@@ -220,7 +220,7 @@ export class HUD {
         const p = g.player, y = g.gy(p.x, p.z);
         const fr = this.portrait.querySelector('.pframe').getBoundingClientRect();
         const cv = g.app.graphicsDevice.canvas.getBoundingClientRect();
-        if (!fr.width) return;
+        if (!fr.width || fr.top < cv.top - 1 || fr.left < cv.left - 1) { this.pcam.enabled = false; return; }
         this.pcam.camera.rect = new Vec4((fr.left - cv.left) / cv.width, 1 - (fr.bottom - cv.top) / cv.height, fr.width / cv.width, fr.height / cv.height);
         this.pcam.camera.scissorRect = this.pcam.camera.rect;
         this.pcam.camera.aspectRatioMode = 1;

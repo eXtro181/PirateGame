@@ -137,6 +137,10 @@ export function createStage(canvas) {
         app.setCanvasResolution(RESOLUTION_FIXED, w, h);
         stage.pixels = [w, h];
         stage.cssSize = [cw, ch];
+        // the HUD covers exactly the canvas (letterboxed on desktop)
+        const root = document.documentElement.style;
+        root.setProperty('--cv-l', `${(ww - cw) / 2}px`); root.setProperty('--cv-t', `${(wh - ch) / 2}px`);
+        root.setProperty('--cv-w', `${cw}px`); root.setProperty('--cv-h', `${ch}px`);
         stage.portrait = portrait;
         // fixed visible radius: the short screen side always spans VIEW units
         if (cw >= ch) { camera.camera.horizontalFov = false; camera.camera.fov = CAM.fov; }

@@ -303,3 +303,5 @@ body.touch .prompt { bottom: auto !important; }
 body.touch .toast { bottom: auto !important; }
 body.portrait.touch .minimap { display: none; }
 .creator-screen .opts { grid-template-columns: 1fr; }
+
+#hud { inset: auto; left: var(--cv-l, 0px); top: var(--cv-t, 0px); width: var(--cv-w, 100vw); height: var(--cv-h, 100vh); }

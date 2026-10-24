@@ -632,14 +632,15 @@ export class Game {
         this.stage.lookAt(this.camX + sx, this.camY + 0.6, this.camZ + sz, this.camZoom);
     }
 
-    // world -> screen (CSS pixels in the page); h = height above the ground
+    // world -> screen (CSS pixels relative to the canvas); h = height above the ground
     toScreen(x, z, h = 0) {
         const c = this.stage.app.graphicsDevice.canvas;
         const r = c.getBoundingClientRect();
         _v.set(x, (this.mode === 'sea' && h < 1.5 ? 0 : Math.max(0, this.gy(x, z))) + h, z);
         this.stage.camera.camera.worldToScreen(_v, _o);
         const cr = this.stage.app.graphicsDevice.clientRect;
-        return { x: r.left + _o.x * r.width / (cr.width || r.width), y: r.top + _o.y * r.height / (cr.height || r.height) };
+        // relative to the canvas: the HUD layer covers exactly the canvas
+        return { x: _o.x * r.width / (cr.width || r.width), y: _o.y * r.height / (cr.height || r.height) };
     }
 }
 
