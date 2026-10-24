@@ -82,4 +82,11 @@ if (watch) {
     console.log('watching…');
 } else {
     await esbuild.build(options);
+    // cache busting: browsers (and GitHub Pages' 10-minute cache) must never mix old and new files
+    const { createHash } = await import('node:crypto');
+    const hash = (f) => createHash('sha1').update(fs.readFileSync(path.join(dist, f))).digest('hex').slice(0, 10);
+    const html = path.join(dist, 'index.html');
+    fs.writeFileSync(html, fs.readFileSync(html, 'utf8')
+        .replace('src="game.js"', `src="game.js?v=${hash('game.js')}"`)
+        .replace('href="style.css"', `href="style.css?v=${hash('style.css')}"`));
 }
