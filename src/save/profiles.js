@@ -65,7 +65,7 @@ export class ProfileStore {
         const row = {
             id: profile.id, name: profile.name, salt: profile.salt, verifier: profile.verifier,
             iv: b64(iv), data: b64(data), updatedAt: Date.now(),
-            summary: { level: save.level, playTime: Math.round(save.playTime), lastFire: save.lastFire, origin: save.origin, look: save.look, deaths: save.deaths || 0 }
+            summary: { level: save.level, playTime: Math.round(save.playTime), lastFire: save.lastFire, origin: save.origin, look: save.look, weapon: save.weapon, off: save.off, deaths: save.deaths || 0 }
         };
         await tx('readwrite', s => s.put(row));
     }

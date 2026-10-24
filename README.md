@@ -1,20 +1,24 @@
 # Schwarzwasser
 
-Ein Soulslike-Piratenspiel in Pixel-Art im Browser – geneigte 3D-Ansicht von schräg oben wie *A Link Between Worlds*, Kampf wie *Dark Souls*, gebaut mit der [PlayCanvas Engine](https://playcanvas.com/products/engine).
+Ein düsteres Soulslike-Piratenspiel im Browser – isometrische 3D-Ansicht im Stil klassischer Action-RPGs, Kampf wie *Dark Souls*, gebaut mit der [PlayCanvas Engine](https://playcanvas.com/products/engine).
 
-**Version 0.1 – erste spielbare Fassung:** die Smaragdküste bei Nacht.
+**Version 0.3 – neue Grafik:** Die Pixel-Art ist komplett ersetzt durch eine echte 3D-Welt in Full HD nach dem Umsetzungsplan „Isometrischer Dark-Fantasy-Look“: feste Iso-Kamera (45° gedreht, 55° geneigt), fast kein Grundlicht, viele flackernde Punktlichter, Nebel, Bloom, ACES-Tonemapping und Farbkorrektur.
 
 ## Was schon drin ist
 
 - **Spielerprofile** mit Charaktername und Passwort. Mehrere Spieler pro Gerät; Spielstände liegen verschlüsselt im Browser (IndexedDB, PBKDF2 + AES-GCM) und lassen sich als Datei exportieren/importieren.
-- **Charaktereditor**: 6 Herkünfte, Statur, Hautton, Frisur, Haarfarbe, Bart, Kopfbedeckung, Mantel-, Akzent- und Halstuchfarbe, Augenklappe, Narbe, Startgeschenk – mit Live-Vorschau am Säbelfeuer.
+- **Charakterauswahl am Lagerfeuer**: eine eigene 3D-Szene mit Feuer als Hauptlicht, kaltem Gegenlicht, Bergen im Hintergrund, Nebelschichten und Tiefenunschärfe. Profile sitzen am Feuer; wer ausgewählt wird, steht auf und tritt ins Scheinwerferlicht.
+- **Charaktereditor**: 6 Herkünfte, Statur, Hautton, Frisur, Haarfarbe, Bart, Kopfbedeckung, Mantel-, Akzent- und Halstuchfarbe, Augenklappe, Narbe, Startgeschenk – die 3D-Figur ändert sich live.
 - **Soulslike-Kampf**: Ausdauer, leichte/schwere Angriffe mit Kombos, Ausweichrolle mit I-Frames, Parieren mit kritischem Gegenschlag, Zielerfassung, Rumflaschen, Haltung/Taumeln.
 - **Tod und Perlen**: Wer stirbt, verliert die getragenen Gezeitenperlen am Todesort. Zurückholen – oder beim nächsten Tod für immer verlieren.
 - **Säbelfeuer** (an Land) und **Wrackfeuer** (auf See): Rasten heilt, füllt die Flaschen, lässt Gegner wiederauferstehen, speichert automatisch. Stufenaufstieg und Reisen zwischen Feuern.
 - **Gegner**: Strandkrabben, Skelettpiraten (zerfallen und setzen sich wieder zusammen, wenn man den Schädel nicht zertrümmert) und das Seeungeheuer *Rostkiefer*.
 - **Segeln** mit der *Möwenschrei* (3D-Schiff): Sie steigt an jeder Küste aus der Tiefe auf, sobald du ans Ufer trittst, und sinkt zurück, wenn du dich entfernst. Wind, Segelstufen, Breitseiten links/rechts, Rammschäden, **Strudel** mit Sog und Drehung.
 - **Steuerungsleiste** am linken Rand (Tastatur oder Gamepad, je nach Eingabe; **H** blendet sie aus).
-- **Licht**: Pixel-Art mit Normal- und Emission-Maps, Clustered Lighting mit Dutzenden Lichtern, Schatten von Mond und Feuern, Bloom, Vignette, Farbkorrektur. Flackernde Fackeln, Glühwürmchen, glühende Augen.
+- **Grafik**: prozedurale PBR-Texturen (Sand, Gras, Erde, Pflaster, Fels, Holz, Mauerwerk …), Terrain mit Höhen-Überblendung und Klippen, Wasser mit Gischt, modulare Ruinenmauern mit Zinnen, Palisaden, Steg, instanziertes Gras und Steine, Decals (Blut, Pfützen, Moos, Brandspuren). Alle Figuren sind 3D-Modelle mit prozeduraler Animation in beliebige Richtungen; Leichen bleiben liegen.
+- **Licht und Atmosphäre**: Lichtkreis um den Spieler mit Schatten, Perlin-Flackern bei Feuern und Fackeln, Clustered Lighting, Höhen- und Volumennebel, Staub, Glut und Glühwürmchen, SSAO, Bloom, ACES, Farbkorrektur, Vignette, TAA (Ultra).
+- **Kettenblitz** (C): springt auf bis zu vier Gegner, kostet Geist; grelles Blitzlicht für 1–2 Bilder.
+- **HUD in 1920×1080**: Leben- und Geist-Kugel mit wirbelnder Flüssigkeit, Ausdauer- und Perlenleiste, Skill-Slots, Gürtel 1–4, Live-Porträt der Figur, Minimap mit Gebietsname, Gegnername oben, Steuerungsleiste links.
 - **Musik**: synthetisierte Shantys (WebAudio, ohne Audiodateien) – „Salz auf der Haut“ an Land, „Hol die Leine“ auf See mit summender Crew, „Atem holen“ am Feuer. **F** auf See lässt die Crew lauter singen (Liedblatt in der Inseltruhe oder Startgeschenk „Bootsmannspfeife“).
 - **Karte** (M) mit Erkundungsnebel, Pausenmenü (Esc) mit Steuerung, Ton, Grafikqualität und Export.
 
@@ -24,7 +28,7 @@ Das Spiel erkennt beim Start, ob es auf einem Handy/Tablet oder am Computer läu
 
 - **Desktop:** Tastatur, Maus und Gamepad, Bild immer im Format 16:9 (bei anderen Fenstergrößen mit schwarzen Rändern).
 - **iPhone / Android / iPad:** Touch-Steuerung mit Daumen-Stick links und Aktionsknöpfen rechts. Hochkant nutzt das Spiel den ganzen Bildschirm und zeigt mehr von der Welt nach oben und unten; quer gibt es die breite Ansicht.
-- **Grafik:** „4K (Ultra)“ rendert mit bis zu 3840 × 2160 Pixeln (Standard am Desktop), „Bildschirm (Hoch)“ in der Auflösung des Geräts (Standard am Handy), „Niedrig“ ohne Schatten und Post-Processing. Umschalten im Menü.
+- **Grafik:** „Hoch (Full HD)“ rendert mit 1920 × 1080 (Standard am Desktop), „Ultra“ bis 4K mit TAA, „Mittel“ (Standard am Handy) ohne SSAO und Volumennebel, „Niedrig“ ohne Schatten und Post-Processing. Im Menü gibt es zusätzlich einen Helligkeits-/Gamma-Regler. Der sichtbare Ausschnitt ist bei jeder Auflösung gleich.
 - Steuerung lässt sich im Menü manuell zwischen Touch und Tastatur wechseln.
 - **Tipp fürs iPhone:** In Safari „Teilen → Zum Home-Bildschirm“ – dann startet das Spiel im Vollbild ohne Browserleiste.
 
@@ -43,7 +47,9 @@ Das Spiel erkennt beim Start, ob es auf einem Handy/Tablet oder am Computer läu
 | Ausweichrolle | Leertaste | A |
 | Parieren | Q | L1 |
 | Gegner fixieren | Tab | R3 |
-| Rumflasche | R | Steuerkreuz unten |
+| Kettenblitz | C | Y |
+| Rumflasche | 1–4 oder R | Steuerkreuz unten |
+| Zoom | Mausrad | – |
 | Interagieren / Rasten / An Bord | E | X |
 | Shanty bestellen | F | Steuerkreuz oben |
 | Karte | M | Select |
@@ -72,7 +78,7 @@ Ohne Internetzugang zum npm-Register kann man die Engine auch aus einem Quellcod
 PC_ENGINE_SRC=/pfad/zu/playcanvas-engine/src node build.mjs
 ```
 
-URL-Parameter: `?lowfx` startet ohne Schatten und Post-Processing (für schwache Grafikkarten), `?debug` hängt das Spielobjekt als `window.__sw` an.
+URL-Parameter: `?lowfx` startet ohne Schatten und Post-Processing, `?q=ultra|high|medium|low` wählt die Stufe, `?rs=0.5` skaliert die Renderauflösung, `?debug` hängt das Spielobjekt als `window.__sw` an.
 
 ## Projektstruktur
 
@@ -80,28 +86,22 @@ URL-Parameter: `?lowfx` startet ohne Schatten und Post-Processing (für schwache
 index.html, style.css   Seite und Oberfläche
 build.mjs               esbuild-Bundle nach dist/
 src/main.js             Einstieg
-src/core/               App, geneigte Kamera, Licht, Post-Processing, Sprites, Eingabe, Texturen
-src/art/                Pixel-Art-Generator: Kacheln, Objekte, Figuren, Effekte (inkl. Normal-/Emission-Maps)
-src/world/              Weltgenerierung (Smaragdküste) und Darstellung (Chunks, Wasser, Lichter)
+src/core/               App, Iso-Kamera, Licht, Post-Processing, Eingabe
+src/gfx/                Texturen, Materialien, Geometrie, Partikel, Noise
+src/world/              Weltgenerierung (Smaragdküste), Terrain, 3D-Modelle, Darstellung, Lagerfeuer-Szene
 src/game/               Spieler, Gegner, Schiff, Effekte, Spielablauf, Daten (Herkünfte, Waffen)
-src/ui/                 Titelbild, Profile, Charaktereditor, HUD, Menüs, Karte
+src/ui/                 Titel, Profile, Charaktereditor, HUD (hud.js), Menüs, Karte
 src/save/               Profile mit Passwort und verschlüsselten Spielständen
 src/audio/              Shanty-Synthesizer, Crew-Gesang, Ambiente, Soundeffekte
 ```
 
-## Grafik: 4K und vierfache Pixeldichte
+## Grafik-Technik
 
-Jede Grafik wird beim Start mit einem Pixel-Art-Skalierer (Scale4x) auf die vierfache Auflösung gebracht (`DETAIL = 4` in `src/core/gfx.js`). Danach werden die Höhen geglättet und eine feine Materialkörnung ergänzt, und die Normal Maps werden in dieser hohen Auflösung berechnet. So zeigen Fackel- und Mondlicht weiche Wölbungen statt harter Pixelstufen, und bei 4K-Rendering bleibt jedes Detail scharf.
-
-Spielfigur, Skelettpiraten, Säbelfeuer und Flammen sind direkt in vierfacher Auflösung gemalt (`src/art/hires.js`): Figuren mit 80 × 104 Pixeln pro Bild, mit Verläufen, Gesichtern, Kleidungsdetails und leuchtenden Augen. Alle Optionen des Charaktereditors werden in dieser Qualität gezeichnet.
-
-## Grafik und Aseprite
-
-Alle Grafiken werden in dieser Version zur Laufzeit im Code gemalt (`src/art/`), inklusive Normal- und Emission-Maps. Sie sind als Platzhalter gedacht und halten sich an das Raster aus dem Spielskript (16 × 16-Kacheln, Figuren 20 × 26). Der nächste Schritt ist, sie durch Aseprite-Exporte (PNG-Sprite-Sheets + JSON) zu ersetzen.
-
-## Gedächtnisdatei
-
-`CLAUDE.md` fasst Architektur, Befehle, Konventionen und Entscheidungen zusammen, damit Weiterentwicklung (auch mit Claude) schnell einsteigen kann.
+- `src/core/stage.js`: Iso-Kamera, Qualitätsstufen, Licht-Umgebung, Post-Processing (CameraFrame).
+- `src/gfx/`: prozedurale Texturen, Material-Bibliothek (inkl. Terrain-Shader mit vier Schichten und Fels an Steilhängen), Geometrie-Baukasten, Partikel, Noise.
+- `src/world/`: Terrain aus der Kachelkarte, 3D-Modelle aller Objekte, Welt-Aufbau mit Instancing und Decals, Lagerfeuer-Szene.
+- `src/game/figure.js`: Pirat, Skelett, Krabbe, Seeungeheuer und Truhe als 3D-Modelle mit prozeduraler Animation.
+- Alle Assets entstehen im Code (keine fremden Modelle oder Texturen).
 
 ## Nächste Schritte laut Spielskript
 

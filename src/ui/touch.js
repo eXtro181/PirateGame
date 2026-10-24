@@ -8,7 +8,8 @@ const LAND = [
     { a: 'parry', label: 'Parieren', cls: '' },
     { a: 'drink', label: 'Rum', cls: 'small' },
     { a: 'lock', label: 'Zielen', cls: 'small' },
-    { a: 'item', label: 'Pistole', cls: 'small offhand' }
+    { a: 'item', label: 'Pistole', cls: 'small offhand' },
+    { a: 'spell', label: 'Blitz', cls: 'small spell' }
 ];
 const SEA = [
     { a: 'attack', label: '◀ Breitseite', cls: 'big main' },

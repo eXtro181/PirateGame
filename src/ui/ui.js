@@ -1,33 +1,19 @@
-// DOM user interface: title & profiles, character creator, HUD, menus, death screen, map.
-import { DEFAULT_LOOK, SKIN, HAIR_COLORS, CLOTH, SCARF, HAIR_STYLES, BEARDS, HATS, BODIES, FW, FH } from '../art/character.js';
-import { paintCharacterSheetHi, saberFireHi, flameSheetHi } from '../art/hires.js';
+// DOM user interface: title & profiles (over the 3D camp scene), character creator, menus,
+// death screen, map. The in-game HUD lives in hud.js.
+import { DEFAULT_LOOK, SKIN, HAIR_COLORS, CLOTH, SCARF, HAIR_STYLES, BEARDS, HATS, BODIES } from '../game/looks.js';
 import { ORIGINS, GIFTS, STAT_NAMES, WEAPONS, OFFHAND, levelCost, newSave } from '../game/data.js';
-import { T } from '../art/tiles.js';
+import { T } from '../world/defs.js';
+import { QUALITY, QUALITY_ORDER } from '../core/stage.js';
 import { TouchControls } from './touch.js';
+import { HUD, h } from './hud.js';
 
-const h = (tag, attrs = {}, ...kids) => {
-    const el = document.createElement(tag);
-    for (const [k, v] of Object.entries(attrs)) {
-        if (k === 'class') el.className = v;
-        else if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
-        else if (k === 'html') el.innerHTML = v;
-        else if (v !== false && v != null) el.setAttribute(k, v);
-    }
-    for (const k of kids.flat()) if (k != null) el.append(k.nodeType ? k : document.createTextNode(k));
-    return el;
-};
 const TOUCH_KEYS = [['Linke Hälfte', 'Daumen auflegen und ziehen: laufen · auf See steuern'], ['Hieb / Schwer', 'Leichter und schwerer Angriff'], ['Rolle', 'Ausweichen mit Unverwundbarkeit'], ['Parieren', 'Im richtigen Moment für einen Gegenschlag'], ['Rum / Zielen', 'Heilen · Gegner fixieren'], ['Hinweisfeld', 'Antippen zum Interagieren, Rasten, An Bord gehen'], ['Auf See', 'Breitseiten links/rechts · Segel + / −']];
 const fmtTime = s => { s = Math.round(s); const hh = Math.floor(s / 3600), mm = Math.floor(s / 60) % 60; return hh ? `${hh} Std ${mm} Min` : `${mm} Min`; };
 
-function portrait(look) {
-    const c = document.createElement('canvas');
-    c.width = FW * 4; c.height = FH * 4;
-    try {
-        const { canvas, frames } = paintCharacterSheetHi(look);
-        const r = frames['stand-down'][0];
-        c.getContext('2d').drawImage(canvas, r.x * 4, r.y * 4, r.w * 4, r.h * 4, 0, 0, r.w * 4, r.h * 4);
-    } catch (e) { console.warn(e); }
-    return c;
+// profile emblem: initial on a disc in the character's coat colour
+function emblem(name, look) {
+    const col = CLOTH[look?.coat ?? 0] || CLOTH[0];
+    return h('div', { class: 'emblem', style: `--c:${col}` }, (name || '?').slice(0, 1).toUpperCase());
 }
 
 export class UI {
@@ -41,8 +27,9 @@ export class UI {
         document.addEventListener('pointerdown', () => this.audio.unlock(), { once: false });
         document.addEventListener('keydown', () => this.audio.unlock());
     }
-    bind(game) {
-        this.game = game; this.hud.game = game;
+    bind(game, camp) {
+        this.game = game; this.camp = camp;
+        this.hud.bindGame(game);
         this.hud.touch = new TouchControls(game.input, this.hud.el);
         this.hud.promptEl.addEventListener('pointerdown', (e) => { e.preventDefault(); game.input.vPress('interact'); setTimeout(() => game.input.vRelease('interact'), 80); });
     }
@@ -56,6 +43,9 @@ export class UI {
         this.hud.el.classList.add('hidden');
         this.screen?.remove();
         const profiles = await this.store.list().catch(() => []);
+        // the camp scene: every profile sits at the fire
+        this.camp.enter();
+        this.camp.setProfiles(profiles.slice(0, 5).map(p => ({ look: p.summary?.look, weapon: p.summary?.weapon || ORIGINS.find(o => o.id === p.summary?.origin)?.weapon, off: p.summary?.off })));
         let selected = null;
         const err = h('div', { class: 'error' });
         const pass = h('input', { class: 'text', type: 'password', placeholder: 'Passwort', autocomplete: 'current-password' });
@@ -81,16 +71,17 @@ export class UI {
                 if (!b.dataset.armed) { b.dataset.armed = '1'; b.textContent = 'Wirklich löschen?'; err.textContent = 'Löschen kann nicht rückgängig gemacht werden. Passwort eingeben und erneut klicken.'; return; }
                 try { await this.store.remove(selected.name, pass.value); this.title(onStart); } catch (e) { err.textContent = e.message; }
             } }, 'Löschen')), err);
-        const list = h('div', { class: 'profiles' }, profiles.map(p => {
+        const list = h('div', { class: 'profiles' }, profiles.map((p, idx) => {
             const card = h('button', { class: 'profile', onclick: () => {
                 selected = p;
+                if (idx < 5) this.camp.select(idx);
                 list.querySelectorAll('.profile').forEach(x => x.classList.remove('active'));
                 card.classList.add('active');
                 who.textContent = `${p.name} – Passwort eingeben`;
                 loginBox.classList.remove('hidden');
                 pass.value = ''; err.textContent = '';
                 pass.focus();
-            } }, p.summary?.look ? portrait(p.summary.look) : null,
+            } }, emblem(p.name, p.summary?.look),
             h('div', {}, h('div', { class: 'pname' }, p.name), h('div', { class: 'pmeta' }, `Stufe ${p.summary?.level ?? '?'} · ${fmtTime(p.summary?.playTime || 0)} · ${p.summary?.deaths || 0}× ertrunken`)));
             return card;
         }));
@@ -98,7 +89,7 @@ export class UI {
         const fileIn = h('input', { type: 'file', accept: '.json,application/json', class: 'hidden', onchange: async () => {
             try { await this.store.importFile(fileIn.files[0]); this.title(onStart); } catch (e) { importErr.textContent = e.message; }
         } });
-        this.screen = h('div', { class: 'screen' }, h('div', { class: 'screen-inner' },
+        this.screen = h('div', { class: 'screen title-screen' }, h('div', { class: 'screen-inner' },
             h('h1', { class: 'logo' }, 'SCHWARZWASSER'),
             h('p', { class: 'tagline' }, 'Die See nimmt. Die See gibt zurück. Manchmal.'),
             profiles.length ? h('div', {}, h('div', { class: 'panel' }, h('h3', {}, 'Ertränkte auf diesem Gerät'), list, loginBox)) : h('p', { class: 'note', style: 'text-align:center' }, 'Noch kein Profil auf diesem Gerät.'),
@@ -121,7 +112,6 @@ export class UI {
         const name = h('input', { class: 'text', maxlength: 16, placeholder: 'Finn Rabenfeder', value: 'Finn Rabenfeder' });
         const pw1 = h('input', { class: 'text', type: 'password', placeholder: 'mind. 4 Zeichen', autocomplete: 'new-password' });
         const pw2 = h('input', { class: 'text', type: 'password', placeholder: 'wiederholen', autocomplete: 'new-password' });
-        const canvas = h('canvas', { width: 384, height: 400 });
         const statsEl = h('div', { class: 'stats' });
         const giftDesc = h('div', { class: 'note' });
 
@@ -139,8 +129,7 @@ export class UI {
             ['Narbe', 'scar', 2, i => (i ? 'Ja' : 'Nein')]
         ];
         function swatch(c, label) { const s = h('span', {}, h('i', { class: 'swatch', style: `background:${c}` }), label); return s; }
-        let sheet = null;
-        const repaint = () => { sheet = paintCharacterSheetHi(look); sheet.canvas = sheet.pix.toCanvas(); };
+        const repaint = () => { const o = ORIGINS.find(x => x.id === origin); this.camp.setPreview({ look: { ...look }, weapon: o.weapon, off: o.off }); };
         const opts = h('div', { class: 'opts' }, optDefs.map(([label, key, n, fmt]) => {
             const val = h('span', { class: 'val' });
             const show = () => { val.replaceChildren(); const v = typeof look[key] === 'boolean' ? (look[key] ? 1 : 0) : look[key]; const f = fmt(v); val.append(f.nodeType ? f : document.createTextNode(f)); };
@@ -154,7 +143,7 @@ export class UI {
             return h('div', { class: 'opt' }, h('span', { class: 'name' }, label), h('div', { class: 'ctl' }, h('button', { onclick: () => step(-1), 'aria-label': `${label} zurück` }, '‹'), val, h('button', { onclick: () => step(1), 'aria-label': `${label} weiter` }, '›')));
         }));
         const originBtns = ORIGINS.map(o => h('button', { class: 'origin' + (o.id === origin ? ' active' : ''), onclick: () => {
-            origin = o.id; originBtns.forEach(b => b.classList.toggle('active', b.dataset.id === o.id)); showStats(); this.audio.sfx('click');
+            origin = o.id; originBtns.forEach(b => b.classList.toggle('active', b.dataset.id === o.id)); showStats(); repaint(); this.audio.sfx('click');
         }, 'data-id': o.id }, h('b', {}, o.name), h('span', {}, o.desc)));
         const showStats = () => {
             const o = ORIGINS.find(x => x.id === origin);
@@ -167,48 +156,6 @@ export class UI {
         const giftSel = h('select', { class: 'text', onchange: () => { gift = giftSel.value; giftDesc.textContent = GIFTS.find(g => g.id === gift).desc; } }, GIFTS.map(g => h('option', { value: g.id }, g.name)));
         giftDesc.textContent = GIFTS[0].desc;
         showStats(); repaint();
-
-        // preview: the figure next to a burning saber, lit by its flicker
-        const ctx = canvas.getContext('2d');
-        const fireP = saberFireHi(); const fire = fireP.toCanvas();
-        const flames = flameSheetHi('teal', 14, 22);
-        const flameCanvas = flames.pix.toCanvas();
-        let t0 = performance.now();
-        const draw = () => {
-            if (!canvas.isConnected) return;
-            const t = (performance.now() - t0) / 1000;
-            ctx.setTransform(4, 0, 0, 4, 0, 0);
-            ctx.imageSmoothingEnabled = false;
-            ctx.fillStyle = '#0e1210'; ctx.fillRect(0, 0, 96, 100);
-            for (let i = 0; i < 90; i++) { const x = (i * 37) % 96, y = (i * 53) % 100; ctx.fillStyle = i % 3 ? '#16201a' : '#1c2a20'; ctx.fillRect(x, y, 1, 1); }
-
-            const fr = flames.frames.burn[Math.floor(t * 10) % flames.frames.burn.length];
-            ctx.drawImage(flameCanvas, fr.x * 4, fr.y * 4, fr.w * 4, fr.h * 4, 8, 36, fr.w, fr.h);
-            ctx.drawImage(fire, 6, 50, fireP.w / 4, fireP.h / 4);
-            const walk = sheet.frames['walk-down'], stand = sheet.frames['stand-down'];
-            const phase = Math.floor(t / 2.5) % 4;
-            const anims = [stand, walk, sheet.frames['stand-side'], sheet.frames['stand-up']];
-            const fl = anims[phase];
-            const r = fl[Math.floor(t * 8) % fl.length];
-            ctx.save();
-            ctx.translate(52, 44);
-            ctx.scale(2, 2);
-            ctx.drawImage(sheet.canvas, r.x * 4, r.y * 4, r.w * 4, r.h * 4, 0, 0, r.w, r.h);
-            ctx.restore();
-            // light: darken everything, then add the teal glow of the fire
-            const flick = 0.85 + Math.sin(t * 13) * 0.06 + Math.sin(t * 7.1) * 0.05;
-            ctx.globalCompositeOperation = 'multiply';
-            const g = ctx.createRadialGradient(15, 52, 4, 15, 52, 90 * flick);
-            g.addColorStop(0, '#e8fff8'); g.addColorStop(0.55, '#7fc0b4'); g.addColorStop(1, '#1a2628');
-            ctx.fillStyle = g; ctx.fillRect(0, 0, 96, 100);
-            ctx.globalCompositeOperation = 'lighter';
-            const g2 = ctx.createRadialGradient(15, 48, 1, 15, 48, 26 * flick);
-            g2.addColorStop(0, 'rgba(95,242,200,0.55)'); g2.addColorStop(1, 'rgba(95,242,200,0)');
-            ctx.fillStyle = g2; ctx.fillRect(0, 0, 96, 100);
-            ctx.globalCompositeOperation = 'source-over';
-            requestAnimationFrame(draw);
-        };
-        requestAnimationFrame(draw);
 
         const create = async () => {
             err.textContent = '';
@@ -225,7 +172,7 @@ export class UI {
             } catch (e) { err.textContent = e.message || 'Fehler beim Anlegen.'; createBtn.disabled = false; createBtn.textContent = 'In die Tiefe'; }
         };
         const createBtn = h('button', { class: 'btn primary', onclick: create }, 'In die Tiefe');
-        this.screen = h('div', { class: 'screen' }, h('div', { class: 'screen-inner' },
+        this.screen = h('div', { class: 'screen creator-screen' }, h('div', { class: 'screen-inner' },
             h('h1', { class: 'logo', style: 'font-size:clamp(26px,4vw,44px)' }, 'Neuer Ertränkter'),
             h('p', { class: 'tagline' }, 'Wer warst du, bevor die See dich nahm?'),
             h('div', { class: 'creator' },
@@ -234,10 +181,10 @@ export class UI {
                         h('div', { class: 'row' }, h('label', { class: 'field', style: 'flex:1 1 180px' }, 'Charaktername', name)),
                         h('div', { class: 'row', style: 'margin-top:8px' }, h('label', { class: 'field', style: 'flex:1 1 140px' }, 'Passwort', pw1), h('label', { class: 'field', style: 'flex:1 1 140px' }, 'Wiederholen', pw2)),
                         h('p', { class: 'note' }, 'Das Passwort schützt deinen Spielstand auf diesem Gerät. Nutze keins, das du anderswo verwendest.')),
-                    h('div', { class: 'panel' }, h('h3', {}, 'Herkunft'), h('div', { class: 'origins' }, originBtns)),
-                    h('div', { class: 'panel' }, h('h3', {}, 'Aussehen'), opts)),
+                    h('div', { class: 'panel' }, h('h3', {}, 'Herkunft'), h('div', { class: 'origins' }, originBtns))),
+                h('div', { class: 'stage-gap' }),
                 h('div', { class: 'preview-wrap' },
-                    h('div', { class: 'preview' }, canvas),
+                    h('div', { class: 'panel' }, h('h3', {}, 'Aussehen'), opts),
                     h('div', { class: 'panel' }, h('h3', {}, 'Werte'), statsEl),
                     h('div', { class: 'panel' }, h('h3', {}, 'Startgeschenk'), giftSel, giftDesc),
                     err,
@@ -329,8 +276,8 @@ export class UI {
     // --------------------------------------------------------------- pause + map
     pauseMenu() {
         const g = this.game;
-        const qualityLabel = q => `Grafik: ${{ ultra: '4K (Ultra)', high: 'Bildschirm (Hoch)', low: 'Niedrig' }[q]}`;
-        const keys = [['WASD / Pfeile', 'Laufen · Schiff steuern (A/D) · Segel (W/S)'], ['J', 'Angriff · Breitseite links'], ['L / Shift+J', 'Schwerer Angriff'], ['K', 'Zweithand · Breitseite rechts'], ['Leertaste', 'Ausweichrolle'], ['Q', 'Parieren'], ['R', 'Rumflasche trinken'], ['Tab', 'Gegner fixieren'], ['E', 'Interagieren · Rasten · An Bord'], ['F', 'Shanty bestellen (auf See)'], ['M', 'Karte'], ['Esc', 'Menü']];
+        const qualityLabel = q => `Grafik: ${QUALITY[q].label}`;
+        const keys = [['WASD / Pfeile', 'Laufen · Schiff steuern (A/D) · Segel (W/S)'], ['J', 'Angriff · Breitseite links'], ['L / Shift+J', 'Schwerer Angriff'], ['K', 'Zweithand · Breitseite rechts'], ['Leertaste', 'Ausweichrolle'], ['Q', 'Parieren'], ['C', 'Kettenblitz (kostet Geist)'], ['1–4 / R', 'Rumflasche trinken'], ['Mausrad', 'Zoom'], ['H', 'Steuerungsleiste'], ['Tab', 'Gegner fixieren'], ['E', 'Interagieren · Rasten · An Bord'], ['F', 'Shanty bestellen (auf See)'], ['M', 'Karte'], ['Esc', 'Menü']];
         const main = () => this.openModal(h('div', { class: 'modal' }, h('div', { class: 'menu' },
             h('h2', {}, g.save.name), h('div', { class: 'sub' }, `Stufe ${g.save.level} · ${fmtTime(g.save.playTime)} · ${g.save.deaths || 0}× ertrunken`),
             h('div', { class: 'items' },
@@ -343,10 +290,11 @@ export class UI {
                     h('button', { class: 'btn', onclick: main }, 'Zurück')))) }, 'Steuerung'),
                 h('button', { class: 'btn', onclick: (e) => { this.audio.setMuted(!this.audio.muted); e.target.textContent = this.audio.muted ? 'Ton an' : 'Ton aus'; } }, this.audio.muted ? 'Ton an' : 'Ton aus'),
                 h('button', { class: 'btn', onclick: (e) => {
-                    const order = ['ultra', 'high', 'low'];
-                    g.stage.setQuality(order[(order.indexOf(g.stage.quality) + 1) % 3]);
+                    const order = QUALITY_ORDER;
+                    g.stage.setQuality(order[(order.indexOf(g.stage.quality) + 1) % order.length]);
                     e.target.textContent = qualityLabel(g.stage.quality);
                 } }, qualityLabel(g.stage.quality)),
+                h('label', { class: 'gamma' }, 'Helligkeit (Gamma)', h('input', { type: 'range', min: '0.6', max: '1.8', step: '0.05', value: String(g.app.scene.exposure), oninput: (e) => g.stage.setGamma(Number(e.target.value)) })),
                 h('button', { class: 'btn', onclick: (e) => {
                     g.stage.setTouch(!g.stage.device.touch);
                     e.target.textContent = `Steuerung: ${g.stage.device.touch ? 'Touch' : 'Tastatur / Gamepad'}`;
@@ -382,142 +330,3 @@ export class UI {
     }
 }
 
-// ---------------------------------------------------------------------------- HUD
-class HUD {
-    constructor(ui) {
-        this.ui = ui;
-        const bar = (cls) => { const b = h('div', { class: `bar ${cls}` }, h('i', { class: 'lag' }), h('i', { class: 'fill' })); return b; };
-        this.hp = bar('hp'); this.st = bar('st'); this.hull = bar('hull');
-        this.flaskIco = h('div', { class: 'flask-ico' });
-        this.flaskN = h('span', {});
-        this.offEl = h('span', { class: 'offhand' });
-        this.pearlN = h('span', {}, '0');
-        this.gainEl = h('div', { class: 'gain' });
-        this.promptEl = h('div', { class: 'prompt hidden' });
-        this.toastEl = h('div', { class: 'toast' });
-        this.hintEl = h('div', { class: 'hint' });
-        this.bannerEl = h('div', { class: 'banner' });
-        this.saveEl = h('div', { class: 'saveico' }, 'GESPEICHERT');
-        this.lockEl = h('div', { class: 'lockmark hidden' });
-        this.compassWind = h('i'); this.compassShip = h('b');
-        this.sailsEl = h('div', { class: 'sails' });
-        this.reloadL = h('i'); this.reloadR = h('i');
-        this.ship = h('div', { class: 'shippanel hidden' },
-            h('div', { class: 'compass', title: 'Türkis: Wind · Gold: Kurs' }, this.compassWind, this.compassShip),
-            h('div', {}, h('div', {}, 'Segel'), this.sailsEl),
-            h('div', {}, h('div', {}, 'Kanonen L / R'), h('div', { class: 'reload' }, h('div', {}, this.reloadL), h('div', {}, this.reloadR))));
-        this.ebars = new Map();
-        this.legendEl = h('div', { class: 'legend' });
-        try { this.legendOn = localStorage.getItem('sw-legend') !== 'off'; } catch { this.legendOn = true; }
-        this.el = h('div', { id: 'hud', class: 'hidden' }, this.legendEl,
-            h('div', { class: 'bars' }, this.hp, this.st, this.hull, h('div', { class: 'flasks' }, this.flaskIco, this.flaskN, this.offEl)),
-            this.ship,
-            h('div', { class: 'pearls' }, h('div', { class: 'pearl-ico' }), this.pearlN), this.gainEl,
-            this.promptEl, this.toastEl, this.hintEl, this.bannerEl, this.saveEl, this.lockEl);
-        this.lagHp = 1;
-    }
-    // controls legend on the left edge (keyboard / gamepad; touch shows labelled buttons instead)
-    legend(g) {
-        if (g.input.pressed('legend')) {
-            this.legendOn = !this.legendOn;
-            try { localStorage.setItem('sw-legend', this.legendOn ? 'on' : 'off'); } catch { /* ignore */ }
-        }
-        const sea = g.mode === 'sea', pad = g.input.usingPad;
-        const show = !g.stage.device.touch && g.dying === undefined;
-        const key = `${show}:${this.legendOn}:${sea}:${pad}:${g.save.off}`;
-        if (key !== this.legendKey) {
-            this.legendKey = key;
-            this.legendEl.classList.toggle('hidden', !show);
-            const K = (k, p) => pad ? p : k;
-            const rows = !this.legendOn ? [[K('H', '—'), 'Steuerung einblenden']] : sea ? [
-                [K('W / S', 'Stick ↑↓'), 'Segel setzen / reffen'],
-                [K('A / D', 'Stick ←→'), 'Steuern'],
-                [K('J', 'R1'), 'Breitseite links'],
-                [K('K', 'B'), 'Breitseite rechts'],
-                [K('E', 'X'), 'An Land gehen / Rasten', 'interact'],
-                [K('F', '↑'), 'Shanty bestellen'],
-                [K('M', 'Select'), 'Karte'],
-                [K('Esc', 'Start'), 'Menü'],
-                [K('H', ''), 'Ausblenden']
-            ] : [
-                [K('WASD', 'Stick'), 'Laufen'],
-                [K('J', 'R1'), 'Angriff'],
-                [K('L', 'R2'), 'Schwerer Angriff'],
-                [K('Leertaste', 'A'), 'Ausweichrolle'],
-                [K('Q', 'L1'), 'Parieren'],
-                ...(g.save.off !== 'none' ? [[K('K', 'B'), 'Zweithand']] : []),
-                [K('R', '↓'), 'Rum trinken'],
-                [K('Tab', 'R3'), 'Gegner fixieren'],
-                [K('E', 'X'), 'Interagieren / An Bord', 'interact'],
-                [K('M', 'Select'), 'Karte'],
-                [K('Esc', 'Start'), 'Menü'],
-                [K('H', ''), 'Ausblenden']
-            ];
-            this.legendEl.classList.toggle('mini', !this.legendOn);
-            this.legendEl.replaceChildren(...rows.filter(r => r[0] !== '').map(([k, label, id]) => h('div', { class: 'row', 'data-id': id || '' }, h('kbd', {}, k), h('span', {}, label))));
-        }
-        const act = !!this.lastPrompt;
-        this.legendEl.querySelector('[data-id="interact"]')?.classList.toggle('on', act);
-    }
-    prompt(label) {
-        if (label === this.lastPrompt) return;
-        this.lastPrompt = label;
-        if (!label) { this.promptEl.classList.add('hidden'); return; }
-        this.promptEl.replaceChildren(h('kbd', {}, this.game?.stage.device.touch ? '●' : 'E'), label);
-        this.promptEl.classList.remove('hidden');
-    }
-    setBar(b, frac, widthPx) {
-        b.style.width = `${widthPx}px`;
-        b.querySelector('.fill').style.transform = `scaleX(${Math.max(0, frac)})`;
-    }
-    update() {
-        const g = this.game;
-        if (!g || !g.save || !g.player) return;
-        const p = g.player, d = g.derived, s = g.save;
-        const sea = g.mode === 'sea';
-        this.legend(g);
-        if (this.touch) {
-            const show = g.stage.device.touch && !this.ui.modalOpen() && g.dying === undefined;
-            this.touch.setVisible(show);
-            if (show) this.touch.setMode(g.mode, s.off);
-        }
-        const bw = Math.min(2.4, (window.innerWidth - (g.stage.device.touch ? 150 : 60)) / Math.max(d.maxHp, d.maxSt));
-        this.setBar(this.hp, p.hp / d.maxHp, d.maxHp * bw);
-        const hf = p.hp / d.maxHp;
-        this.lagHp = this.lagHp > hf ? Math.max(hf, this.lagHp - 0.006) : hf;
-        this.hp.querySelector('.lag').style.transform = `scaleX(${this.lagHp})`;
-        this.setBar(this.st, p.st / d.maxSt, d.maxSt * bw);
-        this.hull.classList.toggle('hidden', !sea);
-        this.st.classList.toggle('hidden', sea);
-        this.ship.classList.toggle('hidden', !sea);
-        if (sea) {
-            this.setBar(this.hull, g.ship.hull / g.ship.maxHull, 220);
-            this.compassWind.style.transform = `rotate(${g.wind.angle}rad)`;
-            this.compassShip.style.transform = `rotate(${g.ship.heading}rad)`;
-            const sails = g.ship.sail;
-            if (this.lastSail !== sails) { this.lastSail = sails; this.sailsEl.replaceChildren(...[0, 1].map(i => h('span', { class: i < sails ? 'on' : '' }))); }
-            this.reloadL.style.transform = `scaleX(${1 - g.ship.reload[0] / 2.6})`;
-            this.reloadR.style.transform = `scaleX(${1 - g.ship.reload[1] / 2.6})`;
-        }
-        this.flaskN.textContent = String(p.flasks);
-        this.flaskIco.classList.toggle('empty', p.flasks <= 0);
-        this.offEl.textContent = s.off !== 'none' ? ` · ${s.off === 'pistol' ? 'Pulver' : 'Gezeiten'} ${p.ammo}` : '';
-        this.pearlN.textContent = String(s.pearls);
-        // lock marker
-        const lt = g.lockTarget;
-        if (lt) { const sp = g.toScreen(lt.x, lt.z, lt.sea ? 0.6 : 0.9); this.lockEl.style.left = `${sp.x}px`; this.lockEl.style.top = `${sp.y}px`; this.lockEl.classList.remove('hidden'); }
-        else this.lockEl.classList.add('hidden');
-        // enemy health bars
-        for (const e of g.enemies) {
-            let b = this.ebars.get(e);
-            const show = e.alive && e.showBarUntil > g.time && (e.hp > 0);
-            if (!show) { if (b) b.el.classList.add('hidden'); continue; }
-            if (!b) { b = { el: h('div', { class: 'ebar' }, h('i'), h('b')) }; this.el.append(b.el); this.ebars.set(e, b); }
-            const sp = (e.sea ? g.toScreen(e.x, e.z - 1.3, 0.3) : g.toScreen(e.x, e.z, 2.05));
-            b.el.classList.remove('hidden');
-            b.el.style.left = `${sp.x}px`; b.el.style.top = `${sp.y}px`;
-            b.el.querySelector('i').style.transform = `scaleX(${Math.max(0, e.hp / e.maxHp)})`;
-            b.el.querySelector('b').textContent = g.time - e.lastDmgT < 1.5 ? String(e.lastDmg) : '';
-        }
-    }
-}

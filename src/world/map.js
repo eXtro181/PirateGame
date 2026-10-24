@@ -1,7 +1,5 @@
 // World generation for the first playable region: the Emerald Coast at night.
-import { Rng } from '../art/painter.js';
-import { T, VARIANTS } from '../art/tiles.js';
-import { PROP_INFO } from '../art/props.js';
+import { Rng, T, VARIANTS, PROP_INFO } from './defs.js';
 
 export const MAP_W = 128, MAP_H = 96;
 
@@ -119,7 +117,11 @@ export class WorldMap {
         // ruin dressing
         const pillars = [[rx + 1, ry + 1], [rx + 5, ry], [rx + 9, ry + 1], [rx + 1, ry + 6], [rx + 9, ry + 6]];
         pillars.forEach(([x, y], i) => this.addProp('pillar', i % 2, x + 0.5, y + 0.9));
-        this.addProp('wall', 0, rx + 3.5, ry + 7.8); this.addProp('wall', 1, rx + 8, ry - 0.2);
+        // modular ruin walls with merlons; gaps for the paths (west/south-west and east)
+        [[rx + 1.5, 0], [rx + 3.6, 1], [rx + 8.2, 0], [rx + 10.2, 1]].forEach(([x, v]) => this.addProp('wall', v, x, ry - 0.2));
+        [[rx + 3.6, 0], [rx + 7.6, 1], [rx + 9.8, 0]].forEach(([x, v]) => this.addProp('wall', v, x, ry + 8.1));
+        [[ry + 1.4, 0], [ry + 3.5, 1]].forEach(([z, v]) => this.addProp('wallV', v, rx - 0.25, z));
+        [[ry + 1.4, 1], [ry + 3.5, 0]].forEach(([z, v]) => this.addProp('wallV', v, rx + 11.25, z));
         this.addProp('torch', 0, rx + 3.5, ry + 3.6); this.addProp('torch', 0, rx + 7.5, ry + 3.6);
         this.lights.push({ kind: 'torch', x: rx + 3.5, z: ry + 3.2 }, { kind: 'torch', x: rx + 7.5, z: ry + 3.2 });
         this.addProp('skulls', 0, rx + 6, ry + 5); this.addProp('skulls', 0, rx + 2.4, ry + 4.2);
@@ -132,6 +134,7 @@ export class WorldMap {
         this.colliders.push({ x: fire2.x + 1.5, z: fire2.y - 3.75, r: 0.45 });
         // crates by the dock
         this.addProp('crate', 0, dx - 0.5, dy - 1.2); this.addProp('barrel', 0, dx - 1.4, dy - 0.6); this.addProp('barrel', 0, dx + 0.3, dy + 3.2);
+        for (const [px, pz] of [[dx - 2.4, dy - 2.6], [dx - 4.6, dy - 2.6]]) if (this.walkableTile(Math.floor(px), Math.floor(pz)) && this.walkableTile(Math.floor(px - 1), Math.floor(pz)) && this.walkableTile(Math.floor(px + 1), Math.floor(pz))) this.addProp('palisade', 0, px, pz);
         this.addProp('torch', 0, dx + 0.5, dy - 0.6); this.lights.push({ kind: 'torch', x: dx + 0.5, z: dy - 1.0 });
         // the saber fires and wreck as props
         this.addProp('saberFire', 0, this.fires[0].x, this.fires[0].z + 0.3);
@@ -196,8 +199,8 @@ export class WorldMap {
     addProp(type, v, x, z) {
         this.props.push({ type, v, x, z });
         const info = PROP_INFO[type];
-        if (info.r > 0) this.colliders.push({ x, z: z - 0.25, r: info.r });
-        if (info.box) this.colliders.push({ x, z: z - 0.4, hw: info.box[0] / 2 + 0.1, hd: info.box[1] / 2 + 0.1, box: true });
+        if (info.r > 0) this.colliders.push({ x, z, r: info.r });
+        if (info.box) this.colliders.push({ x, z, hw: info.box[0] / 2 + 0.1, hd: info.box[1] / 2 + 0.1, box: true });
     }
     walkableTile(x, y) { const t = this.get(x, y); return t !== T.WATER && t !== T.ROCK; }
     // circle vs world (walker)

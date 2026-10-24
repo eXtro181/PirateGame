@@ -1,22 +1,20 @@
 // Game orchestration: modes (land/sea), combat resolution, fires, death and pearls, camera.
-import { Sprite } from '../core/sprite.js';
-import { buildPlayerSheet } from '../core/assets.js';
 import { Player } from './player.js';
 import { Crab, Skeleton, Shark } from './enemies.js';
 import { Ship, SHIP_R } from './ship.js';
-import { T } from '../art/tiles.js';
+import { T } from '../world/defs.js';
+import { ChestFigure } from './figure.js';
+import { MeshBuilder } from '../gfx/mesh.js';
+import { MeshInstance, Entity } from 'playcanvas';
 import { Vec3 } from 'playcanvas';
-import { PITCH } from '../core/gfx.js';
-import { CAM_DIST } from '../core/stage.js';
 
-const CAM_Y = CAM_DIST * Math.sin(PITCH * Math.PI / 180), CAM_BACK = CAM_DIST * Math.cos(PITCH * Math.PI / 180);
 const _v = new Vec3(), _o = new Vec3();
 import { Fx } from './fx.js';
 import { derived, ORIGINS, OFFHAND, levelCost } from './data.js';
 
 export class Game {
-    constructor({ stage, art, map, view, input, audio, hud, ui, store }) {
-        Object.assign(this, { stage, art, map, view, input, audio, hud, ui, store });
+    constructor({ stage, M, models, particles, map, terrain, view, input, audio, hud, ui, store }) {
+        Object.assign(this, { stage, M, models, particles, map, terrain, view, input, audio, hud, ui, store });
         this.app = stage.app;
         this.time = 0;
         this.mode = 'land';
@@ -34,16 +32,20 @@ export class Game {
         this.ship = new Ship(this);
         this.ship.place(map.dock.shipX, map.dock.shipZ, map.dock.heading);
         this.enemies = map.spawns.map(s => s.type === 'crab' ? new Crab(this, s) : s.type === 'skeleton' ? new Skeleton(this, s) : new Shark(this, s));
-        this.chestSprites = {};
-        const chestSheet = { tex: art.props.tex, mat: art.props.mat, casterMat: art.props.casterMat, frames: { closed: [art.props.rects['chest:0']], open: [art.props.rects['chestOpen:0']] } };
+        this.chests = {};
         for (const c of map.chests) {
-            const s = new Sprite(this.app, chestSheet, { y: 0.03 });
-            s.setPos(c.x, c.z);
-            this.chestSprites[c.id] = s;
+            const f = new ChestFigure(this.app, this.M, this.models);
+            f.setPos(c.x, terrain.ground(c.x, c.z), c.z);
+            f.setYaw(0.3, 1);
+            this.chests[c.id] = f;
         }
-        this.stainSprite = new Sprite(this.app, art.fx, { y: 0.07, caster: false, anchor: 0.5 });
-        this.stainSprite.set('pearl'); this.stainSprite.setVisible(false);
-        this.stainLight = view.addOmni(0, 0.8, 0, [0.4, 0.9, 1.0], 0, 4);
+        // lost pearls: a glowing orb hovering where you died
+        const sb = new MeshBuilder(); sb.sphere(0.16, 12, 8);
+        this.stain = new Entity('stain');
+        this.stain.addComponent('render', { meshInstances: [new MeshInstance(sb.toMesh(this.app.graphicsDevice), this.M.glow('#7fe8ff', 6))] });
+        this.app.root.addChild(this.stain);
+        this.stain.enabled = false;
+        this.stainLight = view.addOmni(0, 0.8, 0, [0.4, 0.9, 1.0], 0, 5);
         this.app.on('update', dt => this.update(dt));
     }
 
@@ -53,21 +55,21 @@ export class Game {
         this.save = save;
         this.originData = ORIGINS.find(o => o.id === save.origin) || ORIGINS[0];
         this.save.hints = this.save.hints || {};
-        if (this.player) this.player.setSheet(buildPlayerSheet(this.app, save.look));
-        else this.player = new Player(this, buildPlayerSheet(this.app, save.look));
+        if (this.player) this.player.setSave(save);
+        else this.player = new Player(this, save);
         if (save.explored === 'all') this.explored.fill(1);
         else if (save.explored) this.explored.set(decodeBits(save.explored, this.explored.length));
         else this.explored.fill(0);
         this.refreshDerived();
-        for (const c of this.map.chests) this.chestSprites[c.id].set(save.chests.includes(c.id) ? 'open' : 'closed');
+        for (const c of this.map.chests) this.chests[c.id].setOpen(save.chests.includes(c.id));
         this.respawn(true);
         this.paused = false;
         const fresh = save.playTime < 1;
         if (fresh) {
             this.ui.banner('Schwarzwasser', 'Du bist ertrunken. Die Flut hat dich zurückgegeben.', 'title', 5.5);
             this.hint('controls', this.touch
-                ? 'Daumen links auflegen und ziehen zum Laufen. Rechts: Hieb, Rolle, Parieren, Rum. Tippe auf Hinweise wie „Rasten“, um zu interagieren.'
-                : 'WASD bewegen · J Angriff · L schwerer Angriff · Leertaste Rolle · Q Parieren · R Rum · E Interagieren · Tab Zielen · M Karte · Esc Menü');
+                ? 'Daumen links auflegen und ziehen zum Laufen. Rechts: Hieb, Rolle, Parieren, Rum, Blitz. Tippe auf Hinweise wie „Rasten“, um zu interagieren.'
+                : 'WASD bewegen · J Angriff · L schwer · Leertaste Rolle · Q Parieren · C Kettenblitz · 1–4 Rum · E Interagieren · Tab Zielen');
         }
     }
 
@@ -91,6 +93,7 @@ export class Game {
         const fire = this.map.fires.find(f => f.id === s.lastFire && s.litFires.includes(f.id));
         this.refillAll();
         for (const e of this.enemies) e.reset();
+        this.view.clearBlood();
         this.ship.hull = this.ship.maxHull;
         this.lockTarget = null;
         if (fire && fire.kind === 'sea') {
@@ -115,6 +118,7 @@ export class Game {
         const p = this.player, s = this.save;
         p.hp = this.derived.maxHp; p.st = this.derived.maxSt;
         p.flasks = s.flasksMax;
+        p.mp = this.derived.maxMp;
         p.ammo = s.off !== 'none' ? OFFHAND[s.off].ammo : 0;
         p.state = 'idle';
     }
@@ -135,15 +139,57 @@ export class Game {
         this.save.hints[id] = 1;
         this.ui.hint(text);
     }
+    gy(x, z) { return this.terrain.ground(x, z); }
     slashFx(p, heavy) {
-        const a = Math.atan2(p.fx, -p.fz);
-        this.fx.play(this.art.fx, 'slash', p.x + p.fx * 0.75, p.z + p.fz * 0.75 - 0.4, { fps: heavy ? 11 : 15, angle: a, scale: heavy ? 1.3 : 1 });
+        this.fx.slash(p.x, this.gy(p.x, p.z), p.z, Math.atan2(p.fx, p.fz), heavy, (p.combo || 0) % 2 === 1);
     }
-    sparkFx(x, z) { this.fx.play(this.art.fx, 'spark', x, z, { fps: 20 }); this.fx.flash(x, z, [1, 0.85, 0.55], 2.5, 0.1, 4); }
-    bloodFx(x, z) { this.fx.play(this.art.fx, 'blood', x, z - 0.2, { dur: 2.5, fade: true }); }
-    healFx(p) { this.fx.flash(p.x, p.z, [1, 0.8, 0.4], 3, 0.6, 5); this.sfx('heal'); }
-    smokeFx(x, z) { this.fx.play(this.art.fx, 'smoke', x, z, { fps: 6, scale: 1.4 }); this.fx.flash(x, z, [1, 0.6, 0.25], 6, 0.15, 7); }
-    splashFx(x, z) { this.fx.play(this.art.fx, 'splash', x, z, { fps: 12 }); }
+    sparkFx(x, z, y = 1.0) { this.fx.burst('spark', x, this.gy(x, z) + y, z); this.fx.flash(x, this.gy(x, z) + y, z, [1, 0.8, 0.5], 6, 0.1, 5); }
+    bloodFx(x, z) { this.fx.burst('blood', x, this.gy(x, z) + 0.9, z); this.view.addBlood(x + (Math.random() - 0.5) * 0.4, z + (Math.random() - 0.5) * 0.4, 0.5 + Math.random() * 0.6); }
+    healFx(p) { this.fx.burst('heal', p.x, this.gy(p.x, p.z) + 0.3, p.z); this.fx.flash(p.x, this.gy(p.x, p.z) + 1.5, p.z, [1, 0.75, 0.35], 6, 0.6, 6); this.sfx('heal'); }
+    smokeFx(x, z) { this.fx.burst('smoke', x, Math.max(0, this.gy(x, z)) + 1.0, z); this.fx.flash(x, Math.max(0, this.gy(x, z)) + 1.2, z, [1, 0.6, 0.25], 14, 0.12, 8); }
+    splashFx(x, z) { this.fx.burst('splash', x, 0.05, z); }
+
+    nearestEnemy(x, z, r) {
+        let best = null, bd = r;
+        for (const e of this.enemies) {
+            if (!e.alive || e.sea || e.state === 'pile') continue;
+            const d = Math.hypot(e.x - x, e.z - z);
+            if (d < bd) { bd = d; best = e; }
+        }
+        return best;
+    }
+    // Kettenblitz: jumps from the caster to up to four enemies, each jump weaker
+    chainLightning(p) {
+        const gy = this.gy(p.x, p.z);
+        const pts = [[p.x + p.fx * 0.5, gy + 1.35, p.z + p.fz * 0.5]];
+        const hit = new Set();
+        let cx = p.x, cz = p.z, dmg = this.derived.spellDmg;
+        let first = this.lockTarget && this.lockTarget.alive ? this.lockTarget : null;
+        for (let k = 0; k < 4; k++) {
+            let tgt = first && k === 0 ? first : null;
+            if (!tgt) {
+                let bd = k === 0 ? 8 : 5;
+                for (const e of this.enemies) {
+                    if (!e.alive || e.sea || hit.has(e) || e.state === 'pile') continue;
+                    const d = Math.hypot(e.x - cx, e.z - cz);
+                    if (k === 0 && (e.x - p.x) * p.fx + (e.z - p.z) * p.fz < -0.5) continue; // roughly in front
+                    if (d < bd) { bd = d; tgt = e; }
+                }
+            }
+            if (!tgt) break;
+            hit.add(tgt);
+            pts.push([tgt.x, this.gy(tgt.x, tgt.z) + 0.9, tgt.z]);
+            tgt.damage(Math.round(dmg), 2, { x: cx, z: cz });
+            cx = tgt.x; cz = tgt.z; dmg *= 0.78;
+        }
+        if (pts.length === 1) { // nothing in reach: the bolt strikes the ground ahead
+            pts.push([p.x + p.fx * 4, gy + 0.1, p.z + p.fz * 4]);
+        }
+        this.fx.lightning(pts);
+        this.sfx('zap');
+        this.shake(0.2, 0.12);
+        this.hitstop = 0.05;
+    }
 
     // ---------------------------------------------------------------- combat
     meleeHit(p, atk) {
@@ -155,7 +201,8 @@ export class Game {
             if (l > 0.45 && ang > atk.arc) continue;
             atk.hit.add(e);
             if (e.damage(atk.dmg, atk.poise, p)) {
-                this.sparkFx(e.x - dx / (l || 1) * 0.3, e.z - dz / (l || 1) * 0.3 - 0.5);
+                this.sparkFx(e.x - dx / (l || 1) * 0.3, e.z - dz / (l || 1) * 0.3);
+                if (!(e instanceof Skeleton)) this.bloodFx(e.x, e.z);
                 this.sfx(atk.riposte ? 'crit' : 'hit');
                 this.hitstop = atk.riposte ? 0.16 : (atk.heavy ? 0.08 : 0.05);
                 this.shake(0.1, atk.heavy ? 0.12 : 0.06);
@@ -176,7 +223,7 @@ export class Game {
         if (p.isParrying()) {
             e.parried();
             this.sfx('parried');
-            this.sparkFx((p.x + e.x) / 2, (p.z + e.z) / 2 - 0.6);
+            this.sparkFx((p.x + e.x) / 2, (p.z + e.z) / 2, 1.2);
             this.hitstop = 0.12;
             this.ui.floatText('PARIERT', e.x, e.z, 'parry');
             this.hint('riposte', 'Pariert! Greife jetzt an für einen kritischen Gegenschlag.');
@@ -196,18 +243,17 @@ export class Game {
     shoot(p, kind) {
         const tide = kind === 'tide';
         const sp = tide ? 9 : 16;
-        const s = this.fx.get(this.art.fx);
-        s.sprite.set(tide ? 'pearl' : 'ball');
-        const light = tide ? this.fx.flash(p.x, p.z, [0.3, 0.9, 1], 2, 0.3, 4) : this.fx.flash(p.x + p.fx, p.z + p.fz, [1, 0.7, 0.3], 5, 0.12, 6);
-        this.projectiles.push({ s, x: p.x + p.fx * 0.5, z: p.z + p.fz * 0.5 - 0.5, vx: p.fx * sp, vz: p.fz * sp, life: tide ? 0.9 : 0.55, dmg: this.derived.offDmg, land: true });
+        const b = this.fx.ball(tide ? 'tide' : 'pistol');
+        const y = this.gy(p.x, p.z) + 1.15;
+        if (tide) this.fx.flash(p.x, y, p.z, [0.3, 0.9, 1], 6, 0.3, 5); else this.fx.flash(p.x + p.fx, y, p.z + p.fz, [1, 0.7, 0.3], 14, 0.1, 7);
+        this.projectiles.push({ b, x: p.x + p.fx * 0.6, y, z: p.z + p.fz * 0.6, vx: p.fx * sp, vz: p.fz * sp, life: tide ? 0.9 : 0.55, dmg: this.derived.offDmg, land: true });
         this.sfx(tide ? 'tide' : 'pistol');
-        if (!tide) this.smokeFx(p.x + p.fx * 0.8, p.z + p.fz * 0.8 - 0.5);
+        if (!tide) this.smokeFx(p.x + p.fx * 0.8, p.z + p.fz * 0.8);
     }
 
     spawnBall(x, z, vx, vz, dmg, delay) {
-        const s = this.fx.get(this.art.fx);
-        s.sprite.set('ball');
-        this.projectiles.push({ s, x, z, vx, vz, life: 0.85 + delay, dmg, sea: true });
+        const b = this.fx.ball('cannon');
+        this.projectiles.push({ b, x, y: 1.3, z, vx, vz, life: 0.85 + delay, dmg, sea: true });
     }
 
     ramShip(shark, dmg) {
@@ -224,22 +270,22 @@ export class Game {
             const b = this.projectiles[i];
             b.life -= dt;
             b.x += b.vx * dt; b.z += b.vz * dt;
-            b.s.sprite.setPos(b.x, b.z);
+            if (b.sea) b.y = Math.max(0.1, b.y - dt * 0.9);
+            b.b.e.setPosition(b.x, b.y, b.z);
             let done = b.life <= 0;
             for (const e of this.enemies) {
                 if (done || !e.alive) continue;
                 if (b.sea !== !!e.sea && !(b.land && !e.sea)) continue;
-                const hz = e.sea ? 0 : 0.4;
-                if (Math.hypot(e.x - b.x, e.z - hz - b.z) < e.radius + 0.25) {
+                if (Math.hypot(e.x - b.x, e.z - b.z) < e.radius + 0.25) {
                     e.damage(b.dmg, 1, { x: b.x - b.vx, z: b.z - b.vz });
                     this.sparkFx(b.x, b.z); this.sfx('hit');
                     done = true;
                 }
             }
-            if (!done && b.land && this.map.blockedWalk(b.x, b.z + 0.4, 0.05)) { done = true; this.sparkFx(b.x, b.z); }
+            if (!done && b.land && this.map.blockedWalk(b.x, b.z, 0.05)) { done = true; this.sparkFx(b.x, b.z); }
             if (done) {
                 if (b.sea) this.splashFx(b.x, b.z);
-                b.s.busy = false; b.s.sprite.setVisible(false);
+                this.fx.free(b.b);
                 this.projectiles.splice(i, 1);
             }
         }
@@ -250,7 +296,7 @@ export class Game {
         const n = Math.round(e.pearls * greed);
         this.save.pearls += n;
         this.ui.pearlGain(n);
-        this.fx.play(this.art.fx, 'pearl', e.x, e.z - 0.5, { dur: 0.6, vx: 0, vz: -2, fps: 8 });
+        this.fx.burst('pearl', e.x, this.gy(e.x, e.z) + 0.8, e.z);
         if (this.lockTarget === e) this.lockTarget = null;
     }
 
@@ -287,9 +333,9 @@ export class Game {
     }
     updateStain() {
         const st = this.save?.stain;
-        this.stainSprite.setVisible(!!st);
-        this.stainLight.light.intensity = st ? 1.6 : 0;
-        if (st) { this.stainSprite.setPos(st.x, st.z); this.stainLight.setLocalPosition(st.x, 0.8, st.z); }
+        this.stain.enabled = !!st;
+        this.stainLight.light.intensity = st ? 5 : 0;
+        if (st) { const y = Math.max(0, this.gy(st.x, st.z)) + 0.7; this.stain.setPosition(st.x, y, st.z); this.stainLight.setLocalPosition(st.x, y + 0.3, st.z); }
     }
     checkStain() {
         const st = this.save.stain;
@@ -312,7 +358,7 @@ export class Game {
         if (this.mode === 'land') {
             for (const f of m.fires) if (f.kind === 'land' && Math.hypot(p.x - f.x, p.z - f.z - 0.3) < 1.6) return { label: s.litFires.includes(f.id) ? 'Rasten' : 'Feuer entzünden', act: () => this.useFire(f) };
             for (const c of m.chests) if (!s.chests.includes(c.id) && Math.hypot(p.x - c.x, p.z - c.z) < 1.3) return { label: 'Truhe öffnen', act: () => this.openChest(c) };
-            if (this.ship.ready && this.shipDist(p.x, p.z) < 2.3) return { label: 'An Bord gehen', act: () => this.board() };
+            if (this.ship.ready && this.shipDist(p.x, p.z) < 4.6) return { label: 'An Bord gehen', act: () => this.board() };
         } else {
             for (const f of m.fires) if (f.kind === 'sea' && Math.hypot(this.ship.x - f.x - 1, this.ship.z - f.z) < 4.2) return { label: s.litFires.includes(f.id) ? 'Am Wrack rasten' : 'Wrackfeuer entzünden', act: () => this.useFire(f) };
             const land = this.landingSpot();
@@ -414,7 +460,8 @@ export class Game {
     openChest(c) {
         const s = this.save;
         s.chests.push(c.id);
-        this.chestSprites[c.id].set('open');
+        this.chests[c.id].setOpen(true);
+        this.fx.flash(c.x, this.gy(c.x, c.z) + 0.8, c.z, [1, 0.8, 0.45], 10, 1.2, 6);
         s.pearls += c.pearls;
         this.sfx('chest');
         if (c.item === 'flask') { s.flasksMax++; this.player.flasks++; this.ui.banner('Rumflaschen-Splitter', `Eine Rumflasche mehr · +${c.pearls} Perlen`, 'gold', 3.5); }
@@ -434,7 +481,7 @@ export class Game {
         for (const e of this.enemies) e.reset();
         this.lockTarget = null;
         this.paused = true;
-        if (this.mode === 'land') { this.player.state = 'frozen'; this.player.face(f.x - this.player.x, f.z - this.player.z); }
+        if (this.mode === 'land') { this.player.state = 'sit'; this.player.t = 0; this.player.face(f.x - this.player.x, f.z - this.player.z); }
         this.audio.setMood('fire');
         this.persist();
         setTimeout(() => this.ui.restMenu(f), first ? 1600 : 200);
@@ -464,7 +511,7 @@ export class Game {
         this.persist(null);
         this.paused = true;
         this.audio.setMood('fire');
-        if (this.mode === 'land') this.player.state = 'frozen';
+        if (this.mode === 'land') { this.player.state = 'sit'; this.player.t = 0; }
     }
 
     // ---------------------------------------------------------------- loop
@@ -473,17 +520,20 @@ export class Game {
         inp.poll();
         if (!this.save) { // attract mode behind the title screen
             this.time += rawDt;
-            const f = this.map.fires[0];
-            this.camX = f.x + Math.sin(this.time * 0.06) * 5 + 2;
-            this.camZ = f.z + Math.cos(this.time * 0.045) * 3 - 1;
-            this.stage.camera.setPosition(this.camX, CAM_Y, this.camZ + CAM_BACK);
             this.view.update(rawDt);
+            this.fx.update(rawDt);
+            this.onAttract?.(rawDt);
             inp.endFrame();
             return;
         }
         if (inp.pressed('menu') && !this.ui.modalOpen() && this.dying === undefined) this.ui.pauseMenu();
         if (inp.pressed('map') && !this.ui.modalOpen()) this.ui.toggleMap();
-        if (this.paused || this.ui.modalOpen()) { this.view.update(rawDt); this.fx.update(rawDt); this.updateCamera(rawDt); this.hud.update(); inp.endFrame(); return; }
+        if (this.paused || this.ui.modalOpen()) {
+            this.view.update(rawDt, { x: this.camX, z: this.camZ }); this.fx.update(rawDt);
+            for (const c of Object.values(this.chests)) c.animate(rawDt);
+            if (this.mode === 'land' && this.player) this.player.animate(rawDt);
+            this.updateCamera(rawDt); this.hud.update(); inp.endFrame(); return;
+        }
         let dt = rawDt;
         if (this.hitstop > 0) { this.hitstop -= rawDt; dt = rawDt * 0.05; }
         this.time += dt;
@@ -510,7 +560,8 @@ export class Game {
         }
         this.updateProjectiles(dt);
         this.fx.update(dt);
-        this.view.update(dt);
+        this.view.update(dt, { x: this.camX, z: this.camZ });
+        for (const c of Object.values(this.chests)) c.animate(dt);
         this.updateDeath(rawDt);
         if (this.dying === undefined) {
             this.checkStain();
@@ -518,7 +569,7 @@ export class Game {
             this.hud.prompt(it ? it.label : null);
             if (it && inp.pressed('interact')) it.act();
         } else this.hud.prompt(null);
-        this.stainSprite.update(dt, 3);
+        if (this.stain.enabled) { const st = this.save.stain; this.stain.setPosition(st.x, Math.max(0, this.gy(st.x, st.z)) + 0.7 + Math.sin(this.time * 2) * 0.08, st.z); }
         this.audio.update(dt, this);
         this.updateExplored(dt);
         this.updateCamera(rawDt);
@@ -559,32 +610,36 @@ export class Game {
 
     updateCamera(dt) {
         const sea = this.mode === 'sea';
-        let tx = this.player.x, tz = this.player.z - 0.3;
-        if (sea) { const f = this.ship.fwd; tx = this.ship.x + f.x * this.ship.speed * 0.5; tz = this.ship.z + f.z * this.ship.speed * 0.5; }
+        let tx = this.player.x, tz = this.player.z;
+        if (sea) { const f = this.ship.fwd; tx = this.ship.x + f.x * this.ship.speed * 0.45; tz = this.ship.z + f.z * this.ship.speed * 0.45; }
         if (this.lockTarget && !sea) { tx = (tx * 2 + this.lockTarget.x) / 3; tz = (tz * 2 + this.lockTarget.z) / 3; }
-        const k = 1 - Math.pow(0.0015, dt);
+        // smooth follow (critically damped like SmoothDamp)
+        const k = 1 - Math.pow(0.0025, dt);
         this.camX += (tx - this.camX) * k;
         this.camZ += (tz - this.camZ) * k;
+        const ty = sea ? 0 : Math.max(0, this.gy(this.camX, this.camZ));
+        this.camY = (this.camY ?? ty) + (ty - (this.camY ?? ty)) * k;
         let sx = 0, sz = 0;
         if (this.shakeT > 0) {
             this.shakeT -= dt;
-            sx = (Math.random() - 0.5) * this.shakeAmp * 2; sz = (Math.random() - 0.5) * this.shakeAmp * 2;
+            const fall = Math.max(0, this.shakeT) * 4;
+            sx = (Math.random() - 0.5) * this.shakeAmp * 2 * Math.min(1, fall); sz = (Math.random() - 0.5) * this.shakeAmp * 2 * Math.min(1, fall);
             if (this.shakeT <= 0) this.shakeAmp = 0;
         }
-        // pull the camera back while sailing: the ship is big and fast
-        this.camZoom = (this.camZoom || 1) + ((sea ? 1.4 : 1) - (this.camZoom || 1)) * (1 - Math.pow(0.05, dt));
-        this.stage.camera.setPosition(this.camX + sx, CAM_Y * this.camZoom, this.camZ + sz + CAM_BACK * this.camZoom);
+        // a little further out at sea; the wheel zooms a bit (in tight limits)
+        const want = (sea ? 1.35 : 1) * (this.userZoom || 1);
+        this.camZoom = (this.camZoom || 1) + (want - (this.camZoom || 1)) * (1 - Math.pow(0.05, dt));
+        this.stage.lookAt(this.camX + sx, this.camY + 0.6, this.camZ + sz, this.camZoom);
     }
 
-    // world -> screen (CSS pixels in the page). h = height along a standing sprite (leans with it).
+    // world -> screen (CSS pixels in the page); h = height above the ground
     toScreen(x, z, h = 0) {
         const c = this.stage.app.graphicsDevice.canvas;
         const r = c.getBoundingClientRect();
-        const lean = (90 - PITCH) * Math.PI / 180; // eslint-disable-line no-mixed-operators
-        _v.set(x, h * Math.cos(lean), z - h * Math.sin(lean));
+        _v.set(x, (this.mode === 'sea' && h < 1.5 ? 0 : Math.max(0, this.gy(x, z))) + h, z);
         this.stage.camera.camera.worldToScreen(_v, _o);
-        const sx = r.width / (this.stage.app.graphicsDevice.clientRect.width || r.width), sy = r.height / (this.stage.app.graphicsDevice.clientRect.height || r.height);
-        return { x: r.left + _o.x * sx, y: r.top + _o.y * sy };
+        const cr = this.stage.app.graphicsDevice.clientRect;
+        return { x: r.left + _o.x * r.width / (cr.width || r.width), y: r.top + _o.y * r.height / (cr.height || r.height) };
     }
 }
 

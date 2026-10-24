@@ -2,10 +2,10 @@
 const KEYS = {
     up: ['KeyW', 'ArrowUp'], down: ['KeyS', 'ArrowDown'], left: ['KeyA', 'ArrowLeft'], right: ['KeyD', 'ArrowRight'],
     attack: ['KeyJ'], heavy: ['KeyL'], item: ['KeyK'], roll: ['Space'], parry: ['KeyQ'], lock: ['Tab'],
-    drink: ['KeyR'], interact: ['KeyE'], shanty: ['KeyF'], menu: ['Escape'], map: ['KeyM'], legend: ['KeyH']
+    drink: ['KeyR'], interact: ['KeyE'], shanty: ['KeyF'], menu: ['Escape'], map: ['KeyM'], legend: ['KeyH'], spell: ['KeyC'], belt1: ['Digit1'], belt2: ['Digit2'], belt3: ['Digit3'], belt4: ['Digit4']
 };
 // standard gamepad mapping
-const PAD = { roll: 0, item: 1, interact: 2, attack: 5, heavy: 7, parry: 4, lock: 11, drink: 13, shanty: 12, menu: 9, map: 8 };
+const PAD = { roll: 0, item: 1, interact: 2, spell: 3, attack: 5, heavy: 7, parry: 4, lock: 11, drink: 13, shanty: 12, menu: 9, map: 8 };
 
 export class Input {
     constructor() {
@@ -60,7 +60,10 @@ export class Input {
         let z = (this.held('down') ? 1 : 0) - (this.held('up') ? 1 : 0);
         if (this.stick && (this.stick.x || this.stick.z)) { x = this.stick.x; z = this.stick.z; }
         const l = Math.hypot(x, z);
-        return l > 1 ? { x: x / l, z: z / l } : { x, z };
+        if (l > 1) { x /= l; z /= l; }
+        // the camera is turned 45°: map screen directions onto the world grid
+        const c = Math.SQRT1_2;
+        return { x: (x + z) * c, z: (z - x) * c };
     }
     // a touch button press: counts as pressed this frame and held until released
     vPress(action) { this.vHits.add(action); this.vHeld.add(action); }

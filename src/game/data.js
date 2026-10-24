@@ -43,6 +43,8 @@ export function derived(save) {
     return {
         maxHp: Math.round(60 + s.vit * 9),
         maxSt: Math.round(55 + s.end * 7),
+        maxMp: Math.round(40 + s.fai * 6),
+        spellDmg: Math.round(18 + s.fai * 4.5),
         dmg: Math.round(w.dmg * (0.7 + scaleStat * 0.06)),
         offDmg: save.off !== 'none' ? Math.round(OFFHAND[save.off].dmg * (0.75 + (save.off === 'tide' ? s.fai : s.dex) * 0.05)) : 0
     };

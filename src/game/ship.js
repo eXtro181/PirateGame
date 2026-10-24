@@ -10,7 +10,7 @@ const DEPTH = -4.2;
 export class Ship {
     constructor(game) {
         this.game = game;
-        const model = buildShipModel(game.app);
+        const model = buildShipModel(game.app, game.M);
         this.entity = model.root; this.body = model.body; this.sails = model.sails; this.lanternPos = model.lanternPos;
         game.app.root.addChild(this.entity);
         this.len = SHIP_LEN;
@@ -26,7 +26,7 @@ export class Ship {
         this.reload = [0, 0];
         this.dx = 0; this.dz = 0; // drift from currents
         this.spin = 0;
-        this.lantern = game.view.addOmni(0, 2.4, 0, [1.0, 0.75, 0.4], 0.5, 6, { flicker: 0.1 });
+        this.lantern = game.view.addOmni(0, 2.4, 0, [1.0, 0.7, 0.35], 6, 10);
     }
     get fwd() { return { x: Math.sin(this.heading), z: -Math.cos(this.heading) }; }
     place(x, z, heading) { this.x = x; this.z = z; this.heading = heading; this.speed = 0; this.sail = 0; this.dx = this.dz = 0; this.state = 'surfaced'; this.riseT = 1; this.sync(); }

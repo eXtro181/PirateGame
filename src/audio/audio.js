@@ -307,6 +307,8 @@ export class Audio {
             case 'level': [0, 0.1, 0.2].forEach((d, i) => this.tone(t + d, 'triangle', 392 * Math.pow(1.26, i), 392 * Math.pow(1.26, i), 0.6, 0.15)); break;
             case 'lock': this.tone(t, 'square', 1200, 1200, 0.04, 0.08); break;
             case 'rise': this.tone(t, 'sine', 48, 70, 2.2, 0.7); this.noiseHit(t, 180, 2.4, 0.7, null, 'lowpass'); for (let k = 0; k < 9; k++) this.tone(t + 0.4 + k * 0.17 + Math.random() * 0.1, 'sine', 300 + Math.random() * 500, 900 + Math.random() * 600, 0.07, 0.08); this.noiseHit(t + 1.4, 900, 0.9, 0.5, null, 'bandpass', 0.8); break;
+            case 'zap': for (let k = 0; k < 6; k++) this.noiseHit(t + k * 0.035, 3000 + Math.random() * 3000, 0.06, 0.45, null, 'bandpass', 2); this.tone(t, 'sawtooth', 1400, 120, 0.35, 0.22); this.noiseHit(t + 0.05, 400, 0.6, 0.6, null, 'lowpass'); break;
+            case 'charge': this.tone(t, 'sine', 300, 900, 0.22, 0.12); this.noiseHit(t, 2500, 0.2, 0.2, null, 'bandpass', 3); break;
             case 'board': this.noiseHit(t, 400, 0.4, 0.4, null, 'lowpass'); this.tone(t, 'triangle', 180, 120, 0.3, 0.1); break;
             case 'click': this.tone(t, 'square', 900, 900, 0.03, 0.06); break;
         }

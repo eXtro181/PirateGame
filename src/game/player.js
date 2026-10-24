@@ -1,19 +1,16 @@
 // The player on foot: Soulslike movement and combat (stamina, roll i-frames, parry, flasks).
-import { Sprite } from '../core/sprite.js';
+import { Humanoid } from './figure.js';
 import { WEAPONS } from './data.js';
 
 const WALK = 3.9;
 const ROLL_COST = 17, PARRY_COST = 9;
 
-export function dirOf(fx, fz) {
-    if (Math.abs(fx) > Math.abs(fz) * 1.05) return 'side';
-    return fz < 0 ? 'up' : 'down';
-}
+const SPELL_COST = 28;
 
 export class Player {
-    constructor(game, sheet) {
+    constructor(game, save) {
         this.game = game;
-        this.sprite = new Sprite(game.app, sheet, { y: 0.06, pivotY: 2 });
+        this.makeFigure(save);
         this.x = 0; this.z = 0;
         this.fx = 0; this.fz = 1;
         this.vx = 0; this.vz = 0;
@@ -29,12 +26,19 @@ export class Player {
         this.ammo = 0;
         this.invuln = 0; // brief post-hit invulnerability
         this.radius = 0.24;
-        this.glow = game.view.addOmni(0, 1.1, 0, [1.0, 0.78, 0.5], 0.55, 3.6);
+        this.mp = 0;
+        // the light around the player: only a circle of the world is lit (light radius)
+        this.glow = game.view.addOmni(0, 2.4, 0, [1.0, 0.86, 0.68], 4.2, 9, { shadows: true, res: 1024 });
     }
     get weapon() { return WEAPONS[this.game.save.weapon]; }
     get stats() { return this.game.derived; }
-    setSheet(sheet) { this.sprite.destroy(); this.sprite = new Sprite(this.game.app, sheet, { y: 0.06, pivotY: 2 }); }
-    place(x, z) { this.x = x; this.z = z; this.vx = this.vz = 0; this.state = 'idle'; this.t = 0; this.sprite.setPos(x, z); }
+    get sprite() { return this.fig; }
+    makeFigure(save) {
+        this.fig?.destroy();
+        this.fig = new Humanoid(this.game.app, this.game.M, { look: save.look, weapon: save.weapon, off: save.off });
+    }
+    setSave(save) { this.makeFigure(save); }
+    place(x, z) { this.x = x; this.z = z; this.vx = this.vz = 0; this.state = 'idle'; this.t = 0; this.fig.setPos(x, this.game.terrain.ground(x, z), z); }
     face(x, z) { const l = Math.hypot(x, z); if (l > 0.01) { this.fx = x / l; this.fz = z / l; } }
 
     spend(cost) {
@@ -74,10 +78,11 @@ export class Player {
                 } else if (inp.pressed('attack') && this.st > 0) this.startAttack(false);
                 else if (inp.pressed('heavy') && this.st > 0) this.startAttack(true);
                 else if (inp.pressed('parry') && this.spend(PARRY_COST)) { this.state = 'parry'; this.t = 0; g.sfx('parry'); }
-                else if (inp.pressed('drink')) {
+                else if (inp.pressed('drink') || inp.pressed('belt1') || inp.pressed('belt2') || inp.pressed('belt3') || inp.pressed('belt4')) {
                     if (this.flasks > 0) { this.state = 'drink'; this.t = 0; this.drank = false; g.sfx('drink'); }
                     else g.toast('Keine Rumflaschen mehr.');
                 } else if (inp.pressed('item')) this.useOffhand();
+                else if (inp.pressed('spell')) this.castSpell();
                 break;
             }
             case 'roll': {
@@ -128,6 +133,12 @@ export class Player {
                 if (this.t > 1.05) this.toIdle();
                 break;
             }
+            case 'cast': {
+                this.vx = this.vz = 0;
+                if (!this.cast && this.t > 0.22) { this.cast = true; g.chainLightning(this); }
+                if (this.t > 0.6) this.toIdle();
+                break;
+            }
             case 'hurt': {
                 this.vx *= Math.pow(0.002, dt); this.vz *= Math.pow(0.002, dt);
                 if (this.t > 0.32) this.toIdle();
@@ -137,7 +148,7 @@ export class Player {
                 this.vx = this.vz = 0;
                 break;
             }
-            case 'frozen': { this.vx = this.vz = 0; break; }
+            case 'frozen': case 'sit': { this.vx = this.vz = 0; break; }
         }
         this.move(dt);
         this.animate(dt);
@@ -171,6 +182,17 @@ export class Player {
         this.vx = this.vz = 0;
     }
 
+    castSpell() {
+        const g = this.game;
+        if (this.mp < SPELL_COST) { g.toast('Zu wenig Geist für den Kettenblitz. Raste an einem Feuer.'); return; }
+        if (!this.spend(12)) return;
+        this.mp -= SPELL_COST;
+        this.state = 'cast'; this.t = 0; this.cast = false;
+        const tgt = g.lockTarget || g.nearestEnemy(this.x, this.z, 7);
+        if (tgt) this.face(tgt.x - this.x, tgt.z - this.z);
+        g.sfx('charge');
+    }
+
     useOffhand() {
         const g = this.game;
         if (g.save.off === 'none') { g.toast('Keine Zweitwaffe ausgerüstet.'); return; }
@@ -194,24 +216,18 @@ export class Player {
     }
 
     animate(dt) {
-        const s = this.sprite;
-        const dir = dirOf(this.fx, this.fz);
-        s.setFlip(dir === 'side' && this.fx < 0);
-        switch (this.state) {
-            case 'walk': s.set(`walk-${dir}`); s.update(dt, 9); break;
-            case 'roll': s.set('roll'); s.update(dt, 10); break;
-            case 'attack': s.set(this.t < this.atk.wind ? `windup-${dir}` : `strike-${dir}`); break;
-            case 'parry': s.set(`windup-${dir}`); break;
-            case 'drink': s.set('drink'); break;
-            case 'hurt': s.set(`hurt-${dir}`); break;
-            case 'dead': s.set('dead'); break;
-            default: s.set(`stand-${dir}`);
-        }
-        // blink while invulnerable after a hit
-        s.setVisible(this.state === 'dead' || this.invuln <= 0 || Math.floor(this.invuln * 20) % 2 === 0);
-        s.setPos(this.x, this.z);
-        this.glow.setLocalPosition(this.x, 1.1, this.z - 0.4);
-        this.glow.enabled = this.game.mode === 'land';
+        const g = this.game, f = this.fig;
+        const st = this.state === 'attack' ? 'attack' : this.state;
+        f.animate(dt, { state: st, t: this.t, speed: Math.hypot(this.vx, this.vz), atk: this.atk, combo: this.combo, hipsOffset: this.sitting ? 0 : 0 });
+        f.setYaw(this.fx, this.fz);
+        const y = g.terrain.ground(this.x, this.z);
+        f.setPos(this.x, y, this.z);
+        // flicker while invulnerable after a hit
+        f.setVisible(g.mode === 'land' && (this.state === 'dead' || this.invuln <= 0 || Math.floor(this.invuln * 20) % 2 === 0));
+        this.glow.setLocalPosition(this.x - 0.6, y + 2.4, this.z + 0.6);
+        this.glow.enabled = g.mode === 'land';
+        // spirit regenerates slowly
+        this.mp = Math.min(this.stats.maxMp, this.mp + dt * 1.2);
     }
 
     isParrying() { return this.state === 'parry' && this.t > 0.02 && this.t < 0.24 * (this.weapon.parry || 1); }

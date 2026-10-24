@@ -1,13 +1,19 @@
 // Enemies: beach crabs, reassembling skeleton pirates and the sea monster "Rostkiefer".
-import { Sprite } from '../core/sprite.js';
-import { dirOf } from './player.js';
+import { Humanoid, CrabFigure, SharkFigure } from './figure.js';
 
 class Enemy {
-    constructor(game, spawn, sheet, opts) {
+    constructor(game, spawn, fig) {
         this.game = game;
         this.spawn = spawn;
-        this.sprite = new Sprite(game.app, sheet, opts);
+        this.fig = fig;
         this.reset();
+    }
+    get sprite() { return this.fig; }
+    sync(dt, extra = {}) {
+        const g = this.game;
+        this.fig.animate(dt, { state: this.state, t: this.t, speed: this.speed || 0, ...extra });
+        this.fig.setYaw(this.fx, this.fz);
+        this.fig.setPos(this.x, g.terrain.ground(this.x, this.z), this.z);
     }
     reset() {
         const s = this.spawn;
@@ -19,12 +25,13 @@ class Enemy {
         this.state = 'idle';
         this.t = Math.random();
         this.hitBy = null;
-        this.sprite.setVisible(true);
+        this.fig.setVisible(true);
         this.showBarUntil = 0;
     }
     dist() { const p = this.game.player; return Math.hypot(p.x - this.x, p.z - this.z); }
     toPlayer() { const p = this.game.player; const dx = p.x - this.x, dz = p.z - this.z, l = Math.hypot(dx, dz) || 1; return { x: dx / l, z: dz / l, l }; }
-    moveBy(dx, dz) {
+    moveBy(dx, dz, dt = 1 / 60) {
+        this.speed = Math.hypot(dx, dz) / Math.max(dt, 1e-3);
         const m = this.game.map;
         const r = m.moveCircle(this.x, this.z, dx, dz, this.radius);
         this.x = r.x; this.z = r.z;
@@ -49,10 +56,11 @@ class Enemy {
 
 export class Crab extends Enemy {
     constructor(game, spawn) {
-        super(game, spawn, game.art.crab, { y: 0.045, pivotY: 3 });
+        super(game, spawn, new CrabFigure(game.app, game.M));
         this.radius = 0.27;
     }
-    reset() { this.maxHp = 34; this.flinch = 0.8; super.reset(); this.sprite.set('idle'); }
+    get displayName() { return 'Strandkrabbe'; }
+    reset() { this.maxHp = 34; this.flinch = 0.8; super.reset(); }
     get pearls() { return 22; }
     die() { this.alive = false; this.set('dead'); this.game.onEnemyKilled(this); }
     update(dt) {
@@ -86,26 +94,21 @@ export class Crab extends Enemy {
             case 'stagger':
                 if (this.t > (this.staggerTime || 0.4)) this.set('chase');
                 break;
-            case 'dead':
-                if (this.t > 1.5) this.sprite.setVisible(Math.floor(this.t * 10) % 2 === 0);
-                if (this.t > 2.2) this.sprite.setVisible(false);
-                return this.sprite.setPos(this.x, this.z);
+            case 'dead': // the corpse stays until the next rest
+                return this.sync(dt);
         }
-        this.moveBy(mx, mz);
-        const anim = { idle: 'idle', chase: 'walk', windup: 'windup', attack: 'attack', stagger: 'idle' }[this.state];
-        this.sprite.set(anim);
-        this.sprite.update(dt, this.state === 'chase' ? 10 : 3);
-        this.sprite.setFlip(this.fx < 0);
-        this.sprite.setPos(this.x, this.z);
+        this.moveBy(mx, mz, dt);
+        this.sync(dt);
     }
 }
 
 export class Skeleton extends Enemy {
     constructor(game, spawn) {
-        super(game, spawn, game.art.skeleton, { y: 0.055, pivotY: 2 });
+        super(game, spawn, new Humanoid(game.app, game.M, { skeleton: true }));
         this.radius = 0.25;
     }
-    reset() { this.maxHp = 62; this.flinch = 0.35; this.destroyed = false; super.reset(); this.sprite.set('stand-down'); }
+    get displayName() { return 'Skelettpirat'; }
+    reset() { this.maxHp = 62; this.flinch = 0.35; this.destroyed = false; super.reset(); }
     get pearls() { return 55; }
     die() {
         // collapses into a pile and reassembles unless the skull is smashed
@@ -113,6 +116,7 @@ export class Skeleton extends Enemy {
         this.hp = 0;
         this.set('pile');
         this.game.sfx('bones');
+        this.game.fx.burst('bone', this.x, 0.4 + this.game.terrain.ground(this.x, this.z), this.z);
         this.game.hint('pile', 'Zerschlage den Schädel, solange er am Boden liegt!');
     }
     destroy() {
@@ -173,33 +177,24 @@ export class Skeleton extends Enemy {
             case 'rise':
                 if (this.t > 0.7) { this.hp = Math.round(this.maxHp * 0.6); this.set('chase'); }
                 break;
-            case 'gone':
-                if (this.t > 0.15) this.sprite.setVisible(false);
-                return;
+            case 'gone': // the bones stay where they fell
+                return this.sync(dt);
         }
-        this.moveBy(mx, mz);
-        const dir = dirOf(this.fx, this.fz);
-        this.sprite.setFlip(dir === 'side' && this.fx < 0);
-        const s = this.sprite;
-        if (this.state === 'pile' || this.state === 'gone') s.set('pile');
-        else if (this.state === 'rise') { s.set(Math.floor(this.t * 8) % 2 ? 'pile' : `stand-${dir}`); }
-        else if (this.state === 'windup') s.set(`windup-${dir}`);
-        else if (this.state === 'attack') s.set(`strike-${dir}`);
-        else if (this.state === 'stagger') s.set(`hurt-${dir}`);
-        else if (this.state === 'chase' || this.state === 'return') { s.set(`walk-${dir}`); s.update(dt, 7); }
-        else s.set(`stand-${dir}`);
-        s.setPos(this.x, this.z);
+        this.moveBy(mx, mz, dt);
+        const st = this.state === 'attack' ? 'strike' : this.state;
+        this.sync(dt, { state: st, atk: { wind: this.windT || 0.5, act: 0.14, rec: 0.3 }, combo: this.combo === 0 ? 1 : 0 });
     }
 }
 
 // Sea monster: circles the ship, then rams it.
 export class Shark extends Enemy {
     constructor(game, spawn) {
-        super(game, spawn, game.art.shark, { y: 0.02, anchor: 0.5, caster: false });
+        super(game, spawn, new SharkFigure(game.app, game.M));
         this.radius = 1.2;
         this.sea = true;
     }
-    reset() { this.maxHp = 160; this.flinch = 0; super.reset(); this.angle = 0; this.sprite.set('swim'); this.state = 'roam'; }
+    get displayName() { return 'Rostkiefer, Schrecken der Tiefe'; }
+    reset() { this.maxHp = 160; this.flinch = 0; super.reset(); this.angle = 0; this.state = 'roam'; this.depth = -0.3; }
     get pearls() { return 420; }
     die() { this.alive = false; this.set('dead'); this.game.onEnemyKilled(this); this.game.hint('shark', 'Rostkiefer ist besiegt. Die Tiefe hat ein Ungeheuer weniger.'); }
     damage(dmg, poise, from) {
@@ -234,9 +229,10 @@ export class Shark extends Enemy {
                 tx = this.x - dx; tz = this.z - dz; speed = 5;
                 if (this.t > 1.8) this.set('circle');
                 break;
-            case 'dead':
-                this.sprite.entity.setLocalScale(1, 1, Math.max(0.01, 1 - this.t));
-                if (this.t > 1) this.sprite.setVisible(false);
+            case 'dead': // sinks into the deep
+                this.fig.setPos(this.x, -0.3 - this.t * 1.5, this.z);
+                this.fig.animate(dt, { state: 'dead' });
+                if (this.t > 3) this.fig.setVisible(false);
                 return;
         }
         const ddx = tx - this.x, ddz = tz - this.z, dl = Math.hypot(ddx, ddz) || 1;
@@ -247,9 +243,10 @@ export class Shark extends Enemy {
         this.angle += Math.max(-3 * dt, Math.min(3 * dt, diff));
         const nx = this.x + Math.cos(this.angle) * speed * dt, nz = this.z + Math.sin(this.angle) * speed * dt;
         if (!this.game.map.blockedSail(nx, nz, 0.6)) { this.x = nx; this.z = nz; } else this.angle += 1.5 * dt;
-        this.sprite.update(dt, 6);
-        this.sprite.entity.setLocalScale(1, 1, 1);
-        this.sprite.setPos(this.x, this.z);
-        this.sprite.entity.setEulerAngles(0, -this.angle * 180 / Math.PI, 0);
+        // mostly submerged; it surfaces when it charges
+        this.depth += ((this.state === 'charge' ? -0.02 : -0.32) - this.depth) * Math.min(1, dt * 2);
+        this.fig.animate(dt, { state: this.state });
+        this.fig.setPos(this.x, this.depth, this.z);
+        this.fig.setYaw(Math.cos(this.angle), Math.sin(this.angle));
     }
 }
