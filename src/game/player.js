@@ -1,0 +1,229 @@
+// The player on foot: Soulslike movement and combat (stamina, roll i-frames, parry, flasks).
+import { Sprite } from '../core/sprite.js';
+import { WEAPONS } from './data.js';
+
+const WALK = 3.9;
+const ROLL_COST = 17, PARRY_COST = 9;
+
+export function dirOf(fx, fz) {
+    if (Math.abs(fx) > Math.abs(fz) * 1.05) return 'side';
+    return fz < 0 ? 'up' : 'down';
+}
+
+export class Player {
+    constructor(game, sheet) {
+        this.game = game;
+        this.sprite = new Sprite(game.app, sheet, { y: 0.06, pivotY: 2 });
+        this.x = 0; this.z = 0;
+        this.fx = 0; this.fz = 1;
+        this.vx = 0; this.vz = 0;
+        this.state = 'idle';
+        this.t = 0;
+        this.hp = 100; this.st = 100;
+        this.stDelay = 0;
+        this.flasks = 3;
+        this.combo = 0;
+        this.queued = null;
+        this.hitSet = new Set();
+        this.riposteUntil = 0;
+        this.ammo = 0;
+        this.invuln = 0; // brief post-hit invulnerability
+        this.radius = 0.3;
+        this.glow = game.view.addOmni(0, 1.1, 0, [1.0, 0.78, 0.5], 0.55, 3.6);
+    }
+    get weapon() { return WEAPONS[this.game.save.weapon]; }
+    get stats() { return this.game.derived; }
+    setSheet(sheet) { this.sprite.destroy(); this.sprite = new Sprite(this.game.app, sheet, { y: 0.06, pivotY: 2 }); }
+    place(x, z) { this.x = x; this.z = z; this.vx = this.vz = 0; this.state = 'idle'; this.t = 0; this.sprite.setPos(x, z); }
+    face(x, z) { const l = Math.hypot(x, z); if (l > 0.01) { this.fx = x / l; this.fz = z / l; } }
+
+    spend(cost) {
+        if (this.st <= 0) return false;
+        this.st -= cost;
+        this.stDelay = 0.55;
+        return true;
+    }
+
+    canAct() { return this.state === 'idle' || this.state === 'walk'; }
+
+    update(dt) {
+        const g = this.game, inp = g.input;
+        this.t += dt;
+        this.invuln = Math.max(0, this.invuln - dt);
+        // stamina regeneration
+        this.stDelay -= dt;
+        if (this.stDelay <= 0 && this.state !== 'roll' && this.state !== 'attack') {
+            const rate = this.state === 'drink' ? 20 : 52;
+            this.st = Math.min(this.stats.maxSt, this.st + rate * dt);
+        }
+        const ax = inp.axis();
+        const target = g.lockTarget;
+        if (target && (!target.alive || target.state === 'pile' || Math.hypot(target.x - this.x, target.z - this.z) > 11)) g.lockTarget = null;
+
+        switch (this.state) {
+            case 'idle':
+            case 'walk': {
+                const moving = Math.hypot(ax.x, ax.z) > 0.15;
+                this.vx = ax.x * WALK; this.vz = ax.z * WALK;
+                if (g.lockTarget) this.face(g.lockTarget.x - this.x, g.lockTarget.z - this.z);
+                else if (moving) this.face(ax.x, ax.z);
+                this.state = moving ? 'walk' : 'idle';
+                if (inp.pressed('roll') && this.spend(ROLL_COST)) {
+                    if (moving) this.face(ax.x, ax.z);
+                    this.state = 'roll'; this.t = 0; g.sfx('roll');
+                } else if (inp.pressed('attack') && this.st > 0) this.startAttack(false);
+                else if (inp.pressed('heavy') && this.st > 0) this.startAttack(true);
+                else if (inp.pressed('parry') && this.spend(PARRY_COST)) { this.state = 'parry'; this.t = 0; g.sfx('parry'); }
+                else if (inp.pressed('drink')) {
+                    if (this.flasks > 0) { this.state = 'drink'; this.t = 0; this.drank = false; g.sfx('drink'); }
+                    else g.toast('Keine Rumflaschen mehr.');
+                } else if (inp.pressed('item')) this.useOffhand();
+                break;
+            }
+            case 'roll': {
+                const d = 0.44;
+                const k = Math.max(0, 1 - this.t / d);
+                const sp = 8.2 * (0.35 + 0.65 * k);
+                this.vx = this.fx * sp; this.vz = this.fz * sp;
+                if (this.t > d) this.toIdle();
+                break;
+            }
+            case 'attack': {
+                const a = this.atk;
+                this.vx *= Math.pow(0.001, dt); this.vz *= Math.pow(0.001, dt);
+                if (g.lockTarget && this.t < a.wind) this.face(g.lockTarget.x - this.x, g.lockTarget.z - this.z);
+                if (!a.lunged && this.t >= a.wind) {
+                    a.lunged = true;
+                    this.vx = this.fx * (a.heavy ? 4.5 : 3.2); this.vz = this.fz * (a.heavy ? 4.5 : 3.2);
+                    g.slashFx(this, a.heavy);
+                    g.sfx(a.heavy ? 'heavy' : 'swing');
+                }
+                if (this.t >= a.wind && this.t <= a.wind + a.act) {
+                    g.meleeHit(this, a);
+                }
+                if (this.t > a.wind + a.act && (inp.pressed('attack') || inp.pressed('heavy'))) this.queued = inp.pressed('heavy') ? 'heavy' : 'light';
+                if (this.t > a.wind + a.act + a.rec * 0.45 && this.queued && this.st > 0) {
+                    const h = this.queued === 'heavy';
+                    this.queued = null;
+                    this.combo = (this.combo + 1) % 3;
+                    this.startAttack(h, true);
+                    break;
+                }
+                if (this.t > a.wind + a.act + a.rec) { this.combo = 0; this.toIdle(); }
+                break;
+            }
+            case 'parry': {
+                this.vx = this.vz = 0;
+                if (this.t > 0.42) this.toIdle();
+                break;
+            }
+            case 'drink': {
+                this.vx = ax.x * 1.0; this.vz = ax.z * 1.0;
+                if (!this.drank && this.t > 0.6) {
+                    this.drank = true;
+                    this.flasks--;
+                    this.hp = Math.min(this.stats.maxHp, this.hp + 60);
+                    g.healFx(this);
+                }
+                if (this.t > 1.05) this.toIdle();
+                break;
+            }
+            case 'hurt': {
+                this.vx *= Math.pow(0.002, dt); this.vz *= Math.pow(0.002, dt);
+                if (this.t > 0.32) this.toIdle();
+                break;
+            }
+            case 'dead': {
+                this.vx = this.vz = 0;
+                break;
+            }
+            case 'frozen': { this.vx = this.vz = 0; break; }
+        }
+        this.move(dt);
+        this.animate(dt);
+    }
+
+    toIdle() { this.state = 'idle'; this.t = 0; }
+
+    startAttack(heavy, chained = false) {
+        const w = this.weapon;
+        const cost = heavy ? w.stam * 1.7 : w.stam;
+        if (!this.spend(cost)) return;
+        const ax = this.game.input.axis();
+        if (!this.game.lockTarget && Math.hypot(ax.x, ax.z) > 0.2) this.face(ax.x, ax.z);
+        const sp = w.speed;
+        const riposte = this.game.time < this.riposteUntil;
+        this.atk = {
+            heavy,
+            wind: (heavy ? 0.4 : 0.13) / sp,
+            act: heavy ? 0.12 : 0.1,
+            rec: (heavy ? 0.36 : 0.24) / sp,
+            dmg: Math.round(this.stats.dmg * (heavy ? w.heavyMul : 1) * (riposte ? 2.6 : 1) * (1 + this.combo * 0.08)),
+            range: w.range * (heavy ? 1.12 : 1),
+            arc: heavy ? 1.35 : 1.1,
+            poise: heavy ? 2 : 1,
+            riposte,
+            lunged: false,
+            hit: new Set()
+        };
+        if (riposte) this.riposteUntil = 0;
+        this.state = 'attack'; this.t = 0;
+        this.vx = this.vz = 0;
+    }
+
+    useOffhand() {
+        const g = this.game;
+        if (g.save.off === 'none') { g.toast('Keine Zweitwaffe ausgerüstet.'); return; }
+        if (this.ammo <= 0) { g.toast(g.save.off === 'pistol' ? 'Kein Pulver mehr. Raste an einem Feuer.' : 'Keine Gezeitenkraft mehr. Raste an einem Feuer.'); return; }
+        const cost = g.save.off === 'pistol' ? 10 : 18;
+        if (!this.spend(cost)) return;
+        this.ammo--;
+        g.shoot(this, g.save.off);
+        this.state = 'hurt'; this.t = 0.12; // short recoil lock
+    }
+
+    move(dt) {
+        const g = this.game;
+        if (!this.vx && !this.vz) return;
+        const nx = this.x + this.vx * dt, nz = this.z + this.vz * dt;
+        if (!g.map.blockedWalk(nx, this.z, this.radius)) this.x = nx; else if (this.state === 'roll') this.vx = 0;
+        if (!g.map.blockedWalk(this.x, nz, this.radius)) this.z = nz; else if (this.state === 'roll') this.vz = 0;
+    }
+
+    animate(dt) {
+        const s = this.sprite;
+        const dir = dirOf(this.fx, this.fz);
+        s.setFlip(dir === 'side' && this.fx < 0);
+        switch (this.state) {
+            case 'walk': s.set(`walk-${dir}`); s.update(dt, 9); break;
+            case 'roll': s.set('roll'); s.update(dt, 10); break;
+            case 'attack': s.set(this.t < this.atk.wind ? `windup-${dir}` : `strike-${dir}`); break;
+            case 'parry': s.set(`windup-${dir}`); break;
+            case 'drink': s.set('drink'); break;
+            case 'hurt': s.set(`hurt-${dir}`); break;
+            case 'dead': s.set('dead'); break;
+            default: s.set(`stand-${dir}`);
+        }
+        // blink while invulnerable after a hit
+        s.setVisible(this.state === 'dead' || this.invuln <= 0 || Math.floor(this.invuln * 20) % 2 === 0);
+        s.setPos(this.x, this.z);
+        this.glow.setLocalPosition(this.x, 1.1, this.z - 0.4);
+        this.glow.enabled = this.game.mode === 'land';
+    }
+
+    isParrying() { return this.state === 'parry' && this.t > 0.02 && this.t < 0.24 * (this.weapon.parry || 1); }
+    isInvulnerable() { return (this.state === 'roll' && this.t > 0.03 && this.t < 0.33) || this.invuln > 0 || this.state === 'dead'; }
+
+    hurt(dmg, fromX, fromZ) {
+        const g = this.game;
+        this.hp -= dmg;
+        const dx = this.x - fromX, dz = this.z - fromZ, l = Math.hypot(dx, dz) || 1;
+        this.vx = dx / l * 5; this.vz = dz / l * 5;
+        this.invuln = 0.5;
+        g.shake(0.25, 0.18);
+        g.sfx('hurt');
+        g.bloodFx(this.x, this.z);
+        if (this.hp <= 0) { this.hp = 0; this.state = 'dead'; this.t = 0; g.onPlayerDeath(); }
+        else { this.state = 'hurt'; this.t = 0; }
+    }
+}
