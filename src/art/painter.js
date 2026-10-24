@@ -177,6 +177,81 @@ export class Pix {
         }
         return out;
     }
+    // ---- "128-bit" detail: Scale2x/Scale4x pixel-art upscaling, smoothed heights, material grain
+    upscale(k = 4, cell = 0) {
+        let src = this;
+        // transparent pixels compare equal regardless of leftover colour
+        for (let i = 0; i < src.col.length; i += 4) if (!src.col[i + 3]) { src.col[i] = src.col[i + 1] = src.col[i + 2] = 0; }
+        while (k > 1) { src = src._scale2x(cell); cell = cell ? cell * 2 : 0; k /= 2; }
+        src._detail(cell);
+        return src;
+    }
+    _scale2x(cell) {
+        const { w, h } = this;
+        const out = new Pix(w * 2, h * 2);
+        const C = new Uint32Array(this.col.buffer, this.col.byteOffset, w * h);
+        const E = new Uint32Array(this.emi.buffer, this.emi.byteOffset, w * h);
+        const OC = new Uint32Array(out.col.buffer), OE = new Uint32Array(out.emi.buffer);
+        for (let y = 0; y < h; y++) {
+            const by = cell ? y - y % cell : 0, ey = cell ? by + cell - 1 : h - 1;
+            const yu = Math.max(by, y - 1), yd = Math.min(ey, y + 1);
+            for (let x = 0; x < w; x++) {
+                const bx = cell ? x - x % cell : 0, ex = cell ? bx + cell - 1 : w - 1;
+                const xl = Math.max(bx, x - 1), xr = Math.min(ex, x + 1);
+                const i = y * w + x;
+                const iA = yu * w + x, iB = y * w + xr, iC = y * w + xl, iD = yd * w + x;
+                const A = C[iA], B = C[iB], L = C[iC], D = C[iD], P = C[i];
+                let s0 = i, s1 = i, s2 = i, s3 = i;
+                if (L === A && L !== D && A !== B) s0 = iA;
+                if (A === B && A !== L && B !== D) s1 = iB;
+                if (D === L && D !== B && L !== A) s2 = iC;
+                if (B === D && B !== A && D !== L) s3 = iD;
+                const o = (y * 2) * (w * 2) + x * 2;
+                OC[o] = C[s0]; OC[o + 1] = C[s1]; OC[o + w * 2] = C[s2]; OC[o + w * 2 + 1] = C[s3];
+                OE[o] = E[s0]; OE[o + 1] = E[s1]; OE[o + w * 2] = E[s2]; OE[o + w * 2 + 1] = E[s3];
+                const hh = this.hgt[i], fl = this.flat[i];
+                for (const q of [o, o + 1, o + w * 2, o + w * 2 + 1]) { out.hgt[q] = hh; out.flat[q] = fl; }
+                if (P === 0 && P !== C[s0]) out.hgt[o] = this.hgt[s0];
+            }
+        }
+        return out;
+    }
+    _detail(cell) {
+        const { w, h } = this;
+        // smooth the height field inside each cell so bevels become soft curves
+        for (let pass = 0; pass < 2; pass++) {
+            const src = this.hgt.slice();
+            for (let y = 0; y < h; y++) {
+                for (let x = 0; x < w; x++) {
+                    const k = y * w + x;
+                    if (!this.col[k * 4 + 3] || this.flat[k]) continue;
+                    let s = 0, n = 0;
+                    for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) {
+                        const xx = x + i, yy = y + j;
+                        if (xx < 0 || yy < 0 || xx >= w || yy >= h) continue;
+                        if (cell && (Math.floor(xx / cell) !== Math.floor(x / cell) || Math.floor(yy / cell) !== Math.floor(y / cell))) continue;
+                        const q = yy * w + xx;
+                        if (!this.col[q * 4 + 3]) continue;
+                        s += src[q]; n++;
+                    }
+                    this.hgt[k] = s / n;
+                }
+            }
+        }
+        // material grain: tiny height and colour variation per high-res pixel
+        for (let k = 0; k < w * h; k++) {
+            const a = this.col[k * 4 + 3];
+            if (!a) continue;
+            let r = ((k * 2654435761) >>> 0) / 4294967296;
+            r = (r + (((k * 40503) ^ (k >> 3)) & 1023) / 1023) * 0.5;
+            if (!this.flat[k]) this.hgt[k] += (r - 0.5) * 0.06;
+            const f = 1 + (r - 0.5) * 0.06;
+            this.col[k * 4] = Math.min(255, this.col[k * 4] * f);
+            this.col[k * 4 + 1] = Math.min(255, this.col[k * 4 + 1] * f);
+            this.col[k * 4 + 2] = Math.min(255, this.col[k * 4 + 2] * f);
+        }
+    }
+
     toCanvas(data = this.col) {
         const c = document.createElement('canvas');
         c.width = this.w; c.height = this.h;

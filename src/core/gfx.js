@@ -22,11 +22,15 @@ export function makeTexture(device, canvas, { srgb = true, repeat = false, name 
 }
 
 // Build the three maps of a painted image.
+// DETAIL = texture pixels per painted pixel ("128-bit" mode: 4x the pixel density of the art)
+export const DETAIL = 4;
 export function pixTextures(device, pix, name, normalStrength = 2.2, cell = 0) {
+    const hi = DETAIL > 1 ? pix.upscale(DETAIL, cell) : pix;
     return {
-        diffuse: makeTexture(device, pix.toCanvas(), { name: name + '-d' }),
-        normal: makeTexture(device, pix.toCanvas(pix.normalData(normalStrength, cell)), { srgb: false, name: name + '-n' }),
-        emissive: makeTexture(device, pix.toCanvas(pix.emi), { name: name + '-e' }),
+        diffuse: makeTexture(device, hi.toCanvas(), { name: name + '-d' }),
+        normal: makeTexture(device, hi.toCanvas(hi.normalData(normalStrength * DETAIL * 0.7, cell * DETAIL)), { srgb: false, name: name + '-n' }),
+        emissive: makeTexture(device, hi.toCanvas(hi.emi), { name: name + '-e' }),
+        // rects stay in painted-pixel units; UVs are normalised, so the logical size is kept
         w: pix.w,
         h: pix.h
     };

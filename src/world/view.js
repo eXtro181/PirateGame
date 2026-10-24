@@ -13,14 +13,14 @@ const CHUNK = 32;
 const PX = 1 / 16;
 
 function waterNormalCanvas() {
-    const S = 64;
+    const S = 256;
     const p = new Pix(S, S);
     const h = (x, y) => {
         const a = 2 * Math.PI / S;
-        return Math.sin(x * a * 2 + Math.sin(y * a) * 2) * 0.5 + Math.sin(y * a * 3 + x * a) * 0.35 + Math.sin((x + y) * a * 5) * 0.15;
+        return Math.sin(x * a * 2 + Math.sin(y * a) * 2) * 0.5 + Math.sin(y * a * 3 + x * a) * 0.35 + Math.sin((x + y) * a * 5) * 0.15 + Math.sin(x * a * 17 + y * a * 9) * 0.05 + Math.sin(y * a * 23 - x * a * 7) * 0.04;
     };
     for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) p.px(x, y, [255, 255, 255, 255], h(x, y));
-    return p.toCanvas(p.normalData(2.2));
+    return p.toCanvas(p.normalData(2.2 * 4));
 }
 
 function shallowPix() {

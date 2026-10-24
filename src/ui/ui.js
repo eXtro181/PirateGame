@@ -122,7 +122,7 @@ export class UI {
         const name = h('input', { class: 'text', maxlength: 16, placeholder: 'Finn Rabenfeder', value: 'Finn Rabenfeder' });
         const pw1 = h('input', { class: 'text', type: 'password', placeholder: 'mind. 4 Zeichen', autocomplete: 'new-password' });
         const pw2 = h('input', { class: 'text', type: 'password', placeholder: 'wiederholen', autocomplete: 'new-password' });
-        const canvas = h('canvas', { width: 96, height: 100 });
+        const canvas = h('canvas', { width: 384, height: 400 });
         const statsEl = h('div', { class: 'stats' });
         const giftDesc = h('div', { class: 'note' });
 
@@ -141,7 +141,7 @@ export class UI {
         ];
         function swatch(c, label) { const s = h('span', {}, h('i', { class: 'swatch', style: `background:${c}` }), label); return s; }
         let sheet = null;
-        const repaint = () => { sheet = paintCharacterSheet(look); sheet.canvas = sheet.pix.toCanvas(); };
+        const repaint = () => { sheet = paintCharacterSheet(look); sheet.canvas = sheet.pix.upscale(4).toCanvas(); };
         const opts = h('div', { class: 'opts' }, optDefs.map(([label, key, n, fmt]) => {
             const val = h('span', { class: 'val' });
             const show = () => { val.replaceChildren(); const v = typeof look[key] === 'boolean' ? (look[key] ? 1 : 0) : look[key]; const f = fmt(v); val.append(f.nodeType ? f : document.createTextNode(f)); };
@@ -171,19 +171,20 @@ export class UI {
 
         // preview: the figure next to a burning saber, lit by its flicker
         const ctx = canvas.getContext('2d');
-        const fire = saberFire().toCanvas();
+        const fireP = saberFire(); const fire = fireP.upscale(4).toCanvas();
         const flames = flameSheet('teal', 14, 22);
-        const flameCanvas = flames.pix.toCanvas();
+        const flameCanvas = flames.pix.upscale(4).toCanvas();
         let t0 = performance.now();
         const draw = () => {
             if (!canvas.isConnected) return;
             const t = (performance.now() - t0) / 1000;
+            ctx.setTransform(4, 0, 0, 4, 0, 0);
             ctx.imageSmoothingEnabled = false;
             ctx.fillStyle = '#0e1210'; ctx.fillRect(0, 0, 96, 100);
             for (let i = 0; i < 90; i++) { const x = (i * 37) % 96, y = (i * 53) % 100; ctx.fillStyle = i % 3 ? '#16201a' : '#1c2a20'; ctx.fillRect(x, y, 1, 1); }
-            ctx.drawImage(fire, 6, 50);
+            ctx.drawImage(fire, 6, 50, fireP.w, fireP.h);
             const fr = flames.frames.burn[Math.floor(t * 10) % flames.frames.burn.length];
-            ctx.drawImage(flameCanvas, fr.x, fr.y, fr.w, fr.h, 8, 36, fr.w, fr.h);
+            ctx.drawImage(flameCanvas, fr.x * 4, fr.y * 4, fr.w * 4, fr.h * 4, 8, 36, fr.w, fr.h);
             const walk = sheet.frames['walk-down'], stand = sheet.frames['stand-down'];
             const phase = Math.floor(t / 2.5) % 4;
             const anims = [stand, walk, sheet.frames['stand-side'], sheet.frames['stand-up']];
@@ -192,7 +193,7 @@ export class UI {
             ctx.save();
             ctx.translate(52, 44);
             ctx.scale(2, 2);
-            ctx.drawImage(sheet.canvas, r.x, r.y, r.w, r.h, 0, 0, r.w, r.h);
+            ctx.drawImage(sheet.canvas, r.x * 4, r.y * 4, r.w * 4, r.h * 4, 0, 0, r.w, r.h);
             ctx.restore();
             // light: darken everything, then add the teal glow of the fire
             const flick = 0.85 + Math.sin(t * 13) * 0.06 + Math.sin(t * 7.1) * 0.05;
