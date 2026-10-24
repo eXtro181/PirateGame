@@ -19,6 +19,8 @@ Kurzreferenz, damit neue Sitzungen sofort weiterarbeiten können. Bei Änderunge
 - Playwright-Aktionen nicht per `;` in JS-Ausdrücken mischen (Skript splittet daran) → JS aus Datei evaluieren.
 - Veröffentlichen: Dateien nach `/home/claude/pirategame` (Git-Klon) kopieren (tar, kein rsync), committen, `git push`; danach `gh run list -R eXtro181/PirateGame` prüfen.
 - Gecachte Meshes brauchen `mesh.incRefCount()`, sonst zerstört `entity.destroy()` sie für alle (verursachte v0.3-Absturz: Schattenpass „reading 'impl'“).
+- Build hängt Cache-Busting-Hashes an game.js/style.css. HUD (`#hud`) deckt per CSS-Variablen `--cv-*` genau die Canvas ab; `toScreen` liefert Canvas-Koordinaten.
+- Grasbüschel-Karten sind ausgeblendet (wirkten von oben wie schwarze Kreuze).
 - Echter GPU-Test: Über den eingebauten Browser des Nutzers (mcp__remote-devices__Claude_Browser__*) die Live-Seite mit `?debug` öffnen, Konsole lesen, FPS messen.
 - Vorsicht bei Python-String-Ersetzungen mit Slices: ein leerer `old`-String zerstört die Datei (einmal passiert).
 
@@ -28,7 +30,7 @@ Kurzreferenz, damit neue Sitzungen sofort weiterarbeiten können. Bei Änderunge
 - `core/input.js` Aktionen inkl. `spell` (C/Y), `belt1–4`, `legend` (H). `axis()` dreht Eingaben um 45° auf das Weltraster.
 - `gfx/noise.js` Perlin (kachelbar, getrennte Perioden x/y), fBm, ridged, Worley, `NOISE.n1` fürs Flackern.
 - `gfx/textures.js` prozedurale PBR-Sätze (albedo, normal, surface: R=gloss, G=Höhe), Karten (Wedel, Gras, Laub), Decal-Atlas 2×2 (Blut, Pfütze, Brand, Moos), Partikel-Sprites.
-- `gfx/materials.js` `Materials`: `pbr(kind,{tint,tiling,gloss,metal,vertexColor,cull,emissive})` (gecacht), `plain`, `card` (alphaTest), `glow` (additiv, HDR), `decal`, `terrain()` (Shader-Chunks diffusePS/normalMapPS/glossPS: 4 Schichten per Vertexfarbe mit Höhen-Überblendung + Fels triplanar an Steilhängen), `water()`.
+- `gfx/materials.js` `Materials`: `pbr(kind,{tint,tiling,gloss,metal,vertexColor,cull,emissive})` (gecacht), `plain`, `card` (alphaTest), `glow` (additiv, HDR), `decal`, `terrain()` (Shader-Chunks diffusePS/normalMapPS/glossPS mit **drei Textur-Arrays** à 5 Schichten – max. 16 Texturen pro Shader, sonst bleibt das Terrain auf echten GPUs schwarz; 4 Schichten per Vertexfarbe mit Höhen-Überblendung + Fels triplanar an Steilhängen), `water()`.
 - `gfx/mesh.js` `MeshBuilder` (at/quad/box/lathe/cylinder/sphere/rock/tube/ribbon), `instanced()`, `trs()`.
 - `gfx/particles.js` Feuer (teal/orange), Glut, Rauch, Staub, Glühwürmchen, gepoolte Bursts (spark, blood, splash, smoke, heal, bone, pearl, zap, rise).
 - `world/defs.js` Tiletypen `T`, `PROP_INFO` (Kollision), `Rng`. `world/map.js` Weltgenerierung + Kollision (`moveCircle`, `blockedSail(x,z,r,heading)`), Ruinenmauern (wall/wallV), Palisaden.
