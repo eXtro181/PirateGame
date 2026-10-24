@@ -1,371 +1,352 @@
-// In-game HUD, built for a 1920×1080 reference and scaled with the canvas height:
-// life and spirit orbs (animated liquid), lower bar with stamina, pearl progress, skill slots and
-// belt 1–4, a live 3D portrait on the left, controls legend, minimap with area name, target bar.
-import { Entity, Color, Vec3, Vec4, TONEMAP_ACES } from 'playcanvas';
+// Canvas UI in the low-res target: HUD (health bar with anchor hook, stamina pips, soul bar,
+// weapon portholes, rum circle, quick slots, pearls), boss bar, enemy names, interaction bubble,
+// ground item names, banners, toasts, dialogue box, list menus, the sea chart and the legend.
+import { rgb } from '../art/pal.js';
+import { WEAPONS, OFFHAND, SPELLS, RARITY } from '../game/data.js';
+import { ZONES, MW, MH } from '../world/world.js';
+import { G } from '../art/tiles.js';
+import { levelEntries, weaponEntries, shopEntries } from '../game/dialog.js';
 import { levelCost } from '../game/data.js';
-import { T } from '../world/defs.js';
-import { NOISE } from '../gfx/noise.js';
-import { QUALITY } from '../core/stage.js';
 
-export const h = (tag, attrs = {}, ...kids) => {
-    const el = document.createElement(tag);
-    for (const [k, v] of Object.entries(attrs)) {
-        if (k === 'class') el.className = v;
-        else if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
-        else if (k === 'html') el.innerHTML = v;
-        else if (v !== false && v != null) el.setAttribute(k, v);
-    }
-    for (const k of kids.flat()) if (k != null) el.append(k.nodeType ? k : document.createTextNode(k));
-    return el;
+const c4 = (h, a = 1) => { const v = rgb(h); return [v[0] / 255, v[1] / 255, v[2] / 255, a]; };
+export const COL = {
+    bone: c4('#D8CFB8'), boneDim: c4('#D8CFB8', 0.7), gold: c4('#E8A443'), soul: c4('#5FF2C8'), blood: c4('#7A1A22'), bloodLight: c4('#C2502E'),
+    ink: c4('#0B1016'), panel: c4('#0B1016', 0.82), mist: c4('#8FA3A8'), brass: c4('#E8A443'), brassDark: c4('#7A5A3E'), parchment: c4('#D8CFB8'), parchmentDark: c4('#8F8672'), red: [0.9, 0.35, 0.3, 1]
 };
 
-
-// ------------------------------------------------------------------ liquid orb
-class Orb {
-    constructor(kind) {
-        this.kind = kind; // 'life' | 'spirit'
-        this.c = h('canvas', { width: 220, height: 220, class: 'orb-canvas' });
-        this.g = this.c.getContext('2d');
-        this.level = 1; this.shown = 1; this.pulse = 0; this.t = Math.random() * 10;
-        // two noise layers for the swirling liquid, generated once
-        this.noise = [0, 1].map(k => {
-            const c = document.createElement('canvas'); c.width = c.height = 128;
-            const g = c.getContext('2d'), id = g.createImageData(128, 128);
-            for (let y = 0; y < 128; y++) for (let x = 0; x < 128; x++) {
-                const n = NOISE.fbm(x / 128 * 4 + k * 7, y / 128 * 4, 4, 4) * 0.5 + 0.5, i = (y * 128 + x) * 4;
-                id.data[i] = id.data[i + 1] = id.data[i + 2] = 255; id.data[i + 3] = n * 255;
-            }
-            g.putImageData(id, 0, 0);
-            return c;
-        });
+export class CanvasUI {
+    constructor(app) {
+        this.app = app; this.F = app.font; this.U = app.art.ui; this.W = app.art.atlas.white;
+        this.banners = []; this.toastT = 0; this.toastText = '';
+        this.dialog = null; this.list = null; this.mapOpen = false; this.legendOpen = false;
+        this.deathT = -1; this.fade = 0; this.t = 0;
     }
-    set(v, hurt) { if (v < this.level - 0.001 && hurt) this.pulse = 1; this.level = Math.max(0, Math.min(1, v)); }
-    draw(dt, poison = false) {
+    get modal() { return !!(this.dialog || this.list || this.mapOpen || this.legendOpen); }
+    rect(r, x, y, w, h, c) { r.rect(this.W.tex, Math.round(x), Math.round(y), Math.round(w), Math.round(h), c); }
+    frame(r, x, y, w, h, fill = COL.panel) { // brass-edged panel
+        this.rect(r, x, y, w, h, fill);
+        this.rect(r, x, y, w, 1, COL.brass); this.rect(r, x, y + h - 1, w, 1, COL.brassDark);
+        this.rect(r, x, y, 1, h, COL.brass); this.rect(r, x + w - 1, y, 1, h, COL.brassDark);
+    }
+    banner(title, sub = '', kind = 'big', dur = 3) { this.banners.push({ title, sub, kind, dur, t: 0 }); }
+    toast(text) { this.toastText = text; this.toastT = 2.4; }
+
+    // ------------------------------------------------------------------ dialogue
+    openDialog(name, script) {
+        this.dialog = { name, pages: script.pages, choices: script.choices || [], page: 0, chars: 0, sel: 0 };
+        this.app.audio.sfx('click');
+    }
+    openList(title, items, { onBack, desc = true, wide = false } = {}) { this.list = { title, items, sel: Math.max(0, items.findIndex(i => !i.disabled)), onBack, desc, wide }; }
+    closeList() { this.list = null; }
+    levelUp() { const g = this.app.game; this.openList(`Stufe ${g.save.level} · nächste ${levelCost(g.save.level)} Perlen · du hast ${g.save.pearls}`, levelEntries(g), { onBack: () => g.endTalk(), wide: true }); }
+    weaponShop() { const g = this.app.game; this.openList(`Waffen · ${g.save.pearls} Perlen`, weaponEntries(g), { onBack: () => g.endTalk(), wide: true }); }
+    shop() { const g = this.app.game; this.openList(`Handeln · ${g.save.pearls} Perlen`, shopEntries(g), { onBack: () => g.endTalk(), wide: true }); }
+    update(dt, input) {
         this.t += dt;
-        this.shown += (this.level - this.shown) * Math.min(1, dt * 6);
-        this.pulse = Math.max(0, this.pulse - dt * 2.5);
-        const g = this.g, S = 220, R = 100, cx = 110, cy = 110;
-        g.clearRect(0, 0, S, S);
-        g.save();
-        g.beginPath(); g.arc(cx, cy, R, 0, Math.PI * 2); g.clip();
-        g.fillStyle = '#050405'; g.fillRect(0, 0, S, S);
-        const life = this.kind === 'life';
-        const base = poison ? ['#1e4a14', '#5aa040'] : life ? ['#3a0606', '#c0201a'] : ['#06103a', '#2a5ad8'];
-        // liquid surface: sin(x * f + time) * amp
-        const top = cy + R - this.shown * R * 2;
-        g.beginPath(); g.moveTo(0, S);
-        for (let x = 0; x <= S; x += 4) g.lineTo(x, top + Math.sin(x * 0.05 + this.t * 2.2) * 3.5 + Math.sin(x * 0.11 - this.t * 3.1) * 1.8);
-        g.lineTo(S, S); g.closePath();
-        const grd = g.createLinearGradient(0, top, 0, S);
-        grd.addColorStop(0, base[1]); grd.addColorStop(1, base[0]);
-        g.fillStyle = grd; g.fill();
-        // two noise textures moving against each other: swirling liquid
-        g.save(); g.clip();
-        g.globalCompositeOperation = 'overlay';
-        for (let k = 0; k < 2; k++) {
-            const off = (this.t * (k ? -14 : 9)) % 128, y = (this.t * (k ? 6 : -4)) % 128;
-            g.globalAlpha = 0.55;
-            for (let i = -1; i <= 2; i++) for (let j = -1; j <= 2; j++) g.drawImage(this.noise[k], i * 128 + off, j * 128 + y, 128, 128);
-        }
-        g.restore();
-        g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
-        if (this.pulse > 0) { g.fillStyle = `rgba(255,220,200,${this.pulse * 0.35})`; g.fillRect(0, 0, S, S); }
-        // inner shadow
-        const sh = g.createRadialGradient(cx, cy, R * 0.55, cx, cy, R);
-        sh.addColorStop(0, 'rgba(0,0,0,0)'); sh.addColorStop(1, 'rgba(0,0,0,0.75)');
-        g.fillStyle = sh; g.fillRect(0, 0, S, S);
-        // glass highlight
-        const hl = g.createRadialGradient(cx - 30, cy - 42, 2, cx - 30, cy - 42, 52);
-        hl.addColorStop(0, 'rgba(255,255,255,0.42)'); hl.addColorStop(1, 'rgba(255,255,255,0)');
-        g.fillStyle = hl; g.beginPath(); g.ellipse(cx - 26, cy - 40, 46, 30, -0.5, 0, Math.PI * 2); g.fill();
-        g.restore();
-    }
-}
-
-// ------------------------------------------------------------------ HUD
-export class HUD {
-    constructor(ui) {
-        this.ui = ui;
-        this.lifeOrb = new Orb('life'); this.spiritOrb = new Orb('spirit');
-        this.lifeTxt = h('div', { class: 'orb-txt' }); this.spiritTxt = h('div', { class: 'orb-txt' });
-        this.stFill = h('i'); this.stLag = h('i', { class: 'lag' });
-        this.hullFill = h('i');
-        this.xpSegs = h('div', { class: 'xp-segs' }, Array.from({ length: 10 }, () => h('i')));
-        this.pearlN = h('span', { class: 'pearl-n' }, '0');
-        this.belt = Array.from({ length: 4 }, (_, i) => h('div', { class: 'slot belt' }, h('span', { class: 'flask' }), h('kbd', {}, String(i + 1))));
-        this.skillL = h('div', { class: 'slot skill' }, h('span', { class: 'ico sword' }), h('kbd', {}, 'J'));
-        this.skillR = h('div', { class: 'slot skill' }, h('span', { class: 'ico bolt' }), h('i', { class: 'cd' }), h('kbd', {}, 'C'));
-        this.offEl = h('div', { class: 'offhand-n' });
-        this.bottom = h('div', { class: 'bottombar' },
-            h('div', { class: 'orb life' }, this.lifeOrb.c, h('div', { class: 'orb-ring' }), this.lifeTxt, h('label', {}, 'Leben')),
-            h('div', { class: 'midbar' },
-                h('div', { class: 'bar-row' }, h('div', { class: 'stam' }, this.stLag, this.stFill), h('div', { class: 'hullbar hidden' }, this.hullFill)),
-                h('div', { class: 'slots' }, this.skillL, h('div', { class: 'belt-row' }, this.belt), this.skillR),
-                h('div', { class: 'xp-row' }, this.xpSegs, h('div', { class: 'pearls' }, h('i', { class: 'pearl-ico' }), this.pearlN)),
-                this.offEl),
-            h('div', { class: 'orb spirit' }, this.spiritOrb.c, h('div', { class: 'orb-ring' }), this.spiritTxt, h('label', {}, 'Geist')));
-        this.gainEl = h('div', { class: 'gain' });
-        this.promptEl = h('div', { class: 'prompt hidden' });
-        this.toastEl = h('div', { class: 'toast' });
-        this.hintEl = h('div', { class: 'hint' });
-        this.bannerEl = h('div', { class: 'banner' });
-        this.saveEl = h('div', { class: 'saveico' }, 'GESPEICHERT');
-        this.lockEl = h('div', { class: 'lockmark hidden' });
-        // ship panel (at sea)
-        this.compassWind = h('i'); this.compassShip = h('b');
-        this.sailsEl = h('div', { class: 'sails' });
-        this.reloadL = h('i'); this.reloadR = h('i');
-        this.ship = h('div', { class: 'shippanel hidden' },
-            h('div', { class: 'compass', title: 'Türkis: Wind · Gold: Kurs' }, this.compassWind, this.compassShip),
-            h('div', {}, h('div', {}, 'Segel'), this.sailsEl),
-            h('div', {}, h('div', {}, 'Kanonen L / R'), h('div', { class: 'reload' }, h('div', {}, this.reloadL), h('div', {}, this.reloadR))));
-        // target bar at the top edge
-        this.targetName = h('div', { class: 'tname' }); this.targetFill = h('i');
-        this.target = h('div', { class: 'target hidden' }, this.targetName, h('div', { class: 'tbar' }, this.targetFill));
-        // portrait frame (the picture itself is a second camera rendering into this rectangle)
-        this.portraitName = h('div', { class: 'pname' }); this.portraitLvl = h('div', { class: 'plvl' });
-        this.portrait = h('div', { class: 'portrait' }, h('div', { class: 'pframe' }), h('div', { class: 'pbar' }, h('i')), this.portraitName, this.portraitLvl);
-        // minimap
-        this.mapC = h('canvas', { width: 240, height: 240 });
-        this.areaEl = h('div', { class: 'area' });
-        this.minimap = h('div', { class: 'minimap' }, this.areaEl, this.mapC);
-        this.legendEl = h('div', { class: 'legend' });
-        try { this.legendOn = localStorage.getItem('sw-legend') !== 'off'; } catch { this.legendOn = true; }
-        this.ebars = new Map();
-        this.el = h('div', { id: 'hud', class: 'hidden' }, this.portrait, this.legendEl, this.minimap, this.target, this.bottom, this.ship, this.gainEl,
-            this.promptEl, this.toastEl, this.hintEl, this.bannerEl, this.saveEl, this.lockEl);
-        this.mapT = 0;
-        this.lastT = performance.now();
-    }
-
-    bindGame(game) {
-        this.game = game;
-        // live portrait: a second camera looking at the player's face, drawn into the top-left corner
-        const cam = new Entity('portrait-cam');
-        cam.addComponent('camera', { fov: 26, nearClip: 0.1, farClip: 20, clearColor: new Color(0.01, 0.012, 0.016), priority: 10, toneMapping: TONEMAP_ACES });
-        game.app.root.addChild(cam);
-        cam.enabled = false;
-        this.pcam = cam;
-        // mouse hover over enemies → name and life bar at the top
-        const canvas = game.app.graphicsDevice.canvas;
-        canvas.addEventListener('mousemove', (e) => { const r = canvas.getBoundingClientRect(); this.mouse = { x: e.clientX - r.left, y: e.clientY - r.top }; });
-        canvas.addEventListener('mouseleave', () => { this.mouse = null; });
-    }
-
-    prompt(label) {
-        if (label === this.lastPrompt) return;
-        this.lastPrompt = label;
-        if (!label) { this.promptEl.classList.add('hidden'); return; }
-        this.promptEl.replaceChildren(h('kbd', {}, this.game?.stage.device.touch ? '●' : 'E'), label);
-        this.promptEl.classList.remove('hidden');
-    }
-
-    // controls legend on the left (keyboard / gamepad; touch shows labelled buttons instead)
-    legend(g) {
-        if (g.input.pressed('legend')) {
-            this.legendOn = !this.legendOn;
-            try { localStorage.setItem('sw-legend', this.legendOn ? 'on' : 'off'); } catch { /* ignore */ }
-        }
-        const sea = g.mode === 'sea', pad = g.input.usingPad;
-        const show = !g.stage.device.touch && g.dying === undefined;
-        const key = `${show}:${this.legendOn}:${sea}:${pad}:${g.save.off}`;
-        if (key !== this.legendKey) {
-            this.legendKey = key;
-            this.legendEl.classList.toggle('hidden', !show);
-            const K = (k, p) => (pad ? p : k);
-            const rows = !this.legendOn ? [[K('H', '—'), 'Steuerung einblenden']] : sea ? [
-                [K('W / S', 'Stick ↑↓'), 'Segel setzen / reffen'], [K('A / D', 'Stick ←→'), 'Steuern'],
-                [K('J', 'R1'), 'Breitseite links'], [K('K', 'B'), 'Breitseite rechts'],
-                [K('E', 'X'), 'An Land gehen / Rasten', 'interact'], [K('F', '↑'), 'Shanty bestellen'],
-                [K('M', 'Select'), 'Karte'], [K('Esc', 'Start'), 'Menü'], [K('H', ''), 'Ausblenden']
-            ] : [
-                [K('WASD', 'Stick'), 'Laufen'], [K('J', 'R1'), 'Angriff'], [K('L', 'R2'), 'Schwerer Angriff'],
-                [K('Leertaste', 'A'), 'Ausweichrolle'], [K('Q', 'L1'), 'Parieren'],
-                [K('C', 'Y'), 'Kettenblitz'],
-                ...(g.save.off !== 'none' ? [[K('K', 'B'), 'Zweithand']] : []),
-                [K('1–4 / R', '↓'), 'Rum trinken'], [K('Tab', 'R3'), 'Gegner fixieren'],
-                [K('E', 'X'), 'Interagieren / An Bord', 'interact'], [K('M', 'Select'), 'Karte'],
-                [K('Esc', 'Start'), 'Menü'], [K('H', ''), 'Ausblenden']
-            ];
-            this.legendEl.classList.toggle('mini', !this.legendOn);
-            this.legendEl.replaceChildren(...rows.filter(r => r[0] !== '').map(([k, label, id]) => h('div', { class: 'row', 'data-id': id || '' }, h('kbd', {}, k), h('span', {}, label))));
-        }
-        this.legendEl.querySelector('[data-id="interact"]')?.classList.toggle('on', !!this.lastPrompt);
-    }
-
-    // world-space mouse hover: nearest living enemy to the ray's ground hit
-    hovered(g) {
-        if (!this.mouse) return null;
-        const cam = g.stage.camera.camera;
-        const cr = g.app.graphicsDevice.clientRect;
-        const a = cam.screenToWorld(this.mouse.x * cr.width / g.stage.cssSize[0], this.mouse.y * cr.height / g.stage.cssSize[1], 1);
-        const b = cam.screenToWorld(this.mouse.x * cr.width / g.stage.cssSize[0], this.mouse.y * cr.height / g.stage.cssSize[1], 60);
-        let best = null, bd = 1.1;
-        for (const e of g.enemies) {
-            if (!e.alive) continue;
-            const y = (e.sea ? 0 : Math.max(0, g.gy(e.x, e.z))) + 0.8;
-            const t = (y - a.y) / (b.y - a.y);
-            const px = a.x + (b.x - a.x) * t, pz = a.z + (b.z - a.z) * t;
-            const d = Math.hypot(px - e.x, pz - e.z);
-            if (d < bd + (e.sea ? 1 : 0)) { bd = d; best = e; }
-        }
-        return best;
-    }
-
-    updatePortrait(g) {
-        const show = g.mode === 'land' && QUALITY[g.stage.quality].post && !this.ui.modalOpen() && g.dying === undefined && !g.stage.portrait;
-        this.pcam.enabled = show;
-        this.portrait.classList.toggle('nocam', !show);
-        if (!show) return;
-        const p = g.player, y = g.gy(p.x, p.z);
-        const fr = this.portrait.querySelector('.pframe').getBoundingClientRect();
-        const cv = g.app.graphicsDevice.canvas.getBoundingClientRect();
-        if (!fr.width || fr.top < cv.top - 1 || fr.left < cv.left - 1) { this.pcam.enabled = false; return; }
-        this.pcam.camera.rect = new Vec4((fr.left - cv.left) / cv.width, 1 - (fr.bottom - cv.top) / cv.height, fr.width / cv.width, fr.height / cv.height);
-        this.pcam.camera.scissorRect = this.pcam.camera.rect;
-        this.pcam.camera.aspectRatioMode = 1;
-        this.pcam.camera.aspectRatio = fr.width / fr.height;
-        // head height follows the animation (rolls, sitting)
-        const head = p.fig.joints.head.e.getPosition();
-        const fx = p.fx, fz = p.fz;
-        this.pcam.setPosition(head.x + fx * 1.5 + fz * 0.45, head.y + 0.25, head.z + fz * 1.5 - fx * 0.45);
-        this.pcam.lookAt(new Vec3(head.x, head.y + 0.05, head.z));
-        void y;
-    }
-
-    drawMinimap(g, dt) {
-        const m = g.map, c = this.mapC, x = c.getContext('2d');
-        this.mapT -= dt;
-        // the coast lines are re-traced when more of the map is explored
-        if (!this.lines || this.mapT <= 0) {
-            this.mapT = 1.5;
-            const L = this.lines || (this.lines = document.createElement('canvas'));
-            L.width = m.w * 6; L.height = m.h * 6;
-            const lg = L.getContext('2d');
-            lg.clearRect(0, 0, L.width, L.height);
-            const seen = (i, j) => g.explored[j * m.w + i];
-            for (let j = 0; j < m.h; j++) for (let i = 0; i < m.w; i++) {
-                if (!seen(i, j)) continue;
-                const t = m.get(i, j), land = m.isLand(i, j);
-                if (t === T.ROCK) { lg.fillStyle = 'rgba(150,140,125,0.35)'; lg.fillRect(i * 6, j * 6, 6, 6); }
-                if (t === T.STONE) { lg.fillStyle = 'rgba(200,190,160,0.25)'; lg.fillRect(i * 6, j * 6, 6, 6); }
-                if (t === T.DIRT) { lg.fillStyle = 'rgba(150,110,70,0.25)'; lg.fillRect(i * 6, j * 6, 6, 6); }
-                if (t === T.DOCK) { lg.fillStyle = 'rgba(190,150,100,0.6)'; lg.fillRect(i * 6, j * 6, 6, 6); }
-                lg.strokeStyle = 'rgba(228,220,198,0.85)'; lg.lineWidth = 1.6;
-                const edge = (a, b, c2, d) => { lg.beginPath(); lg.moveTo(a, b); lg.lineTo(c2, d); lg.stroke(); };
-                if (land) {
-                    if (!m.isLand(i, j - 1)) edge(i * 6, j * 6, i * 6 + 6, j * 6);
-                    if (!m.isLand(i, j + 1)) edge(i * 6, j * 6 + 6, i * 6 + 6, j * 6 + 6);
-                    if (!m.isLand(i - 1, j)) edge(i * 6, j * 6, i * 6, j * 6 + 6);
-                    if (!m.isLand(i + 1, j)) edge(i * 6 + 6, j * 6, i * 6 + 6, j * 6 + 6);
-                }
+        for (const b of this.banners) b.t += dt;
+        this.banners = this.banners.filter(b => b.t < b.dur);
+        this.toastT -= dt;
+        if (this.legendOpen) { if (input.pressed('legend') || input.pressed('menu') || input.pressed('interact') || input.pressed('confirm')) this.legendOpen = false; return true; }
+        if (this.mapOpen) { if (input.pressed('map') || input.pressed('menu') || input.pressed('interact')) this.mapOpen = false; return true; }
+        const D = this.dialog;
+        if (D) {
+            const text = D.pages[D.page] || '';
+            D.chars = Math.min(text.length, D.chars + dt * 60);
+            const atEnd = D.page >= D.pages.length - 1 && D.chars >= text.length;
+            const ok = input.pressed('interact') || input.pressed('confirm') || input.pressed('attack');
+            if (atEnd && D.choices.length) {
+                if (input.pressed('up')) { D.sel = (D.sel + D.choices.length - 1) % D.choices.length; this.app.audio.sfx('click'); }
+                if (input.pressed('down')) { D.sel = (D.sel + 1) % D.choices.length; this.app.audio.sfx('click'); }
+                if (ok && !D.choices[D.sel].disabled) { const c = D.choices[D.sel]; this.dialog = null; this.app.audio.sfx('click'); c.act(); }
+                if (input.pressed('menu')) { this.dialog = null; this.app.game?.endTalk(); }
+            } else if (ok || input.pressed('menu')) {
+                if (D.chars < text.length) D.chars = text.length;
+                else if (D.page < D.pages.length - 1) { D.page++; D.chars = 0; }
+                else { this.dialog = null; this.app.game?.endTalk(); }
             }
+            return true;
         }
-        const S = c.width, px = g.mode === 'sea' ? g.ship.x : g.player.x, pz = g.mode === 'sea' ? g.ship.z : g.player.z;
-        x.clearRect(0, 0, S, S);
-        x.save();
-        x.beginPath(); x.arc(S / 2, S / 2, S / 2 - 2, 0, Math.PI * 2); x.clip();
-        x.fillStyle = 'rgba(4,6,8,0.35)'; x.fillRect(0, 0, S, S);
-        x.translate(S / 2, S / 2);
-        x.rotate(Math.PI / 4); // screen-up is world north-west (camera turned 45°)
-        const z = 0.75;
-        x.drawImage(this.lines, -px * 6 * z, -pz * 6 * z, m.w * 6 * z, m.h * 6 * z);
-        const dot = (wx, wz, col, r) => { x.fillStyle = col; x.beginPath(); x.arc((wx - px) * 6 * z, (wz - pz) * 6 * z, r, 0, Math.PI * 2); x.fill(); };
-        for (const f of m.fires) if (g.explored[Math.floor(f.z) * m.w + Math.floor(f.x)]) dot(f.x, f.z, g.save.litFires.includes(f.id) ? (f.kind === 'sea' ? '#ff9a3a' : '#5ff2c8') : '#777', 4);
-        if (g.save.stain) dot(g.save.stain.x, g.save.stain.z, '#9fe8ff', 3.5);
-        if (g.mode === 'land' && g.ship.state === 'surfaced') dot(g.ship.x, g.ship.z, '#c9a060', 3.5);
-        for (const e of g.enemies) if (e.alive && Math.hypot(e.x - px, e.z - pz) < 14) dot(e.x, e.z, 'rgba(200,60,50,0.8)', 2);
-        x.restore();
-        // player arrow (fixed in the centre, rotated with the facing)
-        const fx = g.mode === 'sea' ? g.ship.fwd.x : g.player.fx, fz = g.mode === 'sea' ? g.ship.fwd.z : g.player.fz;
-        const a = Math.atan2(fz, fx) + Math.PI / 4;
-        x.save(); x.translate(S / 2, S / 2); x.rotate(a);
-        x.fillStyle = '#fff'; x.beginPath(); x.moveTo(7, 0); x.lineTo(-5, 4.5); x.lineTo(-3, 0); x.lineTo(-5, -4.5); x.closePath(); x.fill();
-        x.restore();
-        // area name
-        let area = 'Schwarze See';
-        if (g.mode === 'land') { let bd = 1e9; for (const f of m.fires) if (f.kind === 'land') { const d = Math.hypot(f.x - px, f.z - pz); if (d < bd) { bd = d; area = d < 14 ? f.name : 'Smaragdküste'; } } }
-        if (area !== this.lastArea) { this.lastArea = area; this.areaEl.textContent = area; }
+        const L = this.list;
+        if (L) {
+            const n = L.items.length;
+            if (input.pressed('up')) { L.sel = (L.sel + n - 1) % n; this.app.audio.sfx('click'); }
+            if (input.pressed('down')) { L.sel = (L.sel + 1) % n; this.app.audio.sfx('click'); }
+            if (input.pressed('interact') || input.pressed('confirm') || input.pressed('attack')) { const it = L.items[L.sel]; if (it && !it.disabled) { this.app.audio.sfx('click'); it.act(); } }
+            if (input.pressed('menu') || input.pressed('roll')) { const b = L.onBack; this.list = null; b?.(); }
+            return true;
+        }
+        return false;
+    }
+    // pointer / touch on the canvas UI (low-res coordinates)
+    pointer(x, y, click) {
+        const D = this.dialog;
+        if (D && this.dialogBox) {
+            const B = this.dialogBox;
+            const text = D.pages[D.page] || '';
+            const atEnd = D.page >= D.pages.length - 1 && D.chars >= text.length;
+            if (atEnd && D.choices.length && this.choiceRects) {
+                this.choiceRects.forEach((cr, i) => { if (x >= cr[0] && x <= cr[0] + cr[2] && y >= cr[1] && y <= cr[1] + cr[3]) { D.sel = i; if (click && !D.choices[i].disabled) { const c = D.choices[i]; this.dialog = null; c.act(); } } });
+                return true;
+            }
+            if (click && x >= B[0] && y >= B[1] - 30) { if (D.chars < text.length) D.chars = text.length; else if (D.page < D.pages.length - 1) { D.page++; D.chars = 0; } else { this.dialog = null; this.app.game?.endTalk(); } }
+            return true;
+        }
+        const L = this.list;
+        if (L && this.listRects) {
+            let hit = false;
+            this.listRects.forEach((cr, i) => { if (x >= cr[0] && x <= cr[0] + cr[2] && y >= cr[1] && y <= cr[1] + cr[3]) { hit = true; L.sel = i; if (click && !L.items[i].disabled) L.items[i].act(); } });
+            if (click && !hit && this.listBox) { const b = this.listBox; if (x < b[0] || x > b[0] + b[2] || y < b[1] || y > b[1] + b[3]) { const back = L.onBack; this.list = null; back?.(); } }
+            return true;
+        }
+        if (click && (this.mapOpen || this.legendOpen)) { this.mapOpen = false; this.legendOpen = false; return true; }
+        return false;
     }
 
-    update() {
-        const g = this.game;
-        if (!g || !g.save || !g.player) return;
-        const now = performance.now(), dt = Math.min(0.1, (now - this.lastT) / 1000); this.lastT = now;
-        const p = g.player, d = g.derived, s = g.save;
-        const sea = g.mode === 'sea';
-        // scale the HUD with the canvas (reference: 1080 lines)
-        const scale = Math.max(0.55, Math.min(1.6, g.stage.cssSize[1] / 1080));
-        if (scale !== this.scale) { this.scale = scale; this.el.style.setProperty('--hud', String(scale)); }
-        this.legend(g);
-        if (this.touch) {
-            const show = g.stage.device.touch && !this.ui.modalOpen() && g.dying === undefined;
-            this.touch.setVisible(show);
-            if (show) this.touch.setMode(g.mode, s.off);
+    // ------------------------------------------------------------------ drawing
+    draw(r, game) {
+        const W = r.W, H = r.H, F = this.F;
+        r.spriteBegin('alpha');
+        if (game) this.drawWorldLabels(r, game);
+        if (game && !game.hideHud) this.drawHud(r, game);
+        // banners
+        for (const b of this.banners) {
+            const k = b.t / b.dur, a = Math.min(1, b.t * 3, (b.dur - b.t) * 2);
+            if (b.kind === 'death') {
+                this.rect(r, 0, H * 0.42 - 14, W, 36, [0.04, 0.02, 0.03, 0.7 * a]);
+                this.bigText(r, b.title, W / 2, H * 0.42 - 4, [0.62, 0.12, 0.14, a], 2);
+            } else if (b.kind === 'small') {
+                F.draw(r, b.title, W / 2, H * 0.24, [COL.gold[0], COL.gold[1], COL.gold[2], a], { align: 'center' });
+            } else {
+                this.rect(r, 0, H * 0.3 - 12, W, b.sub ? 40 : 30, [0.04, 0.06, 0.09, 0.55 * a]);
+                this.rect(r, W * 0.2, H * 0.3 - 12, W * 0.6, 1, [0.91, 0.64, 0.26, 0.5 * a]);
+                this.bigText(r, b.title, W / 2, H * 0.3 - 4, b.kind === 'boss' ? [0.86, 0.35, 0.28, a] : [0.91, 0.75, 0.45, a], b.title.length > 26 ? 1 : 2);
+                if (b.sub) F.draw(r, b.sub, W / 2, H * 0.3 + 14, [0.85, 0.81, 0.72, a * 0.9], { align: 'center' });
+            }
+            void k;
         }
-        // orbs
-        this.lifeOrb.set(p.hp / d.maxHp, true); this.lifeOrb.draw(dt);
-        this.spiritOrb.set(p.mp / d.maxMp, false); this.spiritOrb.draw(dt);
-        this.lifeTxt.textContent = `${Math.ceil(p.hp)} / ${d.maxHp}`;
-        this.spiritTxt.textContent = `${Math.floor(p.mp)} / ${d.maxMp}`;
-        // stamina with lag / hull at sea
-        const sf = p.st / d.maxSt;
-        this.stFill.style.transform = `scaleX(${Math.max(0, sf)})`;
-        this.stLagV = this.stLagV > sf ? Math.max(sf, this.stLagV - dt * 0.6) : sf;
-        this.stLag.style.transform = `scaleX(${Math.max(0, this.stLagV)})`;
-        this.bottom.querySelector('.stam').classList.toggle('hidden', sea);
-        this.bottom.querySelector('.hullbar').classList.toggle('hidden', !sea);
-        if (sea) this.hullFill.style.transform = `scaleX(${g.ship.hull / g.ship.maxHull})`;
-        // pearls towards the next level, ten segments
-        const cost = levelCost(s.level), prog = Math.min(1, s.pearls / cost);
-        [...this.xpSegs.children].forEach((seg, i) => { const f = Math.max(0, Math.min(1, prog * 10 - i)); seg.style.setProperty('--f', String(f)); });
-        this.pearlN.textContent = String(s.pearls);
-        this.xpSegs.title = `${s.pearls} / ${cost} Perlen bis Stufe ${s.level + 1}`;
-        // belt: one rum flask per slot (more than four: the last slot shows the rest)
-        this.belt.forEach((b, i) => { const have = p.flasks > i; b.classList.toggle('empty', !have); b.querySelector('.flask').textContent = i === 3 && p.flasks > 4 ? `+${p.flasks - 3}` : ''; });
-        this.skillR.classList.toggle('empty', p.mp < 28);
-        this.offEl.textContent = s.off !== 'none' ? `${s.off === 'pistol' ? 'Pulver' : 'Gezeiten'}: ${p.ammo}  (K)` : '';
-        // ship panel
-        this.ship.classList.toggle('hidden', !sea);
-        if (sea) {
-            this.compassWind.style.transform = `rotate(${g.wind.angle + Math.PI / 4}rad)`;
-            this.compassShip.style.transform = `rotate(${g.ship.heading + Math.PI / 4}rad)`;
-            const sails = g.ship.sail;
-            if (this.lastSail !== sails) { this.lastSail = sails; this.sailsEl.replaceChildren(...[0, 1].map(i => h('span', { class: i < sails ? 'on' : '' }))); }
-            this.reloadL.style.transform = `scaleX(${1 - g.ship.reload[0] / 2.6})`;
-            this.reloadR.style.transform = `scaleX(${1 - g.ship.reload[1] / 2.6})`;
+        if (this.toastT > 0) { const a = Math.min(1, this.toastT * 2); const w = F.width(this.toastText) + 12; this.rect(r, W / 2 - w / 2, H - 64, w, 13, [0.04, 0.06, 0.09, 0.7 * a]); F.draw(r, this.toastText, W / 2, H - 61, [0.85, 0.81, 0.72, a], { align: 'center' }); }
+        if (this.dialog) this.drawDialog(r);
+        if (this.list) this.drawList(r);
+        if (this.mapOpen && game) this.drawMap(r, game);
+        if (this.legendOpen) this.drawLegend(r);
+        if (this.fade > 0) this.rect(r, 0, 0, W, H, [0, 0, 0, this.fade]);
+        r.end();
+    }
+    bigText(r, text, x, y, col, scale = 2) { // 2× bitmap text for banners: drawn as doubled glyph pixels
+        if (scale === 1) { this.F.draw(r, text, x, y, col, { align: 'center' }); return; }
+        const F = this.F, w = F.width(text) * 2;
+        let cx = Math.round(x - w / 2);
+        for (const ch of text) {
+            const g = F.glyphs[ch] || F.glyphs['?'];
+            if (g.rect) { r.sprite(g.rect, cx + 2, y + 2, { sx: 2, sy: 2, color: [0, 0, 0, col[3] * 0.8] }); r.sprite(g.rect, cx, y, { sx: 2, sy: 2, color: col }); }
+            cx += (g.w + 1) * 2;
         }
-        // portrait
-        this.portraitName.textContent = s.name;
-        this.portraitLvl.textContent = `Stufe ${s.level}`;
-        this.portrait.querySelector('.pbar i').style.transform = `scaleX(${Math.max(0, p.hp / d.maxHp)})`;
-        this.updatePortrait(g);
-        this.drawMinimap(g, dt);
-        // target: hovered > locked > last hit
-        const hov = this.hovered(g);
-        let tgt = hov || g.lockTarget;
-        if (!tgt) for (const e of g.enemies) if (e.alive && e.showBarUntil > g.time && (!tgt || e.lastDmgT > tgt.lastDmgT)) tgt = e;
-        this.target.classList.toggle('hidden', !tgt);
-        if (tgt) {
-            this.targetName.textContent = tgt.displayName || 'Feind';
-            this.targetFill.style.transform = `scaleX(${Math.max(0, tgt.hp / tgt.maxHp)})`;
+    }
+    drawWorldLabels(r, game) {
+        const cam = game.cam, F = this.F;
+        const W = this.W;
+        // enemy hp bars
+        for (const e of game.enemies) e.drawUI?.(r, cam, W);
+        // ground item names: near or with Alt
+        const showAll = game.input.held('names');
+        for (const it of game.items) {
+            const near = Math.hypot(it.x - game.player.x, it.y - game.player.y) < 44;
+            if (!showAll && !near && game.focus?.hover !== it) continue;
+            const c = RARITY[it.item.rarity];
+            const x = it.x - cam[0], y = it.y - cam[1] - 32;
+            const w = F.width(it.name) + 6;
+            this.rect(r, x - w / 2, y - 2, w, 11, [0.04, 0.06, 0.09, 0.7]);
+            F.draw(r, it.name, x, y, c, { align: 'center' });
         }
-        g.hovered = hov;
-        // lock marker
-        const lt = g.lockTarget;
-        if (lt) { const sp = g.toScreen(lt.x, lt.z, lt.sea ? 0.6 : 1.0); this.lockEl.style.left = `${sp.x}px`; this.lockEl.style.top = `${sp.y}px`; this.lockEl.classList.remove('hidden'); }
-        else this.lockEl.classList.add('hidden');
-        // small floating bars above damaged enemies
-        for (const e of g.enemies) {
-            let b = this.ebars.get(e);
-            const show = e.alive && e.showBarUntil > g.time && e.hp > 0 && e !== tgt;
-            if (!show) { if (b) b.el.classList.add('hidden'); continue; }
-            if (!b) { b = { el: h('div', { class: 'ebar' }, h('i'), h('b')) }; this.el.append(b.el); this.ebars.set(e, b); }
-            const sp = g.toScreen(e.x, e.z, e.sea ? 1.2 : 2.1);
-            b.el.classList.remove('hidden');
-            b.el.style.left = `${sp.x}px`; b.el.style.top = `${sp.y}px`;
-            b.el.querySelector('i').style.transform = `scaleX(${Math.max(0, e.hp / e.maxHp)})`;
-            b.el.querySelector('b').textContent = g.time - e.lastDmgT < 1.5 ? String(e.lastDmg) : '';
+        // interaction bubble (parchment)
+        const f = game.focus;
+        if (f && f.label && !this.modal && game.player.state !== 'dead') {
+            const text = (game.input.usingTouch ? '' : 'E  ') + f.label;
+            const w = F.width(text) + 10;
+            const x = Math.round(f.x - cam[0] - w / 2), y = Math.round(f.y - cam[1] - (f.h || 34) - 16);
+            this.rect(r, x, y, w, 13, COL.parchment);
+            this.rect(r, x, y + 12, w, 1, COL.parchmentDark); this.rect(r, x + w - 1, y, 1, 13, COL.parchmentDark);
+            this.rect(r, x + w / 2 - 1, y + 13, 3, 1, COL.parchment); this.rect(r, x + w / 2, y + 14, 1, 1, COL.parchment);
+            F.draw(r, text, x + 5, y + 3, [0.1, 0.08, 0.07, 1], { shadow: false });
+            if (!game.input.usingTouch) this.rect(r, x + 4, y + 2, 7, 9, [0.48, 0.1, 0.13, 0.25]);
         }
+        // target name over a locked or hovered enemy
+        const t = game.lock || (game.focus?.hover?.hp !== undefined && !game.focus.hover.isBoss ? game.focus.hover : null);
+        if (t && !t.dead && !t.isBoss && t.name) {
+            const x = t.x - cam[0], y = t.y - cam[1] - (t.sheet?.h || 30) - 14;
+            F.draw(r, t.name, x, y, [0.85, 0.81, 0.72, 0.9], { align: 'center' });
+            if (game.lock === t) { const k = Math.floor(this.t * 4) % 2; this.rect(r, x - 1, t.y - cam[1] - (t.sheet?.h || 30) * 0.5 - 1 - k, 3, 3, COL.soul); }
+        }
+    }
+    drawHud(r, game) {
+        const F = this.F, U = this.U, p = game.player, s = game.save, W = r.W, H = r.H;
+        if (game.sailing) return this.drawShipHud(r, game);
+        // health bar 140×8 at (8, 6) with the anchor hook
+        r.sprite(U.hpFrame, 8 - 12 + 2, 4);
+        const hpW = Math.round(140 * Math.max(0, p.hp) / p.d.maxHp);
+        this.rect(r, 16, 7, 140, 8, [0.06, 0.04, 0.05, 0.9]);
+        if (game.hpGhost > p.hp) this.rect(r, 16, 7, Math.round(140 * game.hpGhost / p.d.maxHp), 8, [0.75, 0.6, 0.45, 0.8]);
+        this.rect(r, 16, 7, hpW, 8, COL.blood);
+        this.rect(r, 16, 7, hpW, 2, COL.bloodLight);
+        this.rect(r, 16, 13, hpW, 2, [0.3, 0.05, 0.08, 1]);
+        // stamina: 4 pips of 8×3 below
+        const seg = p.d.maxSt / 4;
+        for (let i = 0; i < 4; i++) {
+            const f = Math.max(0, Math.min(1, (p.st - i * seg) / seg));
+            const x = 16 + i * 10, y = 18;
+            this.rect(r, x, y, 8, 3, [0.06, 0.08, 0.1, 0.9]);
+            this.rect(r, x, y, Math.round(8 * f), 3, f >= 1 ? [0.55, 0.75, 0.45, 1] : [0.38, 0.5, 0.32, 1]);
+            this.rect(r, x, y, Math.round(8 * f), 1, [0.75, 0.9, 0.6, 1]);
+        }
+        // soul (mp) bar
+        const mpW = Math.round(54 * p.mp / p.d.maxMp);
+        this.rect(r, 58, 18, 54, 3, [0.06, 0.08, 0.1, 0.9]);
+        this.rect(r, 58, 18, mpW, 3, [0.22, 0.6, 0.52, 1]); this.rect(r, 58, 18, mpW, 1, COL.soul);
+        // two overlapping weapon portholes (main + off-hand) at top-left under the bars
+        const wx = 10, wy = 26;
+        r.sprite(U.porthole, wx + 14, wy + 6); r.sprite(U['i_' + (OFFHAND[s.off]?.icon || 'bullets')], wx + 17, wy + 9, { color: s.off === 'none' ? [1, 1, 1, 0.25] : undefined });
+        r.sprite(U.porthole, wx, wy); r.sprite(U['i_' + WEAPONS[s.weapon].icon], wx + 3, wy + 3);
+        if (s.weaponLevel) F.draw(r, '+' + s.weaponLevel, wx + 17, wy + 1, COL.gold);
+        if (s.off === 'pistol') F.draw(r, String(s.bullets), wx + 34, wy + 20, COL.bone);
+        // active slot glow ring is drawn in the glow pass (see drawHudGlow)
+        // consumable bottom-left: rum circle 24 px + counter, two quick slots of 16 px above
+        const cx = 8, cy = H - 34;
+        r.sprite(U.porthole26, cx, cy);
+        r.sprite(U.i_rum, cx + 5, cy + 5, { color: p.flasks ? undefined : [1, 1, 1, 0.3] });
+        F.draw(r, String(p.flasks), cx + 22, cy + 18, COL.bone);
+        const q1 = U.porthole16;
+        r.sprite(q1, cx, cy - 20); r.sprite(U.i_bomb, cx, cy - 20, { color: s.bombs ? undefined : [1, 1, 1, 0.3] }); F.draw(r, String(s.bombs), cx + 13, cy - 10, COL.boneDim);
+        r.sprite(q1, cx + 18, cy - 20); r.sprite(U.i_phial, cx + 18, cy - 20, { color: p.phials ? undefined : [1, 1, 1, 0.3] }); F.draw(r, String(p.phials), cx + 31, cy - 10, COL.boneDim);
+        // spell slot
+        const sp = s.spells[s.spell];
+        if (sp) { r.sprite(q1, cx + 36, cy - 20); r.sprite(U['i_' + SPELLS[sp].icon], cx + 36, cy - 20, { color: p.mp >= SPELLS[sp].mp ? undefined : [1, 1, 1, 0.35] }); }
+        if (!game.input.usingTouch) { F.draw(r, '1', cx + 1, cy - 28, [0.56, 0.64, 0.66, 0.7]); F.draw(r, '2', cx + 19, cy - 28, [0.56, 0.64, 0.66, 0.7]); F.draw(r, 'C', cx + 37, cy - 28, [0.56, 0.64, 0.66, 0.7]); F.draw(r, 'R', cx + 30, cy + 2, [0.56, 0.64, 0.66, 0.7]); }
+        // pearls bottom-right
+        const pt = String(game.pearlShown | 0);
+        r.sprite(U.i_pearl, W - 22 - F.width(pt), H - 22);
+        F.draw(r, pt, W - 8, H - 17, COL.bone, { align: 'right' });
+        if (game.pearlGain > 0) F.draw(r, '+' + game.pearlGain, W - 8, H - 28, [0.37, 0.95, 0.78, Math.min(1, game.pearlGainT)], { align: 'right' });
+        // zone name fades in on arrival
+        if (game.zoneT > 0) { const a = Math.min(1, game.zoneT, 4 - game.zoneT); F.draw(r, ZONES[game.zoneKey].name, W / 2, 12, [0.85, 0.81, 0.72, a], { align: 'center' }); }
+        // boss bar
+        const b = game.boss;
+        if (b && !b.dead && b.state !== 'dormant') {
+            const bw = Math.min(W - 60, 300), bx = Math.round(W / 2 - bw / 2), by = H - 26;
+            F.draw(r, b.name, bx, by - 11, COL.bone);
+            this.rect(r, bx - 1, by - 1, bw + 2, 7, COL.brassDark); this.rect(r, bx, by, bw, 5, [0.06, 0.04, 0.05, 1]);
+            const k = Math.max(0, b.hp / b.maxHp);
+            if (game.bossGhost > b.hp) this.rect(r, bx, by, Math.round(bw * game.bossGhost / b.maxHp), 5, [0.75, 0.6, 0.45, 0.8]);
+            this.rect(r, bx, by, Math.round(bw * k), 5, COL.blood); this.rect(r, bx, by, Math.round(bw * k), 1, COL.bloodLight);
+            if (b.phase === 1 && !b.mega) this.rect(r, bx + bw / 2, by - 1, 1, 7, COL.brass);
+        }
+        if (game.slowT > 0) F.draw(r, 'Unterkühlt', 16, 46 + 14, [0.6, 0.85, 1, 1]);
+    }
+    drawShipHud(r, game) {
+        const F = this.F, sh = game.ship, W = r.W, H = r.H;
+        F.draw(r, 'Rumpf', 8, 6, COL.boneDim);
+        this.rect(r, 40, 7, 100, 6, [0.06, 0.04, 0.05, 0.9]);
+        this.rect(r, 40, 7, Math.round(100 * sh.hull / sh.maxHull), 6, [0.48, 0.34, 0.22, 1]); this.rect(r, 40, 7, Math.round(100 * sh.hull / sh.maxHull), 1, [0.75, 0.55, 0.35, 1]);
+        F.draw(r, 'Segel', 8, 18, COL.boneDim);
+        for (let i = 0; i < 3; i++) this.rect(r, 40 + i * 12, 19, 10, 5, i < sh.sail ? COL.bone : [0.2, 0.22, 0.26, 0.8]);
+        F.draw(r, `Backbord ${sh.cool[0] > 0 ? '…' : 'bereit'}`, 8, 30, sh.cool[0] > 0 ? COL.boneDim : COL.gold);
+        F.draw(r, `Steuerbord ${sh.cool[1] > 0 ? '…' : 'bereit'}`, 8, 40, sh.cool[1] > 0 ? COL.boneDim : COL.gold);
+        if (game.shantyT > 0) F.draw(r, `♪ ${game.shantyName}`, W / 2, 10, COL.soul, { align: 'center' });
+        const pt = String(game.pearlShown | 0);
+        r.sprite(this.U.i_pearl, W - 22 - F.width(pt), H - 22); F.draw(r, pt, W - 8, H - 17, COL.bone, { align: 'right' });
+        if (!game.input.usingTouch) F.draw(r, '←→ steuern · ↑↓ Segel · J/L Breitseite · F Shanty · E anlegen', W / 2, H - 12, [0.56, 0.64, 0.66, 0.8], { align: 'center' });
+    }
+    drawHudGlow(r, game) { // emissive HUD parts: active weapon slot cyan glow
+        if (!game || game.sailing || game.hideHud) return;
+        r.spriteBegin('alpha');
+        const k = 0.6 + 0.4 * Math.sin(this.t * 3);
+        const x = 10, y = 26;
+        for (let a = 0; a < Math.PI * 2; a += 0.12) this.rect(r, x + 11 + Math.cos(a) * 11.5, y + 11 + Math.sin(a) * 11.5, 1, 1, [0.37 * k, 0.95 * k, 0.78 * k, 1]);
+        r.end();
+    }
+    drawDialog(r) {
+        const D = this.dialog, F = this.F, W = r.W, H = r.H;
+        const bw = Math.min(W - 16, 420), bh = 62, bx = Math.round(W / 2 - bw / 2), by = H - bh - 8;
+        this.dialogBox = [bx, by, bw, bh];
+        this.frame(r, bx, by, bw, bh);
+        F.draw(r, D.name, bx + 8, by - 10, COL.gold);
+        const text = (D.pages[D.page] || '').slice(0, Math.floor(D.chars));
+        F.wrap(text, bw - 16).forEach((l, i) => F.draw(r, l, bx + 8, by + 8 + i * 10, COL.bone));
+        const full = (D.pages[D.page] || '').length <= D.chars;
+        this.choiceRects = null;
+        if (full && D.page >= D.pages.length - 1 && D.choices.length) {
+            const cw = Math.max(...D.choices.map(c => F.width(c.label))) + 24, ch = D.choices.length * 12 + 6;
+            const cx = bx + bw - cw, cy = by - ch - 4;
+            this.frame(r, cx, cy, cw, ch);
+            this.choiceRects = D.choices.map((c, i) => [cx, cy + 3 + i * 12, cw, 12]);
+            D.choices.forEach((c, i) => {
+                if (i === D.sel) r.sprite(this.U.compass[Math.floor(this.t * 8) % 4], cx + 4, cy + 4 + i * 12);
+                F.draw(r, c.label, cx + 16, cy + 5 + i * 12, c.disabled ? [0.6, 0.6, 0.6, 0.5] : i === D.sel ? COL.gold : COL.boneDim);
+            });
+        } else if (full && Math.floor(this.t * 2) % 2) this.rect(r, bx + bw - 10, by + bh - 8, 4, 3, COL.gold);
+    }
+    drawList(r) {
+        const L = this.list, F = this.F, W = r.W, H = r.H;
+        const lw = Math.min(W - 16, L.wide ? 380 : 300);
+        const ih = 12, lh = L.items.length * ih + 30 + (L.desc ? 22 : 0);
+        const lx = Math.round(W / 2 - lw / 2), ly = Math.round(Math.max(8, H / 2 - lh / 2));
+        this.listBox = [lx, ly, lw, lh];
+        this.frame(r, lx, ly, lw, lh);
+        F.draw(r, L.title, lx + 8, ly + 6, COL.gold);
+        this.rect(r, lx + 6, ly + 17, lw - 12, 1, [0.91, 0.64, 0.26, 0.35]);
+        this.listRects = L.items.map((it, i) => [lx, ly + 21 + i * ih, lw, ih]);
+        L.items.forEach((it, i) => {
+            const y = ly + 23 + i * ih;
+            if (i === L.sel) { this.rect(r, lx + 2, y - 2, lw - 4, ih, [0.91, 0.64, 0.26, 0.1]); r.sprite(this.U.compass[Math.floor(this.t * 8) % 4], lx + 5, y - 1); }
+            const c = it.disabled ? [0.6, 0.6, 0.6, 0.5] : i === L.sel ? COL.gold : COL.bone;
+            F.draw(r, it.label, lx + 17 + (i === L.sel ? 2 : 0), y, c);
+            if (it.right) F.draw(r, it.right, lx + lw - 8, y, it.disabled ? [0.6, 0.6, 0.6, 0.5] : COL.boneDim, { align: 'right' });
+        });
+        const cur = L.items[L.sel];
+        if (L.desc && cur?.desc) F.wrap(cur.desc, lw - 16).slice(0, 2).forEach((l, i) => F.draw(r, l, lx + 8, ly + lh - 22 + i * 10, [0.56, 0.64, 0.66, 1]));
+        if (L.footer) F.draw(r, L.footer, lx + 8, ly + lh + 4, COL.boneDim);
+    }
+    // ------------------------------------------------------------------ sea chart
+    buildMap(world) {
+        const c = document.createElement('canvas'); c.width = MW; c.height = MH;
+        const g = c.getContext('2d'), img = g.createImageData(MW, MH);
+        const col = { [G.WATER]: [14, 33, 64], [G.SAND]: [110, 100, 80], [G.GRASS]: [52, 71, 58], [G.DIRT]: [74, 51, 38], [G.STONE]: [43, 58, 64], [G.FLOOR]: [58, 63, 69], [G.BRIDGE]: [122, 90, 62], [G.HEX]: [58, 30, 34], [G.ASH]: [90, 80, 80], [G.SNOW]: [164, 180, 186], [G.ICE]: [126, 158, 172], [G.MUD]: [46, 50, 38] };
+        for (let i = 0; i < MW * MH; i++) {
+            let c3 = col[world.ground[i]] || [40, 40, 40];
+            if (world.cliff[i]) c3 = [30, 32, 36];
+            if (world.ground[i] === G.WATER && world.shoreDist[i] < 2) c3 = [34, 80, 138];
+            img.data.set([c3[0], c3[1], c3[2], 255], i * 4);
+        }
+        g.putImageData(img, 0, 0);
+        this.mapTex = this.app.renderer.texture(c);
+    }
+    drawMap(r, game) {
+        const W = r.W, H = r.H, F = this.F;
+        const sc = Math.max(1, Math.floor(Math.min((W - 20) / MW, (H - 40) / MH)));
+        const mw = MW * sc, mh = MH * sc, mx = Math.round(W / 2 - mw / 2), my = Math.round(H / 2 - mh / 2) + 6;
+        this.rect(r, 0, 0, W, H, [0.02, 0.03, 0.05, 0.85]);
+        this.frame(r, mx - 3, my - 3, mw + 6, mh + 6, [0.85, 0.81, 0.72, 0.1]);
+        r.sprite({ x: 0, y: 0, w: MW, h: MH, tex: this.mapTex }, mx, my, { sx: sc, sy: sc });
+        // fog over unexplored islands
+        for (const [k, z] of Object.entries(ZONES)) {
+            if (game.save.explored.includes(k)) { F.draw(r, z.name, mx + z.cx * sc, my + (z.cy - z.ry - 4) * sc, COL.bone, { align: 'center' }); continue; }
+            if (z.sealed) { this.rect(r, mx + (z.cx - z.rx - 6) * sc, my + (z.cy - z.ry - 6) * sc, (z.rx * 2 + 12) * sc, (z.ry * 2 + 12) * sc, [0.02, 0.03, 0.05, 1]); continue; }
+            this.rect(r, mx + (z.cx - z.rx - 3) * sc, my + (z.cy - z.ry - 3) * sc, (z.rx * 2 + 6) * sc, (z.ry * 2 + 6) * sc, [0.1, 0.12, 0.15, 0.92]);
+            F.draw(r, '?', mx + z.cx * sc, my + z.cy * sc - 3, COL.boneDim, { align: 'center' });
+        }
+        for (const f of game.world.fires) if (game.save.litFires.includes(f.id)) this.rect(r, mx + f.x / 16 * sc - 1, my + f.y / 16 * sc - 1, 3, 3, COL.soul);
+        const pp = game.sailing ? game.ship : game.player;
+        const k = Math.floor(this.t * 3) % 2;
+        this.rect(r, mx + pp.x / 16 * sc - 2, my + pp.y / 16 * sc - 2, 5, 5, k ? COL.gold : COL.bloodLight);
+        if (game.whirlpoolOpen) this.rect(r, mx + game.world.whirlpool.x / 16 * sc - 2, my + game.world.whirlpool.y / 16 * sc - 2, 5, 5, COL.soul);
+        F.draw(r, 'Seekarte', W / 2, 6, COL.gold, { align: 'center' });
+        F.draw(r, 'M schließen', W / 2, H - 12, COL.boneDim, { align: 'center' });
+    }
+    drawLegend(r) {
+        const F = this.F, W = r.W, H = r.H;
+        const rows = [['WASD / Pfeile', 'Laufen'], ['J', 'Hieb (Shift+J / L: schwer)'], ['Leertaste', 'Rolle'], ['Q', 'Parieren'], ['R', 'Rum trinken'], ['2', 'Seelenphiole'], ['1', 'Bombe werfen'], ['K', 'Pistole / Gezeitenstoß'], ['C / X', 'Zauber wirken / wechseln'], ['Tab', 'Gegner fixieren'], ['E', 'Interagieren, rasten, an Bord'], ['Alt', 'Namen aller Gegenstände'], ['M', 'Seekarte'], ['F', 'Shanty auf See'], ['Esc', 'Menü']];
+        const lw = 260, lh = rows.length * 11 + 26, lx = Math.round(W / 2 - lw / 2), ly = Math.round(H / 2 - lh / 2);
+        this.frame(r, lx, ly, lw, lh);
+        F.draw(r, 'Steuerung', lx + 8, ly + 6, COL.gold);
+        rows.forEach(([k, v], i) => { F.draw(r, k, lx + 8, ly + 20 + i * 11, COL.soul); F.draw(r, v, lx + 90, ly + 20 + i * 11, COL.bone); });
     }
 }

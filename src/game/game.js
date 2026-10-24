@@ -1,661 +1,654 @@
-// Game orchestration: modes (land/sea), combat resolution, fires, death and pearls, camera.
-import { Player } from './player.js';
-import { Crab, Skeleton, Shark } from './enemies.js';
-import { Ship, SHIP_R } from './ship.js';
-import { T } from '../world/defs.js';
-import { ChestFigure } from './figure.js';
-import { MeshBuilder } from '../gfx/mesh.js';
-import { MeshInstance, Entity } from 'playcanvas';
-import { Vec3 } from 'playcanvas';
+// The game scene: player, enemies, bosses, NPCs, sailing, fires, death and pearls, saving.
+import { Player, Enemy, NPC, GroundItem, Shot, dist } from './actors.js';
+import { Boss } from './boss.js';
+import { Ship, GhostShip, Shark } from './ship.js';
+import { FX, FXCOL } from './fx.js';
+import { dialogFor, levelEntries, weaponEntries, shopEntries, CREW } from './dialog.js';
+import { ITEMS, KINGS, SPELLS, EL_NAME, levelCost, upgradeCost, WEAPONS, derived } from './data.js';
+import { ZONES } from '../world/world.js';
+import { GRADES } from '../art/pal.js';
+import { TS } from '../art/tiles.js';
 
-const _v = new Vec3(), _o = new Vec3();
-import { Fx } from './fx.js';
-import { derived, ORIGINS, OFFHAND, levelCost } from './data.js';
+const lerp = (a, b, t) => a + (b - a) * t;
+const lerp3 = (a, b, t) => [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
 
-export class Game {
-    constructor({ stage, M, lib, models, particles, map, terrain, view, input, audio, hud, ui, store }) {
-        Object.assign(this, { stage, M, lib, models, particles, map, terrain, view, input, audio, hud, ui, store });
-        this.app = stage.app;
-        this.time = 0;
-        this.mode = 'land';
-        this.paused = true;
-        this.camX = map.start.x; this.camZ = map.start.z;
-        this.shakeT = 0; this.shakeAmp = 0;
-        this.hitstop = 0;
-        this.wind = { angle: 2.3, strength: 1 };
-        this.lockTarget = null;
-        this.projectiles = [];
-        this.fx = new Fx(this);
-        this.explored = new Uint8Array(map.w * map.h);
-        this.exploreT = 0;
-
-        this.ship = new Ship(this);
-        this.ship.place(map.dock.shipX, map.dock.shipZ, map.dock.heading);
-        this.enemies = map.spawns.map(s => s.type === 'crab' ? new Crab(this, s) : s.type === 'skeleton' ? new Skeleton(this, s) : new Shark(this, s));
-        this.chests = {};
-        for (const c of map.chests) {
-            const f = new ChestFigure(this.app, this.M, this.models);
-            f.setPos(c.x, terrain.ground(c.x, c.z), c.z);
-            f.setYaw(0.3, 1);
-            this.chests[c.id] = f;
-        }
-        // lost pearls: a glowing orb hovering where you died
-        const sb = new MeshBuilder(); sb.sphere(0.16, 12, 8);
-        this.stain = new Entity('stain');
-        this.stain.addComponent('render', { meshInstances: [new MeshInstance(sb.toMesh(this.app.graphicsDevice), this.M.glow('#7fe8ff', 6))] });
-        this.app.root.addChild(this.stain);
-        this.stain.enabled = false;
-        this.stainLight = view.addOmni(0, 0.8, 0, [0.4, 0.9, 1.0], 0, 5);
-        this.app.on('update', dt => this.update(dt));
+export class GameScene {
+    constructor(app, profile, save) {
+        this.app = app; this.mode = 'world';
+        this.profile = profile; this.save = save;
+        this.world = app.world; this.view = app.view; this.input = app.input; this.audio = app.audio; this.ui = app.cui;
+        this.fx = new FX(app);
+        migrate(save);
+        this.player = new Player(this, save);
+        this.cam = [0, 0]; this.camF = [0, 0];
+        this.shakeK = 0; this.flashC = [1, 1, 1, 0]; this.slowT = 0; this.shantyT = 0; this.hpGhost = 0; this.bossGhost = 0;
+        this.pearlShown = save.pearls; this.pearlGain = 0; this.pearlGainT = 0;
+        this.zoneKey = null; this.zoneT = 0; this.gradeCur = { ...GRADES.coast };
+        this.shots = []; this.lock = null; this.focus = null; this.talkTo = null;
+        this.npcs = this.world.npcs.map(n => new NPC(this, n));
+        this.items = this.world.items.filter(i => !save.picked.includes(i.id)).map(i => new GroundItem(this, i));
+        for (const c of this.world.chests) { c.opened = save.chests.includes(c.chestId); c.def = this.app.art.props[c.opened ? 'chestopen' : 'chest']; }
+        this.bosses = {};
+        for (const k of Object.keys(KINGS)) { const z = KINGS[k].zone; const b = new Boss(this, k, this.world.arenas[z]); if (save.kings[k]) b.state = 'dead', b.hidden = true; this.bosses[k] = b; }
+        this.bosses.mega = new Boss(this, 'mega', this.world.arenas.ende); if (save.megalodon) { this.bosses.mega.state = 'dead'; this.bosses.mega.hidden = true; }
+        this.world.dynamicBlockers = this.world.gates.map(g => ({ gate: g, active: false, x0: g.x - 34, x1: g.x + 34, y0: g.y - 30, y1: g.y + 30 }));
+        for (const g of this.world.gates) { const k = Object.keys(KINGS).find(k => KINGS[k].zone === g.key); g.king = k; if (save.kings[k]) g.prop.hidden = true; }
+        // hub figurehead slots
+        for (const s of this.world.slots) this.applySlot(s);
+        this.whirlpoolOpen = ['fire', 'ice', 'wind', 'earth'].every(e => save.mounted[e]);
+        // ship at its dock
+        const dock = this.world.docks.find(d => d.zone === save.shipDock) || this.world.docks[0];
+        this.ship = new Ship(this, dock.x, dock.y, dock.heading);
+        this.sailing = false;
+        this.spawnAll();
+        this.placeAtFire(save.lastFire, true);
+        this.t = 0; this.saveT = 0;
+        this.ui.buildMap(this.world);
+        if (!save.litFires.includes(save.lastFire)) save.litFires.push(save.lastFire);
+        this.lightFires();
+        if (save.playTime < 1) { this.zoneKey = 'kueste'; setTimeout(() => this.ui.banner('Strand der Ertränkten', 'Die See hat dich zurückgegeben.', 'big', 4), 600); }
+        if (save.stain) this.stain = { ...save.stain, t: 0 };
     }
-
-    // ---------------------------------------------------------------- session
-    start(profile, save) {
-        this.profile = profile;
-        this.save = save;
-        this.originData = ORIGINS.find(o => o.id === save.origin) || ORIGINS[0];
-        this.save.hints = this.save.hints || {};
-        if (this.player) this.player.setSave(save);
-        else this.player = new Player(this, save);
-        if (save.explored === 'all') this.explored.fill(1);
-        else if (save.explored) this.explored.set(decodeBits(save.explored, this.explored.length));
-        else this.explored.fill(0);
-        this.refreshDerived();
-        for (const c of this.map.chests) this.chests[c.id].setOpen(save.chests.includes(c.id));
-        this.respawn(true);
-        this.paused = false;
-        const fresh = save.playTime < 1;
-        if (fresh) {
-            this.ui.banner('Schwarzwasser', 'Du bist ertrunken. Die Flut hat dich zurückgegeben.', 'title', 5.5);
-            this.hint('controls', this.touch
-                ? 'Daumen links auflegen und ziehen zum Laufen. Rechts: Hieb, Rolle, Parieren, Rum, Blitz. Tippe auf Hinweise wie „Rasten“, um zu interagieren.'
-                : 'WASD bewegen · J Angriff · L schwer · Leertaste Rolle · Q Parieren · C Kettenblitz · 1–4 Rum · E Interagieren · Tab Zielen');
-        }
+    // ---------------------------------------------------------------- spawning
+    spawnAll() {
+        this.enemies = this.world.spawns.map(s => new Enemy(this, s));
+        this.ghosts = this.world.ghostRoutes.map(r => new GhostShip(this, r));
+        this.sharks = [[140, 120], [100, 60], [170, 100], [80, 150], [150, 170]].map(([x, y]) => new Shark(this, x * TS, y * TS));
     }
-
-    logout() {
-        this.persist(null);
-        this.save = null;
-        this.paused = true;
-        this.player.sprite.setVisible(false);
-        this.lockTarget = null;
-        this.hud.el.classList.add('hidden');
-        this.hud.prompt(null);
-        this.onLogout?.();
+    placeAtFire(id, initial = false) {
+        const f = this.world.fires.find(f => f.id === id) || this.world.fires[0];
+        this.player.x = f.x + 14; this.player.y = f.y + 10; this.player.face(0, 1);
+        this.sailing = false; this.player.state = 'free';
+        this.camF = [this.player.x, this.player.y];
+        if (!initial) this.fx.clear();
     }
-
-    refreshDerived() {
-        this.derived = derived(this.save);
-    }
-
-    respawn(initial = false) {
-        const s = this.save;
-        const fire = this.map.fires.find(f => f.id === s.lastFire && s.litFires.includes(f.id));
-        this.refillAll();
-        for (const e of this.enemies) e.reset();
-        this.view.clearBlood();
-        this.ship.hull = this.ship.maxHull;
-        this.lockTarget = null;
-        if (fire && fire.kind === 'sea') {
-            this.ship.place(fire.x - 3.5, fire.z + 2, 0);
-            this.mode = 'sea';
-            this.player.place(this.ship.x, this.ship.z);
-            this.player.sprite.setVisible(false);
-        } else {
-            const p = fire ? { x: fire.x - 0.2, z: fire.z + 1.3 } : this.map.start;
-            if (this.ship.hull <= 0 || !initial) this.ship.place(this.map.dock.shipX, this.map.dock.shipZ, this.map.dock.heading);
-            this.mode = 'land';
-            this.player.place(p.x, p.z);
-            this.player.face(0, 1);
-        }
-        this.summonCd = 0;
-        this.camX = this.player.x; this.camZ = this.player.z;
-        this.updateStain();
-        this.audio.setMood(this.mode === 'sea' ? 'sea' : 'land');
-    }
-
-    refillAll() {
-        const p = this.player, s = this.save;
-        p.hp = this.derived.maxHp; p.st = this.derived.maxSt;
-        p.flasks = s.flasksMax;
-        p.mp = this.derived.maxMp;
-        p.ammo = s.off !== 'none' ? OFFHAND[s.off].ammo : 0;
-        p.state = 'idle';
-    }
-
-    persist(msg = 'Gespeichert') {
-        this.save.explored = this.explored.every(v => v) ? 'all' : encodeBits(this.explored);
-        return this.store.save(this.profile, this.save).then(() => { if (msg) this.ui.saveIcon(); }).catch(e => { console.error(e); this.toast('Speichern fehlgeschlagen'); });
-    }
-
-    get touch() { return this.stage.device.touch; }
-
-    // ---------------------------------------------------------------- feedback
-    sfx(name) { this.audio.sfx(name); }
-    shake(t, amp) { this.shakeT = Math.max(this.shakeT, t); this.shakeAmp = Math.max(this.shakeAmp, amp); }
-    toast(text) { this.ui.toast(text); }
-    hint(id, text) {
-        if (!this.save || this.save.hints[id]) return;
-        this.save.hints[id] = 1;
-        this.ui.hint(text);
-    }
-    gy(x, z) { return this.terrain.ground(x, z); }
-    slashFx(p, heavy) {
-        this.fx.slash(p.x, this.gy(p.x, p.z), p.z, Math.atan2(p.fx, p.fz), heavy, (p.combo || 0) % 2 === 1);
-    }
-    sparkFx(x, z, y = 1.0) { this.fx.burst('spark', x, this.gy(x, z) + y, z); this.fx.flash(x, this.gy(x, z) + y, z, [1, 0.8, 0.5], 6, 0.1, 5); }
-    bloodFx(x, z) { this.fx.burst('blood', x, this.gy(x, z) + 0.9, z); this.view.addBlood(x + (Math.random() - 0.5) * 0.4, z + (Math.random() - 0.5) * 0.4, 0.5 + Math.random() * 0.6); }
-    healFx(p) { this.fx.burst('heal', p.x, this.gy(p.x, p.z) + 0.3, p.z); this.fx.flash(p.x, this.gy(p.x, p.z) + 1.5, p.z, [1, 0.75, 0.35], 6, 0.6, 6); this.sfx('heal'); }
-    smokeFx(x, z) { this.fx.burst('smoke', x, Math.max(0, this.gy(x, z)) + 1.0, z); this.fx.flash(x, Math.max(0, this.gy(x, z)) + 1.2, z, [1, 0.6, 0.25], 14, 0.12, 8); }
-    splashFx(x, z) { this.fx.burst('splash', x, 0.05, z); }
-
-    nearestEnemy(x, z, r) {
-        let best = null, bd = r;
-        for (const e of this.enemies) {
-            if (!e.alive || e.sea || e.state === 'pile') continue;
-            const d = Math.hypot(e.x - x, e.z - z);
-            if (d < bd) { bd = d; best = e; }
-        }
-        return best;
-    }
-    // Kettenblitz: jumps from the caster to up to four enemies, each jump weaker
-    chainLightning(p) {
-        const gy = this.gy(p.x, p.z);
-        const pts = [[p.x + p.fx * 0.5, gy + 1.35, p.z + p.fz * 0.5]];
-        const hit = new Set();
-        let cx = p.x, cz = p.z, dmg = this.derived.spellDmg;
-        let first = this.lockTarget && this.lockTarget.alive ? this.lockTarget : null;
-        for (let k = 0; k < 4; k++) {
-            let tgt = first && k === 0 ? first : null;
-            if (!tgt) {
-                let bd = k === 0 ? 8 : 5;
-                for (const e of this.enemies) {
-                    if (!e.alive || e.sea || hit.has(e) || e.state === 'pile') continue;
-                    const d = Math.hypot(e.x - cx, e.z - cz);
-                    if (k === 0 && (e.x - p.x) * p.fx + (e.z - p.z) * p.fz < -0.5) continue; // roughly in front
-                    if (d < bd) { bd = d; tgt = e; }
-                }
-            }
-            if (!tgt) break;
-            hit.add(tgt);
-            pts.push([tgt.x, this.gy(tgt.x, tgt.z) + 0.9, tgt.z]);
-            tgt.damage(Math.round(dmg), 2, { x: cx, z: cz });
-            cx = tgt.x; cz = tgt.z; dmg *= 0.78;
-        }
-        if (pts.length === 1) { // nothing in reach: the bolt strikes the ground ahead
-            pts.push([p.x + p.fx * 4, gy + 0.1, p.z + p.fz * 4]);
-        }
-        this.fx.lightning(pts);
-        this.sfx('zap');
-        this.shake(0.2, 0.12);
-        this.hitstop = 0.05;
-    }
-
-    // ---------------------------------------------------------------- combat
-    meleeHit(p, atk) {
-        for (const e of this.enemies) {
-            if (!e.alive || e.sea || atk.hit.has(e)) continue;
-            const dx = e.x - p.x, dz = e.z - p.z, l = Math.hypot(dx, dz);
-            if (l > atk.range + e.radius) continue;
-            const ang = Math.acos(Math.max(-1, Math.min(1, (dx * p.fx + dz * p.fz) / (l || 1))));
-            if (l > 0.45 && ang > atk.arc) continue;
-            atk.hit.add(e);
-            if (e.damage(atk.dmg, atk.poise, p)) {
-                this.sparkFx(e.x - dx / (l || 1) * 0.3, e.z - dz / (l || 1) * 0.3);
-                if (!(e instanceof Skeleton)) this.bloodFx(e.x, e.z);
-                this.sfx(atk.riposte ? 'crit' : 'hit');
-                this.hitstop = atk.riposte ? 0.16 : (atk.heavy ? 0.08 : 0.05);
-                this.shake(0.1, atk.heavy ? 0.12 : 0.06);
-                if (atk.riposte) this.ui.floatText('KRITISCH', e.x, e.z, 'crit');
-            }
-        }
-    }
-
-    enemyHit(e, range, arc, dmg) {
+    lightFires() { for (const f of this.world.fires) f.prop.lit = this.save.litFires.includes(f.id); }
+    // ---------------------------------------------------------------- main update
+    update(dt, input) {
+        this.t += dt;
+        this.save.playTime += dt;
+        this.view.time += dt;
+        const modal = this.ui.update(dt, input);
+        this.shakeK = Math.max(0, this.shakeK - dt * 14);
+        this.flashC[3] = Math.max(0, this.flashC[3] - dt * 2.5);
+        this.slowT = Math.max(0, this.slowT - dt); this.shantyT = Math.max(0, this.shantyT - dt);
+        this.pearlGainT -= dt; if (this.pearlGainT <= 0) this.pearlGain = 0;
+        this.pearlShown += (this.save.pearls - this.pearlShown) * Math.min(1, dt * 6);
+        if (Math.abs(this.pearlShown - this.save.pearls) < 1) this.pearlShown = this.save.pearls;
         const p = this.player;
-        if (e.attackLanded === e.attackId) return;
-        if (p.state === 'dead' || this.mode !== 'land') return;
-        const dx = p.x - e.x, dz = p.z - e.z, l = Math.hypot(dx, dz);
-        if (l > range + p.radius) return;
-        const ang = Math.acos(Math.max(-1, Math.min(1, (dx * e.fx + dz * e.fz) / (l || 1))));
-        if (ang > arc) return;
-        e.attackLanded = e.attackId;
-        if (p.isParrying()) {
-            e.parried();
-            this.sfx('parried');
-            this.sparkFx((p.x + e.x) / 2, (p.z + e.z) / 2, 1.2);
-            this.hitstop = 0.12;
-            this.ui.floatText('PARIERT', e.x, e.z, 'parry');
-            this.hint('riposte', 'Pariert! Greife jetzt an für einen kritischen Gegenschlag.');
-            return;
+        this.hpGhost = this.hpGhost > p.hp ? Math.max(p.hp, this.hpGhost - p.d.maxHp * dt * 0.5) : p.hp;
+        if (this.boss) this.bossGhost = this.bossGhost > this.boss.hp ? Math.max(this.boss.hp, this.bossGhost - this.boss.maxHp * dt * 0.3) : this.boss.hp;
+        if (this.deathT !== undefined) { this.deathT += dt; this.ui.fade = Math.max(0, Math.min(1, (this.deathT - 2.6) * 1.5)); if (this.deathT > 3.6) this.respawn(); }
+        if (!modal && !this.cutscene) {
+            if (input.pressed('menu')) { this.pauseMenu(); return; }
+            if (input.pressed('map')) { this.ui.mapOpen = true; this.audio.sfx('click'); }
+            if (input.pressed('legend')) this.ui.legendOpen = true;
+            if (input.pressed('lock')) this.toggleLock();
+            if (this.sailing) this.updateSailing(dt, input);
+            else { p.update(dt, input); if (input.pressed('interact')) this.interact(); if (p.state === 'free' && this.world.walkable(p.x, p.y)) this.lastSafe = { x: p.x, y: p.y }; }
+        } else if (!this.sailing) { p.at += dt; }
+        // world simulation keeps running behind dialogues (but not behind menus)
+        const frozen = modal && !this.ui.dialog;
+        if (!frozen) {
+            for (const e of this.enemies) e.update(dt);
+            for (const b of Object.values(this.bosses)) b.update(dt);
+            for (const n of this.npcs) n.update(dt);
+            for (const it of this.items) it.update(dt);
+            for (const s of this.shots) s.update(dt);
+            this.shots = this.shots.filter(s => s.life > 0);
+            this.ship.update(dt, input, this.sailing && !modal);
+            for (const g of this.ghosts) g.update(dt);
+            for (const s of this.sharks) s.update(dt);
+            this.fx.update(dt);
         }
-        if (p.isInvulnerable()) return;
-        p.hurt(dmg, e.x, e.z);
+        if (this.stain) this.stain.t += dt;
+        this.updateFocus();
+        this.updateZone(dt);
+        this.updateBossArena();
+        this.updateCamera(dt);
+        this.fx.ambient(dt, this.cam, this.app.renderer.W, this.app.renderer.H, ZONES[this.zoneKey]?.biome, this.sailing);
+        if (this.whirlpoolOpen && this.sailing && dist(this.ship, this.world.whirlpool) < 36 && !this.cutscene) this.enterWhirlpool();
+        this.saveT -= dt;
     }
-
-    // at most two enemies may wind up or strike at the same time
-    attackToken(e) {
-        let n = 0;
-        for (const o of this.enemies) if (o !== e && o.alive && (o.state === 'windup' || o.state === 'attack')) n++;
-        return n < 2;
-    }
-
-    shoot(p, kind) {
-        const tide = kind === 'tide';
-        const sp = tide ? 9 : 16;
-        const b = this.fx.ball(tide ? 'tide' : 'pistol');
-        const y = this.gy(p.x, p.z) + 1.15;
-        if (tide) this.fx.flash(p.x, y, p.z, [0.3, 0.9, 1], 6, 0.3, 5); else this.fx.flash(p.x + p.fx, y, p.z + p.fz, [1, 0.7, 0.3], 14, 0.1, 7);
-        this.projectiles.push({ b, x: p.x + p.fx * 0.6, y, z: p.z + p.fz * 0.6, vx: p.fx * sp, vz: p.fz * sp, life: tide ? 0.9 : 0.55, dmg: this.derived.offDmg, land: true });
-        this.sfx(tide ? 'tide' : 'pistol');
-        if (!tide) this.smokeFx(p.x + p.fx * 0.8, p.z + p.fz * 0.8);
-    }
-
-    spawnBall(x, z, vx, vz, dmg, delay) {
-        const b = this.fx.ball('cannon');
-        this.projectiles.push({ b, x, y: 1.3, z, vx, vz, life: 0.85 + delay, dmg, sea: true });
-    }
-
-    ramShip(shark, dmg) {
-        this.ship.damage(dmg);
-        const f = this.ship.fwd;
-        this.ship.dx += (this.ship.x - shark.x) * 1.5; this.ship.dz += (this.ship.z - shark.z) * 1.5;
-        this.sfx('crash');
-        this.splashFx(this.ship.x, this.ship.z);
-        this.hint('ram', this.touch ? 'Rostkiefer rammt dein Schiff! Dreh ihm die Breitseite zu und feuere.' : 'Rostkiefer rammt dein Schiff! Breitseiten: J links, K rechts. W/S Segel, A/D steuern.');
-    }
-
-    updateProjectiles(dt) {
-        for (let i = this.projectiles.length - 1; i >= 0; i--) {
-            const b = this.projectiles[i];
-            b.life -= dt;
-            b.x += b.vx * dt; b.z += b.vz * dt;
-            if (b.sea) b.y = Math.max(0.1, b.y - dt * 0.9);
-            b.b.e.setPosition(b.x, b.y, b.z);
-            let done = b.life <= 0;
-            for (const e of this.enemies) {
-                if (done || !e.alive) continue;
-                if (b.sea !== !!e.sea && !(b.land && !e.sea)) continue;
-                if (Math.hypot(e.x - b.x, e.z - b.z) < e.radius + 0.25) {
-                    e.damage(b.dmg, 1, { x: b.x - b.vx, z: b.z - b.vz });
-                    this.sparkFx(b.x, b.z); this.sfx('hit');
-                    done = true;
-                }
-            }
-            if (!done && b.land && this.map.blockedWalk(b.x, b.z, 0.05)) { done = true; this.sparkFx(b.x, b.z); }
-            if (done) {
-                if (b.sea) this.splashFx(b.x, b.z);
-                this.fx.free(b.b);
-                this.projectiles.splice(i, 1);
-            }
+    updateSailing(dt, input) {
+        if (input.pressed('interact')) {
+            const d = this.world.docks.find(d => Math.hypot(d.x - this.ship.x, d.y - this.ship.y) < 60);
+            if (d) this.disembark(d);
+            else this.ui.toast('Hier gibt es keinen Steg zum Anlegen.');
         }
+        if (input.pressed('shanty')) this.singShanty();
     }
-
-    onEnemyKilled(e) {
-        const greed = (this.originData.greed || 1) * (this.save.gift === 'coin' ? 1.2 : 1);
-        const n = Math.round(e.pearls * greed);
-        this.save.pearls += n;
-        this.ui.pearlGain(n);
-        this.fx.burst('pearl', e.x, this.gy(e.x, e.z) + 0.8, e.z);
-        if (this.lockTarget === e) this.lockTarget = null;
+    // ---------------------------------------------------------------- camera / zones
+    updateCamera(dt) {
+        const r = this.app.renderer, t = this.sailing ? this.ship : this.player;
+        let tx = t.x, ty = t.y - (this.sailing ? 10 : 12);
+        if (!this.sailing) { tx += this.player.fx * 16; ty += this.player.fy * 10; }
+        if (this.boss && !this.boss.dead && !this.boss.hidden) { tx = lerp(tx, this.boss.x, 0.3); ty = lerp(ty, this.boss.y, 0.3); }
+        const k = Math.min(1, dt * (this.sailing ? 3 : 5));
+        this.camF[0] = lerp(this.camF[0], tx, k); this.camF[1] = lerp(this.camF[1], ty, k);
+        const sx = this.shakeK ? (Math.random() - 0.5) * this.shakeK * 2 : 0, sy = this.shakeK ? (Math.random() - 0.5) * this.shakeK * 2 : 0;
+        this.cam = [Math.round(this.camF[0] - r.W / 2 + sx), Math.round(this.camF[1] - r.H / 2 + sy)];
     }
-
-    // ---------------------------------------------------------------- death
-    onPlayerDeath() {
-        this.dying = 0;
-        this.sfx('death');
-        this.audio.setMood('death');
-        this.lockTarget = null;
+    updateZone(dt) {
+        const t = this.sailing ? this.ship : this.player;
+        const z = this.world.zoneAt(t.x, t.y);
+        const tile = this.world.zone[Math.floor(t.y / TS) * 240 + Math.floor(t.x / TS)];
+        const onIsland = !this.sailing || (tile && this.world.shoreDist[Math.floor(t.y / TS) * 240 + Math.floor(t.x / TS)] < 8);
+        if (z !== this.zoneKey) {
+            this.zoneKey = z;
+            if (!this.sailing || onIsland) this.zoneT = 4;
+            if (!this.save.explored.includes(z)) this.save.explored.push(z);
+        }
+        this.zoneT = Math.max(0, this.zoneT - dt);
+        // grading towards the zone (or the sea)
+        const G = this.sailing && !onIsland ? GRADES.sea : GRADES[ZONES[z].grade];
+        const k = Math.min(1, dt * 1.5), c = this.gradeCur;
+        c.lift = lerp3(c.lift || G.lift, G.lift, k); c.gain = lerp3(c.gain || G.gain, G.gain, k); c.ambient = lerp3(c.ambient || G.ambient, G.ambient, k);
+        c.sat = lerp(c.sat ?? G.sat, G.sat, k); c.contrast = lerp(c.contrast ?? G.contrast, G.contrast, k);
+        // music
+        let mood = this.sailing ? 'sea' : ZONES[z].music;
+        if (this.boss && !this.boss.dead && this.boss.state !== 'dormant') mood = 'boss';
+        if (this.player.state === 'sit') mood = 'fire';
+        if (this.deathT !== undefined) mood = 'death';
+        this.audio.setMood(mood);
     }
-    onShipSunk() {
-        this.dying = 0;
-        this.sinking = true;
-        this.sfx('death');
-        this.audio.setMood('death');
-    }
-    updateDeath(dt) {
-        if (this.dying === undefined) return;
-        this.dying += dt;
-        if (this.sinking && this.ship.state === 'surfaced') { this.ship.state = 'sinking'; this.ship.riseT = 1; }
-        if (this.dying > 1.2 && !this.deathShown) { this.deathShown = true; this.ui.death(); }
-        if (this.dying > 5.2) {
-            const s = this.save;
-            const sea = this.mode === 'sea';
-            s.stain = s.pearls > 0 ? { x: sea ? this.ship.x : this.player.x, z: sea ? this.ship.z : this.player.z, amount: s.pearls, sea } : null;
-            s.pearls = 0;
-            s.deaths = (s.deaths || 0) + 1;
-            this.dying = undefined; this.deathShown = false; this.sinking = false;
-            this.respawn();
-            this.persist(null);
-            this.ui.hideDeath();
-            if (s.stain) this.hint('stain', 'Deine Perlen liegen dort, wo du gestorben bist. Hol sie zurück – stirbst du vorher, sind sie verloren.');
+    updateBossArena() {
+        const mega = this.bosses.mega;
+        if (mega.state === 'dormant' && !this.save.megalodon && this.zoneKey === 'ende' && !this.sailing) {
+            const a = this.world.arenas.ende;
+            if (Math.hypot((this.player.x - a.x) / a.r, (this.player.y - a.y) / a.ry) < 0.55) mega.activate();
         }
     }
-    updateStain() {
-        const st = this.save?.stain;
-        this.stain.enabled = !!st;
-        this.stainLight.light.intensity = st ? 5 : 0;
-        if (st) { const y = Math.max(0, this.gy(st.x, st.z)) + 0.7; this.stain.setPosition(st.x, y, st.z); this.stainLight.setLocalPosition(st.x, y + 0.3, st.z); }
-    }
-    checkStain() {
-        const st = this.save.stain;
-        if (!st) return;
-        const sea = this.mode === 'sea';
-        if (st.sea !== sea) return;
-        const px = sea ? this.ship.x : this.player.x, pz = sea ? this.ship.z : this.player.z;
-        if (Math.hypot(px - st.x, pz - st.z) < (sea ? 2 : 0.9)) {
-            this.save.pearls += st.amount;
-            this.ui.banner('Perlen zurückgewonnen', `+${st.amount}`, 'gold', 2.5);
-            this.sfx('pearls');
-            this.save.stain = null;
-            this.updateStain();
+    shake(k) { this.shakeK = Math.max(this.shakeK, k); }
+    flash(col, a) { this.flashC = [col[0], col[1], col[2], a]; }
+    // ---------------------------------------------------------------- focus + interaction
+    interactables() {
+        const out = [], p = this.player, s = this.save;
+        for (const f of this.world.fires) out.push({ x: f.x, y: f.y, h: 36, label: s.litFires.includes(f.id) ? 'Rasten' : 'Feuer entzünden', act: () => this.useFire(f), obj: f.prop });
+        for (const n of this.npcs) out.push({ x: n.x, y: n.y, h: 36, label: 'Sprechen', act: () => this.talk(n), obj: n });
+        for (const it of this.items) out.push({ x: it.x, y: it.y, h: 24, label: 'Aufheben', act: () => this.pickUp(it), obj: it });
+        for (const c of this.world.chests) if (!c.opened) out.push({ x: c.x, y: c.y, h: 22, label: 'Öffnen', act: () => this.openChest(c), obj: c });
+        for (const g of this.world.gates) if (!g.prop.hidden && !this.save.kings[g.king] && this.bosses[g.king].state === 'dormant') out.push({ x: g.x, y: g.y + 8, h: 40, label: 'Durch den Nebel schreiten', act: () => this.enterGate(g), obj: g.prop });
+        for (const sl of this.world.slots) if (!s.mounted[sl.el]) out.push({ x: sl.x, y: sl.y, h: 30, label: s.figureheads[sl.el] ? 'Galionsfigur anbringen' : 'Ein leerer Bug', act: () => this.useSlot(sl), obj: sl.prop });
+        for (const d of this.world.docks) {
+            const here = Math.hypot(this.ship.x - d.x, this.ship.y - d.y) < 24;
+            out.push({ x: d.px, y: d.py, h: 30, label: here ? 'An Bord gehen' : 'Schiff rufen', act: () => here ? this.board(d) : this.callShip(d) });
         }
+        if (this.stain) out.push({ x: this.stain.x, y: this.stain.y, h: 18, label: 'Perlen zurückholen', act: () => this.takeStain() });
+        return out;
     }
-
-    // ---------------------------------------------------------------- interaction
-    nearestInteraction() {
-        const m = this.map, p = this.player, s = this.save;
-        if (this.mode === 'land') {
-            for (const f of m.fires) if (f.kind === 'land' && Math.hypot(p.x - f.x, p.z - f.z - 0.3) < 1.6) return { label: s.litFires.includes(f.id) ? 'Rasten' : 'Feuer entzünden', act: () => this.useFire(f) };
-            for (const c of m.chests) if (!s.chests.includes(c.id) && Math.hypot(p.x - c.x, p.z - c.z) < 1.3) return { label: 'Truhe öffnen', act: () => this.openChest(c) };
-            if (this.ship.ready && this.shipDist(p.x, p.z) < 4.6) return { label: 'An Bord gehen', act: () => this.board() };
+    updateFocus() {
+        const p = this.player;
+        let best = null, bd = 30;
+        if (!this.sailing && p.state !== 'dead') for (const it of this.interactables()) { const d = Math.hypot(it.x - p.x, (it.y - p.y) * 1.2); if (d < bd) { bd = d; best = it; } }
+        // mouse hover outline (enemies, items, NPCs, props with interactions)
+        let hover = best?.obj || null;
+        const m = this.input.mouse;
+        if (m.x >= 0 && m.moved) {
+            const wx = m.x + this.cam[0], wy = m.y + this.cam[1];
+            const cands = [...this.enemies.filter(e => !e.dead), ...this.npcs, ...this.items, ...Object.values(this.bosses).filter(b => !b.hidden && !b.dead)];
+            for (const c of cands) { const h = c.sheet?.h || 20, w = (c.sheet?.w || 16) * 0.5; if (wx > c.x - w && wx < c.x + w && wy > c.y - h && wy < c.y + 2) { hover = c; break; } }
+        }
+        this.focus = best ? { ...best, hover } : (hover ? { hover } : null);
+    }
+    interact() { if (this.focus?.act) this.focus.act(); }
+    toggleLock() {
+        if (this.lock) { this.lock = null; return; }
+        const p = this.player;
+        let best = null, bd = 160;
+        for (const e of this.hittables()) { const d = dist(e, p); if (d < bd) { bd = d; best = e; } }
+        this.lock = best; if (best) this.audio.sfx('lock');
+    }
+    hittables() {
+        const out = this.enemies.filter(e => !e.dead);
+        for (const b of Object.values(this.bosses)) if (!b.hidden && !b.dead) out.push(b);
+        if (this.sailing) { for (const g of this.ghosts) if (!g.dead) out.push(g); for (const s of this.sharks) if (!s.dead) out.push(s); }
+        return out;
+    }
+    // ---------------------------------------------------------------- combat hooks
+    playerStrike(p, heavy) {
+        const w = p.w, reach = w.range * 14 + 6;
+        let dmg = p.d.dmg * (heavy ? w.heavyMul : 1) * (1 + p.combo * 0.1);
+        const ang = Math.atan2(p.fy, p.fx);
+        this.fx.slash(p.x + p.fx * 6, p.y - 10 + p.fy * 4, ang, reach * 0.75, heavy ? [1, 0.85, 0.6, 1] : [0.9, 0.95, 1, 1], heavy ? 2 : 1.4);
+        let hit = false;
+        for (const t of this.hittables()) {
+            if (!p.inArc(t, reach + (t.isBoss ? t.hurtR * 0.5 : 0), heavy ? 1.3 : 1.15)) continue;
+            t.hurt(Math.round(dmg * (0.9 + Math.random() * 0.2)), p, { push: [p.fx * 6, p.fy * 6], poise: heavy ? dmg * 2 : dmg });
+            hit = true;
+            this.fx.burst('spark', t.x, t.y - (t.bodyY || 10), 5, { speed: 70 });
+        }
+        if (hit) this.shake(heavy ? 3 : 1.5);
+    }
+    onParry(from) {
+        from.stagger?.();
+        this.audio.sfx('parried'); this.flash([1, 1, 1], 0.25); this.shake(2);
+        this.fx.burst('spark', from.x, from.y - 14, 18, { speed: 110 });
+        this.ui.toast('Pariert! Jetzt zustechen.');
+    }
+    castSpell(p, sp) {
+        const dmg = p.d.spellDmg;
+        const t = this.lock && !this.lock.dead ? this.lock : null;
+        const ang = t ? Math.atan2(t.y - p.y, t.x - p.x) : Math.atan2(p.fy, p.fx);
+        if (sp === 'fireball') {
+            this.shots.push(new Shot(this, { owner: 'player', kind: 'fireball', x: p.x + Math.cos(ang) * 8, y: p.y + Math.sin(ang) * 6, z: 12, vx: Math.cos(ang) * 170, vy: Math.sin(ang) * 140, dmg: Math.round(dmg * 1.3), r: 5, life: 1.4, glow: [1.6, 0.7, 0.25, 1], col: [1, 0.55, 0.2, 1], light: [1, 0.5, 0.2],
+                onHit: (s) => this.explode(s.x, s.y, 26, s.dmg, 'ember'), onExpire: (s) => this.explode(s.x, s.y, 26, s.dmg, 'ember'), onHitWall: (s) => this.explode(s.x, s.y, 26, s.dmg, 'ember') }));
+            this.audio.sfx('cannon');
         } else {
-            for (const f of m.fires) if (f.kind === 'sea' && Math.hypot(this.ship.x - f.x - 1, this.ship.z - f.z) < 4.2) return { label: s.litFires.includes(f.id) ? 'Am Wrack rasten' : 'Wrackfeuer entzünden', act: () => this.useFire(f) };
-            const land = this.landingSpot();
-            if (land) return { label: 'An Land gehen', act: () => this.disembark(land) };
-        }
-        return null;
-    }
-    landingSpot() {
-        const sx = this.ship.x, sz = this.ship.z;
-        let best = null, bd = 4.4;
-        for (let j = -5; j <= 5; j++) for (let i = -5; i <= 5; i++) {
-            const tx = Math.floor(sx) + i, tz = Math.floor(sz) + j;
-            const cx = tx + 0.5, cz = tz + 0.5;
-            if (this.map.blockedWalk(cx, cz, 0.3)) continue;
-            const d = this.shipDist(cx, cz);
-            if (d < bd) { bd = d; best = { x: cx, z: cz }; }
-        }
-        return best;
-    }
-    // distance from a point to the ship's keel line (the hull is long, not round)
-    shipDist(x, z) {
-        const sh = this.ship, f = sh.fwd, half = sh.len / 2 - 0.3;
-        const t = Math.max(-half, Math.min(half, (x - sh.x) * f.x + (z - sh.z) * f.z));
-        return Math.hypot(x - (sh.x + f.x * t), z - (sh.z + f.z * t));
-    }
-    // the Möwenschrei answers its captain: at any shore it rises from the deep
-    updateSummon(dt) {
-        const sh = this.ship, p = this.player, m = this.map;
-        this.summonCd = Math.max(0, (this.summonCd || 0) - dt);
-        if (sh.hull <= 0) return;
-        const d = Math.hypot(p.x - sh.x, p.z - sh.z);
-        // left behind: it sinks back into the deep
-        if (sh.state === 'surfaced' && d > 22) { sh.state = 'submerged'; sh.riseT = 0; sh.sync(); }
-        if (this.summonCd > 0 || sh.state === 'rising' || sh.state === 'sinking') return;
-        // at the shore?
-        let shore = false;
-        for (let j = -2; j <= 2 && !shore; j++) for (let i = -2; i <= 2; i++) {
-            const tx = Math.floor(p.x + i * 0.8), tz = Math.floor(p.z + j * 0.8);
-            if (m.get(tx, tz) === T.WATER) { shore = true; break; }
-        }
-        if (!shore) return;
-        if (sh.state === 'surfaced') {
-            if (d < 9) return;
-            sh.dive(); // far away: it goes down and comes up here
-            this.summonCd = 2.8;
-            return;
-        }
-        const spot = this.riseSpot(p.x, p.z);
-        if (!spot) return;
-        sh.rise(spot.x, spot.z, spot.heading);
-        this.summonCd = 3;
-        this.sfx('rise');
-        this.shake(0.25, 1.6);
-        for (let k = 0; k < 5; k++) setTimeout(() => this.splashFx(sh.x + (Math.random() - 0.5) * 3, sh.z + (Math.random() - 0.5) * 2), k * 260);
-        this.hint('rise', 'Die Möwenschrei steigt aus der Tiefe. Wo immer du ans Ufer trittst, folgt sie dir.');
-    }
-    riseSpot(px, pz) {
-        let best = null, bd = 1e9;
-        for (let r = 2.6; r <= 6.5; r += 0.6) {
-            for (let a = 0; a < 16; a++) {
-                const ang = a / 16 * Math.PI * 2, cx = px + Math.cos(ang) * r, cz = pz + Math.sin(ang) * r;
-                if (this.map.get(Math.floor(cx), Math.floor(cz)) !== T.WATER) continue;
-                // broadside to the shore looks best; try both directions along it
-                for (const heading of [ang, ang + Math.PI, ang + Math.PI / 2]) {
-                    if (this.map.blockedSail(cx, cz, SHIP_R, heading)) continue;
-                    const d = this.shipDistFrom(px, pz, cx, cz, heading);
-                    if (d < 1.5) continue; // never right on top of the captain
-                    if (d < bd) { bd = d; best = { x: cx, z: cz, heading }; }
-                }
+            // chain lightning: first target in front, then hops
+            const cands = this.hittables();
+            let cur = null, bd = 140;
+            for (const e of cands) { const dx = e.x - p.x, dy = e.y - p.y, d = Math.hypot(dx, dy); const a = Math.acos(Math.max(-1, Math.min(1, (dx * Math.cos(ang) + dy * Math.sin(ang)) / (d || 1)))); if (d < bd && a < 0.9) { bd = d; cur = e; } }
+            const pts = [[p.x + p.fx * 4, p.y - 22]];
+            const hitSet = new Set();
+            let k = 1;
+            while (cur && hitSet.size < 4) {
+                hitSet.add(cur); pts.push([cur.x, cur.y - (cur.bodyY || 10)]);
+                cur.hurt(Math.round(dmg * k), p, { poise: dmg });
+                this.fx.burst('soulLight', cur.x, cur.y - 10, 8, { speed: 60 });
+                k *= 0.8;
+                let nx = null, nd = 80;
+                for (const e of cands) if (!hitSet.has(e) && !e.dead) { const d = dist(e, cur); if (d < nd) { nd = d; nx = e; } }
+                cur = nx;
             }
-            if (best && bd < 2.2) break;
+            if (pts.length === 1) pts.push([p.x + Math.cos(ang) * 90, p.y + Math.sin(ang) * 70]);
+            this.fx.bolt(pts); this.flash([0.7, 1, 0.95], 0.18); this.audio.sfx('zap');
         }
-        return best;
     }
-    shipDistFrom(x, z, sx, sz, heading) {
-        const fx = Math.sin(heading), fz = -Math.cos(heading), half = this.ship.len / 2 - 0.3;
-        const t = Math.max(-half, Math.min(half, (x - sx) * fx + (z - sz) * fz));
-        return Math.hypot(x - (sx + fx * t), z - (sz + fz * t));
+    explode(x, y, r, dmg, kind) {
+        this.fx.burst(kind, x, y, 26, { speed: 100 }); this.fx.burst('smoke', x, y, 8, { speed: 40, up: 20, g: -20, life: 0.8 });
+        this.fx.ring(x, y, 3, r, 0.3, [1, 0.6, 0.3]); this.shake(3); this.audio.sfx('cannon');
+        this.flashLight = { x, y, r: 90, col: [1, 0.55, 0.25], i: 2.5, t: 0.25 };
+        for (const t of this.hittables()) if (Math.hypot(t.x - x, (t.y - y) * 1.2) < r + (t.hurtR || 6)) t.hurt(dmg, this.player, { poise: dmg });
     }
-    board() {
-        this.mode = 'sea';
-        this.player.sprite.setVisible(false);
-        this.lockTarget = null;
-        this.ship.sail = 0;
-        this.sfx('board');
-        this.audio.setMood('sea');
-        this.hint('sail', this.touch
-            ? 'Stick links/rechts: steuern · Segel + / −: Fahrt · Breitseiten feuern zur Seite · Tippe „An Land gehen“, um anzulegen.'
-            : 'W/S: Segel setzen · A/D: steuern · J/K: Breitseite links/rechts · E: an Land gehen · F: Shanty');
+    playerShoot(p) {
+        const t = this.lock && !this.lock.dead ? this.lock : null;
+        const ang = t ? Math.atan2(t.y - p.y, t.x - p.x) : Math.atan2(p.fy, p.fx);
+        if (this.save.off === 'tide') {
+            this.shots.push(new Shot(this, { owner: 'player', kind: 'tide', x: p.x, y: p.y, z: 8, vx: Math.cos(ang) * 150, vy: Math.sin(ang) * 120, dmg: p.d.offDmg, r: 6, life: 1.1, pierce: true, glow: [0.4, 1.1, 0.9, 1], col: [0.4, 0.8, 0.9, 1] }));
+            this.audio.sfx('tide');
+        } else {
+            this.shots.push(new Shot(this, { owner: 'player', kind: 'bullet', x: p.x + Math.cos(ang) * 10, y: p.y + Math.sin(ang) * 8, z: 14, vx: Math.cos(ang) * 300, vy: Math.sin(ang) * 260, dmg: p.d.offDmg, r: 3, life: 0.7 }));
+            this.fx.burst('smoke', p.x + Math.cos(ang) * 14, p.y + Math.sin(ang) * 10, 5, { speed: 20, up: 10, g: -10, life: 0.6 });
+            this.fx.burst('spark', p.x + Math.cos(ang) * 14, p.y + Math.sin(ang) * 10 - 12, 4, { speed: 60 });
+            this.audio.sfx('pistol'); this.shake(1.5);
+        }
     }
-    disembark(spot) {
-        this.mode = 'land';
-        this.ship.sail = 0; this.ship.speed = 0;
-        this.player.place(spot.x, spot.z);
-        this.player.sprite.setVisible(true);
-        this.sfx('board');
-        this.audio.setMood('land');
+    throwBomb(p) {
+        const tx = p.x + p.fx * 70, ty = p.y + p.fy * 55;
+        this.shots.push(new Shot(this, { owner: 'none', kind: 'bomb', x: p.x, y: p.y, z: 16, vz: 110, grav: 300, vx: (tx - p.x) / 0.75, vy: (ty - p.y) / 0.75, dmg: 0, life: 3, onLand: (s) => this.explode(s.x, s.y, 32, 70, 'ember') }));
     }
-    openChest(c) {
-        const s = this.save;
-        s.chests.push(c.id);
-        this.chests[c.id].setOpen(true);
-        this.fx.flash(c.x, this.gy(c.x, c.z) + 0.8, c.z, [1, 0.8, 0.45], 10, 1.2, 6);
-        s.pearls += c.pearls;
-        this.sfx('chest');
-        if (c.item === 'flask') { s.flasksMax++; this.player.flasks++; this.ui.banner('Rumflaschen-Splitter', `Eine Rumflasche mehr · +${c.pearls} Perlen`, 'gold', 3.5); }
-        else { if (!s.songs.includes('leine')) s.songs.push('leine'); this.ui.banner('Vergilbtes Liedblatt', `„Hol die Leine“ – die Crew kennt jetzt den Shanty · +${c.pearls} Perlen`, 'gold', 4); }
+    spawnShot(e, kind, tx, ty, dmg) {
+        const a = Math.atan2(ty - e.y, tx - e.x);
+        this.shots.push(new Shot(this, { owner: 'enemy', kind, x: e.x + Math.cos(a) * 10, y: e.y + Math.sin(a) * 8, z: 14, vx: Math.cos(a) * 190, vy: Math.sin(a) * 170, dmg, r: 3, life: 1.2, src: e,
+            onHit: (s, t) => t.hurt(s.dmg, { parryable: false }) }));
+        this.fx.burst('smoke', e.x + Math.cos(a) * 12, e.y + Math.sin(a) * 9, 4, { speed: 20, up: 10, g: -10 });
     }
+    spawnBossShot(b, kind, a, sp, dmg) {
+        const C = { fireball: [[1.5, 0.6, 0.2, 1], [1, 0.5, 0.2, 1]], shard: [[0.6, 1, 1.3, 1], [0.7, 0.9, 1, 1]], feather: [[1, 1, 1.2, 1], [0.8, 0.85, 0.9, 1]], rock: [null, null] }[kind];
+        this.shots.push(new Shot(this, { owner: 'enemy', kind: kind === 'rock' ? 'rock' : kind, x: b.x + Math.cos(a) * 14, y: b.y + Math.sin(a) * 10, z: b.human ? 18 : 24, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp * 0.8, dmg, r: 4, life: 2.2, glow: C[0], col: C[1],
+            onHit: (s, t) => { t.hurt(s.dmg, { parryable: false }, { unparryable: true }); if (kind === 'shard') this.slowT = 1.5; } }));
+    }
+    spawnShotRaw(o) { this.shots.push(new Shot(this, { ...o, onHit: (s, t) => { t.hurt(s.dmg); this.fx.burst('splash', s.x, s.y, 6); } })); }
+    pushPlayer(dx, dy) { const p = this.player; for (let i = 0; i < 6; i++) p.move(dx / 6, dy / 6); }
+    gainPearls(n, src) {
+        this.save.pearls += n; this.pearlGain += n; this.pearlGainT = 2;
+        if (src) for (let i = 0; i < 10; i++) this.fx.p(src.x + (Math.random() - 0.5) * 10, src.y - 8, { z: 6, vz: 30 + Math.random() * 20, vx: (this.player.x - src.x) * 0.8, vy: (this.player.y - src.y) * 0.8, life: 1, col: FXCOL.soul, glow: 1.5, drag: 0.3 });
+        this.audio.sfx('pearls');
+    }
+    // ---------------------------------------------------------------- death
+    playerDied() {
+        const p = this.player, s = this.save;
+        p.state = 'dead'; p.anim = 'dead'; p.frame = 0;
+        this.audio.sfx('death');
+        this.ui.banner('DU BIST ERTRUNKEN', '', 'death', 3.4);
+        s.deaths = (s.deaths || 0) + 1;
+        // pearls stay where you fell (on land)
+        const safe = this.world.walkable(p.x, p.y) ? p : (this.lastSafe || p);
+        s.stain = s.pearls > 0 ? { x: safe.x, y: safe.y, pearls: s.pearls } : null;
+        s.pearls = 0; this.pearlShown = 0;
+        this.stain = s.stain ? { ...s.stain, t: 0 } : null;
+        this.deathT = 0; this.lock = null;
+    }
+    shipSunk() { this.sailing = false; this.player.x = this.ship.x; this.player.y = this.ship.y; this.player.hp = 0; this.playerDied(); this.player.hidden = true; }
+    respawn() {
+        this.deathT = undefined; this.ui.fade = 0;
+        const p = this.player;
+        p.hidden = false; p.refresh(true); p.state = 'free';
+        for (const b of Object.values(this.bosses)) if (!b.dead) b.reset();
+        this.boss = null;
+        for (const g of this.world.dynamicBlockers) g.active = false;
+        this.spawnAll();
+        this.ship.hull = this.ship.maxHull;
+        const dock = this.world.docks.find(d => d.zone === this.save.shipDock) || this.world.docks[0];
+        this.ship.x = dock.x; this.ship.y = dock.y; this.ship.h = dock.heading; this.ship.v = 0; this.sailing = false;
+        this.placeAtFire(this.save.lastFire);
+        this.persist();
+    }
+    takeStain() {
+        this.gainPearls(this.stain.pearls, this.stain);
+        this.ui.banner('Perlen zurückgeholt', '', 'small', 2);
+        this.stain = null; this.save.stain = null; this.persist();
+    }
+    // ---------------------------------------------------------------- fires
     useFire(f) {
-        const s = this.save;
-        const first = !s.litFires.includes(f.id);
-        if (first) {
-            s.litFires.push(f.id);
-            this.sfx('kindle');
-            this.ui.banner(f.kind === 'sea' ? 'Wrackfeuer entzündet' : 'Feuer entzündet', f.name, 'gold', 3);
+        const s = this.save, p = this.player;
+        if (this.boss && !this.boss.dead && this.boss.state !== 'dormant') { this.ui.toast('Nicht, während ein König wacht.'); return; }
+        if (!s.litFires.includes(f.id)) {
+            s.litFires.push(f.id); f.prop.lit = true;
+            this.audio.sfx('kindle'); this.ui.banner('SÄBELFEUER ENTZÜNDET', f.name, 'big', 3);
+            this.fx.rise('soul', f.x, f.y, 30, { w: 14 });
         }
         s.lastFire = f.id;
-        this.refillAll();
+        p.state = 'sit'; p.face(f.x - p.x, f.y - p.y);
+        p.refresh(true);
+        this.spawnAll();
         this.ship.hull = this.ship.maxHull;
-        for (const e of this.enemies) e.reset();
-        this.lockTarget = null;
-        this.paused = true;
-        if (this.mode === 'land') { this.player.state = 'sit'; this.player.t = 0; this.player.face(f.x - this.player.x, f.z - this.player.z); }
-        this.audio.setMood('fire');
         this.persist();
-        setTimeout(() => this.ui.restMenu(f), first ? 1600 : 200);
+        this.restMenu(f);
     }
-    leaveFire() {
-        this.paused = false;
-        if (this.mode === 'land') this.player.toIdle();
-        this.audio.setMood(this.mode === 'sea' ? 'sea' : 'land');
+    restMenu(f) {
+        this.ui.openList(f.name, [
+            { label: 'Reisen', desc: 'Zu einem anderen entzündeten Säbelfeuer.', act: () => this.travelMenu(f) },
+            { label: 'Steuerung', desc: 'Alle Tasten auf einen Blick.', act: () => { this.ui.closeList(); this.ui.legendOpen = true; this.player.state = 'free'; } },
+            { label: 'Aufstehen', desc: 'Weiter.', act: () => { this.ui.closeList(); this.player.state = 'free'; } }
+        ], { onBack: () => { this.player.state = 'free'; } });
     }
-    levelUp(stat) {
+    travelMenu(from) {
+        const items = this.world.fires.filter(f => this.save.litFires.includes(f.id)).map(f => ({ label: f.name, right: f === from ? 'hier' : ZONES[f.zone]?.name.split(' ')[0], desc: ZONES[f.zone]?.name, disabled: f === from, act: () => this.travelTo(f) }));
+        this.ui.openList('Reisen', items, { onBack: () => this.restMenu(from) });
+    }
+    travelTo(f) {
+        this.ui.closeList();
+        this.cutscene = true; let t = 0;
+        const step = () => {
+            t += 1 / 30; this.ui.fade = Math.min(1, t * 2);
+            if (t < 0.6) return setTimeout(step, 33);
+            this.save.lastFire = f.id; this.placeAtFire(f.id); this.player.state = 'sit';
+            this.spawnAll(); this.persist();
+            const back = () => { this.ui.fade = Math.max(0, this.ui.fade - 0.06); if (this.ui.fade > 0) setTimeout(back, 33); else { this.cutscene = false; this.restMenu(f); } };
+            back();
+        };
+        step();
+    }
+    // ---------------------------------------------------------------- NPCs
+    talk(n) {
+        this.talkTo = n; this.player.state = 'talk'; this.player.face(n.x - this.player.x, n.y - this.player.y);
+        this.ui.openDialog(n.name, dialogFor(this, n));
+    }
+    talkPages(pages) { this.ui.openDialog(this.talkTo?.name || '', { pages, choices: [{ label: 'Weiter', act: () => this.talk(this.talkTo) }, { label: 'Lebewohl', act: () => this.endTalk() }] }); }
+    endTalk() { this.talkTo = null; this.ui.dialog = null; this.ui.closeList(); if (this.player.state === 'talk') this.player.state = 'free'; }
+    recruit(el) {
         const s = this.save;
-        const cost = levelCost(s.level);
-        if (s.pearls < cost) return false;
-        s.pearls -= cost;
-        s.level++;
-        s.stats[stat]++;
-        this.refreshDerived();
-        this.refillAll();
-        this.player.state = 'frozen';
-        this.sfx('level');
+        if (!s.crew.includes(el)) s.crew.push(el);
+        const n = this.npcs.find(n => n.def.crew === el);
+        this.ui.banner('Neue Crew', `${CREW[el].name} · Shanty „${CREW[el].songName}“`, 'big', 3);
+        this.audio.sfx('level');
+        this.moveCrewToHub();
+        this.endTalk(); this.persist();
+        void n;
+    }
+    moveCrewToHub() { // recruited crew sit by the tavern in the hub
+        const spots = this.world.crewSpots || [];
+        this.save.crew.forEach((el, i) => { const n = this.npcs.find(n => n.def.crew === el); if (n && spots[i]) { n.x = spots[i].x; n.y = spots[i].y; n.def = { ...n.def, sit: true }; } });
+    }
+    levelStat(k) {
+        const s = this.save, cost = levelCost(s.level);
+        if (s.pearls < cost) return;
+        s.pearls -= cost; s.level++; s.stats[k]++;
+        this.player.refresh(); this.player.hp = this.player.d.maxHp;
+        this.audio.sfx('level'); this.fx.rise('soul', this.player.x, this.player.y, 20);
+        this.ui.levelUp(); this.persist();
+    }
+    upgradeWeapon() {
+        const s = this.save, lvl = s.weaponLevel || 0, c = upgradeCost(lvl);
+        if (lvl >= 5) return;
+        if (s.pearls < c.pearls || s.shards < c.shards) { this.ui.toast(`Du brauchst ${c.pearls} Perlen und ${c.shards} Gezeitensplitter.`); this.endTalk(); return; }
+        s.pearls -= c.pearls; s.shards -= c.shards; s.weaponLevel = lvl + 1;
+        this.player.refresh(); this.audio.sfx('chest'); this.shake(2);
+        this.ui.banner(`${WEAPONS[s.weapon].name} +${s.weaponLevel}`, 'Gehärtet im Feuer des Ambosses', 'big', 2.5);
+        this.endTalk(); this.persist();
+    }
+    buyWeapon(k) {
+        const s = this.save, w = WEAPONS[k];
+        if (!s.owned.includes(k)) { if (s.pearls < w.price) return; s.pearls -= w.price; s.owned.push(k); this.audio.sfx('pearls'); }
+        s.weapon = k; this.player.refresh(); this.ui.weaponShop(); this.persist();
+    }
+    buy(what, price) {
+        const s = this.save;
+        if (s.pearls < price) return;
+        s.pearls -= price;
+        if (what === 'bullets') s.bullets += 6; else if (what === 'bombs') s.bombs += 3; else if (what === 'phial') { s.phialsMax++; this.player.phials++; }
+        this.audio.sfx('pearls'); this.ui.shop(); this.persist();
+    }
+    // ---------------------------------------------------------------- items, chests, slots
+    pickUp(it) {
+        this.items.splice(this.items.indexOf(it), 1);
+        this.save.picked.push(it.def.id);
+        this.giveItem(it.def.item);
         this.persist();
-        return true;
     }
-    travel(f) {
-        this.save.lastFire = f.id;
-        this.respawn();
-        this.persist(null);
-        this.paused = true;
-        this.audio.setMood('fire');
-        if (this.mode === 'land') { this.player.state = 'sit'; this.player.t = 0; }
+    giveItem(id) {
+        const s = this.save, I = ITEMS[id];
+        this.audio.sfx('chest');
+        switch (id) {
+            case 'pearls': { const n = 300 + Math.floor(Math.random() * 400); this.gainPearls(n); this.ui.banner(I.name, `${n} Perlen`, 'small', 2.2); return; }
+            case 'rum': s.flasksMax++; this.player.flasks++; break;
+            case 'phial': s.phialsMax++; this.player.phials++; break;
+            case 'bullets': s.bullets += 6; break;
+            case 'bombs': s.bombs += 3; break;
+            case 'soulflower': case 'shard': s.shards++; break;
+            case 'fireball': if (!s.spells.includes('fireball')) s.spells.push('fireball'); s.spell = s.spells.indexOf('fireball'); break;
+            default: s.items[id] = true;
+        }
+        this.player.refresh();
+        this.ui.banner(I.name, I.desc, 'big', 3);
     }
-
-    // ---------------------------------------------------------------- loop
-    update(rawDt) {
-        const inp = this.input;
-        inp.poll();
-        if (!this.save) { // attract mode behind the title screen
-            this.time += rawDt;
-            this.view.update(rawDt);
-            this.fx.update(rawDt);
-            this.onAttract?.(rawDt);
-            inp.endFrame();
-            return;
-        }
-        if (inp.pressed('menu') && !this.ui.modalOpen() && this.dying === undefined) this.ui.pauseMenu();
-        if (inp.pressed('map') && !this.ui.modalOpen()) this.ui.toggleMap();
-        if (this.paused || this.ui.modalOpen()) {
-            this.view.update(rawDt, { x: this.camX, z: this.camZ }); this.fx.update(rawDt);
-            for (const c of Object.values(this.chests)) c.animate(rawDt);
-            if (this.mode === 'land' && this.player) this.player.animate(rawDt);
-            this.updateCamera(rawDt); this.hud.update(); inp.endFrame(); return;
-        }
-        let dt = rawDt;
-        if (this.hitstop > 0) { this.hitstop -= rawDt; dt = rawDt * 0.05; }
-        this.time += dt;
-        this.save.playTime += rawDt;
-        this.wind.angle = 2.3 + Math.sin(this.time * 0.015) * 0.9;
-        this.wind.strength = 0.85 + Math.sin(this.time * 0.05) * 0.15;
-
-        if (this.mode === 'land') {
-            if (inp.pressed('lock')) this.toggleLock();
-            this.player.update(dt);
-            if (this.dying === undefined) this.updateSummon(dt);
-        } else {
-            this.ship.update(dt, this.dying === undefined);
-            this.player.x = this.ship.x; this.player.z = this.ship.z;
-            if (inp.pressed('shanty')) this.requestShanty();
-        }
-        if (this.mode !== 'sea') this.ship.update(dt, false);
-        for (const e of this.enemies) {
-            if (!e.alive && e.state !== 'dead' && e.state !== 'gone') continue;
-            // a fresh attack id each time an attack begins
-            if (e.state === 'attack' && e._prev !== 'attack') e.attackId = (e.attackId || 0) + 1;
-            e._prev = e.state;
-            if (Math.hypot(e.x - this.camX, e.z - this.camZ) < 22 || e.sea) e.update(dt);
-        }
-        this.updateProjectiles(dt);
-        this.fx.update(dt);
-        this.view.update(dt, { x: this.camX, z: this.camZ });
-        for (const c of Object.values(this.chests)) c.animate(dt);
-        this.updateDeath(rawDt);
-        if (this.dying === undefined) {
-            this.checkStain();
-            const it = this.nearestInteraction();
-            this.hud.prompt(it ? it.label : null);
-            if (it && inp.pressed('interact')) it.act();
-        } else this.hud.prompt(null);
-        if (this.stain.enabled) { const st = this.save.stain; this.stain.setPosition(st.x, Math.max(0, this.gy(st.x, st.z)) + 0.7 + Math.sin(this.time * 2) * 0.08, st.z); }
-        this.audio.update(dt, this);
-        this.updateExplored(dt);
-        this.updateCamera(rawDt);
-        this.hud.update();
-        inp.endFrame();
+    openChest(c) {
+        c.opened = true; c.def = this.app.art.props.chestopen; this.save.chests.push(c.chestId);
+        this.fx.burst('spark', c.x, c.y - 8, 10, { speed: 50 });
+        this.giveItem(c.loot.item); this.persist();
     }
-
-    toggleLock() {
-        if (this.lockTarget) { this.lockTarget = null; return; }
-        let best = null, bd = 9;
-        for (const e of this.enemies) {
-            if (!e.alive || e.sea || e.state === 'pile') continue;
-            const d = Math.hypot(e.x - this.player.x, e.z - this.player.z);
-            if (d < bd) { bd = d; best = e; }
-        }
-        this.lockTarget = best;
-        if (best) this.sfx('lock');
-    }
-
-    requestShanty() {
-        if (!this.save.songs.includes('leine')) { this.toast('Die Crew kennt noch keinen Shanty. Finde ein Liedblatt.'); return; }
-        this.audio.crewSing();
-        this.toast('„Hol die Leine!“ – die Crew stimmt an.');
-    }
-
-    updateExplored(dt) {
-        this.exploreT -= dt;
-        if (this.exploreT > 0) return;
-        this.exploreT = 0.3;
-        const r = this.mode === 'sea' ? 11 : 8;
-        const cx = Math.floor(this.player.x), cz = Math.floor(this.player.z);
-        for (let j = -r; j <= r; j++) for (let i = -r; i <= r; i++) {
-            if (i * i + j * j > r * r) continue;
-            const x = cx + i, z = cz + j;
-            if (x >= 0 && z >= 0 && x < this.map.w && z < this.map.h) this.explored[z * this.map.w + x] = 1;
+    applySlot(sl) {
+        if (this.save.mounted[sl.el]) {
+            sl.prop.def = this.app.art.props['figurehead_' + sl.el]; sl.prop.kind = 'figurehead_' + sl.el;
+            if (!sl.light) { const L = sl.prop.def.light; sl.light = { x: sl.x, y: sl.y + L.dy, r: L.r, col: L.col, i: L.i, pulse: 2, prop: sl.prop }; this.world.lightsStatic.push(sl.light); }
         }
     }
-
-    updateCamera(dt) {
-        const sea = this.mode === 'sea';
-        let tx = this.player.x, tz = this.player.z;
-        if (sea) { const f = this.ship.fwd; tx = this.ship.x + f.x * this.ship.speed * 0.45; tz = this.ship.z + f.z * this.ship.speed * 0.45; }
-        if (this.lockTarget && !sea) { tx = (tx * 2 + this.lockTarget.x) / 3; tz = (tz * 2 + this.lockTarget.z) / 3; }
-        // smooth follow (critically damped like SmoothDamp)
-        const k = 1 - Math.pow(0.0025, dt);
-        this.camX += (tx - this.camX) * k;
-        this.camZ += (tz - this.camZ) * k;
-        const ty = sea ? 0 : Math.max(0, this.gy(this.camX, this.camZ));
-        this.camY = (this.camY ?? ty) + (ty - (this.camY ?? ty)) * k;
-        let sx = 0, sz = 0;
-        if (this.shakeT > 0) {
-            this.shakeT -= dt;
-            const fall = Math.max(0, this.shakeT) * 4;
-            sx = (Math.random() - 0.5) * this.shakeAmp * 2 * Math.min(1, fall); sz = (Math.random() - 0.5) * this.shakeAmp * 2 * Math.min(1, fall);
-            if (this.shakeT <= 0) this.shakeAmp = 0;
-        }
-        // a little further out at sea; the wheel zooms a bit (in tight limits)
-        const want = (sea ? 1.35 : 1) * (this.userZoom || 1);
-        this.camZoom = (this.camZoom || 1) + (want - (this.camZoom || 1)) * (1 - Math.pow(0.05, dt));
-        this.stage.lookAt(this.camX + sx, this.camY + 0.6, this.camZ + sz, this.camZoom);
+    useSlot(sl) {
+        const s = this.save;
+        if (!s.figureheads[sl.el]) { this.ui.toast(`Hier fehlt die Galionsfigur ${EL_NAME[sl.el] === 'Tiefe' ? 'der Tiefe' : 'des ' + EL_NAME[sl.el] + 's'}.`); return; }
+        s.mounted[sl.el] = true; this.applySlot(sl);
+        this.fx.rise('soul', sl.x, sl.y, 40, { w: 20 }); this.audio.sfx('kindle'); this.flash([0.4, 1, 0.85], 0.4);
+        const n = ['fire', 'ice', 'wind', 'earth'].filter(e => s.mounted[e]).length;
+        this.ui.banner('Galionsfigur angebracht', `${n} von 4`, 'big', 3);
+        if (n === 4) { this.whirlpoolOpen = true; setTimeout(() => { this.ui.banner('DER STRUDEL ÖFFNET SICH', 'Nördlich des Schiffshains', 'boss', 4); this.audio.sfx('rise'); this.shake(6); }, 3200); }
+        this.persist();
     }
-
-    // world -> screen (CSS pixels relative to the canvas); h = height above the ground
-    toScreen(x, z, h = 0) {
-        const c = this.stage.app.graphicsDevice.canvas;
-        const r = c.getBoundingClientRect();
-        _v.set(x, (this.mode === 'sea' && h < 1.5 ? 0 : Math.max(0, this.gy(x, z))) + h, z);
-        this.stage.camera.camera.worldToScreen(_v, _o);
-        const cr = this.stage.app.graphicsDevice.clientRect;
-        // relative to the canvas: the HUD layer covers exactly the canvas
-        return { x: _o.x * r.width / (cr.width || r.width), y: _o.y * r.height / (cr.height || r.height) };
+    // ---------------------------------------------------------------- bosses
+    enterGate(g) {
+        const p = this.player;
+        p.x = g.x - g.dir[0] * 50; p.y = g.y - g.dir[1] * 50;
+        this.world.dynamicBlockers.find(b => b.gate === g).active = true;
+        g.prop.open = false;
+        this.bosses[g.king].activate();
+    }
+    bossStarted(b) { this.boss = b; this.bossGhost = b.hp; this.ui.banner(b.name, b.mega ? '' : 'Geisterkönig', 'boss', 3); }
+    bossDefeated(b) {
+        const s = this.save;
+        this.ui.banner(b.mega ? 'DAS ENDE DER WELT' : 'SEELE ERBEUTET', b.mega ? 'Moloch ist gefallen. Die See wird still.' : b.def.name.split(',')[0], 'big', 5);
+        this.gainPearls(b.def.pearls, b);
+        if (b.mega) { s.megalodon = true; setTimeout(() => this.ending(), 6000); }
+        else {
+            s.kings[b.key] = true; s.figureheads[b.key] = true; s.shards += 2;
+            const g = this.world.gates.find(g => g.king === b.key);
+            if (g) { g.prop.hidden = true; this.world.dynamicBlockers.find(x => x.gate === g).active = false; }
+            setTimeout(() => this.ui.banner(ITEMS[b.def.figurehead].name, 'Bring sie zum Schiffshain.', 'big', 3.5), 5200);
+        }
+        this.boss = null;
+        this.persist();
+    }
+    ending() {
+        this.ui.openDialog('Die Laternenmagd', { pages: [
+            'Du hast es getan. Das Wasser am Ende der Welt ist still.',
+            'Die Schiffe im Hain haben ihre Gesichter wieder. Sie werden heimfahren, eines nach dem anderen.',
+            'Und du? Die See hat dich zurückgegeben. Vielleicht, damit du ihr dies hier zurückgibst.',
+            'Danke fürs Spielen von Schwarzwasser.'
+        ], choices: [{ label: 'Weitersegeln', act: () => this.endTalk() }] });
+    }
+    // ---------------------------------------------------------------- sailing
+    callShip(d) {
+        this.ship.x = d.x; this.ship.y = d.y; this.ship.h = d.heading; this.ship.v = 0; this.ship.rise = 0; this.ship.alpha = 0;
+        this.audio.sfx('rise'); this.shake(3);
+        this.save.shipDock = d.zone;
+    }
+    board(d) {
+        this.sailing = true; this.player.state = 'ship'; this.player.hidden = true;
+        this.ship.sail = 1; this.audio.sfx('board'); this.lock = null;
+        if (!this.boardedOnce) { this.boardedOnce = true; this.ui.toast('←→ steuern · ↑↓ Segel · J/L Breitseiten · E anlegen'); }
+    }
+    disembark(d) {
+        this.sailing = false; this.player.state = 'free'; this.player.hidden = false;
+        this.player.x = d.px; this.player.y = d.py;
+        this.ship.x = d.x; this.ship.y = d.y; this.ship.h = d.heading; this.ship.v = 0; this.ship.sail = 0;
+        this.save.shipDock = d.zone; this.audio.sfx('board');
+        this.persist();
+    }
+    singShanty() {
+        const s = this.save;
+        if (!s.crew.length) { this.ui.toast('Ohne Crew singt niemand.'); return; }
+        const el = s.crew[(this.shantyIdx = ((this.shantyIdx ?? -1) + 1) % s.crew.length)];
+        this.shantyT = 40; this.shantyName = CREW[el].songName;
+        this.audio.playSong?.(CREW[el].song, 40);
+        this.ui.toast(`Die Crew singt „${this.shantyName}“. Der Wind dreht sich.`);
+    }
+    enterWhirlpool() {
+        this.cutscene = true; let t = 0;
+        this.audio.sfx('rise'); this.ui.banner('Der Strudel', 'Die See nimmt dich mit', 'boss', 3);
+        const step = () => {
+            t += 1 / 30;
+            this.ship.h += 0.15; this.ship.x += (this.world.whirlpool.x - this.ship.x) * 0.05; this.ship.y += (this.world.whirlpool.y - this.ship.y) * 0.05;
+            this.ui.fade = Math.min(1, Math.max(0, (t - 1.2) * 1.2));
+            if (t < 2.4) return setTimeout(step, 33);
+            const dock = this.world.docks.find(d => d.zone === 'hain');
+            this.ship.x = dock.x; this.ship.y = dock.y; this.ship.h = dock.heading; this.save.shipDock = 'hain';
+            this.sailing = false; this.player.hidden = false; this.player.state = 'free';
+            this.player.x = this.world.endArrive.x; this.player.y = this.world.endArrive.y;
+            if (!this.save.litFires.includes('ende')) this.save.litFires.push('ende');
+            this.lightFires(); this.camF = [this.player.x, this.player.y];
+            const back = () => { this.ui.fade = Math.max(0, this.ui.fade - 0.04); if (this.ui.fade > 0) setTimeout(back, 33); else this.cutscene = false; };
+            back(); this.persist();
+        };
+        step();
+    }
+    // ---------------------------------------------------------------- menus
+    pauseMenu() {
+        this.audio.sfx('click');
+        this.ui.openList('Pause', [
+            { label: 'Weiter', act: () => this.ui.closeList() },
+            { label: 'Seekarte', act: () => { this.ui.closeList(); this.ui.mapOpen = true; } },
+            { label: 'Steuerung', act: () => { this.ui.closeList(); this.ui.legendOpen = true; } },
+            { label: 'Werte', act: () => this.statsView() },
+            { label: 'Optionen', act: () => { this.ui.closeList(); this.app.ui.options(); } },
+            { label: 'Speichern und zum Titel', act: async () => { this.ui.closeList(); await this.persist(true); this.app.toTitle(); } }
+        ], { desc: false });
+    }
+    statsView() {
+        const s = this.save, d = derived(s);
+        const items = [
+            { label: 'Stufe', right: String(s.level) }, { label: 'Leben', right: String(d.maxHp) }, { label: 'Ausdauer', right: String(d.maxSt) }, { label: 'Geist', right: String(d.maxMp) },
+            { label: 'Waffe', right: `${WEAPONS[s.weapon].name}${s.weaponLevel ? ' +' + s.weaponLevel : ''}` }, { label: 'Schaden', right: String(d.dmg) }, { label: 'Zauberkraft', right: String(d.spellDmg) },
+            { label: 'Zauber', right: s.spells.map(k => SPELLS[k].name).join(', ') }, { label: 'Gezeitensplitter', right: String(s.shards) },
+            { label: 'Galionsfiguren', right: `${Object.keys(s.mounted).length} angebracht, ${Object.keys(s.figureheads).length} erbeutet` }, { label: 'Crew', right: `${s.crew.length} von 4` },
+            { label: 'Ertrunken', right: `${s.deaths}×` }
+        ].map(i => ({ ...i, act: () => {} }));
+        this.ui.openList(`${s.name}`, items, { onBack: () => this.pauseMenu(), desc: false, wide: true });
+    }
+    async persist(force = false) {
+        if (!this.profile || !this.app.store) return;
+        if (!force && this.saveT > 0) { this.saveDirty = true; return; }
+        this.saveT = 1;
+        try { await this.app.store.save(this.profile, this.save); } catch (e) { console.warn('Speichern fehlgeschlagen', e); }
+    }
+    // ---------------------------------------------------------------- rendering
+    entities() {
+        const out = [];
+        const add = (e, sortY) => { if (e && !e.hidden) { if (sortY !== undefined) e.sortY = sortY; out.push(e); } };
+        add(this.player.hidden ? null : this.player);
+        for (const e of this.enemies) add(e, e.dead ? e.y - 6 : undefined);
+        for (const b of Object.values(this.bosses)) if (!b.hidden && b.state !== 'dormant') add(b);
+        for (const n of this.npcs) add(n);
+        for (const it of this.items) add(it);
+        for (const s of this.shots) { s.shadow = s.kind === 'bomb' ? 4 : 0; add(s); }
+        add(this.ship);
+        for (const g of this.ghosts) if (!g.dead || g.alpha > 0) add(g);
+        for (const s of this.sharks) add(s);
+        if (this.stain) add(this.stainEntity());
+        return out;
+    }
+    stainEntity() {
+        const S = this.stain, game = this;
+        return { x: S.x, y: S.y, sortY: S.y - 20, draw() {}, drawGlow(r, cam) { const w = game.app.art.atlas.white; const k = 0.6 + 0.4 * Math.sin(S.t * 3); for (let i = 0; i < 9; i++) { const a = i / 9 * Math.PI * 2 + S.t; r.rect(w.tex, Math.round(S.x + Math.cos(a) * 5 - cam[0]), Math.round(S.y + Math.sin(a) * 3 - cam[1]), 1, 1, [0.37 * k * 2, 0.95 * k * 2, 0.78 * k * 2, 1]); } r.rect(w.tex, Math.round(S.x - cam[0]), Math.round(S.y - 2 - cam[1]), 1, 2, [0.7, 1.6, 1.4, 1]); } };
+    }
+    lights() {
+        const out = [];
+        const p = this.player, cam = this.cam;
+        if (!this.sailing && !p.hidden) out.push({ x: p.x, y: p.y - 10, r: 70, col: [1, 0.85, 0.65], i: 0.32 });
+        if (this.sailing) out.push({ x: this.ship.x, y: this.ship.y - 10, r: 80, col: [1, 0.75, 0.45], i: 0.35 });
+        this.view.lights(cam, out);
+        for (const s of this.shots) if (s.light) out.push({ x: s.x, y: s.y - s.z, r: 50, col: s.light, i: 1.3 });
+        for (const b of Object.values(this.bosses)) if (!b.hidden && !b.dead && b.state !== 'dormant') out.push({ x: b.x, y: b.y - 20, r: b.human ? 70 : 110, col: [...KINGS[b.key]?.col || [1, 0.4, 0.2]], i: 0.6 });
+        for (const g of this.ghosts) if (!g.dead) out.push({ x: g.x, y: g.y - 16, r: 70, col: [0.35, 1, 0.82], i: 0.6 });
+        if (this.flashLight) { const f = this.flashLight; f.t -= 1 / 60; if (f.t > 0) out.push(f); else this.flashLight = null; }
+        if (this.whirlpoolOpen) out.push({ x: this.world.whirlpool.x, y: this.world.whirlpool.y, r: 100, col: [0.35, 1, 0.82], i: 0.8 + Math.sin(this.t * 2) * 0.2 });
+        if (this.stain) out.push({ x: this.stain.x, y: this.stain.y, r: 30, col: [0.35, 1, 0.82], i: 0.6 });
+        this.fx.lights(out);
+        return out;
+    }
+    drawWhirlpool(r, cam, glow) {
+        if (!this.whirlpoolOpen) return;
+        const w = this.app.art.atlas.white, W = this.world.whirlpool;
+        if (W.x < cam[0] - 120 || W.x > cam[0] + r.W + 120 || W.y < cam[1] - 120 || W.y > cam[1] + r.H + 120) return;
+        r.spriteBegin('alpha');
+        for (let arm = 0; arm < 3; arm++) for (let i = 0; i < 70; i++) {
+            const t = i / 70, a = arm * 2.09 + t * 9 - this.t * 2.2, rr = 6 + t * 70;
+            const x = W.x + Math.cos(a) * rr - cam[0], y = W.y + Math.sin(a) * rr * 0.6 - cam[1];
+            const c = glow ? [0.37 * (1 - t) * 1.6, 0.95 * (1 - t) * 1.6, 0.78 * (1 - t) * 1.6, 1] : [0.66, 0.78, 0.9, 0.9 - t * 0.6];
+            r.rect(w.tex, Math.round(x), Math.round(y), 2, 1, c);
+        }
+        if (!glow) r.rect(w.tex, Math.round(W.x - 5 - cam[0]), Math.round(W.y - 3 - cam[1]), 10, 6, [0.02, 0.03, 0.05, 1]);
+        r.end();
+    }
+    frame() {
+        const r = this.app.renderer, cam = this.cam, v = this.view;
+        r.grade = this.gradeCur;
+        r.flash = this.flashC;
+        const ents = this.entities();
+        const focus = this.focus ? { ...this.focus, x: this.player.x, y: this.player.y } : { x: this.player.x, y: this.player.y };
+        return {
+            cam, ambient: this.gradeCur.ambient, lightmap: v.lightmap, lights: this.lights(),
+            drawScene: (r) => {
+                v.drawScene(r, cam, ents, focus, { under: (r) => { this.drawWhirlpool(r, cam, false); this.fx.drawUnder(r, cam); } });
+                this.fx.drawParticles(r, cam, false);
+                v.drawFog(r, cam, this.zoneKey || 'kueste', this.sailing ? 0.6 : 1);
+            },
+            drawGlow: (r) => { v.drawGlow(r, cam, ents); this.drawWhirlpool(r, cam, true); this.fx.drawParticles(r, cam, true); },
+            drawUI: (r) => { this.fx.drawNumbers(r, cam, this.app.font); this.ui.draw(r, this); this.ui.drawHudGlow(r, this); }
+        };
     }
 }
 
-function encodeBits(arr) {
-    const bytes = new Uint8Array(Math.ceil(arr.length / 8));
-    for (let i = 0; i < arr.length; i++) if (arr[i]) bytes[i >> 3] |= 1 << (i & 7);
-    let s = '';
-    for (const b of bytes) s += String.fromCharCode(b);
-    return btoa(s);
-}
-function decodeBits(str, n) {
-    const out = new Uint8Array(n);
-    try {
-        const s = atob(str);
-        for (let i = 0; i < n; i++) out[i] = (s.charCodeAt(i >> 3) >> (i & 7)) & 1;
-    } catch { /* ignore */ }
-    return out;
+// older saves → current format
+function migrate(s) {
+    s.version = 2;
+    s.owned ||= [s.weapon]; s.weaponLevel ||= 0; s.phialsMax ||= 1; s.bullets ??= 0; s.bombs ??= 0; s.shards ??= 0;
+    s.spells ||= ['bolt']; s.spell ||= 0; s.items ||= {}; s.picked ||= []; s.chests = Array.isArray(s.chests) ? s.chests : [];
+    s.kings ||= {}; s.figureheads ||= {}; s.mounted ||= {}; s.crew ||= []; s.talked ||= {}; s.shipDock ||= 'kueste';
+    if (!Array.isArray(s.explored)) s.explored = s.explored === 'all' ? Object.keys(ZONES).filter(k => k !== 'ende') : ['kueste'];
+    s.litFires ||= []; s.lastFire ||= 'kueste';
+    if (!['kueste', 'hain', 'asche', 'asche2', 'frost', 'frost2', 'raben', 'raben2', 'mangroven', 'mangroven2', 'ende'].includes(s.lastFire)) s.lastFire = 'kueste';
+    s.litFires = s.litFires.filter(f => ['kueste', 'hain', 'asche', 'asche2', 'frost', 'frost2', 'raben', 'raben2', 'mangroven', 'mangroven2', 'ende'].includes(f));
+    s.look = { ...{ body: 0, skin: 1, hair: 1, hairCol: 1, beard: 1, hat: 1, coat: 0, patch: 0 }, ...(s.look || {}) };
+    for (const k of ['body', 'skin', 'hair', 'hairCol', 'beard', 'hat', 'coat', 'patch']) if (typeof s.look[k] !== 'number' || s.look[k] < 0) s.look[k] = 0;
+    s.look.coat %= 6; s.look.skin %= 4; s.look.hair %= 5; s.look.hairCol %= 5; s.look.beard %= 4; s.look.hat %= 5; s.look.body %= 2; s.look.patch = s.look.patch ? 1 : 0;
 }

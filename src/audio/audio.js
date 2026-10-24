@@ -64,13 +64,72 @@ function songTitel() { // title: the Halstuch motif on a solo fiddle over the se
     return { name: 'titel', unit: 60 / 58 / 3, len: 72, events: ev, gain: 0.55 };
 }
 
+
+function songHain() { // "Lied der Laternen" – Schiffshain, E minor 3/4, music box over a soft pad
+    const mel = 'E5:2 G5:1 B5:3 | A5:2 G5:1 F#5:3 | E5:2 D5:1 E5:2 G5:1 | B4:6 | E5:2 G5:1 B5:3 | C6:2 B5:1 A5:3 | G5:2 F#5:1 D5:2 F#5:1 | E5:6';
+    const ev = [...seq(mel, 'bell', 0.55).events, ...seq(mel.replace(/5:/g, '4:').replace(/6:/g, '5:'), 'whistle', 0.18).events];
+    const chords = ['E3+G3+B3', 'D3+F#3+A3', 'C3+E3+G3', 'B2+D#3+F#3', 'E3+G3+B3', 'A2+C3+E3', 'D3+F#3+A3', 'E3+G3+B3'];
+    chords.forEach((c, i) => { ev.push(...seq(`${c}:6`, 'pad', 0.16, i * 6).events); ev.push({ t: i * 6, dur: 3, inst: 'bass', f: freq(c.split('+')[0].replace('3', '2')), vel: 0.35 }); });
+    return { name: 'hain', unit: 60 / 66 / 2, len: 48, events: ev, gain: 0.55 };
+}
+function songGlut() { // "Glutwind" – fire coast, D minor 6/8, fiddle and accordion, heavy drums
+    const A = 'D5:1 D5:1 F5:1 A5:2 F5:1 | G5:1 F5:1 E5:1 D5:3 | C5:1 C5:1 E5:1 G5:2 E5:1 | F5:1 E5:1 D5:1 C#5:3 | D5:1 F5:1 A5:1 D6:2 C6:1 | A#5:1 A5:1 G5:1 A5:3 | G5:1 F5:1 E5:1 F5:1 E5:1 C#5:1 | D5:6';
+    const ev = [...seq(A, 'fiddle', 0.5).events];
+    const ch = ['D3+F3+A3', 'A#2+D3+F3', 'C3+E3+G3', 'A2+C#3+E3', 'D3+F3+A3', 'G2+A#2+D3', 'A2+C#3+E3', 'D3+F3+A3'];
+    ch.forEach((c, i) => {
+        ev.push(...seq(`${c}:2 R:1 ${c}:2 R:1`, 'accordion', 0.16, i * 6).events);
+        ev.push(...seq(`${c.split('+')[0].replace('3', '2').replace('2+', '2')}:3 ${c.split('+')[2]}:3`, 'bass', 0.6, i * 6).events);
+        ev.push({ t: i * 6, dur: 1, inst: 'drum', f: 60, vel: 0.8 }, { t: i * 6 + 2, dur: 1, inst: 'tick', f: 0, vel: 0.25 }, { t: i * 6 + 3, dur: 1, inst: 'drum', f: 55, vel: 0.55 }, { t: i * 6 + 5, dur: 1, inst: 'drum', f: 50, vel: 0.4 });
+    });
+    return { name: 'glut', unit: 60 / 92 / 3, len: 48, events: ev, gain: 0.5 };
+}
+function songFrost() { // "Eisige Leine" – frost grotto, A minor, sparse bells and a lonely whistle
+    const mel = 'A4:4 C5:2 E5:2 | D5:4 B4:4 | C5:2 B4:2 A4:2 G4:2 | A4:8 | E5:4 G5:2 E5:2 | F5:4 D5:4 | E5:2 D5:2 C5:2 B4:2 | A4:8';
+    const ev = [...seq(mel, 'whistle', 0.45).events, ...seq(mel.replace(/4:/g, '5:').replace(/5:(\d)/g, '6:$1'), 'bell', 0.25).events.filter((e, i) => i % 2 === 0)];
+    ['A2+E3+C4', 'G2+D3+B3', 'F2+C3+A3', 'E2+B2+G#3', 'A2+E3+C4', 'D2+A2+F3', 'E2+B2+G#3', 'A2+E3+C4'].forEach((c, i) => ev.push(...seq(`${c}:8`, 'pad', 0.18, i * 8).events));
+    return { name: 'frost', unit: 60 / 60 / 2, len: 64, events: ev, gain: 0.55 };
+}
+function songSturm() { // "Rabensturm" – harbour of Rabenwacht, G minor 4/4, call and response
+    const call = 'G4:1 G4:1 A#4:1 D5:1 G5:2 F5:2 | D#5:1 D5:1 C5:1 A#4:1 C5:4 | R:8 | A#4:1 A#4:1 D5:1 F5:1 A#5:2 A5:2 | G5:1 F5:1 D#5:1 D5:1 G4:4 | R:8';
+    const crew = 'R:16 | D4:2 D4:1 C4:1 A#3:4 | R:16 | G3:2 A3:2 A#3:2 G3:2';
+    const ev = [...seq(call, 'fiddle', 0.5).events, ...seq(crew, 'crewLead', 0.85).events];
+    ['G2+A#2+D3', 'D#2+G2+A#2', 'D2+F#2+A2', 'G2+A#2+D3', 'F2+A2+C3', 'G2+A#2+D3'].forEach((c, i) => {
+        ev.push(...seq(`${c}:2 R:2 ${c}:2 R:2`, 'accordion', 0.15, i * 8).events);
+        ev.push(...seq(`${c.split('+')[0]}:4 ${c.split('+')[2]}:4`, 'bass', 0.6, i * 8).events);
+        for (let b = 0; b < 4; b++) ev.push({ t: i * 8 + b * 2, dur: 1, inst: b % 2 ? 'tick' : 'drum', f: 62, vel: b % 2 ? 0.25 : 0.65 });
+    });
+    return { name: 'sturm', unit: 60 / 112 / 2, len: 48, events: ev, gain: 0.5 };
+}
+function songTiefe() { // "Tiefer Grund" – cursed mangroves, C minor, a low hummed melody over a drone
+    const mel = 'C4:3 D#4:1 G4:4 | F4:2 D#4:2 D4:4 | C4:3 D#4:1 G4:2 G#4:2 | G4:8 | G#4:3 G4:1 F4:4 | D#4:2 D4:2 C4:4 | B3:2 C4:2 D4:2 D#4:2 | C4:8';
+    const ev = [...seq(mel, 'crewHum', 0.9).events, ...seq(mel, 'accordionSolo', 0.22).events];
+    ['C2+G2', 'G#1+D#2', 'C2+G2', 'G1+D2', 'G#1+D#2', 'F1+C2', 'G1+D2', 'C2+G2'].forEach((c, i) => { ev.push(...seq(`${c}:8`, 'pad', 0.2, i * 8).events); ev.push({ t: i * 8, dur: 1, inst: 'drum', f: 45, vel: 0.5 }, { t: i * 8 + 5, dur: 1, inst: 'drum', f: 42, vel: 0.3 }); });
+    return { name: 'tiefe', unit: 60 / 58 / 2, len: 64, events: ev, gain: 0.6 };
+}
+function songEnde() { // "Weltschlund" – the End of the World, D minor, high fiddle over a slow pulse
+    const mel = 'A5:6 G5:2 F5:4 E5:4 | D5:8 R:8 | A#5:6 A5:2 G5:4 F5:4 | E5:12 R:4';
+    const ev = [...seq(mel, 'fiddle', 0.38).events];
+    ['D2+A2+F3', 'D2+A2+F3', 'A#1+F2+D3', 'A1+E2+C#3'].forEach((c, i) => { ev.push(...seq(`${c}:16`, 'pad', 0.22, i * 16).events); for (let b = 0; b < 4; b++) ev.push({ t: i * 16 + b * 4, dur: 1, inst: 'drum', f: 40, vel: 0.5 }); });
+    return { name: 'ende', unit: 60 / 70 / 2, len: 64, events: ev, gain: 0.55 };
+}
+function songBoss() { // boss fights: E phrygian, staccato fiddle, driving drums
+    const mel = 'E5:1 F5:1 E5:1 G5:1 E5:1 F5:1 E5:2 | D5:1 E5:1 D5:1 C5:1 B4:4 | E5:1 F5:1 E5:1 G5:1 A5:1 G5:1 F5:2 | E5:1 D5:1 C5:1 D5:1 E5:4';
+    const ev = [...seq(mel + ' | ' + mel, 'fiddle', 0.48).events];
+    ['E2', 'C2', 'E2', 'D2', 'E2', 'C2', 'F2', 'E2'].forEach((r, i) => {
+        ev.push(...seq(`${r}:1 ${r}:1 R:1 ${r}:1 ${r}:1 R:1 ${r}:2`, 'bass', 0.7, i * 8).events);
+        for (let b = 0; b < 8; b++) ev.push({ t: i * 8 + b, dur: 1, inst: b % 2 ? 'tick' : 'drum', f: 58, vel: b % 4 === 0 ? 0.9 : b % 2 ? 0.3 : 0.55 });
+        ev.push(...seq(`E3+B3:4 F3+C4:4`, 'accordion', 0.12, i * 8).events);
+    });
+    return { name: 'boss', unit: 60 / 132 / 2, len: 64, events: ev, gain: 0.5 };
+}
+
 export class Audio {
     constructor() {
         this.ctx = null;
         this.mood = 'silence';
         this.song = null;
         this.crewBoost = 0;
-        this.songs = { salz: songSalz(), leine: songLeine(), atem: songAtem(), titel: songTitel() };
+        this.songs = { salz: songSalz(), leine: songLeine(), atem: songAtem(), titel: songTitel(), hain: songHain(), glut: songGlut(), frost: songFrost(), sturm: songSturm(), tiefe: songTiefe(), ende: songEnde(), boss: songBoss() };
         this.muted = false;
     }
     unlock() {
@@ -138,7 +197,7 @@ export class Audio {
     }
     applyMood(first = false) {
         const ctx = this.ctx, now = ctx.currentTime;
-        const target = { land: 'salz', sea: 'leine', fire: 'atem', title: 'titel', death: null, silence: null }[this.mood];
+        const target = this.override || ({ land: 'salz', sea: 'leine', fire: 'atem', title: 'titel', death: null, silence: null }[this.mood] ?? (this.songs[this.mood] ? this.mood : null));
         const fade = (param, v, t = 1.5) => { param.cancelScheduledValues(now); param.setValueAtTime(param.value, now); param.linearRampToValueAtTime(v, now + t); };
         fade(this.music.gain, 0, first ? 0.01 : 1.0);
         fade(this.droneG.gain, this.mood === 'death' ? 0.25 : 0, 1.5);
@@ -149,10 +208,17 @@ export class Audio {
         this.swapT = setTimeout(() => {
             this.song = target ? this.songs[target] : null;
             this.pos = 0; this.nextTime = this.ctx.currentTime + 0.05;
-            if (this.song) { const n = this.ctx.currentTime; this.music.gain.cancelScheduledValues(n); this.music.gain.setValueAtTime(0, n); this.music.gain.linearRampToValueAtTime(this.song.gain * (this.mood === 'land' ? 0.55 : 1), n + 2.5); }
+            if (this.song) { const n = this.ctx.currentTime; this.music.gain.cancelScheduledValues(n); this.music.gain.setValueAtTime(0, n); this.music.gain.linearRampToValueAtTime(this.song.gain * (['salz', 'land'].includes(this.mood) ? 0.6 : 0.85), n + 2.5); }
         }, first ? 10 : 1050);
     }
 
+    // a crew shanty at sea: plays the song for a while, then returns to the mood
+    playSong(name, secs) {
+        if (!this.ctx || !this.songs[name]) return;
+        this.override = name; this.applyMood(); this.crewSing();
+        clearTimeout(this.overT); this.overT = setTimeout(() => { this.override = null; this.applyMood(); }, secs * 1000);
+    }
+    thunder() { if (!this.ctx) return; const t = this.ctx.currentTime + 0.3 + Math.random() * 0.8; this.noiseHit(t, 120, 2.2, 0.6, null, 'lowpass'); this.noiseHit(t, 400, 0.4, 0.3, null, 'lowpass'); }
     crewSing() {
         if (!this.ctx) return;
         const now = this.ctx.currentTime;
@@ -238,6 +304,13 @@ export class Audio {
                 break;
             }
             case 'tick': this.noiseHit(t, 2200, 0.03, 0.18 * v, out, 'bandpass'); break;
+            case 'bell': {
+                const g = ctx.createGain();
+                for (const [m, a] of [[1, 1], [2.76, 0.35], [5.4, 0.12]]) { const o = osc('sine', e.f * m); const og = ctx.createGain(); og.gain.value = a; o.connect(og).connect(g); o.start(t); o.stop(t + Math.min(2.5, dur + 1.5)); }
+                g.connect(out);
+                g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.16 * v, t + 0.005); g.gain.exponentialRampToValueAtTime(0.0001, t + Math.min(2.4, dur + 1.4));
+                break;
+            }
             case 'crewLead': case 'crewHum': {
                 // a few rough male voices singing "oh" through formant filters
                 const hum = e.inst === 'crewHum';
@@ -315,14 +388,15 @@ export class Audio {
     }
 
     update(dt, game) {
-        if (!this.ctx) return;
+        if (!this.ctx || !game?.world) return;
         // fire crackle near fires
         this.crackleT = (this.crackleT || 0) - dt;
         if (this.crackleT <= 0) {
             this.crackleT = 0.05 + Math.random() * 0.2;
-            let d = 99;
-            for (const f of game.map.fires) d = Math.min(d, Math.hypot(game.player.x - f.x, game.player.z - f.z));
-            if (d < 8) this.noiseHit(this.ctx.currentTime, 1500 + Math.random() * 2500, 0.03, 0.25 * (1 - d / 8), null, 'bandpass', 3);
+            let d = 999;
+            const p = game.sailing ? game.ship : game.player;
+            for (const f of game.world.fires) d = Math.min(d, Math.hypot(p.x - f.x, p.y - f.y));
+            if (d < 120) this.noiseHit(this.ctx.currentTime, 1500 + Math.random() * 2500, 0.03, 0.25 * (1 - d / 120), null, 'bandpass', 3);
         }
     }
 }

@@ -57,7 +57,7 @@ const options = {
     format: 'esm',
     target: 'es2022',
     outfile: path.join(dist, 'game.js'),
-    minify: !watch,
+    minify: !watch && !process.env.NOMIN,
     sourcemap: watch,
     pure: ['Debug.assert', 'Debug.warn', 'Debug.warnOnce', 'Debug.log', 'Debug.logOnce', 'Debug.call',
         'Debug.deprecated', 'Debug.error', 'Debug.errorOnce', 'Debug.trace', 'DebugHelper.setName',

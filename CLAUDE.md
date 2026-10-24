@@ -3,63 +3,41 @@
 Kurzreferenz, damit neue Sitzungen sofort weiterarbeiten können. Bei Änderungen an Architektur oder Entscheidungen hier nachtragen.
 
 ## Projekt
-- **Schwarzwasser**: Soulslike-Piratenspiel im Browser (Dark-Souls-3-Stimmung), PlayCanvas Engine 2.23.3 (nur Engine, kein Editor), gebündelt mit esbuild.
+- **Schwarzwasser**: Soulslike-Piratenspiel im Browser (Dark-Souls-3-Stimmung) in **HD-Pixelart**, eigener WebGL2-Renderer (kein PlayCanvas mehr), gebündelt mit esbuild. Keine Bild-/Audiodateien: alles wird beim Start aus Code erzeugt.
 - Repo: `eXtro181/PirateGame`, live: https://extro181.github.io/PirateGame/ (GitHub Pages über Actions, `.github/workflows/deploy.yml` baut bei Push auf `main`).
-- Spielskript/Story liegt als Claude-Doc vor (DS3-artige Story: Schiffshain-Hub, 4 Geister-Piratenkönige Feuer/Eis/Wind/Erde mit je 2 Phasen, Strudel zum „Ende der Welt“, Endboss brennender Skelett-Megalodon). Umgesetzt ist bisher nur das Startgebiet Smaragdküste.
-- **Grafik-Vorgabe**: Claude-Doc „Isometrischer Dark-Fantasy-Look in Full HD – Umsetzungsplan“ (https://claude.ai/artifact/2raNeJ3WfSyovG9R3URVox). Seit v0.3 komplett umgesetzt als echtes 3D (Pixel-Art wurde verworfen).
+- **Grafik-Vorgabe (verbindlich)**: Claude-Doc „Dark Fantasy Pirate RPG – Grafik-Spezifikation“ https://claude.ai/artifact/V4yVVaGGr1YaLyLo4UUA19 (Palette, 640×360, 16er-Tiles, Figuren 16×32, selektive Outlines, Wasser-Shader, Hauptmenü mit 10 Parallax-Ebenen, HUD-Maße, Szenen Hub/Grotte/Hafen/Mangroven/Blutgezeiten). Die 3D-Version v0.3 wurde vom Nutzer als „Katastrophe“ verworfen.
+- Story: Schiffshain-Hub (Schiffsfriedhof ohne Galionsfiguren), 4 Geisterkönige mit 2 Phasen (Mythos-Monster), Strudel zum Ende der Welt, Endboss brennender Skelett-Megalodon mit zufälligem Elementwechsel. Das ursprüngliche Story-Doc war nicht lesbar; Namen sind erfunden (siehe unten).
 - Sprache für Spieltexte und Antworten an den Nutzer: **Deutsch**.
 
 ## Bauen, testen, veröffentlichen
-- Lokal ist das npm-Register gesperrt → Engine aus Quellcode-Checkout:
-  `PC_ENGINE_SRC=/home/claude/playcanvas/engine-2.23.3/src ESBUILD_PATH=/opt/npm-tools/node_modules/esbuild/lib/main.js node build.mjs`
-  (falls der Checkout fehlt: `git clone --depth 1 -b v2.23.3 https://github.com/playcanvas/engine`). CI nutzt npm `playcanvas@2.23.3`.
-- build.mjs behält `#if _DEBUG`-Blöcke (KEEP_DEBUG) und patcht `device.pushMarker/popMarker` zu optionalen Aufrufen.
-- Test: `cd dist && python3 -m http.server 8765`, dann Playwright (Swiftshader, sehr langsam!). Immer `?debug&q=low&rs=0.5` (oder `q=medium&rs=0.5`), Viewport ≤ 960×540, Screenshot-Timeout hoch. Spielzeit läuft im Test ~10× langsamer (dt-Kappung) → Zustände per eval vorspulen. `?debug` → `window.__sw` = Game (`.models`, `.M`, `.view`, `.ui.camp`).
-- Spielstart ohne UI: `ui.camp.exit()`, `ui.showHud()`, `.screen` entfernen, `store.save` stubben, `game.start({name}, save)` (Save-Form siehe `newSave` in `src/game/data.js`).
-- Playwright-Aktionen nicht per `;` in JS-Ausdrücken mischen (Skript splittet daran) → JS aus Datei evaluieren.
-- Veröffentlichen: Dateien nach `/home/claude/pirategame` (Git-Klon) kopieren (tar, kein rsync), committen, `git push`; danach `gh run list -R eXtro181/PirateGame` prüfen.
-- Gecachte Meshes brauchen `mesh.incRefCount()`, sonst zerstört `entity.destroy()` sie für alle (verursachte v0.3-Absturz: Schattenpass „reading 'impl'“).
-- Build hängt Cache-Busting-Hashes an game.js/style.css. HUD (`#hud`) deckt per CSS-Variablen `--cv-*` genau die Canvas ab; `toScreen` liefert Canvas-Koordinaten.
-- Grasbüschel-Karten sind ausgeblendet (wirkten von oben wie schwarze Kreuze).
-- Echter GPU-Test: Über den eingebauten Browser des Nutzers (mcp__remote-devices__Claude_Browser__*) die Live-Seite mit `?debug` öffnen, Konsole lesen, FPS messen.
-- Vorsicht bei Python-String-Ersetzungen mit Slices: ein leerer `old`-String zerstört die Datei (einmal passiert).
+- Lokal: `ESBUILD_PATH=/opt/npm-tools/node_modules/esbuild/lib/main.js node build.mjs` (`NOMIN=1` = unminifiziert für lesbare Stacktraces). Vorher `rm -rf dist`.
+- Server: `python3 -m http.server 8765 --directory /home/claude/schwarzwasser/dist` (nohup, sonst stirbt er).
+- Playwright-Skript `shot.py` im Scratchpad (evalfile:/shot:/press:/down:/up:/fill:/click:). Swiftshader ist langsam, aber 1280×720 geht.
+- URL-Parameter: `?debug` (window.__sw = app, Fehler-Stacks), `?debug&start=<feuer-id>` startet sofort ein Testspiel ohne Profil, `?view=<zone>&x=&y=` freie Kamera, `&gallery` Sprite-Galerie, `&k=2` Skalierungsfaktor erzwingen.
+- Veröffentlichen: in `/home/claude/pirategame` (Git-Klon) `rm -rf src` und dann `tar --exclude=node_modules --exclude=dist -cf - . | (cd /home/claude/pirategame && tar -xf -)`, committen, `git push -q origin HEAD:main`, `gh run list -R eXtro181/PirateGame -L 1`.
+- Echter GPU-Test: eingebauter Browser des Nutzers (mcp__remote-devices__Claude_Browser__*) mit `?debug&v=N`; nie Passwörter auf der Live-Seite eingeben, Spielstart per `?debug&start=`.
+- Vorsicht bei Python-String-Ersetzungen: leerer Suchstring zerstört die Datei.
 
 ## Architektur (src/)
-- `main.js` Einstieg (async boot mit Ladetext): Stage → Materials → Modelle → Partikel → WorldMap → Terrain → WorldView → Camp → Input/Audio/ProfileStore/UI → Game.
-- `core/stage.js` App, Geräteerkennung, Qualitätsstufen `QUALITY` (ultra/high/medium/low: Renderhöhe 2160/1080/810/540, SSAO, Volumennebel, TAA), **Iso-Kamera** `CAM` (pitch 55, yaw 45, fov 30, dist 22; fester Sichtradius), `stage.lookAt(x,y,z,zoom)`, Mond (schwach, ohne Schatten), CameraFrame (ACES, Bloom-Schwelle 1, Grading, ColorEnhance, Vignette, SSAO, Volumennebel), `setGamma` (scene.exposure). URL `?q=` `?rs=` `?lowfx`.
-- `core/input.js` Aktionen inkl. `spell` (C/Y), `belt1–4`, `legend` (H). `axis()` dreht Eingaben um 45° auf das Weltraster.
-- `gfx/noise.js` Perlin (kachelbar, getrennte Perioden x/y), fBm, ridged, Worley, `NOISE.n1` fürs Flackern.
-- `gfx/textures.js` prozedurale PBR-Sätze (albedo, normal, surface: R=gloss, G=Höhe), Karten (Wedel, Gras, Laub), Decal-Atlas 2×2 (Blut, Pfütze, Brand, Moos), Partikel-Sprites.
-- `gfx/materials.js` `Materials`: `pbr(kind,{tint,tiling,gloss,metal,vertexColor,cull,emissive})` (gecacht), `plain`, `card` (alphaTest), `glow` (additiv, HDR), `decal`, `terrain()` (Shader-Chunks diffusePS/normalMapPS/glossPS mit **drei Textur-Arrays** à 5 Schichten – max. 16 Texturen pro Shader, sonst bleibt das Terrain auf echten GPUs schwarz; 4 Schichten per Vertexfarbe mit Höhen-Überblendung + Fels triplanar an Steilhängen), `water()`.
-- `gfx/mesh.js` `MeshBuilder` (at/quad/box/lathe/cylinder/sphere/rock/tube/ribbon), `instanced()`, `trs()`.
-- `gfx/particles.js` Feuer (teal/orange), Glut, Rauch, Staub, Glühwürmchen, gepoolte Bursts (spark, blood, splash, smoke, heal, bone, pearl, zap, rise).
-- `world/defs.js` Tiletypen `T`, `PROP_INFO` (Kollision), `Rng`. `world/map.js` Weltgenerierung + Kollision (`moveCircle`, `blockedSail(x,z,r,heading)`), Ruinenmauern (wall/wallV), Palisaden.
-- `world/terrain.js` Höhenfeld (RES 2 pro Kachel), Splat-Gewichte, `height()`, `ground()` (Steg 0.32, nie unter −0.05).
-- `world/props3d.js` alle Objekt-Modelle als Code (Palmen, Büsche, Gras, Felsen, Säulen, Mauern mit Zinnen, Palisade, Kisten, Fässer, Schädel, Gräber, Fackeln, Säbelfeuer, Wrack, Truhe).
-- `world/view.js` Terrain-Mesh, Wasser + Gischtband, instanzierte Props/Streuobjekte, Decals (`addBlood`, `clearBlood` beim Rasten), Lichter (`addOmni`, Perlin-Flackern), Feuer, Strudel-Trichter.
-- `world/camp.js` Charakterauswahl-Szene bei (−300, −300): Lagerfeuer, Gegenlicht, Matte Painting, Nebelschichten, DOF; `setProfiles`, `select`, `setPreview`, `enter/exit`.
-- `game/figure.js` `Humanoid` (Pirat mit allen Editor-Optionen oder Skelett), `CrabFigure`, `SharkFigure`, `ChestFigure`; prozedurale Animation über Gelenkwinkel (`animate(dt,{state,t,speed,atk,combo})`), Zustände idle/walk/roll/attack/windup/strike/parry/cast/drink/hurt/dead/pile/rise/sit.
-- `game/actors.js` **KayKit-Figuren** (CC0, `public/models/`, per `tools/strip_glb.py` auf nötige Clips gekürzt): `ModelLib` (lädt glb/gltf, Höhen-Skalierung, Gewand-Umfärbung per Paletten-Hue), `Actor` (anim-Komponente, Clip-Zuordnung zu Spielzuständen, Waffe an `handslot.r`). Spieler (5 Körper: Rogue, Rogue_Hooded, Barbarian, Knight, Mage; look.model/look.tone), Skelette (Warrior/Minion/Rogue). Krabbe/Hai/Truhe bleiben prozedural in `figure.js`.
-- `game/looks.js` Editor-Optionen (alt; aktiv sind nur model/tone). `game/player.js` (Geist `mp`, Kettenblitz, Spielerlicht mit Schatten), `enemies.js` (Leichen bleiben liegen), `ship.js` + `shipmodel.js` (3D-Schiff, steigt aus der Tiefe), `fx.js` (Slash-Bögen, Lichtblitze, Kettenblitz-Ribbons, Kugeln), `game.js` (Ablauf, Kampf, `chainLightning`, Kamera, `toScreen(x,z,h)`).
-- `ui/hud.js` HUD (Orbs, untere Leiste, Gürtel, Skill-Slots, Live-Porträt per zweiter Kamera, Minimap gedreht um 45°, Zielname oben, Legende). `ui/ui.js` Titel/Editor über der Camp-Szene, Menüs (Qualität, Gamma), Karte. `ui/touch.js` Touch inkl. „Blitz“.
-- `save/profiles.js` PBKDF2 + AES-GCM; Summary enthält look/weapon/off für die Camp-Figuren.
+- `main.js` Boot (Renderer → Art → World → WorldView → Input/Audio/Store → CanvasUI/DOM-UI/Touch → Menü), `fit()` ganzzahlige Skalierung (Welt: kürzere Seite ≈ 360 px; Menü fest 480×270), Pointer → Low-Res-Koordinaten, Optionen in localStorage.
+- `px/gl.js` WebGL2-Helfer. `px/renderer.js` Batch (12 Floats/Vertex: pos, uv, col, ext=mode/sway/top/worldX), Sprite-Shader (Modus 1 = 1-px-Umriss beim Hover, 2 = Trefferblitz, Wind-Sway), Wasser (Voronoi-Glanz, Schaum aus Uferdistanz), Lichtpuffer (Ambient + Lightmap + Punktlichter, gedithert gestuft), Glow-Puffer, Bloom, Grading, Vignette, Körnung, Letterbox. `render(frame)` mit `drawScene/drawGlow/drawUI`.
+- `art/` alles prozedural: `pal.js` (Palette, `ramp()` mit Hue-Shift, `outlineOf`, `GRADES` pro Zone), `pix.js` (Pix mit Farb- und Glow-Ebene, blob/vramp/outline, Atlas mit `rect.glow`), `tiles.js` (16er-Bodenkacheln pro Biom, Rand-Overlays, Basaltklippen, Deko), `props.js` (Bäume mit Überhang-Krone, Seelenbaum, Bögen, Wächter, Schmiede, Taverne, Häuser, Wracks, Galionsfiguren, Säbelfeuer, Flammen …), `chars.js` (Menschen 32×32, Richtungen down/up/side, Animationen idle/walk/atk/roll/hurt/dead/cast/drink/sit/shoot, Editor-Optionen `LOOK_OPTS`, `PRESETS` für Gegner/NPCs/Könige ×1.5), `creatures.js` (Krabben, Muschel, Hai, Chimäre, Skylla, Harpyie, Talos, Megalodon je Element, Schiffe in 16 Richtungen), `font.js` (5×7-Pixelschrift mit Umlauten), `ui.js` (HUD-Rahmen, Bullaugen, Icons, Kompass, Emblem, Logo), `menu.js` (Panorama-Ebenen), `index.js` baut alle Atlanten.
+- `world/world.js` Karte 240×180 Kacheln, `ZONES` (kueste, hain, asche, frost, raben, mangroven, ende), Layouts pro Insel, Feuer/Stege/Arenen/Spawns/NPCs/Items/Truhen/Galionsbuge, Kollision `blocked/move` (Kacheln + Prop-Kollider + dynamische Blocker), `lineClear`. `world/view.js` Kachel-Cache mit Overlays, Wasser-Maske, Lightmap backen, Deko, Schatten, Y-Sortierung, Überhang-Ausblendung, Glow-Pass mit Verdeckung (schwarze Silhouetten), Nebelschichten, dynamische Lichter.
+- `game/game.js` GameScene (Fokus/Interaktion, Kampf-Hooks, Zauber, Tod/Perlen-Fleck, Feuer/Rasten/Reisen, Dialoge, Crew, Läden, Galionsfiguren, Strudel, Segeln, Speichern, Rendering). `actors.js` (Player-Zustandsmaschine, Enemy-KI, NPC, GroundItem, Shot). `boss.js` (Könige + Megalodon, datengetriebene Angriffe mit Telegraphen). `ship.js` (Schiff, Geisterschiffe, Haie). `fx.js` (Partikel, Hiebbögen, Blitze, Zahlen, Telegraphen). `dialog.js` (Texte, Crew, Läden). `data.js` (Waffen, Zauber, Items, Gegner, Könige, `derived`, `newSave`).
+- `ui/hud.js` CanvasUI (HUD nach Spec, Bossleiste, Namen, Sprechblase, Banner, Dialogbox, Listenmenüs, Seekarte, Legende). `ui/ui.js` DOM-Panels (Editor mit Pixel-Vorschau, Login, Optionen, Credits). `ui/touch.js` Touch-Stick und Knöpfe.
+- `audio/audio.js` WebAudio-Synth: Songs salz, leine, atem, titel, hain, glut, frost, sturm, tiefe, ende, boss; `setMood(songName|sea|fire|title|death)`, `playSong(name, secs)` für Shantys, sfx.
+- `save/profiles.js` PBKDF2 + AES-GCM (unverändert).
 
 ## Konventionen
-- Welt: x nach rechts, z nach „unten“ der Karte, 1 Einheit = 1 Kachel. Kamera schaut nach Nordwest: Bildschirm-oben = Welt (−1, −1)/√2.
-- Figuren schauen lokal nach +z; `setYaw(fx, fz)`. Bodenhöhe immer über `terrain.ground()`.
-- Schiffskurs `heading`: Bogenmaß im Uhrzeigersinn von Karten-Nord; `fwd = (sin h, −cos h)`; Modell-Bug lokal −z.
-- Lichtwerte sind HDR (Feuer 5–22, Spielerlicht 4.2, Blitz 40). Albedos dunkel und entsättigt halten.
-- Minifizierter Build: keine `constructor.name`-Logik (→ `displayName`).
-- Keine `alert/confirm` → In-Page-Dialoge. Commits enden mit den Attributionszeilen aus der Sitzung.
+- Weltkoordinaten in Pixeln, 16 px pro Kachel; Figuren stehen auf ihrem Fuß (`ax/ay`). Sortierung nach Fuß-Y.
+- Schiffskurs `h`: Bogenmaß im Uhrzeigersinn von Nord; vorwärts = (sin h, −cos h).
+- Lichtfarben HDR; Glow-Pixel nur für Seelenlicht, Glut, Laternen. Albedos dunkel und entsättigt.
+- Keine `alert/confirm`; Minifizierter Build: keine `constructor.name`-Logik. Commits enden mit den Attributionszeilen aus der Sitzung.
 
-## Entscheidungen (Verlauf)
-- Unity verworfen → PlayCanvas. Pixel-Art (ALttP, dann ALBW-Neigung) → **v0.3 komplett 3D isometrisch** nach dem Umsetzungsplan.
-- Schiff taucht an jeder Küste aus der Tiefe auf; sinkt zurück, wenn der Spieler > 22 entfernt ist. An Bord ab Abstand < 4.6 zur Kiellinie.
-- Spieler blieb hängen → `moveCircle` mit Gleiten, kleinere Radien.
-- Geist (Mana) + Kettenblitz eingeführt, weil der Plan Kugeln und Blitz verlangt.
+## Namen
+- Könige: Admiral Brandvogt (Glut → Chimäre, Aschebucht), Königin Ysra Frostweh (Frost → Skylla, Frostgrotte), Kapitän Rabensturm (Sturm → Harpyienkönigin Aello, Rabenwacht), Morgrim Korallenhand (Tiefe → Talos aus Korallenstein, Fluchmangroven). Endboss: Moloch, der Weltschlinger.
+- Crew: Kanonierin Asra, Navigatorin Lene, Bootsmann Kalo, Zimmermann Ode. Hub: Laternenmagd, Schmied Harrow, Wirt Bilge. Start: Alter Galionsschnitzer.
 
 ## Offene Punkte / Ideen
-- Weitere Gebiete laut Skript: Schiffshain (Hub, Galionsfiguren), 4 Königsgebiete + Bosse, Ende der Welt + Megalodon.
-- Eigene Shantys für Schiffshain und die 4 Königsregionen (Angebot an den Nutzer noch offen).
-- Grafik-Feinschliff auf echter GPU prüfen (Helligkeit, Bloom, Nebel), Gegenstände am Boden mit Namen, Umriss-Shader beim Hover, Feuerball-Zauber, Lightmaps.
-- NPCs, Dialoge, Crew, Geisterschiffe.
+- Auf echter GPU feinjustieren (Helligkeit pro Zone, Bloom, Nebel), Balancing der Bosse.
+- Mehr Animationsframes und Details für Monster, Innenräume (Taverne), mehr Gegnertypen pro Zone, NG+.

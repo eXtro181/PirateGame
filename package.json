@@ -1,15 +1,12 @@
 {
   "name": "schwarzwasser",
-  "version": "0.1.0",
+  "version": "0.4.0",
   "private": true,
-  "description": "Schwarzwasser – ein Soulslike-Piratenspiel in Pixel-Art mit PlayCanvas",
+  "description": "Schwarzwasser – ein Soulslike-Piratenspiel in HD-Pixelart (eigener WebGL2-Renderer)",
   "type": "module",
   "scripts": {
     "build": "node build.mjs",
     "dev": "node build.mjs --watch & npx --yes http-server dist -p 5173 -c-1"
-  },
-  "dependencies": {
-    "playcanvas": "2.23.3"
   },
   "devDependencies": {
     "esbuild": "^0.25.0"

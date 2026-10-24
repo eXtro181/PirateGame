@@ -1,302 +1,223 @@
-// Turns the tile map into a lit 3D world: splat-blended terrain with cliffs, water with foam,
-// instanced props and scatter, modular ruins, decals, fires and their lights, whirlpools, ambience.
-import {
-    Entity, Color, Vec2, Mat4, StandardMaterial, MeshInstance, LIGHTFALLOFF_INVERSESQUARED,
-    SHADOW_PCF3_32F, SHADOWUPDATE_REALTIME, BLEND_NORMAL, BLEND_ADDITIVE, CULLFACE_NONE
-} from 'playcanvas';
-import { MeshBuilder, instanced, trs } from '../gfx/mesh.js';
-import { NOISE } from '../gfx/noise.js';
-import { T, Rng } from './defs.js';
-import { RES } from './terrain.js';
+// World rendering: autotiled ground with organic edge overlays, basalt cliffs, the water shader,
+// ground deco, multiplied soft shadows, y-sorted props and entities, overhead crowns that fade
+// when the player walks beneath, glow pass with occlusion, fog layers, baked + dynamic lights.
+import { G, TS, PRIO, BIOME } from '../art/tiles.js';
+import { MW, MH, BIOMES, ZONES } from './world.js';
+import { Pix, BAYER } from '../art/pix.js';
+import { f3, P } from '../art/pal.js';
+import { Noise, NOISE } from '../gfx/noise.js';
 
-const DECAL_UV = { blood: [0, 0], puddle: [0.5, 0], burn: [0, 0.5], moss: [0.5, 0.5] };
+const hash = (x, y) => { let h = (x * 374761393 + y * 668265263) | 0; h = (h ^ (h >>> 13)) * 1274126177; return (h ^ (h >>> 16)) >>> 0; };
+const DIR4 = [['n', 0, -1], ['e', 1, 0], ['s', 0, 1], ['w', -1, 0]];
+const DIAG = [['ne', 1, -1, 'n', 'e'], ['nw', -1, -1, 'n', 'w'], ['se', 1, 1, 's', 'e'], ['sw', -1, 1, 's', 'w']];
+const FOG = { coast: [[0.56, 0.64, 0.66], 0.18], hub: [[0.5, 0.7, 0.68], 0.22], fire: [[0.5, 0.2, 0.3], 0.2], ice: [[0.8, 0.88, 0.92], 0.24], wind: [[0.5, 0.56, 0.62], 0.26], earth: [[0.36, 0.46, 0.36], 0.3], end: [[0.5, 0.15, 0.22], 0.24] };
 
 export class WorldView {
-    constructor(app, map, terrain, M, models, particles) {
-        Object.assign(this, { app, map, terrain, M, models, particles });
-        this.device = app.graphicsDevice;
-        this.root = new Entity('world');
-        app.root.addChild(this.root);
+    constructor(r, world, art) {
+        this.r = r; this.world = world; this.art = art; // art: { tiles, deco, props, ui }
         this.time = 0;
-        this.flickers = [];
-        this.buildTerrain();
-        this.buildWater();
-        this.buildProps();
-        this.buildScatter();
-        this.buildDecals();
-        this.buildLights();
-        this.ambient = particles.ambient(null);
+        // per tile: base tile rect + overlay list (computed once)
+        this.cache = new Array(MW * MH);
+        for (let ty = 0; ty < MH; ty++) for (let tx = 0; tx < MW; tx++) this.cache[ty * MW + tx] = this.tileLayers(tx, ty);
+        // water mask: r = water, g = distance to the shore (0..8 tiles)
+        const data = new Uint8Array(MW * MH * 4);
+        for (let i = 0; i < MW * MH; i++) {
+            const w = world.ground[i] === G.WATER;
+            data[i * 4] = w ? 255 : 0;
+            data[i * 4 + 1] = w ? Math.min(255, Math.max(0, (world.shoreDist[i] - 0.5) / 8 * 255)) : 0;
+            data[i * 4 + 3] = 255;
+        }
+        this.mask = r.texture(null, { w: MW, h: MH, linear: true });
+        const gl = r.gl; gl.bindTexture(gl.TEXTURE_2D, this.mask); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, MW, MH, 0, gl.RGBA, gl.UNSIGNED_BYTE, data);
+        this.water = { mask: this.mask, mapW: MW, mapH: MH, colors: { shallow: f3('#22508A'), deep: f3('#0E2140'), glint: f3('#4F86C0'), foam: f3('#A9C8E6'), soul: f3('#5FF2C8') } };
+        this.bake();
+        this.fog = this.makeFog();
+        // spatial buckets for props (8×8 tiles)
+        this.buckets = new Map();
+        for (const p of world.props) this.bucketAdd(p);
     }
-
-    render(name, meshInstances, parent = this.root) {
-        const e = new Entity(name);
-        e.addComponent('render', { meshInstances, castShadows: meshInstances.some(m => m.castShadow), receiveShadows: true });
-        parent.addChild(e);
-        return e;
+    bucketAdd(p) { const k = Math.floor(p.y / 128) * 1000 + Math.floor(p.x / 128); if (!this.buckets.has(k)) this.buckets.set(k, []); this.buckets.get(k).push(p); }
+    bucketRemove(p) { const k = Math.floor(p.y / 128) * 1000 + Math.floor(p.x / 128); const a = this.buckets.get(k); if (a) { const i = a.indexOf(p); if (i >= 0) a.splice(i, 1); } }
+    bake() {
+        const st = this.world.lightsStatic.filter(l => !l.flicker && !l.pulse);
+        // soft ambient soul glow from soul stones etc. is part of the static set
+        this.lightmap = this.r.bakeLightmap(MW * TS, MH * TS, st, 4);
     }
-
-    // ------------------------------------------------------------------ terrain
-    buildTerrain() {
-        const tr = this.terrain, W = tr.W, H = tr.H;
-        const b = new MeshBuilder();
-        for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
-            const k = j * W + i, x = i / RES, z = j / RES;
-            const n = tr.normal(i, j);
-            b.color = [tr.w[k * 4], tr.w[k * 4 + 1], tr.w[k * 4 + 2], tr.w[k * 4 + 3]];
-            b.v(x, tr.h[k], z, n[0], n[1], n[2], x * 0.32, z * 0.32);
-        }
-        for (let j = 0; j < H - 1; j++) for (let i = 0; i < W - 1; i++) {
-            const a = j * W + i, c = a + W;
-            b.idx.push(a, c, a + 1, a + 1, c, c + 1);
-        }
-        const mesh = b.toMesh(this.device, { colors: true });
-        const mi = new MeshInstance(mesh, this.M.terrain());
-        mi.castShadow = true; mi.receiveShadow = true;
-        this.render('terrain', [mi]);
-    }
-
-    // ------------------------------------------------------------------ water + foam
-    buildWater() {
-        const { map } = this;
-        const m = this.M.water();
-        m.normalDetailMap = this.M.waterN;
-        m.normalDetailMapTiling = new Vec2(43, 43);
-        m.normalDetailMapBumpiness = 0.6;
-        m.update();
-        this.waterMat = m;
-        const pad = 60;
-        const b = new MeshBuilder();
-        b.quad([-pad, 0, map.h + pad], [map.w + pad, 0, map.h + pad], [map.w + pad, 0, -pad], [-pad, 0, -pad], [0, 0, 1, 1]);
-        const mi = new MeshInstance(b.toMesh(this.device), m);
-        mi.castShadow = false;
-        this.render('water', [mi]);
-
-        // foam: a band of quads along the shoreline, alpha from the coast field, noise texture scrolling
-        const tr = this.terrain, W = tr.W, H = tr.H;
-        const fb = new MeshBuilder();
-        const step = 2; // every second terrain vertex
-        const vid = new Int32Array(W * H).fill(-1);
-        for (let j = 0; j < H; j += step) for (let i = 0; i < W; i += step) {
-            const h = tr.h[j * W + i];
-            const a = Math.max(0, 1 - Math.abs(h + 0.08) / 0.35); // strongest where the ground meets the waterline
-            if (a <= 0.01) continue;
-            fb.color = [1, 1, 1, a];
-            vid[j * W + i] = fb.v(i / RES, 0.02, j / RES, 0, 1, 0, i / RES * 0.25, j / RES * 0.25);
-        }
-        for (let j = 0; j < H - step; j += step) for (let i = 0; i < W - step; i += step) {
-            const a = vid[j * W + i], bb = vid[j * W + i + step], c = vid[(j + step) * W + i], d = vid[(j + step) * W + i + step];
-            if (a < 0 || bb < 0 || c < 0 || d < 0) continue;
-            fb.idx.push(a, c, bb, bb, c, d);
-        }
-        const fm = new StandardMaterial();
-        fm.diffuse = new Color(0.55, 0.62, 0.6);
-        fm.opacityMap = this.M.noise; fm.opacityMapChannel = 'a';
-        fm.opacityVertexColor = true; fm.opacityVertexColorChannel = 'a';
-        fm.opacityMapTiling = new Vec2(1, 1);
-        fm.blendType = BLEND_NORMAL; fm.depthWrite = false;
-        fm.gloss = 0.4; fm.useMetalness = true; fm.metalness = 0; fm.useSkybox = false;
-        fm.update();
-        this.foamMat = fm;
-        if (fb.idx.length) {
-            const fmi = new MeshInstance(fb.toMesh(this.device, { colors: true, tangents: false }), fm);
-            fmi.castShadow = false;
-            this.render('foam', [fmi]);
-        }
-    }
-
-    // ------------------------------------------------------------------ props
-    groundY(x, z) { return this.terrain.height(x, z); }
-    buildProps() {
-        const { map, models } = this;
-        const groups = new Map();
-        const rng = new Rng(4711);
-        const add = (key, m) => { if (!models[key]) return; if (!groups.has(key)) groups.set(key, []); groups.get(key).push(m); };
-        for (const p of map.props) {
-            if (p.type === 'saberFire') continue; // built with its fire below
-            if (p.type === 'tuft') continue; // grass cards read as black crosses from above – left out
-            const ry = ['wall', 'wallV', 'palisade', 'post', 'torch', 'grave'].includes(p.type) ? 0 : rng.range(0, 360);
-            const s = ['palm', 'bush', 'boulder', 'boulderBig', 'tuft'].includes(p.type) ? rng.range(0.85, 1.2) : 1;
-            add(`${p.type}:${p.v}`, trs(p.x, this.groundY(p.x, p.z), p.z, ry, s));
-        }
-        // docks: planks over the DOCK tiles, posts at the outer edge
-        const db = new MeshBuilder();
-        for (let y = 0; y < map.h; y++) for (let x = 0; x < map.w; x++) {
-            if (map.get(x, y) !== T.DOCK) continue;
-            db.at(x + 0.5, 0.22, y + 0.5).box(1.0, 0.1, 1.0, 1);
-            if (map.get(x + 1, y) !== T.DOCK || map.get(x, y + 1) !== T.DOCK) add('post:0', trs(x + 0.9, -0.3, y + 0.9));
-        }
-        if (db.idx.length) {
-            const mi = new MeshInstance(db.toMesh(this.device), this.M.pbr('wood', { tiling: 1 }));
-            mi.castShadow = true; this.render('dock', [mi]);
-        }
-        // the sea wreck
-        const wf = map.fires.find(f => f.kind === 'sea');
-        if (wf) add('wreck:0', trs(wf.x, -0.4, wf.z, 35, 1.2, 0, -12));
-        for (const [key, mats] of groups) this.instances(key, mats);
-    }
-    instances(key, mats, castShadow = true) {
-        const mis = this.models[key].map(part => instanced(this.device, part.mesh, part.mat, mats, { castShadow }));
-        return this.render(key, mis);
-    }
-
-    // scatter: grass tufts on green ground, pebbles and driftwood on beaches
-    buildScatter() {
-        const { map } = this;
-        const rng = new Rng(91);
-        const tufts = [[], [], []], pebbles = [], drift = [];
-        for (let y = 1; y < map.h - 1; y++) for (let x = 1; x < map.w - 1; x++) {
-            const t = map.get(x, y);
-            if (t === T.GRASS || t === T.DARK) {
-                const n = rng.chance(0.45) ? 1 + Math.floor(rng.next() * 2) : 0;
-                for (let k = 0; k < n; k++) {
-                    const px = x + rng.next(), pz = y + rng.next();
-                    tufts[rng.int(0, 2)].push(trs(px, this.groundY(px, pz), pz, rng.range(0, 360), rng.range(0.5, 1.0)));
-                }
-            } else if (t === T.SAND && rng.chance(0.18)) {
-                const px = x + rng.next(), pz = y + rng.next();
-                pebbles.push(trs(px, this.groundY(px, pz), pz, rng.range(0, 360), rng.range(0.7, 1.4)));
+    makeFog() {
+        const n = new Noise(77), S = 128;
+        const layers = [];
+        for (let L = 0; L < 2; L++) {
+            const p = new Pix(S, S);
+            for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+                const v = n.fbm(x / 32 + L * 5, y / 32, 3, 4) * 0.5 + 0.5 - 0.35;
+                const q = Math.floor(Math.max(0, v) * 6) / 4; // quantized to 4 steps
+                if (q <= 0 || BAYER[(y & 3) * 4 + (x & 3)] >= q) continue;
+                p.px(x, y, [255, 255, 255]);
             }
-            if (t === T.SAND && map.dist && map.dist[map.idx(x, y)] < 1.6 && rng.chance(0.03)) {
-                const px = x + rng.next(), pz = y + rng.next();
-                drift.push(trs(px, this.groundY(px, pz), pz, rng.range(0, 360), rng.range(0.8, 1.3)));
+            const tex = this.r.texture(p.canvas('col'), { repeat: true });
+            layers.push({ tex, x: 0, y: 0, w: S, h: S });
+        }
+        return layers;
+    }
+    // ---------------------------------------------------------------- tiles
+    tileLayers(tx, ty) {
+        const W = this.world, i = ty * MW + tx;
+        const g = W.ground[i], bn = BIOMES[W.biome[i]] || 'coast';
+        const v = hash(tx, ty) % 4;
+        const T = this.art.tiles;
+        if (W.cliff[i]) {
+            const f = W.face[i];
+            const cl = (x, y) => W.inb(x, y) && W.cliff[y * MW + x];
+            if (f >= 0) { const side = !cl(tx - 1, ty) ? 'l' : !cl(tx + 1, ty) ? 'r' : 'm'; return { base: T[`cliffFace:${bn}:${f}:${side}`], over: [], face: true }; }
+            return { base: T[cl(tx, ty - 1) ? `cliffTop:${bn}` : `cliffTopN:${bn}`], over: [], top: true };
+        }
+        const base = g === G.WATER ? T[`seabed:${v}`] : T[`${g}:${bn}:${v}`] || T[`${G.GRASS}:${bn}:${v}`];
+        const over = [];
+        if (g !== G.BRIDGE && g !== G.PLANK) {
+            const my = PRIO[g] || 0;
+            const gat = (x, y) => (W.inb(x, y) && !W.cliff[y * MW + x]) ? W.ground[y * MW + x] : g;
+            const cand = new Map();
+            for (const [d, dx, dy] of DIR4) { const ng = gat(tx + dx, ty + dy); if ((PRIO[ng] || 0) > my && T[`e:${ng}:${bn}:${d}`]) { if (!cand.has(ng)) cand.set(ng, []); cand.get(ng).push(d); } }
+            for (const [d, dx, dy, a, b] of DIAG) {
+                const ng = gat(tx + dx, ty + dy);
+                if ((PRIO[ng] || 0) <= my) continue;
+                const has = cand.get(ng) || [];
+                if (has.includes(a) || has.includes(b)) continue;
+                if (!cand.has(ng)) cand.set(ng, []); cand.get(ng).push(d);
             }
+            [...cand.keys()].sort((a, b) => (PRIO[a] || 0) - (PRIO[b] || 0)).forEach(ng => cand.get(ng).forEach(d => over.push(T[`e:${ng}:${bn}:${d}`])));
         }
-        void tufts;
-        if (pebbles.length) this.instances('pebble', pebbles);
-        if (drift.length) this.instances('drift', drift);
+        // ambient occlusion under cliff faces
+        const ao = ty > 0 && W.cliff[(ty - 1) * MW + tx] && !W.cliff[i];
+        return { base, over, ao };
     }
-
-    // ------------------------------------------------------------------ decals
-    buildDecals() {
-        const { map } = this;
-        const rng = new Rng(5);
-        const statics = [];
-        for (let y = 1; y < map.h - 1; y++) for (let x = 1; x < map.w - 1; x++) {
-            const t = map.get(x, y);
-            if (t === T.DIRT && rng.chance(0.12)) statics.push(['puddle', x + rng.next(), y + rng.next(), rng.range(0.6, 1.4), rng.range(0, 6.3)]);
-            if (t === T.STONE && rng.chance(0.08)) statics.push(['moss', x + rng.next(), y + rng.next(), rng.range(0.6, 1.2), rng.range(0, 6.3)]);
-        }
-        for (const p of map.props) if (p.type === 'wall' || p.type === 'wallV') for (let k = 0; k < 2; k++) statics.push(['moss', p.x + rng.range(-0.8, 0.8), p.z + rng.range(-0.4, 0.4), rng.range(0.7, 1.1), rng.range(0, 6.3)]);
-        for (const f of map.fires) if (f.kind === 'land') statics.push(['burn', f.x, f.z, 2.2, 0]);
-        if (statics.length) this.render('decals', [this.decalMesh(statics)]);
-        this.blood = [];
-        this.bloodEntity = null;
+    eachTile(cam, fn) {
+        const r = this.r;
+        const x0 = Math.max(0, Math.floor(cam[0] / TS)), y0 = Math.max(0, Math.floor(cam[1] / TS));
+        const x1 = Math.min(MW - 1, Math.floor((cam[0] + r.W) / TS)), y1 = Math.min(MH - 1, Math.floor((cam[1] + r.H) / TS));
+        for (let ty = y0; ty <= y1; ty++) for (let tx = x0; tx <= x1; tx++) fn(tx, ty, this.cache[ty * MW + tx], tx * TS - cam[0], ty * TS - cam[1]);
+        return [x0, y0, x1, y1];
     }
-    decalMesh(list) {
-        const b = new MeshBuilder();
-        for (const [kind, x, z, s, r] of list) {
-            const [u0, v0] = DECAL_UV[kind];
-            const c = Math.cos(r) * s / 2, sn = Math.sin(r) * s / 2;
-            const y = (px, pz) => this.terrain.ground(px, pz) + 0.025;
-            const P = (dx, dz) => [x + dx, y(x + dx, z + dz), z + dz];
-            b.quad(P(-c + sn, -sn - c), P(c + sn, sn - c), P(c - sn, sn + c), P(-c - sn, -sn + c), [u0, v0, u0 + 0.5, v0 + 0.5]);
-        }
-        const mi = new MeshInstance(b.toMesh(this.device), this.M.decal());
-        mi.castShadow = false;
-        return mi;
-    }
-    // persistent blood pools (cleared when resting at a fire)
-    addBlood(x, z, s = 0.9) {
-        this.blood.push(['blood', x, z, s, Math.random() * 6.3]);
-        if (this.blood.length > 60) this.blood.shift();
-        this.bloodEntity?.destroy();
-        this.bloodEntity = this.render('blood', [this.decalMesh(this.blood)]);
-    }
-    clearBlood() { this.blood = []; this.bloodEntity?.destroy(); this.bloodEntity = null; }
-
-    // ------------------------------------------------------------------ lights
-    addOmni(x, y, z, color, intensity, range, { shadows = false, flicker = 0, parent = null, res = 512 } = {}) {
-        const e = new Entity('light');
-        e.addComponent('light', {
-            type: 'omni', color: new Color(color[0], color[1], color[2]), intensity, range,
-            falloffMode: LIGHTFALLOFF_INVERSESQUARED, castShadows: shadows, shadowType: SHADOW_PCF3_32F,
-            shadowResolution: res, shadowBias: 0.15, normalOffsetBias: 0.04, shadowUpdateMode: SHADOWUPDATE_REALTIME
+    // ---------------------------------------------------------------- scene
+    // ents: [{ y, draw(r,cam), drawGlow(r,cam), shadow:[rect, x, y] }]
+    drawScene(r, cam, ents, focus, hooks = {}) {
+        this.time += 0; // advanced by the game
+        const A = this.art;
+        r.spriteBegin('alpha');
+        // out-of-map: open sea seabed
+        const [x0, y0, x1, y1] = this.eachTile(cam, (tx, ty, c, sx, sy) => {
+            if (c.base) r.sprite(c.base, sx, sy);
+            for (const o of c.over) r.sprite(o, sx, sy);
+            if (c.ao) r.sprite(A.tiles.ao, sx, sy, { color: [1, 1, 1, 0.45] });
         });
-        e.setLocalPosition(x, y, z);
-        (parent || this.root).addChild(e);
-        if (flicker) this.flickers.push({ e, base: intensity, amt: flicker, seed: Math.random() * 100, x, y, z });
-        return e;
+        r.end();
+        r.drawWater(this.water, cam);
+        r.spriteBegin('alpha');
+        // deco
+        for (const d of this.decoInView(x0, y0, x1, y1)) { const rect = A.deco[d.k]; if (rect) r.sprite(rect, d.x - cam[0], d.y - cam[1]); }
+        r.end();
+        // shadows (multiplied)
+        const props = this.propsInView(cam);
+        r.spriteBegin('mul');
+        const shade = [0.58, 0.6, 0.72, 1];
+        for (const p of props) { const sh = p.def.shadow; if (!sh || !sh[0]) continue; const rect = this.shadowRect(sh[0]); r.sprite(rect, p.x - rect.w / 2 - cam[0] + (p.def.shadowDx || 0), p.y - rect.h / 2 - cam[1], { color: shade }); }
+        for (const e of ents) if (e.shadow && !e.hidden) { const rect = this.shadowRect(e.shadow); r.sprite(rect, e.x - rect.w / 2 - cam[0], (e.shadowY ?? e.y) - rect.h / 2 - cam[1], { color: shade }); }
+        r.end();
+        hooks.under?.(r);
+        // y-sorted entities
+        const list = props.map(p => ({ y: p.y + (p.def.sortDy || 0), p })).concat(ents.filter(e => !e.hidden).map(e => ({ y: e.sortY ?? e.y, e })));
+        list.sort((a, b) => a.y - b.y);
+        this.sorted = list;
+        r.spriteBegin('alpha');
+        for (const it of list) { if (it.p) this.drawProp(r, it.p, cam, focus); else it.e.draw(r, cam); }
+        // overhead: crowns and roofs
+        for (const p of props) {
+            if (!p.def.overheadRect) continue;
+            const ox = p.x - (p.flip ? p.def.w - p.def.ax : p.def.ax) - cam[0], oy = p.y - p.def.ay - cam[1];
+            let a = p.def.overheadAlpha ?? 1;
+            if (focus && focus.x > p.x - p.def.w / 2 - 4 && focus.x < p.x + p.def.w / 2 + 4 && focus.y > p.y - p.def.h && focus.y < p.y + 6) a = Math.min(a, 0.35);
+            r.sprite(p.def.overheadRect, ox, oy, { flip: p.flip, color: [1, 1, 1, a], sway: p.def.sway || 0, wx: p.x });
+        }
+        if (this.world.soulCrown && this.inView(this.world.soulCrown, cam, 200)) { const c = A.props.soulcrown; r.sprite(c.frames[0], this.world.soulCrown.x - c.ax - cam[0], this.world.soulCrown.y - c.ay + 30 - cam[1], { color: [1, 1, 1, 0.92] }); }
+        r.end();
     }
-    buildLights() {
-        const { map, app, particles, models } = this;
-        this.fireLights = {};
-        for (const f of map.fires) {
-            const root = new Entity('fire-' + f.id);
-            this.root.addChild(root);
-            if (f.kind === 'land') {
-                const gy = this.groundY(f.x, f.z);
-                root.setPosition(f.x, gy, f.z);
-                this.render('saber', models['saberFire:0'].map(p => { const mi = new MeshInstance(p.mesh, p.mat); mi.castShadow = true; return mi; }), root);
-                const fx = new Entity('flames'); fx.setLocalPosition(0, 0.12, 0); root.addChild(fx);
-                particles.fire(fx, 'teal', 0.9);
-                this.fireLights[f.id] = { root, light: this.addOmni(f.x, gy + 1.3, f.z, [0.35, 1.0, 0.85], 3.5, 11, { shadows: true, flicker: 0.22, res: 1024 }) };
-            } else {
-                root.setPosition(f.x, 0, f.z);
-                const a = new Entity(); a.setLocalPosition(0.3, 0.9, -0.4); root.addChild(a); particles.fire(a, 'orange', 1.4);
-                const b = new Entity(); b.setLocalPosition(-0.6, 0.5, 1.0); root.addChild(b); particles.fire(b, 'orange', 0.9);
-                this.fireLights[f.id] = { root, light: this.addOmni(f.x, 2.0, f.z, [1.0, 0.5, 0.18], 22, 18, { shadows: true, flicker: 0.3, res: 1024 }) };
-            }
-        }
-        // torches: no shadows, but every one is a real light
-        for (const l of map.lights) {
-            if (l.kind !== 'torch') continue;
-            const gy = this.groundY(l.x, l.z + 0.4);
-            const e = new Entity('torch-fire'); e.setPosition(l.x, gy + 1.72, l.z + 0.4); this.root.addChild(e);
-            particles.fire(e, 'orange', 0.35);
-            this.addOmni(l.x, gy + 1.9, l.z + 0.4, [1.0, 0.55, 0.22], 4.5, 8, { flicker: 0.35 });
-        }
-        // fireflies: one emitter per cluster
-        const ff = map.lights.filter(l => l.kind === 'firefly');
-        for (let i = 0; i < ff.length; i += 5) {
-            const g = ff.slice(i, i + 5);
-            const cx = g.reduce((s, l) => s + l.x, 0) / g.length, cz = g.reduce((s, l) => s + l.z, 0) / g.length;
-            const e = new Entity('fireflies'); e.setPosition(cx, this.groundY(cx, cz) + 0.9, cz); this.root.addChild(e);
-            particles.fireflies(e, [3, 0.6, 3]);
-            this.addOmni(cx, this.groundY(cx, cz) + 1, cz, [0.6, 1.0, 0.35], 0.6, 4, { flicker: 0.5 });
-        }
-        // whirlpools: a sinking funnel with scrolling foam, faint teal glow at the core
-        this.whirls = [];
-        for (const w of map.whirlpools) {
-            const e = new Entity('whirl'); e.setPosition(w.x, 0.01, w.z); this.root.addChild(e);
-            const b = new MeshBuilder();
-            const prof = [];
-            for (let i = 0; i <= 10; i++) { const t = i / 10; prof.push([w.r * (1 - t * 0.95), -Math.pow(t, 2.2) * 3.2]); }
-            b.lathe(prof.reverse(), 40, { caps: false, uvU: 6, uvV: 0.5 });
-            const m = new StandardMaterial();
-            m.diffuse = new Color(0.01, 0.03, 0.04);
-            m.emissive = new Color(0.25, 0.55, 0.55); m.emissiveMap = this.M.noise; m.emissiveIntensity = 0.5;
-            m.opacityMap = this.M.noise; m.opacityMapChannel = 'a'; m.opacity = 0.9;
-            m.blendType = BLEND_NORMAL; m.depthWrite = false; m.cull = CULLFACE_NONE;
-            m.gloss = 0.9; m.useMetalness = true; m.useSkybox = false;
-            m.update();
-            const mi = new MeshInstance(b.toMesh(this.device), m);
-            this.render('funnel', [mi], e);
-            this.whirls.push({ e, m });
-            this.addOmni(w.x, 1.5, w.z, [0.3, 0.75, 0.8], 2.5, w.r * 1.4);
-        }
-        void app;
+    drawFog(r, cam, zoneKey, k = 1) {
+        const [col, a] = FOG[ZONES[zoneKey]?.biome] || FOG.coast;
+        r.spriteBegin('alpha');
+        this.fog.forEach((f, i) => {
+            const sp = i ? 6 : 3.5, par = i ? 1.15 : 1.05;
+            const ox = ((cam[0] * par + this.time * sp) % 128 + 128) % 128, oy = ((cam[1] * par + this.time * sp * 0.4) % 128 + 128) % 128;
+            const tex = f.tex;
+            r.setTex(tex);
+            // one big quad with repeating uv
+            r.batch.quad(0, 0, r.W, r.H, ox / 128, oy / 128, (ox + r.W) / 128, (oy + r.H) / 128, col[0], col[1], col[2], a * k * (i ? 0.7 : 1));
+        });
+        r.end();
     }
-
-    update(dt, cam) {
-        this.time += dt;
+    shadowRect(rx) { const U = this.art.ui; return rx <= 6 ? U.shadowS : rx <= 10 ? U.shadowM : rx <= 18 ? U.shadowL : rx <= 34 ? U.shadowXL : U.shadowXXL; }
+    inView(pt, cam, m = 64) { return pt.x > cam[0] - m && pt.x < cam[0] + this.r.W + m && pt.y > cam[1] - m && pt.y < cam[1] + this.r.H + m; }
+    propsInView(cam) {
+        const out = [];
+        const bx0 = Math.floor((cam[0] - 96) / 128), bx1 = Math.floor((cam[0] + this.r.W + 96) / 128);
+        const by0 = Math.floor((cam[1] - 32) / 128), by1 = Math.floor((cam[1] + this.r.H + 160) / 128);
+        for (let by = by0; by <= by1; by++) for (let bx = bx0; bx <= bx1; bx++) { const a = this.buckets.get(by * 1000 + bx); if (a) for (const p of a) if (!p.hidden) out.push(p); }
+        return out;
+    }
+    decoInView(x0, y0, x1, y1) {
+        if (!this.decoGrid) { this.decoGrid = new Map(); for (const d of this.world.deco) { const k = Math.floor(d.y / 128) * 1000 + Math.floor(d.x / 128); if (!this.decoGrid.has(k)) this.decoGrid.set(k, []); this.decoGrid.get(k).push(d); } }
+        const out = [];
+        for (let by = Math.floor(y0 / 8); by <= Math.floor(y1 / 8); by++) for (let bx = Math.floor(x0 / 8); bx <= Math.floor(x1 / 8); bx++) { const a = this.decoGrid.get(by * 1000 + bx); if (a) out.push(...a); }
+        return out;
+    }
+    frameOf(p) {
+        const d = p.def;
+        if (d.frames.length > 1) return d.frames[Math.floor(this.time * (d.anim === 'waterfall' ? 12 : 8)) % d.frames.length];
+        return d.frames[0];
+    }
+    drawProp(r, p, cam, focus, glow = false) {
+        const d = p.def, rect = this.frameOf(p);
+        const x = p.x - (p.flip ? d.w - d.ax : d.ax) - cam[0], y = p.y - d.ay - cam[1];
+        if (glow) {
+            if (rect.glow) r.sprite(rect, x, y, { tex: rect.gtex, flip: p.flip, sway: d.sway || 0, wx: p.x });
+            else r.sprite(rect, x, y, { flip: p.flip, color: [0, 0, 0, 1], sway: d.sway || 0, wx: p.x });
+        } else {
+            let col;
+            if (d.anim === 'fog') col = [0.8, 0.9, 0.9, p.open === false ? 0.8 : 0.42 + Math.sin(this.time * 2) * 0.08];
+            r.sprite(rect, x, y, { flip: p.flip, sway: d.sway || 0, wx: p.x, outline: focus && focus.hover === p, color: col });
+        }
+        // attached animations
+        const A = this.art.props, t = this.time;
+        const fl = (k, dx, dy, speed = 10) => { const s = A[k]; const fr = s.frames[Math.floor(t * speed + p.x * 0.1) % s.frames.length]; const gx = p.x - s.ax + dx * (p.flip ? -1 : 1) - cam[0], gy = p.y - s.ay + dy - cam[1]; if (glow) r.sprite(fr, gx, gy, { tex: fr.gtex }); else r.sprite(fr, gx, gy); };
+        if (d.anim === 'soulfire' && p.lit !== false) fl('soulflame', 0, -1);
+        if (d.anim === 'fire') fl('fireflame', 0, -17);
+        if (p.kind === 'forge') { fl('forgeflame', -8, -9, 12); fl('forgeflame', -2, -9, 9); }
+        if (p.flag) { const s = A.flagcloth; const fr = s.frames[Math.floor(t * 6) % 4]; if (!glow) r.sprite(fr, p.x - d.ax + 3 - cam[0], p.y - d.ay + 1 - cam[1]); }
+    }
+    drawGlow(r, cam, ents) {
+        r.spriteBegin('alpha');
+        this.eachTile(cam, (tx, ty, c, sx, sy) => {
+            if (c.base?.glow) r.sprite(c.base, sx, sy, { tex: c.base.gtex });
+            for (const o of c.over) if (o.glow) r.sprite(o, sx, sy, { tex: o.gtex });
+        });
+        for (const d of this.decoInView(Math.floor(cam[0] / TS), Math.floor(cam[1] / TS), Math.floor((cam[0] + r.W) / TS), Math.floor((cam[1] + r.H) / TS))) { const rect = this.art.deco[d.k]; if (rect?.glow) r.sprite(rect, d.x - cam[0], d.y - cam[1], { tex: rect.gtex }); }
+        for (const it of this.sorted || []) { if (it.p) this.drawProp(r, it.p, cam, null, true); else it.e.drawGlow?.(r, cam); }
+        for (const p of this.propsInView(cam)) if (p.def.overheadRect?.glow) { const ox = p.x - (p.flip ? p.def.w - p.def.ax : p.def.ax) - cam[0], oy = p.y - p.def.ay - cam[1]; r.sprite(p.def.overheadRect, ox, oy, { tex: p.def.overheadRect.gtex, flip: p.flip, sway: p.def.sway || 0, wx: p.x }); }
+        if (this.world.soulCrown && this.inView(this.world.soulCrown, cam, 200)) { const c = this.art.props.soulcrown; const k = 0.75 + 0.25 * Math.sin(this.time * Math.PI * 2 / 4); r.sprite(c.frames[0], this.world.soulCrown.x - c.ax - cam[0], this.world.soulCrown.y - c.ay + 30 - cam[1], { tex: c.frames[0].gtex, color: [k, k, k, 1] }); }
+        r.end();
+    }
+    // dynamic lights in view (flickering / pulsing ones; static ones are baked)
+    lights(cam, out) {
         const t = this.time;
-        const m = this.waterMat;
-        m.normalMapOffset = new Vec2((t * 0.006) % 1, (t * 0.004) % 1);
-        m.normalDetailMapOffset = new Vec2((-t * 0.009) % 1, (t * 0.007) % 1);
-        m.update();
-        this.foamMat.opacityMapOffset = new Vec2((t * 0.02) % 1, (t * 0.013) % 1);
-        this.foamMat.update();
-        for (const f of this.flickers) {
-            // Perlin noise, not random: smooth, organic flicker of intensity and position
-            const n = NOISE.n1(t * 3.1 + f.seed) * 0.7 + NOISE.n1(t * 9.3 + f.seed * 2) * 0.3;
-            f.e.light.intensity = f.base * (1 + n * f.amt);
-            f.e.setLocalPosition(f.x + NOISE.n1(t * 2.2 + f.seed + 5) * 0.06, f.y + NOISE.n1(t * 2.7 + f.seed + 9) * 0.05, f.z);
+        for (const L of this.world.lightsStatic) {
+            if (!L.flicker && !L.pulse) continue;
+            if (L.prop?.lit === false) continue;
+            if (L.x < cam[0] - L.r || L.x > cam[0] + this.r.W + L.r || L.y < cam[1] - L.r || L.y > cam[1] + this.r.H + L.r) continue;
+            let k = 1;
+            if (L.flicker) k *= 1 + NOISE.n1(t * 6 + L.x * 0.01) * L.flicker * 1.5;
+            if (L.pulse) k *= 0.7 + 0.3 * Math.sin(t * Math.PI * 2 / L.pulse);
+            out.push({ x: L.x, y: L.y, r: L.r * (0.96 + 0.04 * k), col: L.col, i: L.i * k });
         }
-        for (const w of this.whirls) {
-            w.e.setEulerAngles(0, -t * 60, 0);
-            w.m.emissiveMapOffset = new Vec2(0, (t * 0.15) % 1); w.m.opacityMapOffset = w.m.emissiveMapOffset; w.m.update();
-        }
-        if (cam) this.ambient.setPosition(cam.x, 2, cam.z);
+        return out;
     }
 }
-export { Mat4, BLEND_ADDITIVE };
+export { P };
