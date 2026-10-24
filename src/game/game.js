@@ -3,7 +3,14 @@ import { Sprite } from '../core/sprite.js';
 import { buildPlayerSheet } from '../core/assets.js';
 import { Player } from './player.js';
 import { Crab, Skeleton, Shark } from './enemies.js';
-import { Ship } from './ship.js';
+import { Ship, SHIP_R } from './ship.js';
+import { T } from '../art/tiles.js';
+import { Vec3 } from 'playcanvas';
+import { PITCH } from '../core/gfx.js';
+import { CAM_DIST } from '../core/stage.js';
+
+const CAM_Y = CAM_DIST * Math.sin(PITCH * Math.PI / 180), CAM_BACK = CAM_DIST * Math.cos(PITCH * Math.PI / 180);
+const _v = new Vec3(), _o = new Vec3();
 import { Fx } from './fx.js';
 import { derived, ORIGINS, OFFHAND, levelCost } from './data.js';
 
@@ -98,7 +105,7 @@ export class Game {
             this.player.place(p.x, p.z);
             this.player.face(0, 1);
         }
-        this.ship.sprite.setVisible(true);
+        this.summonCd = 0;
         this.camX = this.player.x; this.camZ = this.player.z;
         this.updateStain();
         this.audio.setMood(this.mode === 'sea' ? 'sea' : 'land');
@@ -152,7 +159,7 @@ export class Game {
                 this.sfx(atk.riposte ? 'crit' : 'hit');
                 this.hitstop = atk.riposte ? 0.16 : (atk.heavy ? 0.08 : 0.05);
                 this.shake(0.1, atk.heavy ? 0.12 : 0.06);
-                if (atk.riposte) this.ui.floatText('KRITISCH', e.x, e.z - 1.6, 'crit');
+                if (atk.riposte) this.ui.floatText('KRITISCH', e.x, e.z, 'crit');
             }
         }
     }
@@ -171,7 +178,7 @@ export class Game {
             this.sfx('parried');
             this.sparkFx((p.x + e.x) / 2, (p.z + e.z) / 2 - 0.6);
             this.hitstop = 0.12;
-            this.ui.floatText('PARIERT', e.x, e.z - 1.6, 'parry');
+            this.ui.floatText('PARIERT', e.x, e.z, 'parry');
             this.hint('riposte', 'Pariert! Greife jetzt an für einen kritischen Gegenschlag.');
             return;
         }
@@ -263,10 +270,7 @@ export class Game {
     updateDeath(dt) {
         if (this.dying === undefined) return;
         this.dying += dt;
-        if (this.sinking) {
-            const k = Math.max(0.01, 1 - this.dying * 0.6);
-            this.ship.sprite.entity.setLocalScale(k, 1, k);
-        }
+        if (this.sinking && this.ship.state === 'surfaced') { this.ship.state = 'sinking'; this.ship.riseT = 1; }
         if (this.dying > 1.2 && !this.deathShown) { this.deathShown = true; this.ui.death(); }
         if (this.dying > 5.2) {
             const s = this.save;
@@ -274,7 +278,6 @@ export class Game {
             s.stain = s.pearls > 0 ? { x: sea ? this.ship.x : this.player.x, z: sea ? this.ship.z : this.player.z, amount: s.pearls, sea } : null;
             s.pearls = 0;
             s.deaths = (s.deaths || 0) + 1;
-            this.ship.sprite.entity.setLocalScale(1, 1, 1);
             this.dying = undefined; this.deathShown = false; this.sinking = false;
             this.respawn();
             this.persist(null);
@@ -309,7 +312,7 @@ export class Game {
         if (this.mode === 'land') {
             for (const f of m.fires) if (f.kind === 'land' && Math.hypot(p.x - f.x, p.z - f.z - 0.3) < 1.6) return { label: s.litFires.includes(f.id) ? 'Rasten' : 'Feuer entzünden', act: () => this.useFire(f) };
             for (const c of m.chests) if (!s.chests.includes(c.id) && Math.hypot(p.x - c.x, p.z - c.z) < 1.3) return { label: 'Truhe öffnen', act: () => this.openChest(c) };
-            if (this.ship.hull > 0 && Math.hypot(p.x - this.ship.x, p.z - this.ship.z) < 4.2) return { label: 'An Bord gehen', act: () => this.board() };
+            if (this.ship.ready && this.shipDist(p.x, p.z) < 2.3) return { label: 'An Bord gehen', act: () => this.board() };
         } else {
             for (const f of m.fires) if (f.kind === 'sea' && Math.hypot(this.ship.x - f.x - 1, this.ship.z - f.z) < 4.2) return { label: s.litFires.includes(f.id) ? 'Am Wrack rasten' : 'Wrackfeuer entzünden', act: () => this.useFire(f) };
             const land = this.landingSpot();
@@ -319,15 +322,75 @@ export class Game {
     }
     landingSpot() {
         const sx = this.ship.x, sz = this.ship.z;
-        let best = null, bd = 3.2;
-        for (let j = -4; j <= 4; j++) for (let i = -4; i <= 4; i++) {
+        let best = null, bd = 4.4;
+        for (let j = -5; j <= 5; j++) for (let i = -5; i <= 5; i++) {
             const tx = Math.floor(sx) + i, tz = Math.floor(sz) + j;
             const cx = tx + 0.5, cz = tz + 0.5;
             if (this.map.blockedWalk(cx, cz, 0.3)) continue;
-            const d = Math.hypot(cx - sx, cz - sz);
+            const d = this.shipDist(cx, cz);
             if (d < bd) { bd = d; best = { x: cx, z: cz }; }
         }
         return best;
+    }
+    // distance from a point to the ship's keel line (the hull is long, not round)
+    shipDist(x, z) {
+        const sh = this.ship, f = sh.fwd, half = sh.len / 2 - 0.3;
+        const t = Math.max(-half, Math.min(half, (x - sh.x) * f.x + (z - sh.z) * f.z));
+        return Math.hypot(x - (sh.x + f.x * t), z - (sh.z + f.z * t));
+    }
+    // the Möwenschrei answers its captain: at any shore it rises from the deep
+    updateSummon(dt) {
+        const sh = this.ship, p = this.player, m = this.map;
+        this.summonCd = Math.max(0, (this.summonCd || 0) - dt);
+        if (sh.hull <= 0) return;
+        const d = Math.hypot(p.x - sh.x, p.z - sh.z);
+        // left behind: it sinks back into the deep
+        if (sh.state === 'surfaced' && d > 22) { sh.state = 'submerged'; sh.riseT = 0; sh.sync(); }
+        if (this.summonCd > 0 || sh.state === 'rising' || sh.state === 'sinking') return;
+        // at the shore?
+        let shore = false;
+        for (let j = -2; j <= 2 && !shore; j++) for (let i = -2; i <= 2; i++) {
+            const tx = Math.floor(p.x + i * 0.8), tz = Math.floor(p.z + j * 0.8);
+            if (m.get(tx, tz) === T.WATER) { shore = true; break; }
+        }
+        if (!shore) return;
+        if (sh.state === 'surfaced') {
+            if (d < 9) return;
+            sh.dive(); // far away: it goes down and comes up here
+            this.summonCd = 2.8;
+            return;
+        }
+        const spot = this.riseSpot(p.x, p.z);
+        if (!spot) return;
+        sh.rise(spot.x, spot.z, spot.heading);
+        this.summonCd = 3;
+        this.sfx('rise');
+        this.shake(0.25, 1.6);
+        for (let k = 0; k < 5; k++) setTimeout(() => this.splashFx(sh.x + (Math.random() - 0.5) * 3, sh.z + (Math.random() - 0.5) * 2), k * 260);
+        this.hint('rise', 'Die Möwenschrei steigt aus der Tiefe. Wo immer du ans Ufer trittst, folgt sie dir.');
+    }
+    riseSpot(px, pz) {
+        let best = null, bd = 1e9;
+        for (let r = 2.6; r <= 6.5; r += 0.6) {
+            for (let a = 0; a < 16; a++) {
+                const ang = a / 16 * Math.PI * 2, cx = px + Math.cos(ang) * r, cz = pz + Math.sin(ang) * r;
+                if (this.map.get(Math.floor(cx), Math.floor(cz)) !== T.WATER) continue;
+                // broadside to the shore looks best; try both directions along it
+                for (const heading of [ang, ang + Math.PI, ang + Math.PI / 2]) {
+                    if (this.map.blockedSail(cx, cz, SHIP_R, heading)) continue;
+                    const d = this.shipDistFrom(px, pz, cx, cz, heading);
+                    if (d < 1.5) continue; // never right on top of the captain
+                    if (d < bd) { bd = d; best = { x: cx, z: cz, heading }; }
+                }
+            }
+            if (best && bd < 2.2) break;
+        }
+        return best;
+    }
+    shipDistFrom(x, z, sx, sz, heading) {
+        const fx = Math.sin(heading), fz = -Math.cos(heading), half = this.ship.len / 2 - 0.3;
+        const t = Math.max(-half, Math.min(half, (x - sx) * fx + (z - sz) * fz));
+        return Math.hypot(x - (sx + fx * t), z - (sz + fz * t));
     }
     board() {
         this.mode = 'sea';
@@ -413,7 +476,7 @@ export class Game {
             const f = this.map.fires[0];
             this.camX = f.x + Math.sin(this.time * 0.06) * 5 + 2;
             this.camZ = f.z + Math.cos(this.time * 0.045) * 3 - 1;
-            this.stage.camera.setPosition(Math.round(this.camX * 16) / 16, 40, Math.round(this.camZ * 16) / 16);
+            this.stage.camera.setPosition(this.camX, CAM_Y, this.camZ + CAM_BACK);
             this.view.update(rawDt);
             inp.endFrame();
             return;
@@ -431,6 +494,7 @@ export class Game {
         if (this.mode === 'land') {
             if (inp.pressed('lock')) this.toggleLock();
             this.player.update(dt);
+            if (this.dying === undefined) this.updateSummon(dt);
         } else {
             this.ship.update(dt, this.dying === undefined);
             this.player.x = this.ship.x; this.player.z = this.ship.z;
@@ -495,7 +559,7 @@ export class Game {
 
     updateCamera(dt) {
         const sea = this.mode === 'sea';
-        let tx = this.player.x, tz = this.player.z - 0.6;
+        let tx = this.player.x, tz = this.player.z - 0.3;
         if (sea) { const f = this.ship.fwd; tx = this.ship.x + f.x * this.ship.speed * 0.5; tz = this.ship.z + f.z * this.ship.speed * 0.5; }
         if (this.lockTarget && !sea) { tx = (tx * 2 + this.lockTarget.x) / 3; tz = (tz * 2 + this.lockTarget.z) / 3; }
         const k = 1 - Math.pow(0.0015, dt);
@@ -507,17 +571,20 @@ export class Game {
             sx = (Math.random() - 0.5) * this.shakeAmp * 2; sz = (Math.random() - 0.5) * this.shakeAmp * 2;
             if (this.shakeT <= 0) this.shakeAmp = 0;
         }
-        const x = Math.round((this.camX + sx) * 16) / 16, z = Math.round((this.camZ + sz) * 16) / 16;
-        this.stage.camera.setPosition(x, 40, z);
+        // pull the camera back while sailing: the ship is big and fast
+        this.camZoom = (this.camZoom || 1) + ((sea ? 1.4 : 1) - (this.camZoom || 1)) * (1 - Math.pow(0.05, dt));
+        this.stage.camera.setPosition(this.camX + sx, CAM_Y * this.camZoom, this.camZ + sz + CAM_BACK * this.camZoom);
     }
 
-    // world -> screen (CSS pixels relative to the canvas)
-    toScreen(x, z) {
+    // world -> screen (CSS pixels in the page). h = height along a standing sprite (leans with it).
+    toScreen(x, z, h = 0) {
         const c = this.stage.app.graphicsDevice.canvas;
         const r = c.getBoundingClientRect();
-        const pxPerUnit = r.height / (this.stage.ortho * 2);
-        const cam = this.stage.camera.getPosition();
-        return { x: r.left + r.width / 2 + (x - cam.x) * pxPerUnit, y: r.top + r.height / 2 + (z - cam.z) * pxPerUnit, s: pxPerUnit };
+        const lean = (90 - PITCH) * Math.PI / 180; // eslint-disable-line no-mixed-operators
+        _v.set(x, h * Math.cos(lean), z - h * Math.sin(lean));
+        this.stage.camera.camera.worldToScreen(_v, _o);
+        const sx = r.width / (this.stage.app.graphicsDevice.clientRect.width || r.width), sy = r.height / (this.stage.app.graphicsDevice.clientRect.height || r.height);
+        return { x: r.left + _o.x * sx, y: r.top + _o.y * sy };
     }
 }
 

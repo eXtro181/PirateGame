@@ -274,7 +274,7 @@ export class UI {
         this.audio.sfx('pearls');
     }
     floatText(text, x, z, cls) {
-        const p = this.game.toScreen(x, z);
+        const p = this.game.toScreen(x, z, 1.9);
         const el = h('div', { class: `float ${cls}`, style: `left:${p.x}px;top:${p.y}px` }, text);
         this.hud.el.append(el);
         requestAnimationFrame(() => { el.style.transform = 'translate(-50%,-160%)'; el.style.opacity = 0; });
@@ -407,12 +407,57 @@ class HUD {
             h('div', {}, h('div', {}, 'Segel'), this.sailsEl),
             h('div', {}, h('div', {}, 'Kanonen L / R'), h('div', { class: 'reload' }, h('div', {}, this.reloadL), h('div', {}, this.reloadR))));
         this.ebars = new Map();
-        this.el = h('div', { id: 'hud', class: 'hidden' },
+        this.legendEl = h('div', { class: 'legend' });
+        try { this.legendOn = localStorage.getItem('sw-legend') !== 'off'; } catch { this.legendOn = true; }
+        this.el = h('div', { id: 'hud', class: 'hidden' }, this.legendEl,
             h('div', { class: 'bars' }, this.hp, this.st, this.hull, h('div', { class: 'flasks' }, this.flaskIco, this.flaskN, this.offEl)),
             this.ship,
             h('div', { class: 'pearls' }, h('div', { class: 'pearl-ico' }), this.pearlN), this.gainEl,
             this.promptEl, this.toastEl, this.hintEl, this.bannerEl, this.saveEl, this.lockEl);
         this.lagHp = 1;
+    }
+    // controls legend on the left edge (keyboard / gamepad; touch shows labelled buttons instead)
+    legend(g) {
+        if (g.input.pressed('legend')) {
+            this.legendOn = !this.legendOn;
+            try { localStorage.setItem('sw-legend', this.legendOn ? 'on' : 'off'); } catch { /* ignore */ }
+        }
+        const sea = g.mode === 'sea', pad = g.input.usingPad;
+        const show = !g.stage.device.touch && g.dying === undefined;
+        const key = `${show}:${this.legendOn}:${sea}:${pad}:${g.save.off}`;
+        if (key !== this.legendKey) {
+            this.legendKey = key;
+            this.legendEl.classList.toggle('hidden', !show);
+            const K = (k, p) => pad ? p : k;
+            const rows = !this.legendOn ? [[K('H', '—'), 'Steuerung einblenden']] : sea ? [
+                [K('W / S', 'Stick ↑↓'), 'Segel setzen / reffen'],
+                [K('A / D', 'Stick ←→'), 'Steuern'],
+                [K('J', 'R1'), 'Breitseite links'],
+                [K('K', 'B'), 'Breitseite rechts'],
+                [K('E', 'X'), 'An Land gehen / Rasten', 'interact'],
+                [K('F', '↑'), 'Shanty bestellen'],
+                [K('M', 'Select'), 'Karte'],
+                [K('Esc', 'Start'), 'Menü'],
+                [K('H', ''), 'Ausblenden']
+            ] : [
+                [K('WASD', 'Stick'), 'Laufen'],
+                [K('J', 'R1'), 'Angriff'],
+                [K('L', 'R2'), 'Schwerer Angriff'],
+                [K('Leertaste', 'A'), 'Ausweichrolle'],
+                [K('Q', 'L1'), 'Parieren'],
+                ...(g.save.off !== 'none' ? [[K('K', 'B'), 'Zweithand']] : []),
+                [K('R', '↓'), 'Rum trinken'],
+                [K('Tab', 'R3'), 'Gegner fixieren'],
+                [K('E', 'X'), 'Interagieren / An Bord', 'interact'],
+                [K('M', 'Select'), 'Karte'],
+                [K('Esc', 'Start'), 'Menü'],
+                [K('H', ''), 'Ausblenden']
+            ];
+            this.legendEl.classList.toggle('mini', !this.legendOn);
+            this.legendEl.replaceChildren(...rows.filter(r => r[0] !== '').map(([k, label, id]) => h('div', { class: 'row', 'data-id': id || '' }, h('kbd', {}, k), h('span', {}, label))));
+        }
+        const act = !!this.lastPrompt;
+        this.legendEl.querySelector('[data-id="interact"]')?.classList.toggle('on', act);
     }
     prompt(label) {
         if (label === this.lastPrompt) return;
@@ -430,6 +475,7 @@ class HUD {
         if (!g || !g.save || !g.player) return;
         const p = g.player, d = g.derived, s = g.save;
         const sea = g.mode === 'sea';
+        this.legend(g);
         if (this.touch) {
             const show = g.stage.device.touch && !this.ui.modalOpen() && g.dying === undefined;
             this.touch.setVisible(show);
@@ -459,7 +505,7 @@ class HUD {
         this.pearlN.textContent = String(s.pearls);
         // lock marker
         const lt = g.lockTarget;
-        if (lt) { const sp = g.toScreen(lt.x, lt.z - 0.7); this.lockEl.style.left = `${sp.x}px`; this.lockEl.style.top = `${sp.y}px`; this.lockEl.classList.remove('hidden'); }
+        if (lt) { const sp = g.toScreen(lt.x, lt.z, lt.sea ? 0.6 : 0.9); this.lockEl.style.left = `${sp.x}px`; this.lockEl.style.top = `${sp.y}px`; this.lockEl.classList.remove('hidden'); }
         else this.lockEl.classList.add('hidden');
         // enemy health bars
         for (const e of g.enemies) {
@@ -467,7 +513,7 @@ class HUD {
             const show = e.alive && e.showBarUntil > g.time && (e.hp > 0);
             if (!show) { if (b) b.el.classList.add('hidden'); continue; }
             if (!b) { b = { el: h('div', { class: 'ebar' }, h('i'), h('b')) }; this.el.append(b.el); this.ebars.set(e, b); }
-            const sp = g.toScreen(e.x, e.z - (e.sea ? 1.3 : 1.75));
+            const sp = (e.sea ? g.toScreen(e.x, e.z - 1.3, 0.3) : g.toScreen(e.x, e.z, 2.05));
             b.el.classList.remove('hidden');
             b.el.style.left = `${sp.x}px`; b.el.style.top = `${sp.y}px`;
             b.el.querySelector('i').style.transform = `scaleX(${Math.max(0, e.hp / e.maxHp)})`;

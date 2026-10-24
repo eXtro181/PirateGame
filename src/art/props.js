@@ -239,13 +239,13 @@ function chest() {
 
 // Prop catalogue: collision radius (tiles) and caster height (tiles, 0 = no shadow)
 export const PROP_INFO = {
-    palm: { r: 0.35, caster: 3.0, variants: 3 },
-    bush: { r: 0.45, caster: 0.8, variants: 3 },
-    boulder: { r: 0.6, caster: 1.0, variants: 2 },
-    boulderBig: { r: 0.9, caster: 1.4, variants: 2 },
-    pillar: { r: 0.4, caster: 1.8, variants: 2 },
-    crate: { r: 0.45, caster: 0.8, variants: 1 },
-    barrel: { r: 0.4, caster: 0.8, variants: 1 },
+    palm: { r: 0.25, caster: 3.0, variants: 3 },
+    bush: { r: 0.28, caster: 0.8, variants: 3 },
+    boulder: { r: 0.5, caster: 1.0, variants: 2 },
+    boulderBig: { r: 0.8, caster: 1.4, variants: 2 },
+    pillar: { r: 0.34, caster: 1.8, variants: 2 },
+    crate: { r: 0.38, caster: 0.8, variants: 1 },
+    barrel: { r: 0.32, caster: 0.8, variants: 1 },
     skulls: { r: 0, caster: 0, variants: 1 },
     grave: { r: 0.2, caster: 1.0, variants: 1 },
     torch: { r: 0.15, caster: 1.3, variants: 1 },
@@ -253,7 +253,7 @@ export const PROP_INFO = {
     tuft: { r: 0, caster: 0, variants: 3 },
     flowers: { r: 0, caster: 0, variants: 3 },
     post: { r: 0.2, caster: 0.6, variants: 1 },
-    chest: { r: 0.45, caster: 0.7, variants: 1 },
+    chest: { r: 0.38, caster: 0.7, variants: 1 },
     chestOpen: { r: 0, caster: 0, variants: 1 },
     saberFire: { r: 0.45, caster: 0, variants: 1 },
     wreck: { r: 0, caster: 2.0, variants: 1 }

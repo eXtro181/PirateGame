@@ -110,6 +110,14 @@ select.text { background: rgba(0, 0, 0, 0.6); border: 1px solid var(--line); col
 .banner p { font-family: var(--body); margin: 6px 0 0; font-style: italic; font-size: clamp(16px, 2vw, 22px); color: var(--bone-dim); }
 .banner.title h2 { color: var(--bone); letter-spacing: .4em; }
 .saveico { position: absolute; right: 24px; top: 18px; font-family: var(--serif); font-size: 12px; letter-spacing: .2em; color: var(--bone-dim); opacity: 0; transition: opacity .4s; }
+.legend { position: absolute; left: calc(18px + env(safe-area-inset-left, 0px)); top: 50%; transform: translateY(-42%); display: flex; flex-direction: column; gap: 3px; padding: 10px 12px; background: linear-gradient(90deg, rgba(4, 5, 8, 0.72), rgba(4, 5, 8, 0.35)); border-left: 2px solid rgba(217, 180, 90, 0.45); font-family: var(--body); font-size: 15px; color: var(--bone-dim); max-width: 250px; }
+.legend .row { display: flex; align-items: center; gap: 9px; line-height: 1.25; }
+.legend kbd { min-width: 30px; padding: 1px 6px; text-align: center; font-family: var(--pixel); font-size: 16px; color: var(--bone); background: rgba(255, 255, 255, 0.07); border: 1px solid rgba(255, 255, 255, 0.22); border-bottom-width: 2px; border-radius: 3px; }
+.legend .row.on { color: var(--gold); }
+.legend .row.on kbd { border-color: var(--gold); color: var(--gold); box-shadow: 0 0 8px rgba(217, 180, 90, 0.4); }
+.legend.mini { opacity: .55; padding: 6px 10px; }
+@media (max-width: 760px), (max-height: 400px) { .legend { display: none; } }
+@media (max-height: 560px) { .legend { font-size: 13px; gap: 1px; } .legend kbd { font-size: 14px; } }
 .lockmark { position: absolute; width: 14px; height: 14px; margin: -7px 0 0 -7px; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 10px #fff; opacity: .9; }
 .ebar { position: absolute; width: 46px; height: 4px; margin-left: -23px; background: rgba(0, 0, 0, .7); border: 1px solid rgba(0, 0, 0, .9); }
 .ebar i { display: block; height: 100%; background: #b3261e; transform-origin: left; }

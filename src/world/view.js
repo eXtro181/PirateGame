@@ -3,7 +3,7 @@ import {
     Entity, Color, StandardMaterial, Vec2, LIGHTFALLOFF_INVERSESQUARED, LIGHTFALLOFF_LINEAR,
     SHADOW_PCF3_32F, SHADOWUPDATE_REALTIME
 } from 'playcanvas';
-import { QuadBatch, meshInstance, makeTexture, spriteMaterial } from '../core/gfx.js';
+import { QuadBatch, meshInstance, makeTexture, spriteMaterial, LAYERS } from '../core/gfx.js';
 import { Pix, hex, shade, mix } from '../art/painter.js';
 import { T } from '../art/tiles.js';
 import { PROP_INFO } from '../art/props.js';
@@ -11,6 +11,9 @@ import { Sprite } from '../core/sprite.js';
 
 const CHUNK = 32;
 const PX = 1 / 16;
+const ROCK_H = 0.85; // cliffs are real blocks in the tilted view
+// props that lie on the ground; everything else stands up and leans towards the camera
+const FLAT_PROPS = new Set(['flowers']);
 
 function waterNormalCanvas() {
     const S = 256;
@@ -53,7 +56,7 @@ export class WorldView {
         const dev = app.graphicsDevice;
         const m = new StandardMaterial();
         m.diffuse = new Color(0.06, 0.17, 0.21);
-        m.normalMap = makeTexture(dev, waterNormalCanvas(), { srgb: false, repeat: true, name: 'water-n' });
+        m.normalMap = makeTexture(dev, waterNormalCanvas(), { srgb: false, repeat: true, name: 'water-n', linear: true });
         m.normalMapTiling = new Vec2(map.w / 4, map.h / 4);
         m.bumpiness = 0.45;
         m.specular = new Color(0.07, 0.09, 0.11);
@@ -92,7 +95,7 @@ export class WorldView {
         for (let cy = 0; cy < map.h; cy += CHUNK) {
             for (let cx = 0; cx < map.w; cx += CHUNK) {
                 const qb = new QuadBatch();
-                const cb = new QuadBatch();
+                const rb = new QuadBatch();
                 for (let y = cy; y < Math.min(map.h, cy + CHUNK); y++) {
                     for (let x = cx; x < Math.min(map.w, cx + CHUNK); x++) {
                         const t = map.get(x, y);
@@ -102,24 +105,28 @@ export class WorldView {
                         if (t === T.SAND) { const m = map.waterMask(x, y); if (m) key = `coast:${m}:${v}`; }
                         if (t !== T.SAND && t !== T.DOCK && map.waterMask(x, y)) { const m = map.waterMask(x, y); key = `coast:${m}:${v}`; }
                         const r = art.tiles.uv[key];
-                        qb.flat(x + 0.5, y + 1, 1, 1, 0, r, tw, th);
-                        // cliffs cast short shadows where rock meets open ground
                         if (t === T.ROCK) {
+                            // a block: lit top plus walls wherever the neighbour is lower
                             const rr = art.tiles.uv[`${T.ROCK}:${v}`];
-                            if (map.get(x, y + 1) !== T.ROCK) cb.upright(x + 0.5, y + 1, 1, 0.7, rr, tw, th, 0);
-                            if (map.get(x + 1, y) !== T.ROCK) cb.upright(x + 1, y + 0.5, 1, 0.7, rr, tw, th, 1);
-                            if (map.get(x - 1, y) !== T.ROCK) cb.upright(x, y + 0.5, 1, 0.7, rr, tw, th, 1);
-                            if (map.get(x, y - 1) !== T.ROCK) cb.upright(x + 0.5, y, 1, 0.7, rr, tw, th, 0);
+                            const H = ROCK_H, x0 = x, x1 = x + 1, z0 = y, z1 = y + 1;
+                            rb.quad([x0, H, z0, x1, H, z0, x1, H, z1, x0, H, z1], [0, 1, 0], r, tw, th);
+                            if (map.get(x, y + 1) !== T.ROCK) rb.quad([x0, H, z1, x1, H, z1, x1, 0, z1, x0, 0, z1], [0, 0, 1], rr, tw, th);
+                            if (map.get(x + 1, y) !== T.ROCK) rb.quad([x1, H, z1, x1, H, z0, x1, 0, z0, x1, 0, z1], [1, 0, 0], rr, tw, th);
+                            if (map.get(x - 1, y) !== T.ROCK) rb.quad([x0, H, z0, x0, H, z1, x0, 0, z1, x0, 0, z0], [-1, 0, 0], rr, tw, th);
+                            if (map.get(x, y - 1) !== T.ROCK) rb.quad([x1, H, z0, x0, H, z0, x0, 0, z0, x1, 0, z0], [0, 0, -1], rr, tw, th);
+                            continue;
                         }
+                        qb.flat(x + 0.5, y + 1, 1, 1, 0, r, tw, th);
                     }
                 }
-                if (!qb.count) continue;
-                const e = new Entity('chunk');
-                e.addComponent('render', { meshInstances: [meshInstance(qb.toMesh(dev), art.tiles.mat)], castShadows: false, receiveShadows: true });
-                this.root.addChild(e);
-                if (cb.count) {
-                    const ce = new Entity('cliff-casters');
-                    ce.addComponent('render', { meshInstances: [meshInstance(cb.toMesh(dev, false), art.tiles.casterMat, { castShadow: true })], castShadows: true, receiveShadows: false });
+                if (qb.count) {
+                    const e = new Entity('chunk');
+                    e.addComponent('render', { meshInstances: [meshInstance(qb.toMesh(dev), art.tiles.mat)], castShadows: false, receiveShadows: true });
+                    this.root.addChild(e);
+                }
+                if (rb.count) {
+                    const ce = new Entity('cliffs');
+                    ce.addComponent('render', { meshInstances: [meshInstance(rb.toMesh(dev), art.tiles.mat, { castShadow: true })], castShadows: true, receiveShadows: true });
                     this.root.addChild(ce);
                 }
             }
@@ -143,21 +150,22 @@ export class WorldView {
             const r = art.props.rects[`${p.type}:${p.v}`];
             const info = PROP_INFO[p.type];
             const w = r.w * PX, h = r.h * PX;
-            qb.flat(p.x, p.z, w, h, 0.01 + i * 0.00002, r, tw, th);
+            if (FLAT_PROPS.has(p.type)) qb.flat(p.x, p.z, w, h, 0.01 + i * 0.00002, r, tw, th);
+            else qb.lean(p.x, p.z, w, h, 0, r, tw, th);
             if (info.caster > 0) cb.caster(p.x, p.z - 0.15, w * 0.7, info.caster, r, tw, th);
         });
         // the wreck lies in the water: draw it like a prop
         const wf = map.fires.find(f => f.kind === 'sea');
         if (wf) {
             const r = art.props.rects['wreck:0'];
-            qb.flat(wf.x, wf.z + 1.4, r.w * PX, r.h * PX, 0.015, r, tw, th);
+            qb.lean(wf.x, wf.z + 1.4, r.w * PX, r.h * PX, -0.3, r, tw, th);
             cb.caster(wf.x, wf.z + 0.6, r.w * PX * 0.6, 1.6, r, tw, th);
         }
         const e = new Entity('props');
         e.addComponent('render', { meshInstances: [meshInstance(qb.toMesh(dev), art.props.mat, { receiveShadow: true })], castShadows: false, receiveShadows: true });
         this.root.addChild(e);
         const ce = new Entity('prop-casters');
-        ce.addComponent('render', { meshInstances: [meshInstance(cb.toMesh(dev, false), art.props.casterMat, { castShadow: true })], castShadows: true, receiveShadows: false });
+        ce.addComponent('render', { meshInstances: [meshInstance(cb.toMesh(dev, false), art.props.casterMat, { castShadow: true })], castShadows: true, receiveShadows: false, layers: [LAYERS.shadow] });
         this.root.addChild(ce);
     }
 
@@ -173,7 +181,8 @@ export class WorldView {
             shadowType: SHADOW_PCF3_32F,
             shadowBias: 0.2,
             normalOffsetBias: 0.05,
-            shadowUpdateMode: SHADOWUPDATE_REALTIME
+            shadowUpdateMode: SHADOWUPDATE_REALTIME,
+            layers: LAYERS.lit
         });
         e.setLocalPosition(x, y, z);
         (parent || this.root).addChild(e);
@@ -189,12 +198,12 @@ export class WorldView {
             if (f.kind === 'land') {
                 const fl = new Sprite(app, art.flameTeal, { y: 0.03, caster: false });
                 fl.setPos(f.x, f.z + 0.05);
-                fl.entity.setLocalScale(0.9, 1, 0.9);
+                fl.entity.setLocalScale(0.9, 0.9, 0.9);
                 this.fireLights[f.id] = { sprite: fl, light: this.addOmni(f.x, 1.1, f.z - 0.2, [0.3, 0.95, 0.9], 2.6, 10, { shadows: true, flicker: 0.25 }) };
             } else {
                 const fl = new Sprite(app, art.flameOrange, { y: 0.03, caster: false });
                 fl.setPos(f.x + 0.9, f.z + 0.3);
-                fl.entity.setLocalScale(1.6, 1, 1.6);
+                fl.entity.setLocalScale(1.6, 1.6, 1.6);
                 const fl2 = new Sprite(app, art.flameOrange, { y: 0.03, caster: false });
                 fl2.setPos(f.x + 2.2, f.z + 0.6);
                 this.fireLights[f.id] = { sprite: fl, sprite2: fl2, light: this.addOmni(f.x + 1, 1.4, f.z, [1.0, 0.55, 0.2], 5, 13, { shadows: true, flicker: 0.3 }) };

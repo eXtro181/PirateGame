@@ -108,7 +108,7 @@ export class WorldMap {
         let dx = 55, dy = 52;
         while (this.get(dx + 1, dy) !== T.WATER && dx < 100) dx++;
         for (let k = 1; k <= 6; k++) { this.set(dx + k, dy, T.DOCK); this.set(dx + k, dy + 1, T.DOCK); }
-        this.dock = { x: dx + 6.5, z: dy + 1, shipX: dx + 9.5, shipZ: dy + 1, heading: Math.PI / 2 };
+        this.dock = { x: dx + 6.5, z: dy + 1, shipX: dx + 10.2, shipZ: dy + 1, heading: Math.PI / 2 };
         this.props.push({ type: 'post', v: 0, x: dx + 6.6, z: dy + 0.4 }, { type: 'post', v: 0, x: dx + 6.6, z: dy + 2.3 });
 
         // dirt paths: fire1 -> ruins -> dock, ruins -> ridge pass
@@ -202,7 +202,8 @@ export class WorldMap {
     walkableTile(x, y) { const t = this.get(x, y); return t !== T.WATER && t !== T.ROCK; }
     // circle vs world (walker)
     blockedWalk(x, z, r = 0.3) {
-        for (const [ox, oz] of [[-r, -r], [r, -r], [-r, r], [r, r], [0, 0]]) {
+        const d = r * 0.72; // sample a circle, not a square: corners no longer snag
+        for (const [ox, oz] of [[-d, -d], [d, -d], [-d, d], [d, d], [r, 0], [-r, 0], [0, r], [0, -r], [0, 0]]) {
             if (!this.walkableTile(Math.floor(x + ox), Math.floor(z + oz))) return true;
         }
         for (const c of this.colliders) {
@@ -212,8 +213,55 @@ export class WorldMap {
         }
         return false;
     }
-    blockedSail(x, z, r = 0.8) {
-        for (const [ox, oz] of [[-r, -r], [r, -r], [-r, r], [r, r], [0, 0], [0, -r * 1.4], [0, r * 1.4]]) {
+    // move a walking circle by (dx, dz) and slide along whatever it touches.
+    // Returns the new position and whether the full move was blocked.
+    moveCircle(x, z, dx, dz, r) {
+        if (!dx && !dz) return { x, z, hit: false };
+        if (!this.blockedWalk(x + dx, z + dz, r)) return { x: x + dx, z: z + dz, hit: false };
+        // 1. slide along circle colliders: drop the part of the motion pointing into them
+        for (const c of this.colliders) {
+            if (c.seaOnly || c.box) continue;
+            const ox = x + dx - c.x, oz = z + dz - c.z, l = Math.hypot(ox, oz), min = c.r + r;
+            if (l >= min || l < 1e-5) continue;
+            const nx = ox / l, nz = oz / l, into = dx * nx + dz * nz;
+            if (into < 0) {
+                const sx = dx - nx * into, sz = dz - nz * into;
+                // keep the speed and push gently out of the overlap
+                const k = Math.hypot(dx, dz) / (Math.hypot(sx, sz) || 1);
+                const tx = x + sx * Math.min(k, 1.4) + nx * (min - l) * 0.5, tz = z + sz * Math.min(k, 1.4) + nz * (min - l) * 0.5;
+                if (!this.blockedWalk(tx, tz, r)) return { x: tx, z: tz, hit: true };
+            }
+        }
+        // 2. axis slides (walls, tile edges)
+        if (Math.abs(dx) > 1e-6 && !this.blockedWalk(x + dx, z, r)) return { x: x + dx, z, hit: true };
+        if (Math.abs(dz) > 1e-6 && !this.blockedWalk(x, z + dz, r)) return { x, z: z + dz, hit: true };
+        // 3. try deflected directions around corners
+        const sp = Math.hypot(dx, dz), a = Math.atan2(dz, dx);
+        for (const off of [0.6, -0.6, 1.1, -1.1]) {
+            const tx = x + Math.cos(a + off) * sp * 0.8, tz = z + Math.sin(a + off) * sp * 0.8;
+            if (!this.blockedWalk(tx, tz, r)) return { x: tx, z: tz, hit: true };
+        }
+        // 4. stuck inside something (e.g. after a knockback): small nudge out
+        if (this.blockedWalk(x, z, r)) {
+            for (let k = 0; k < 8; k++) {
+                const ang = k * Math.PI / 4, tx = x + Math.cos(ang) * 0.06, tz = z + Math.sin(ang) * 0.06;
+                if (!this.blockedWalk(tx, tz, r * 0.8)) return { x: tx, z: tz, hit: true };
+            }
+        }
+        return { x, z, hit: true };
+    }
+
+    // heading given: test the long ship hull (bow, stern, both sides) instead of a square
+    blockedSail(x, z, r = 0.8, heading = null) {
+        let pts;
+        if (heading !== null) {
+            const fx = Math.sin(heading), fz = -Math.cos(heading), sx = -fz, sz = fx, half = r * 2.05, side = r * 0.78;
+            pts = [[0, 0], [fx * half, fz * half], [-fx * half, -fz * half], [sx * side, sz * side], [-sx * side, -sz * side],
+                [fx * half * 0.8 + sx * side * 0.6, fz * half * 0.8 + sz * side * 0.6], [fx * half * 0.8 - sx * side * 0.6, fz * half * 0.8 - sz * side * 0.6], [-fx * half * 0.85 + sx * side, -fz * half * 0.85 + sz * side], [-fx * half * 0.85 - sx * side, -fz * half * 0.85 - sz * side],
+                [fx * half * 0.5 + sx * side * 0.9, fz * half * 0.5 + sz * side * 0.9], [fx * half * 0.5 - sx * side * 0.9, fz * half * 0.5 - sz * side * 0.9],
+                [-fx * half * 0.5 + sx * side * 0.9, -fz * half * 0.5 + sz * side * 0.9], [-fx * half * 0.5 - sx * side * 0.9, -fz * half * 0.5 - sz * side * 0.9]];
+        } else pts = [[-r, -r], [r, -r], [-r, r], [r, r], [0, 0], [0, -r * 1.4], [0, r * 1.4]];
+        for (const [ox, oz] of pts) {
             const t = this.get(Math.floor(x + ox), Math.floor(z + oz));
             if (t !== T.WATER) return true;
         }

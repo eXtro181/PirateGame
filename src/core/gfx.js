@@ -21,6 +21,13 @@ export function makeTexture(device, canvas, { srgb = true, repeat = false, name 
     return t;
 }
 
+// Camera tilt (A Link Between Worlds style): the camera looks down PITCH degrees from the horizon.
+// Standing sprites lean back by LEAN so they face the camera squarely.
+export const PITCH = 56;
+export const LEAN = (90 - PITCH) * Math.PI / 180;
+// layer ids filled in by the stage: 'shadow' holds shadow-only casters the camera never draws
+export const LAYERS = { shadow: -1 };
+
 // Build the three maps of a painted image.
 // DETAIL = texture pixels per painted pixel ("128-bit" mode: 4x the pixel density of the art)
 export const DETAIL = 4;
@@ -90,6 +97,28 @@ export class QuadBatch {
             this.pos.push(x, h, z - w / 2, x, h, z + w / 2, x, 0, z + w / 2, x, 0, z - w / 2);
             this.nrm.push(1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0);
         }
+        this.uv.push(u0, v0, u1, v0, u1, v1, u0, v1);
+        this.idx.push(b, b + 2, b + 1, b, b + 3, b + 2);
+    }
+    // standing sprite leaning back towards the camera, feet at (x, z), bottom at height y
+    lean(x, z, w, h, y, r, tw, th, flipX = false) {
+        const b = this.count;
+        const c = Math.cos(LEAN), sn = Math.sin(LEAN);
+        let u0 = r.x / tw, u1 = (r.x + r.w) / tw;
+        const v0 = r.y / th, v1 = (r.y + r.h) / th;
+        if (flipX) [u0, u1] = [u1, u0];
+        const yt = y + h * c, zt = z - h * sn;
+        this.pos.push(x - w / 2, yt, zt, x + w / 2, yt, zt, x + w / 2, y, z, x - w / 2, y, z);
+        for (let i = 0; i < 4; i++) this.nrm.push(0, sn, c);
+        this.uv.push(u0, v0, u1, v0, u1, v1, u0, v1);
+        this.idx.push(b, b + 2, b + 1, b, b + 3, b + 2);
+    }
+    // generic quad from four corners (clockwise seen from the front) with one normal
+    quad(p, n, r, tw, th) {
+        const b = this.count;
+        const u0 = r.x / tw, u1 = (r.x + r.w) / tw, v0 = r.y / th, v1 = (r.y + r.h) / th;
+        this.pos.push(...p);
+        for (let i = 0; i < 4; i++) this.nrm.push(n[0], n[1], n[2]);
         this.uv.push(u0, v0, u1, v0, u1, v1, u0, v1);
         this.idx.push(b, b + 2, b + 1, b, b + 3, b + 2);
     }

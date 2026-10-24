@@ -2,7 +2,7 @@
 const KEYS = {
     up: ['KeyW', 'ArrowUp'], down: ['KeyS', 'ArrowDown'], left: ['KeyA', 'ArrowLeft'], right: ['KeyD', 'ArrowRight'],
     attack: ['KeyJ'], heavy: ['KeyL'], item: ['KeyK'], roll: ['Space'], parry: ['KeyQ'], lock: ['Tab'],
-    drink: ['KeyR'], interact: ['KeyE'], shanty: ['KeyF'], menu: ['Escape'], map: ['KeyM']
+    drink: ['KeyR'], interact: ['KeyE'], shanty: ['KeyF'], menu: ['Escape'], map: ['KeyM'], legend: ['KeyH']
 };
 // standard gamepad mapping
 const PAD = { roll: 0, item: 1, interact: 2, attack: 5, heavy: 7, parry: 4, lock: 11, drink: 13, shanty: 12, menu: 9, map: 8 };
@@ -23,6 +23,7 @@ export class Input {
             if (['Tab', 'Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
             if (!this.down.has(e.code)) this.hits.add(e.shiftKey && e.code === 'KeyJ' ? 'ShiftJ' : e.code);
             this.down.add(e.code);
+            this.usingPad = false;
         });
         window.addEventListener('keyup', e => this.down.delete(e.code));
         window.addEventListener('blur', () => this.down.clear());
@@ -38,6 +39,7 @@ export class Input {
             if (p.buttons[14]?.pressed) this.padNow.left = true;
             if (p.buttons[15]?.pressed) this.padNow.right = true;
             if (Math.hypot(p.axes[0], p.axes[1]) > 0.25) this.stick = { x: p.axes[0], z: p.axes[1] };
+            if (Object.keys(this.padNow).length || this.stick.x || this.stick.z) this.usingPad = true;
             break;
         }
         if (this.touchStick.x || this.touchStick.z) this.stick = { ...this.touchStick };

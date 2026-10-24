@@ -1,14 +1,16 @@
-// App bootstrap, device detection, resolution (up to 4K), top-down orthographic camera,
-// moonlight and post-processing.
+// App bootstrap, device detection, resolution (up to 4K), tilted perspective camera
+// (A Link Between Worlds style), moonlight and post-processing.
 import {
     Application, Entity, Color, Keyboard, Mouse, CameraFrame,
-    FILLMODE_NONE, RESOLUTION_FIXED, PROJECTION_ORTHOGRAPHIC, TONEMAP_ACES2,
+    FILLMODE_NONE, RESOLUTION_FIXED, PROJECTION_PERSPECTIVE, TONEMAP_ACES2, Layer, LAYERID_WORLD,
     SHADOW_PCF3_32F, SHADOWUPDATE_REALTIME
 } from 'playcanvas';
+import { PITCH, LAYERS } from './gfx.js';
 
-// world framing: on 16:9 the view is 13.5 tiles tall (as in A Link to the Past);
-// in portrait the narrow side shows about 10.5 tiles
-const LANDSCAPE_HALF_H = 6.75;
+// world framing: the camera hangs CAM_DIST units from its target, looking down PITCH degrees.
+// On 16:9 it shows roughly 14 tiles of ground from top to bottom; in portrait about 10.5 tiles across.
+export const CAM_DIST = 21;
+const LANDSCAPE_FOV = 31;
 const PORTRAIT_W = 10.5;
 
 const store = {
@@ -46,14 +48,20 @@ export function createStage(canvas) {
 
     const camera = new Entity('camera');
     camera.addComponent('camera', {
-        projection: PROJECTION_ORTHOGRAPHIC,
-        orthoHeight: LANDSCAPE_HALF_H,
-        nearClip: 1,
-        farClip: 80,
+        projection: PROJECTION_PERSPECTIVE,
+        fov: LANDSCAPE_FOV,
+        nearClip: 2,
+        farClip: 90,
         clearColor: new Color(0.01, 0.02, 0.035)
     });
-    camera.setEulerAngles(-90, 0, 0);
-    camera.setPosition(0, 40, 0);
+    camera.setEulerAngles(-PITCH, 0, 0);
+    camera.setPosition(0, CAM_DIST, 0);
+
+    // shadow-only layer: crossed caster quads give sprites solid shadows but are never drawn
+    const shadowLayer = new Layer({ name: 'ShadowOnly' });
+    scene.layers.push(shadowLayer);
+    LAYERS.shadow = shadowLayer.id;
+    LAYERS.lit = [LAYERID_WORLD, shadowLayer.id];
     app.root.addChild(camera);
 
     // moonlight: cold, low, casting long shadows
@@ -69,7 +77,8 @@ export function createStage(canvas) {
         shadowBias: 0.25,
         normalOffsetBias: 0.1,
         shadowIntensity: 0.85,
-        shadowUpdateMode: SHADOWUPDATE_REALTIME
+        shadowUpdateMode: SHADOWUPDATE_REALTIME,
+        layers: LAYERS.lit
     });
     moon.setEulerAngles(-48, -35, 0);
     app.root.addChild(moon);
@@ -87,7 +96,7 @@ export function createStage(canvas) {
     frame.grading.brightness = 1.05;
     frame.grading.tint = new Color(0.97, 0.98, 1.04);
 
-    const stage = { app, camera, moon, frame, device, ortho: LANDSCAPE_HALF_H, portrait: false, quality, pixels: [0, 0] };
+    const stage = { app, camera, moon, frame, device, portrait: false, quality, pixels: [0, 0] };
 
     const fit = () => {
         const ww = window.innerWidth, wh = window.innerHeight;
@@ -115,8 +124,9 @@ export function createStage(canvas) {
         stage.pixels = [w, h];
         const aspect = cw / ch;
         stage.portrait = portrait;
-        stage.ortho = aspect >= 1 ? LANDSCAPE_HALF_H : PORTRAIT_W / (2 * aspect);
-        camera.camera.orthoHeight = stage.ortho;
+        stage.cssSize = [cw, ch];
+        if (aspect >= 1) { camera.camera.horizontalFov = false; camera.camera.fov = LANDSCAPE_FOV; }
+        else { camera.camera.horizontalFov = true; camera.camera.fov = 2 * Math.atan(PORTRAIT_W / 2 / CAM_DIST) * 180 / Math.PI; }
         frame.bloom.blurLevel = h > 1500 ? 12 : 8;
         frame.update();
         document.body.classList.toggle('portrait', portrait);

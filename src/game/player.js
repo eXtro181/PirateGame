@@ -28,7 +28,7 @@ export class Player {
         this.riposteUntil = 0;
         this.ammo = 0;
         this.invuln = 0; // brief post-hit invulnerability
-        this.radius = 0.3;
+        this.radius = 0.24;
         this.glow = game.view.addOmni(0, 1.1, 0, [1.0, 0.78, 0.5], 0.55, 3.6);
     }
     get weapon() { return WEAPONS[this.game.save.weapon]; }
@@ -185,9 +185,12 @@ export class Player {
     move(dt) {
         const g = this.game;
         if (!this.vx && !this.vz) return;
-        const nx = this.x + this.vx * dt, nz = this.z + this.vz * dt;
-        if (!g.map.blockedWalk(nx, this.z, this.radius)) this.x = nx; else if (this.state === 'roll') this.vx = 0;
-        if (!g.map.blockedWalk(this.x, nz, this.radius)) this.z = nz; else if (this.state === 'roll') this.vz = 0;
+        // sliding movement in small steps so fast rolls cannot tunnel or snag
+        const steps = Math.max(1, Math.ceil(Math.hypot(this.vx, this.vz) * dt / 0.12));
+        for (let i = 0; i < steps; i++) {
+            const r = g.map.moveCircle(this.x, this.z, this.vx * dt / steps, this.vz * dt / steps, this.radius);
+            this.x = r.x; this.z = r.z;
+        }
     }
 
     animate(dt) {

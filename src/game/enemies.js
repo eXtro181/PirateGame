@@ -26,8 +26,8 @@ class Enemy {
     toPlayer() { const p = this.game.player; const dx = p.x - this.x, dz = p.z - this.z, l = Math.hypot(dx, dz) || 1; return { x: dx / l, z: dz / l, l }; }
     moveBy(dx, dz) {
         const m = this.game.map;
-        if (!m.blockedWalk(this.x + dx, this.z, this.radius)) this.x += dx;
-        if (!m.blockedWalk(this.x, this.z + dz, this.radius)) this.z += dz;
+        const r = m.moveCircle(this.x, this.z, dx, dz, this.radius);
+        this.x = r.x; this.z = r.z;
     }
     face(x, z) { const l = Math.hypot(x, z); if (l > 0.01) { this.fx = x / l; this.fz = z / l; } }
     set(s) { this.state = s; this.t = 0; }
@@ -50,7 +50,7 @@ class Enemy {
 export class Crab extends Enemy {
     constructor(game, spawn) {
         super(game, spawn, game.art.crab, { y: 0.045, pivotY: 3 });
-        this.radius = 0.32;
+        this.radius = 0.27;
     }
     reset() { this.maxHp = 34; this.flinch = 0.8; super.reset(); this.sprite.set('idle'); }
     get pearls() { return 22; }
@@ -103,7 +103,7 @@ export class Crab extends Enemy {
 export class Skeleton extends Enemy {
     constructor(game, spawn) {
         super(game, spawn, game.art.skeleton, { y: 0.055, pivotY: 2 });
-        this.radius = 0.3;
+        this.radius = 0.25;
     }
     reset() { this.maxHp = 62; this.flinch = 0.35; this.destroyed = false; super.reset(); this.sprite.set('stand-down'); }
     get pearls() { return 55; }

@@ -1,6 +1,6 @@
 # Schwarzwasser
 
-Ein Soulslike-Piratenspiel in Pixel-Art im Browser – Vogelperspektive wie *A Link to the Past*, Kampf wie *Dark Souls*, gebaut mit der [PlayCanvas Engine](https://playcanvas.com/products/engine).
+Ein Soulslike-Piratenspiel in Pixel-Art im Browser – geneigte 3D-Ansicht von schräg oben wie *A Link Between Worlds*, Kampf wie *Dark Souls*, gebaut mit der [PlayCanvas Engine](https://playcanvas.com/products/engine).
 
 **Version 0.1 – erste spielbare Fassung:** die Smaragdküste bei Nacht.
 
@@ -12,7 +12,8 @@ Ein Soulslike-Piratenspiel in Pixel-Art im Browser – Vogelperspektive wie *A L
 - **Tod und Perlen**: Wer stirbt, verliert die getragenen Gezeitenperlen am Todesort. Zurückholen – oder beim nächsten Tod für immer verlieren.
 - **Säbelfeuer** (an Land) und **Wrackfeuer** (auf See): Rasten heilt, füllt die Flaschen, lässt Gegner wiederauferstehen, speichert automatisch. Stufenaufstieg und Reisen zwischen Feuern.
 - **Gegner**: Strandkrabben, Skelettpiraten (zerfallen und setzen sich wieder zusammen, wenn man den Schädel nicht zertrümmert) und das Seeungeheuer *Rostkiefer*.
-- **Segeln** mit der *Möwenschrei*: Wind, Segelstufen, Breitseiten links/rechts, Rammschäden, **Strudel** mit Sog und Drehung, An- und Ablegen an jeder Küste.
+- **Segeln** mit der *Möwenschrei* (3D-Schiff): Sie steigt an jeder Küste aus der Tiefe auf, sobald du ans Ufer trittst, und sinkt zurück, wenn du dich entfernst. Wind, Segelstufen, Breitseiten links/rechts, Rammschäden, **Strudel** mit Sog und Drehung.
+- **Steuerungsleiste** am linken Rand (Tastatur oder Gamepad, je nach Eingabe; **H** blendet sie aus).
 - **Licht**: Pixel-Art mit Normal- und Emission-Maps, Clustered Lighting mit Dutzenden Lichtern, Schatten von Mond und Feuern, Bloom, Vignette, Farbkorrektur. Flackernde Fackeln, Glühwürmchen, glühende Augen.
 - **Musik**: synthetisierte Shantys (WebAudio, ohne Audiodateien) – „Salz auf der Haut“ an Land, „Hol die Leine“ auf See mit summender Crew, „Atem holen“ am Feuer. **F** auf See lässt die Crew lauter singen (Liedblatt in der Inseltruhe oder Startgeschenk „Bootsmannspfeife“).
 - **Karte** (M) mit Erkundungsnebel, Pausenmenü (Esc) mit Steuerung, Ton, Grafikqualität und Export.
@@ -46,6 +47,7 @@ Das Spiel erkennt beim Start, ob es auf einem Handy/Tablet oder am Computer läu
 | Interagieren / Rasten / An Bord | E | X |
 | Shanty bestellen | F | Steuerkreuz oben |
 | Karte | M | Select |
+| Steuerungsleiste ein/aus | H | – |
 | Menü | Esc | Start |
 
 ## Auf GitHub Pages veröffentlichen
@@ -78,7 +80,7 @@ URL-Parameter: `?lowfx` startet ohne Schatten und Post-Processing (für schwache
 index.html, style.css   Seite und Oberfläche
 build.mjs               esbuild-Bundle nach dist/
 src/main.js             Einstieg
-src/core/               App, Kamera, Licht, Post-Processing, Sprites, Eingabe, Texturen
+src/core/               App, geneigte Kamera, Licht, Post-Processing, Sprites, Eingabe, Texturen
 src/art/                Pixel-Art-Generator: Kacheln, Objekte, Figuren, Effekte (inkl. Normal-/Emission-Maps)
 src/world/              Weltgenerierung (Smaragdküste) und Darstellung (Chunks, Wasser, Lichter)
 src/game/               Spieler, Gegner, Schiff, Effekte, Spielablauf, Daten (Herkünfte, Waffen)
@@ -96,6 +98,10 @@ Spielfigur, Skelettpiraten, Säbelfeuer und Flammen sind direkt in vierfacher Au
 ## Grafik und Aseprite
 
 Alle Grafiken werden in dieser Version zur Laufzeit im Code gemalt (`src/art/`), inklusive Normal- und Emission-Maps. Sie sind als Platzhalter gedacht und halten sich an das Raster aus dem Spielskript (16 × 16-Kacheln, Figuren 20 × 26). Der nächste Schritt ist, sie durch Aseprite-Exporte (PNG-Sprite-Sheets + JSON) zu ersetzen.
+
+## Gedächtnisdatei
+
+`CLAUDE.md` fasst Architektur, Befehle, Konventionen und Entscheidungen zusammen, damit Weiterentwicklung (auch mit Claude) schnell einsteigen kann.
 
 ## Nächste Schritte laut Spielskript
 
