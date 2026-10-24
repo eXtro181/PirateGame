@@ -28,7 +28,7 @@ export class Player {
         this.radius = 0.24;
         this.mp = 0;
         // the light around the player: only a circle of the world is lit (light radius)
-        this.glow = game.view.addOmni(0, 2.4, 0, [1.0, 0.86, 0.68], 4.2, 9, { shadows: true, res: 1024 });
+        this.glow = game.view.addOmni(0, 2.4, 0, [1.0, 0.86, 0.68], 7, 11, { shadows: true, res: 1024 });
     }
     get weapon() { return WEAPONS[this.game.save.weapon]; }
     get stats() { return this.game.derived; }

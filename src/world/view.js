@@ -113,6 +113,7 @@ export class WorldView {
         const add = (key, m) => { if (!models[key]) return; if (!groups.has(key)) groups.set(key, []); groups.get(key).push(m); };
         for (const p of map.props) {
             if (p.type === 'saberFire') continue; // built with its fire below
+            if (p.type === 'tuft') continue; // grass cards read as black crosses from above – left out
             const ry = ['wall', 'wallV', 'palisade', 'post', 'torch', 'grave'].includes(p.type) ? 0 : rng.range(0, 360);
             const s = ['palm', 'bush', 'boulder', 'boulderBig', 'tuft'].includes(p.type) ? rng.range(0.85, 1.2) : 1;
             add(`${p.type}:${p.v}`, trs(p.x, this.groundY(p.x, p.z), p.z, ry, s));
@@ -160,7 +161,7 @@ export class WorldView {
                 drift.push(trs(px, this.groundY(px, pz), pz, rng.range(0, 360), rng.range(0.8, 1.3)));
             }
         }
-        tufts.forEach((m, v) => m.length && this.instances(`tuft:${v}`, m, false));
+        void tufts;
         if (pebbles.length) this.instances('pebble', pebbles);
         if (drift.length) this.instances('drift', drift);
     }
@@ -228,7 +229,7 @@ export class WorldView {
                 this.render('saber', models['saberFire:0'].map(p => { const mi = new MeshInstance(p.mesh, p.mat); mi.castShadow = true; return mi; }), root);
                 const fx = new Entity('flames'); fx.setLocalPosition(0, 0.12, 0); root.addChild(fx);
                 particles.fire(fx, 'teal', 0.9);
-                this.fireLights[f.id] = { root, light: this.addOmni(f.x, gy + 1.3, f.z, [0.35, 1.0, 0.85], 5, 12, { shadows: true, flicker: 0.22, res: 1024 }) };
+                this.fireLights[f.id] = { root, light: this.addOmni(f.x, gy + 1.3, f.z, [0.35, 1.0, 0.85], 3.5, 11, { shadows: true, flicker: 0.22, res: 1024 }) };
             } else {
                 root.setPosition(f.x, 0, f.z);
                 const a = new Entity(); a.setLocalPosition(0.3, 0.9, -0.4); root.addChild(a); particles.fire(a, 'orange', 1.4);

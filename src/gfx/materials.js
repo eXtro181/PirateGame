@@ -32,9 +32,12 @@ export class Materials {
         this.device = device;
         const S = quality === 'low' ? 256 : 512;
         this.sets = {};
+        this.layerCanvases = {};
+        this.S = S;
         for (const k of ['sand', 'grass', 'dirt', 'stone', 'rock', 'wood', 'bark', 'brick', 'cloth', 'leather', 'skin', 'metal', 'bone']) {
             const big = ['sand', 'grass', 'dirt', 'stone', 'rock'].includes(k);
             const s = makeSurface(k, big ? S : S / 2);
+            if (big) this.layerCanvases[k] = s;
             this.sets[k] = {
                 albedo: texture(device, s.albedo, { name: k + '-a' }),
                 normal: texture(device, s.normal, { srgb: false, name: k + '-n' }),
@@ -140,25 +143,42 @@ export class Materials {
         const m = new StandardMaterial();
         m.diffuseVertexColor = true;
         m.normalMap = this.sets.sand.normal; // makes the shader build a TBN and uv0
-        m.glossMap = this.sets.sand.surface; m.glossMapChannel = 'r';
         m.useMetalness = true; m.metalness = 0; m.gloss = 1;
         m.useSkybox = false;
         m.shaderChunksVersion = '2.23';
+        // all five layers live in three texture arrays: a fragment shader may only use 16 textures,
+        // and lights/shadows need several of them (15 separate maps broke the terrain on real GPUs)
+        const layers = ['sand', 'grass', 'dirt', 'stone', 'rock'];
+        const S = this.S, dev = this.device;
+        const arr = (key, srgb) => {
+            const data = layers.map(k => { const c = this.layerCanvases[k][key]; return new Uint8Array(c.getContext('2d').getImageData(0, 0, S, S).data.buffer); });
+            return new Texture(dev, {
+                name: 'terrain-' + key, width: S, height: S, arrayLength: layers.length,
+                format: srgb ? PIXELFORMAT_SRGBA8 : PIXELFORMAT_RGBA8, mipmaps: true,
+                minFilter: FILTER_LINEAR_MIPMAP_LINEAR, magFilter: FILTER_LINEAR,
+                addressU: ADDRESS_REPEAT, addressV: ADDRESS_REPEAT, anisotropy: 8,
+                levels: [data]
+            });
+        };
+        const tA = arr('albedo', true), tN = arr('normal', false), tS = arr('surface', false);
         const common = `
 #ifndef TERRAIN_COMMON
 #define TERRAIN_COMMON
-uniform sampler2D tA0; uniform sampler2D tA1; uniform sampler2D tA2; uniform sampler2D tA3; uniform sampler2D tA4;
-uniform sampler2D tN0; uniform sampler2D tN1; uniform sampler2D tN2; uniform sampler2D tN3; uniform sampler2D tN4;
-uniform sampler2D tS0; uniform sampler2D tS1; uniform sampler2D tS2; uniform sampler2D tS3; uniform sampler2D tS4;
+uniform mediump sampler2DArray tA;
+uniform mediump sampler2DArray tN;
+uniform mediump sampler2DArray tS;
 uniform float tTile;
 vec4 tWeights;
 float tRock;
 vec2 tUv;
 vec2 tUvR;
+vec4 tSample(mediump sampler2DArray t, vec2 uv) {
+    return texture(t, vec3(uv, 0.0)) * tWeights.x + texture(t, vec3(uv, 1.0)) * tWeights.y + texture(t, vec3(uv, 2.0)) * tWeights.z + texture(t, vec3(uv, 3.0)) * tWeights.w;
+}
 void terrainPrep() {
     tUv = vPositionW.xz * tTile;
     vec4 w = clamp(vVertexColor, 0.0, 1.0);
-    float h0 = texture2D(tS0, tUv).g, h1 = texture2D(tS1, tUv).g, h2 = texture2D(tS2, tUv).g, h3 = texture2D(tS3, tUv).g;
+    float h0 = texture(tS, vec3(tUv, 0.0)).g, h1 = texture(tS, vec3(tUv, 1.0)).g, h2 = texture(tS, vec3(tUv, 2.0)).g, h3 = texture(tS, vec3(tUv, 3.0)).g;
     vec4 hw = w + vec4(h0, h1, h2, h3) * 0.6 * step(0.001, w);
     float mx = max(max(hw.x, hw.y), max(hw.z, hw.w));
     vec4 b = max(hw - (mx - 0.25), 0.0);
@@ -173,8 +193,7 @@ void terrainPrep() {
         const chunks = m.getShaderChunks(SHADERLANGUAGE_GLSL);
         chunks.set('normalMapPS', common + `
 void getNormal() {
-    vec3 n = texture2D(tN0, tUv).xyz * tWeights.x + texture2D(tN1, tUv).xyz * tWeights.y + texture2D(tN2, tUv).xyz * tWeights.z + texture2D(tN3, tUv).xyz * tWeights.w;
-    n = mix(n, texture2D(tN4, tUvR).xyz, tRock);
+    vec3 n = mix(tSample(tN, tUv).xyz, texture(tN, vec3(tUvR, 4.0)).xyz, tRock);
     n = normalize(n * 2.0 - 1.0);
     dNormalW = normalize(dTBN * n);
 }
@@ -182,24 +201,17 @@ void getNormal() {
         chunks.set('diffusePS', common + `
 void getAlbedo() {
     terrainPrep();
-    vec3 a = texture2D(tA0, tUv).rgb * tWeights.x + texture2D(tA1, tUv).rgb * tWeights.y + texture2D(tA2, tUv).rgb * tWeights.z + texture2D(tA3, tUv).rgb * tWeights.w;
-    a = mix(a, texture2D(tA4, tUvR).rgb, tRock);
-    dAlbedo = a;
+    dAlbedo = mix(tSample(tA, tUv).rgb, texture(tA, vec3(tUvR, 4.0)).rgb, tRock);
 }
 `);
         chunks.set('glossPS', common + `
 void getGlossiness() {
-    float g = texture2D(tS0, tUv).r * tWeights.x + texture2D(tS1, tUv).r * tWeights.y + texture2D(tS2, tUv).r * tWeights.z + texture2D(tS3, tUv).r * tWeights.w;
-    g = mix(g, texture2D(tS4, tUvR).r, tRock);
-    dGlossiness = g + 0.0000001;
+    dGlossiness = mix(tSample(tS, tUv).r, texture(tS, vec3(tUvR, 4.0)).r, tRock) + 0.0000001;
 }
 `);
-        const layers = ['sand', 'grass', 'dirt', 'stone', 'rock'];
-        layers.forEach((k, i) => {
-            m.setParameter(`tA${i}`, this.sets[k].albedo);
-            m.setParameter(`tN${i}`, this.sets[k].normal);
-            m.setParameter(`tS${i}`, this.sets[k].surface);
-        });
+        m.setParameter('tA', tA);
+        m.setParameter('tN', tN);
+        m.setParameter('tS', tS);
         m.setParameter('tTile', 0.32);
         m.update();
         return m;

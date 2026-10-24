@@ -50,7 +50,7 @@ export function createStage(canvas) {
 
     const scene = app.scene;
     // almost no ambient light: a faint, cold moon glow. Everything else comes from local lights.
-    scene.ambientLight = new Color(0.055, 0.07, 0.1);
+    scene.ambientLight = new Color(0.11, 0.13, 0.18);
     scene.exposure = Number(store.get('sw-gamma')) || 1;
     scene.lighting.shadowsEnabled = true;
     scene.lighting.shadowAtlasResolution = 4096;
@@ -71,7 +71,7 @@ export function createStage(canvas) {
     // the moon: a weak, cold directional light without shadows – it only gives shapes a rim
     const moon = new Entity('moon');
     moon.addComponent('light', {
-        type: 'directional', color: new Color(0.45, 0.58, 0.9), intensity: 0.4,
+        type: 'directional', color: new Color(0.45, 0.58, 0.9), intensity: 0.8,
         castShadows: false
     });
     moon.setEulerAngles(-50, 160, 0);
@@ -105,7 +105,7 @@ export function createStage(canvas) {
     const vf = frame.volumetricFog;
     vf.light = moon.light;
     vf.localOmniLights = true;
-    vf.localIntensity = 0.55;
+    vf.localIntensity = 0.25;
     vf.tint = new Color(0.55, 0.62, 0.6);
     vf.density = 0.05;
     vf.heightBase = 0.0;

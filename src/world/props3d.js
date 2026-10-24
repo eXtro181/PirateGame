@@ -58,7 +58,7 @@ export function buildModels(device, M) {
     // ---------------------------------------------------------------- bushes, grass, flowers
     for (let v = 0; v < 3; v++) make(`bush:${v}`, P => {
         const rng = new Rng(200 + v);
-        const lb = P.b('leaf', () => M.card(M.leafTex, '#8c9a80'));
+        const lb = P.b('leaf', () => M.card(M.leafTex, '#b4c4a4'));
         for (let i = 0; i < 9; i++) {
             const s = rng.range(0.7, 1.15);
             lb.at(rng.range(-0.25, 0.25), rng.range(0.05, 0.35), rng.range(-0.25, 0.25), rng.range(-30, 30), rng.range(0, 180), rng.range(-30, 30), s);
@@ -66,7 +66,7 @@ export function buildModels(device, M) {
         }
     });
     for (let v = 0; v < 3; v++) make(`tuft:${v}`, P => {
-        const gb = P.b('grass', () => M.card(M.grassTex, '#8e9a7e'));
+        const gb = P.b('grass', () => M.card(M.grassTex, '#c4d4a8'));
         for (let i = 0; i < 3; i++) {
             gb.at(0, 0, 0, 0, i * 60 + v * 20, 0, 0.75 + v * 0.1);
             gb.quad([-0.4, 0, 0], [0.4, 0, 0], [0.4, 0.55, 0], [-0.4, 0.55, 0]);
