@@ -1,5 +1,7 @@
 // Enemies: beach crabs, reassembling skeleton pirates and the sea monster "Rostkiefer".
-import { Humanoid, CrabFigure, SharkFigure } from './figure.js';
+import { CrabFigure, SharkFigure } from './figure.js';
+import { Actor, SKELETONS } from './actors.js';
+let skCount = 0;
 
 class Enemy {
     constructor(game, spawn, fig) {
@@ -104,7 +106,7 @@ export class Crab extends Enemy {
 
 export class Skeleton extends Enemy {
     constructor(game, spawn) {
-        super(game, spawn, new Humanoid(game.app, game.M, { skeleton: true }));
+        super(game, spawn, new Actor(game.app, game.lib, game.M, { skeleton: true, model: SKELETONS[skCount++ % SKELETONS.length] }));
         this.radius = 0.25;
     }
     get displayName() { return 'Skelettpirat'; }

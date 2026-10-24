@@ -101,7 +101,8 @@ src/audio/              Shanty-Synthesizer, Crew-Gesang, Ambiente, Soundeffekte
 - `src/gfx/`: prozedurale Texturen, Material-Bibliothek (inkl. Terrain-Shader mit vier Schichten und Fels an Steilhängen), Geometrie-Baukasten, Partikel, Noise.
 - `src/world/`: Terrain aus der Kachelkarte, 3D-Modelle aller Objekte, Welt-Aufbau mit Instancing und Decals, Lagerfeuer-Szene.
 - `src/game/figure.js`: Pirat, Skelett, Krabbe, Seeungeheuer und Truhe als 3D-Modelle mit prozeduraler Animation.
-- Alle Assets entstehen im Code (keine fremden Modelle oder Texturen).
+- Figuren: [KayKit Character Packs](https://kaylousberg.com) „Adventurers“ und „Skeletons“ von Kay Lousberg (CC0) mit echten Animationen, gekürzt mit `tools/strip_glb.py`. Gewandfarben werden zur Laufzeit umgefärbt.
+- Alles andere (Welt, Texturen, Effekte, Krabbe, Seeungeheuer, Schiff) entsteht im Code.
 
 ## Nächste Schritte laut Spielskript
 

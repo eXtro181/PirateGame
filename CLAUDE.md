@@ -18,6 +18,8 @@ Kurzreferenz, damit neue Sitzungen sofort weiterarbeiten können. Bei Änderunge
 - Spielstart ohne UI: `ui.camp.exit()`, `ui.showHud()`, `.screen` entfernen, `store.save` stubben, `game.start({name}, save)` (Save-Form siehe `newSave` in `src/game/data.js`).
 - Playwright-Aktionen nicht per `;` in JS-Ausdrücken mischen (Skript splittet daran) → JS aus Datei evaluieren.
 - Veröffentlichen: Dateien nach `/home/claude/pirategame` (Git-Klon) kopieren (tar, kein rsync), committen, `git push`; danach `gh run list -R eXtro181/PirateGame` prüfen.
+- Gecachte Meshes brauchen `mesh.incRefCount()`, sonst zerstört `entity.destroy()` sie für alle (verursachte v0.3-Absturz: Schattenpass „reading 'impl'“).
+- Echter GPU-Test: Über den eingebauten Browser des Nutzers (mcp__remote-devices__Claude_Browser__*) die Live-Seite mit `?debug` öffnen, Konsole lesen, FPS messen.
 - Vorsicht bei Python-String-Ersetzungen mit Slices: ein leerer `old`-String zerstört die Datei (einmal passiert).
 
 ## Architektur (src/)
@@ -35,7 +37,8 @@ Kurzreferenz, damit neue Sitzungen sofort weiterarbeiten können. Bei Änderunge
 - `world/view.js` Terrain-Mesh, Wasser + Gischtband, instanzierte Props/Streuobjekte, Decals (`addBlood`, `clearBlood` beim Rasten), Lichter (`addOmni`, Perlin-Flackern), Feuer, Strudel-Trichter.
 - `world/camp.js` Charakterauswahl-Szene bei (−300, −300): Lagerfeuer, Gegenlicht, Matte Painting, Nebelschichten, DOF; `setProfiles`, `select`, `setPreview`, `enter/exit`.
 - `game/figure.js` `Humanoid` (Pirat mit allen Editor-Optionen oder Skelett), `CrabFigure`, `SharkFigure`, `ChestFigure`; prozedurale Animation über Gelenkwinkel (`animate(dt,{state,t,speed,atk,combo})`), Zustände idle/walk/roll/attack/windup/strike/parry/cast/drink/hurt/dead/pile/rise/sit.
-- `game/looks.js` Editor-Optionen. `game/player.js` (Geist `mp`, Kettenblitz, Spielerlicht mit Schatten), `enemies.js` (Leichen bleiben liegen), `ship.js` + `shipmodel.js` (3D-Schiff, steigt aus der Tiefe), `fx.js` (Slash-Bögen, Lichtblitze, Kettenblitz-Ribbons, Kugeln), `game.js` (Ablauf, Kampf, `chainLightning`, Kamera, `toScreen(x,z,h)`).
+- `game/actors.js` **KayKit-Figuren** (CC0, `public/models/`, per `tools/strip_glb.py` auf nötige Clips gekürzt): `ModelLib` (lädt glb/gltf, Höhen-Skalierung, Gewand-Umfärbung per Paletten-Hue), `Actor` (anim-Komponente, Clip-Zuordnung zu Spielzuständen, Waffe an `handslot.r`). Spieler (5 Körper: Rogue, Rogue_Hooded, Barbarian, Knight, Mage; look.model/look.tone), Skelette (Warrior/Minion/Rogue). Krabbe/Hai/Truhe bleiben prozedural in `figure.js`.
+- `game/looks.js` Editor-Optionen (alt; aktiv sind nur model/tone). `game/player.js` (Geist `mp`, Kettenblitz, Spielerlicht mit Schatten), `enemies.js` (Leichen bleiben liegen), `ship.js` + `shipmodel.js` (3D-Schiff, steigt aus der Tiefe), `fx.js` (Slash-Bögen, Lichtblitze, Kettenblitz-Ribbons, Kugeln), `game.js` (Ablauf, Kampf, `chainLightning`, Kamera, `toScreen(x,z,h)`).
 - `ui/hud.js` HUD (Orbs, untere Leiste, Gürtel, Skill-Slots, Live-Porträt per zweiter Kamera, Minimap gedreht um 45°, Zielname oben, Legende). `ui/ui.js` Titel/Editor über der Camp-Szene, Menüs (Qualität, Gamma), Karte. `ui/touch.js` Touch inkl. „Blitz“.
 - `save/profiles.js` PBKDF2 + AES-GCM; Summary enthält look/weapon/off für die Camp-Figuren.
 

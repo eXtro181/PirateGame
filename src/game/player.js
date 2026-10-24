@@ -1,5 +1,5 @@
 // The player on foot: Soulslike movement and combat (stamina, roll i-frames, parry, flasks).
-import { Humanoid } from './figure.js';
+import { Actor, HEROES } from './actors.js';
 import { WEAPONS } from './data.js';
 
 const WALK = 3.9;
@@ -35,7 +35,8 @@ export class Player {
     get sprite() { return this.fig; }
     makeFigure(save) {
         this.fig?.destroy();
-        this.fig = new Humanoid(this.game.app, this.game.M, { look: save.look, weapon: save.weapon, off: save.off });
+        const look = save.look || {};
+        this.fig = new Actor(this.game.app, this.game.lib, this.game.M, { model: HEROES[look.model || 0] || HEROES[0], tone: look.tone || 0, weapon: save.weapon, off: save.off });
     }
     setSave(save) { this.makeFigure(save); }
     place(x, z) { this.x = x; this.z = z; this.vx = this.vz = 0; this.state = 'idle'; this.t = 0; this.fig.setPos(x, this.game.terrain.ground(x, z), z); }

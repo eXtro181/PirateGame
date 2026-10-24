@@ -13,8 +13,8 @@ import { Fx } from './fx.js';
 import { derived, ORIGINS, OFFHAND, levelCost } from './data.js';
 
 export class Game {
-    constructor({ stage, M, models, particles, map, terrain, view, input, audio, hud, ui, store }) {
-        Object.assign(this, { stage, M, models, particles, map, terrain, view, input, audio, hud, ui, store });
+    constructor({ stage, M, lib, models, particles, map, terrain, view, input, audio, hud, ui, store }) {
+        Object.assign(this, { stage, M, lib, models, particles, map, terrain, view, input, audio, hud, ui, store });
         this.app = stage.app;
         this.time = 0;
         this.mode = 'land';

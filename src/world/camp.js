@@ -3,7 +3,7 @@
 // painting, layered fog, depth of field, flying sparks and a slowly "breathing" camera.
 import { Entity, Color, Vec2, StandardMaterial, MeshInstance, BLEND_NORMAL, CULLFACE_NONE, Texture, PIXELFORMAT_SRGBA8, FILTER_LINEAR, ADDRESS_CLAMP_TO_EDGE } from 'playcanvas';
 import { MeshBuilder, instanced, trs } from '../gfx/mesh.js';
-import { Humanoid } from '../game/figure.js';
+import { Actor, HEROES } from '../game/actors.js';
 import { NOISE } from '../gfx/noise.js';
 import { Rng } from './defs.js';
 
@@ -40,8 +40,8 @@ function mattePainting() {
 }
 
 export class Camp {
-    constructor(app, stage, M, models, particles) {
-        Object.assign(this, { app, stage, M, models, particles });
+    constructor(app, stage, M, models, particles, lib) {
+        Object.assign(this, { app, stage, M, models, particles, lib });
         this.root = new Entity('camp');
         this.root.setPosition(CAMP.x, 0, CAMP.z);
         app.root.addChild(this.root);
@@ -148,6 +148,7 @@ export class Camp {
         this.ambient.setLocalPosition(0, 2, -4);
     }
 
+    actor(p) { return new Actor(this.app, this.lib, this.M, { model: HEROES[p.look?.model || 0] || HEROES[0], tone: p.look?.tone || 0, weapon: p.weapon, off: p.off }); }
     // seats around the fire (local coordinates), facing the fire
     seat(i, n) {
         const a = -Math.PI * 0.5 + (i - (n - 1) / 2) * 0.66; // far side of the fire, facing camera and flames
@@ -159,7 +160,7 @@ export class Camp {
         this.clearFigures();
         const n = Math.min(list.length, 5);
         list.slice(0, n).forEach((p, i) => {
-            const fig = new Humanoid(this.app, this.M, { look: p.look, weapon: p.weapon, off: p.off });
+            const fig = this.actor(p);
             const s = this.seat(i, n);
             this.figures.push({ fig, home: s, pos: { ...s }, state: 'sit', t: Math.random() * 3 });
         });
@@ -169,7 +170,7 @@ export class Camp {
     // creator: one figure standing next to the fire, updated live
     setPreview(spec) {
         this.clearFigures();
-        const fig = new Humanoid(this.app, this.M, spec);
+        const fig = this.actor(spec);
         this.figures.push({ fig, home: { x: 1.7, z: 0.5 }, pos: { x: 1.7, z: 0.5 }, state: 'idle', t: 0 });
         this.selected = 0;
         this.mode = 'create';

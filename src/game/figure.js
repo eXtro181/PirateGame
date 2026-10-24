@@ -41,7 +41,7 @@ class FigureBase {
     // attach geometry (built once per cache key) to a joint
     part(j, key, mat, build, { shadow = true } = {}) {
         let mesh = meshCache.get(key);
-        if (!mesh) { const b = new MeshBuilder(); build(b); mesh = b.toMesh(this.app.graphicsDevice); meshCache.set(key, mesh); }
+        if (!mesh) { const b = new MeshBuilder(); build(b); mesh = b.toMesh(this.app.graphicsDevice); mesh.incRefCount(); meshCache.set(key, mesh); } // cached meshes must survive destroyed figures
         const mi = new MeshInstance(mesh, mat);
         mi.castShadow = shadow; mi.receiveShadow = true;
         const e = new Entity(key);

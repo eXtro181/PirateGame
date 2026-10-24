@@ -1,6 +1,7 @@
 // DOM user interface: title & profiles (over the 3D camp scene), character creator, menus,
 // death screen, map. The in-game HUD lives in hud.js.
-import { DEFAULT_LOOK, SKIN, HAIR_COLORS, CLOTH, SCARF, HAIR_STYLES, BEARDS, HATS, BODIES } from '../game/looks.js';
+import { DEFAULT_LOOK, CLOTH } from '../game/looks.js';
+import { HERO_NAMES, CLOTH_TONES } from '../game/actors.js';
 import { ORIGINS, GIFTS, STAT_NAMES, WEAPONS, OFFHAND, levelCost, newSave } from '../game/data.js';
 import { T } from '../world/defs.js';
 import { QUALITY, QUALITY_ORDER } from '../core/stage.js';
@@ -106,7 +107,7 @@ export class UI {
     // --------------------------------------------------------------- character creator
     creator() {
         this.screen?.remove();
-        const look = { ...DEFAULT_LOOK };
+        const look = { ...DEFAULT_LOOK, model: 0, tone: 0 };
         let origin = 'matrose', gift = 'rum';
         const err = h('div', { class: 'error' });
         const name = h('input', { class: 'text', maxlength: 16, placeholder: 'Finn Rabenfeder', value: 'Finn Rabenfeder' });
@@ -116,17 +117,8 @@ export class UI {
         const giftDesc = h('div', { class: 'note' });
 
         const optDefs = [
-            ['Statur', 'body', BODIES.length, i => BODIES[i]],
-            ['Hautton', 'skin', SKIN.length, i => swatch(SKIN[i], `Ton ${i + 1}`)],
-            ['Frisur', 'hair', HAIR_STYLES.length, i => HAIR_STYLES[i]],
-            ['Haarfarbe', 'hairColor', HAIR_COLORS.length, i => swatch(HAIR_COLORS[i], `Farbe ${i + 1}`)],
-            ['Bart', 'beard', BEARDS.length, i => BEARDS[i]],
-            ['Kopf', 'hat', HATS.length, i => HATS[i]],
-            ['Mantel', 'coat', CLOTH.length, i => swatch(CLOTH[i], `Farbe ${i + 1}`)],
-            ['Akzent', 'accent', CLOTH.length, i => swatch(CLOTH[i], `Farbe ${i + 1}`)],
-            ['Halstuch', 'scarf', SCARF.length, i => swatch(SCARF[i], `Farbe ${i + 1}`)],
-            ['Augenklappe', 'patch', 2, i => (i ? 'Ja' : 'Nein')],
-            ['Narbe', 'scar', 2, i => (i ? 'Ja' : 'Nein')]
+            ['Figur', 'model', HERO_NAMES.length, i => HERO_NAMES[i]],
+            ['Gewandfarbe', 'tone', CLOTH_TONES.length, i => CLOTH_TONES[i].name]
         ];
         function swatch(c, label) { const s = h('span', {}, h('i', { class: 'swatch', style: `background:${c}` }), label); return s; }
         const repaint = () => { const o = ORIGINS.find(x => x.id === origin); this.camp.setPreview({ look: { ...look }, weapon: o.weapon, off: o.off }); };

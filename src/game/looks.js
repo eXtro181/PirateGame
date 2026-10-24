@@ -8,7 +8,7 @@ export const BEARDS = ['Keiner', 'Stoppeln', 'Vollbart', 'Kinnbart'];
 export const HATS = ['Keine', 'Kopftuch', 'Dreispitz', 'Kapitänsmütze'];
 export const BODIES = ['Schmal', 'Breit'];
 
-export const DEFAULT_LOOK = { body: 0, skin: 1, hair: 0, hairColor: 1, beard: 1, hat: 1, coat: 0, accent: 5, scarf: 0, patch: false, scar: false };
+export const DEFAULT_LOOK = { model: 0, tone: 0, body: 0, skin: 1, hair: 0, hairColor: 1, beard: 1, hat: 1, coat: 0, accent: 5, scarf: 0, patch: false, scar: false };
 
 export function resolveLook(look = {}) {
     const l = { ...DEFAULT_LOOK, ...look };
