@@ -48,7 +48,7 @@ input.text:focus { outline: none; border-color: var(--gold); }
 .profiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
 .profile { display: flex; gap: 12px; align-items: center; padding: 12px; border: 1px solid rgba(255, 255, 255, 0.08); background: rgba(10, 12, 14, 0.75); cursor: pointer; text-align: left; color: var(--bone); font-family: var(--body); }
 .profile:hover, .profile.active { border-color: var(--gold); }
-.profile canvas { width: 40px; height: 52px; image-rendering: pixelated; flex: none; }
+.profile canvas { width: 40px; height: 52px; flex: none; }
 .profile .pname { font-family: var(--serif); font-size: 17px; letter-spacing: .06em; }
 .profile .pmeta { font-size: 14px; color: var(--bone-dim); }
 .login-box { margin-top: 16px; padding: 16px; border: 1px solid var(--line); background: var(--panel); }

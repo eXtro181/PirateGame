@@ -25,14 +25,18 @@ export function makeTexture(device, canvas, { srgb = true, repeat = false, name 
 // DETAIL = texture pixels per painted pixel ("128-bit" mode: 4x the pixel density of the art)
 export const DETAIL = 4;
 export function pixTextures(device, pix, name, normalStrength = 2.2, cell = 0) {
-    const hi = DETAIL > 1 ? pix.upscale(DETAIL, cell) : pix;
+    // art painted natively at high resolution (pix.native = pixels per logical pixel) is used as is
+    const native = pix.native || 1;
+    const hi = native > 1 ? pix : (DETAIL > 1 ? pix.upscale(DETAIL, cell) : pix);
+    if (native > 1) hi._detail(0);
+    const k = native > 1 ? native : DETAIL;
     return {
         diffuse: makeTexture(device, hi.toCanvas(), { name: name + '-d' }),
-        normal: makeTexture(device, hi.toCanvas(hi.normalData(normalStrength * DETAIL * 0.7, cell * DETAIL)), { srgb: false, name: name + '-n' }),
+        normal: makeTexture(device, hi.toCanvas(hi.normalData(normalStrength * k * 0.7, cell * k)), { srgb: false, name: name + '-n' }),
         emissive: makeTexture(device, hi.toCanvas(hi.emi), { name: name + '-e' }),
-        // rects stay in painted-pixel units; UVs are normalised, so the logical size is kept
-        w: pix.w,
-        h: pix.h
+        // rects stay in logical-pixel units; UVs are normalised, so the logical size is kept
+        w: pix.w / native,
+        h: pix.h / native
     };
 }
 

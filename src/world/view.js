@@ -135,6 +135,11 @@ export class WorldView {
         // sort by z so overlapping props layer correctly (later = on top, tiny y offset)
         const list = [...map.props].sort((a, b) => a.z - b.z);
         list.forEach((p, i) => {
+            if (p.type === 'saberFire') { // painted at 4x as its own sprite
+                const s = new Sprite(app, art.saberFire, { y: 0.034, caster: false });
+                s.setPos(p.x, p.z);
+                return;
+            }
             const r = art.props.rects[`${p.type}:${p.v}`];
             const info = PROP_INFO[p.type];
             const w = r.w * PX, h = r.h * PX;

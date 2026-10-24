@@ -91,6 +91,8 @@ src/audio/              Shanty-Synthesizer, Crew-Gesang, Ambiente, Soundeffekte
 
 Jede Grafik wird beim Start mit einem Pixel-Art-Skalierer (Scale4x) auf die vierfache Auflösung gebracht (`DETAIL = 4` in `src/core/gfx.js`). Danach werden die Höhen geglättet und eine feine Materialkörnung ergänzt, und die Normal Maps werden in dieser hohen Auflösung berechnet. So zeigen Fackel- und Mondlicht weiche Wölbungen statt harter Pixelstufen, und bei 4K-Rendering bleibt jedes Detail scharf.
 
+Spielfigur, Skelettpiraten, Säbelfeuer und Flammen sind direkt in vierfacher Auflösung gemalt (`src/art/hires.js`): Figuren mit 80 × 104 Pixeln pro Bild, mit Verläufen, Gesichtern, Kleidungsdetails und leuchtenden Augen. Alle Optionen des Charaktereditors werden in dieser Qualität gezeichnet.
+
 ## Grafik und Aseprite
 
 Alle Grafiken werden in dieser Version zur Laufzeit im Code gemalt (`src/art/`), inklusive Normal- und Emission-Maps. Sie sind als Platzhalter gedacht und halten sich an das Raster aus dem Spielskript (16 × 16-Kacheln, Figuren 20 × 26). Der nächste Schritt ist, sie durch Aseprite-Exporte (PNG-Sprite-Sheets + JSON) zu ersetzen.

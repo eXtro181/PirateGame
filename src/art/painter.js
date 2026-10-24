@@ -123,24 +123,23 @@ export class Pix {
         }
     }
     // Auto-height: a soft dome from the distance to the transparent edge, plus luminance detail.
-    autoHeight(dome = 1, detail = 0.35) {
+    autoHeight(dome = 1, detail = 0.35, R = 6) {
+        // chamfer distance transform to the nearest transparent pixel (fast, any radius)
         const { w, h } = this;
+        const INF = 1e6;
         const dist = new Float32Array(w * h);
-        const R = 6;
-        for (let y = 0; y < h; y++) {
-            for (let x = 0; x < w; x++) {
-                if (!this.alpha(x, y)) { dist[y * w + x] = 0; continue; }
-                let best = R;
-                for (let j = -R; j <= R; j++) {
-                    for (let i = -R; i <= R; i++) {
-                        if (!this.alpha(x + i, y + j)) {
-                            const d = Math.hypot(i, j);
-                            if (d < best) best = d;
-                        }
-                    }
-                }
-                dist[y * w + x] = best;
-            }
+        for (let k = 0; k < w * h; k++) dist[k] = this.col[k * 4 + 3] ? INF : 0;
+        const a = 1, b = Math.SQRT2;
+        const at = (x, y) => (x < 0 || y < 0 || x >= w || y >= h) ? 0 : dist[y * w + x];
+        for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+            const k = y * w + x;
+            if (!dist[k]) continue;
+            dist[k] = Math.min(dist[k], at(x - 1, y) + a, at(x, y - 1) + a, at(x - 1, y - 1) + b, at(x + 1, y - 1) + b);
+        }
+        for (let y = h - 1; y >= 0; y--) for (let x = w - 1; x >= 0; x--) {
+            const k = y * w + x;
+            if (!dist[k]) continue;
+            dist[k] = Math.min(dist[k], at(x + 1, y) + a, at(x, y + 1) + a, at(x + 1, y + 1) + b, at(x - 1, y + 1) + b);
         }
         for (let k = 0; k < w * h; k++) {
             if (!this.col[k * 4 + 3]) continue;

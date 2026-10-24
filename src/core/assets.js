@@ -2,8 +2,9 @@
 import { pixTextures, spriteMaterial } from './gfx.js';
 import { buildTileAtlas } from '../art/tiles.js';
 import { buildPropAtlas } from '../art/props.js';
-import { flameSheet, crabSheet, shipSheet, sharkSheet, fxSheet, whirlSheet } from '../art/sheets.js';
-import { paintCharacterSheet, SKELETON_LOOK } from '../art/character.js';
+import { crabSheet, shipSheet, sharkSheet, fxSheet, whirlSheet } from '../art/sheets.js';
+import { SKELETON_LOOK } from '../art/character.js';
+import { paintCharacterSheetHi, saberFireHi, flameSheetHi } from '../art/hires.js';
 
 export function makeSheet(app, painted, name, { emissive = 0, caster = true, normal = 2.2, gloss = 0.15 } = {}) {
     const tex = pixTextures(app.graphicsDevice, painted.pix, name, normal);
@@ -24,11 +25,12 @@ export function buildArt(app) {
     return {
         tiles: { tex: tilesTex, uv: tiles.uv, mat: spriteMaterial(tilesTex, { emissive: 1.2 }), casterMat: spriteMaterial(tilesTex, { shadowCaster: true }) },
         props: { tex: propsTex, rects: props.rects, mat: spriteMaterial(propsTex, { emissive: 2.5 }), casterMat: spriteMaterial(propsTex, { shadowCaster: true }) },
-        flameTeal: makeSheet(app, flameSheet('teal', 14, 22), 'flame-teal', { emissive: 3.2, caster: false }),
-        flameOrange: makeSheet(app, flameSheet('orange', 18, 26), 'flame-orange', { emissive: 3.2, caster: false }),
-        flameSmall: makeSheet(app, flameSheet('orange', 8, 12), 'flame-small', { emissive: 3, caster: false }),
+        flameTeal: makeSheet(app, flameSheetHi('teal', 14, 22), 'flame-teal', { emissive: 3.2, caster: false }),
+        flameOrange: makeSheet(app, flameSheetHi('orange', 18, 26), 'flame-orange', { emissive: 3.2, caster: false }),
+        flameSmall: makeSheet(app, flameSheetHi('orange', 8, 12), 'flame-small', { emissive: 3, caster: false }),
         crab: makeSheet(app, crabSheet(), 'crab', { emissive: 4 }),
-        skeleton: makeSheet(app, paintCharacterSheet(SKELETON_LOOK), 'skeleton', { emissive: 5 }),
+        skeleton: makeSheet(app, paintCharacterSheetHi(SKELETON_LOOK), 'skeleton', { emissive: 5 }),
+        saberFire: makeSheet(app, { pix: saberFireHi(), frames: { idle: [{ x: 0, y: 0, w: 18, h: 30 }] } }, 'saber-fire', { emissive: 4, caster: false }),
         ship: makeSheet(app, shipSheet(), 'ship', { emissive: 3 }),
         shark: makeSheet(app, sharkSheet(), 'shark', { emissive: 3 }),
         fx: makeSheet(app, fxSheet(), 'fx', { emissive: 4, caster: false }),
@@ -37,5 +39,5 @@ export function buildArt(app) {
 }
 
 export function buildPlayerSheet(app, look) {
-    return makeSheet(app, paintCharacterSheet(look), 'player', { emissive: 3 });
+    return makeSheet(app, paintCharacterSheetHi(look), 'player', { emissive: 3 });
 }

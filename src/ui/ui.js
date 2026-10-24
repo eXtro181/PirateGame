@@ -1,7 +1,6 @@
 // DOM user interface: title & profiles, character creator, HUD, menus, death screen, map.
-import { paintCharacterSheet, DEFAULT_LOOK, SKIN, HAIR_COLORS, CLOTH, SCARF, HAIR_STYLES, BEARDS, HATS, BODIES, FW, FH } from '../art/character.js';
-import { saberFire } from '../art/props.js';
-import { flameSheet } from '../art/sheets.js';
+import { DEFAULT_LOOK, SKIN, HAIR_COLORS, CLOTH, SCARF, HAIR_STYLES, BEARDS, HATS, BODIES, FW, FH } from '../art/character.js';
+import { paintCharacterSheetHi, saberFireHi, flameSheetHi } from '../art/hires.js';
 import { ORIGINS, GIFTS, STAT_NAMES, WEAPONS, OFFHAND, levelCost, newSave } from '../game/data.js';
 import { T } from '../art/tiles.js';
 import { TouchControls } from './touch.js';
@@ -22,11 +21,11 @@ const fmtTime = s => { s = Math.round(s); const hh = Math.floor(s / 3600), mm = 
 
 function portrait(look) {
     const c = document.createElement('canvas');
-    c.width = FW; c.height = FH;
+    c.width = FW * 4; c.height = FH * 4;
     try {
-        const { pix, frames } = paintCharacterSheet(look);
+        const { canvas, frames } = paintCharacterSheetHi(look);
         const r = frames['stand-down'][0];
-        c.getContext('2d').drawImage(pix.toCanvas(), r.x, r.y, r.w, r.h, 0, 0, r.w, r.h);
+        c.getContext('2d').drawImage(canvas, r.x * 4, r.y * 4, r.w * 4, r.h * 4, 0, 0, r.w * 4, r.h * 4);
     } catch (e) { console.warn(e); }
     return c;
 }
@@ -141,7 +140,7 @@ export class UI {
         ];
         function swatch(c, label) { const s = h('span', {}, h('i', { class: 'swatch', style: `background:${c}` }), label); return s; }
         let sheet = null;
-        const repaint = () => { sheet = paintCharacterSheet(look); sheet.canvas = sheet.pix.upscale(4).toCanvas(); };
+        const repaint = () => { sheet = paintCharacterSheetHi(look); sheet.canvas = sheet.pix.toCanvas(); };
         const opts = h('div', { class: 'opts' }, optDefs.map(([label, key, n, fmt]) => {
             const val = h('span', { class: 'val' });
             const show = () => { val.replaceChildren(); const v = typeof look[key] === 'boolean' ? (look[key] ? 1 : 0) : look[key]; const f = fmt(v); val.append(f.nodeType ? f : document.createTextNode(f)); };
@@ -171,9 +170,9 @@ export class UI {
 
         // preview: the figure next to a burning saber, lit by its flicker
         const ctx = canvas.getContext('2d');
-        const fireP = saberFire(); const fire = fireP.upscale(4).toCanvas();
-        const flames = flameSheet('teal', 14, 22);
-        const flameCanvas = flames.pix.upscale(4).toCanvas();
+        const fireP = saberFireHi(); const fire = fireP.toCanvas();
+        const flames = flameSheetHi('teal', 14, 22);
+        const flameCanvas = flames.pix.toCanvas();
         let t0 = performance.now();
         const draw = () => {
             if (!canvas.isConnected) return;
@@ -182,9 +181,10 @@ export class UI {
             ctx.imageSmoothingEnabled = false;
             ctx.fillStyle = '#0e1210'; ctx.fillRect(0, 0, 96, 100);
             for (let i = 0; i < 90; i++) { const x = (i * 37) % 96, y = (i * 53) % 100; ctx.fillStyle = i % 3 ? '#16201a' : '#1c2a20'; ctx.fillRect(x, y, 1, 1); }
-            ctx.drawImage(fire, 6, 50, fireP.w, fireP.h);
+
             const fr = flames.frames.burn[Math.floor(t * 10) % flames.frames.burn.length];
             ctx.drawImage(flameCanvas, fr.x * 4, fr.y * 4, fr.w * 4, fr.h * 4, 8, 36, fr.w, fr.h);
+            ctx.drawImage(fire, 6, 50, fireP.w / 4, fireP.h / 4);
             const walk = sheet.frames['walk-down'], stand = sheet.frames['stand-down'];
             const phase = Math.floor(t / 2.5) % 4;
             const anims = [stand, walk, sheet.frames['stand-side'], sheet.frames['stand-up']];
