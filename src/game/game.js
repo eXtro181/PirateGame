@@ -46,7 +46,7 @@ export class GameScene {
         this.ui.buildMap(this.world);
         if (!save.litFires.includes(save.lastFire)) save.litFires.push(save.lastFire);
         this.lightFires();
-        if (save.playTime < 1) { this.zoneKey = 'kueste'; setTimeout(() => this.ui.banner('Strand der Ertränkten', 'Die See hat dich zurückgegeben.', 'big', 4), 600); }
+        if (save.playTime < 1) { const zk = this.world.fires.find(f => f.id === save.lastFire)?.zone || 'kueste'; this.zoneKey = zk; setTimeout(() => this.ui.banner(ZONES[zk].name, 'Die See hat dich zurückgegeben.', 'big', 4), 600); }
         if (save.stain) this.stain = { ...save.stain, t: 0 };
     }
     // ---------------------------------------------------------------- spawning

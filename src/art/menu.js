@@ -49,7 +49,7 @@ export function buildMenuArt(atlas) {
                 const m = N.ridged(x * 0.006 + seed, seed, 4);
                 const top = base - off - Math.pow(m, 2.2) * amp;
                 for (let y = Math.max(0, Math.floor(top)); y < base; y++) {
-                    const k = y - top < 1 ? 3 : (x % 7 === 0 && y - top > 6) ? 1 : 2; // ridge light + basalt columns
+                    const k = y - top < 1 ? 3 : (N.n2(x * 0.15, y * 0.05 + seed) > 0.35 && y - top > 6) ? 1 : 2; // ridge light + basalt columns
                     p.px(x, y, R[k]);
                 }
             }
@@ -83,8 +83,8 @@ export function buildMenuArt(atlas) {
             const dx = (x - cx) / 62, dy = (y - 36) / 32, d = dx * dx + dy * dy + N.fbm(x * 0.08, y * 0.08, 3, 0) * 0.5;
             if (d > 1) continue;
             if (BAYER[(y & 3) * 4 + (x & 3)] > 1.15 - d) continue;
-            p.px(x, y, d < 0.25 ? '#8FD8C4' : d < 0.6 ? '#4E8C84' : P.mistBlue);
-            p.glow(x, y, P.soul, Math.max(0, 0.6 - d) * 0.4);
+            p.px(x, y, d < 0.25 ? '#6FB8A6' : d < 0.6 ? '#3E7470' : P.mistBlue);
+            p.glow(x, y, P.soul, Math.max(0, 0.6 - d) * 0.22);
         }
         for (let i = 0; i < 8; i++) { const x = 30 + i * 15, y0 = 56 + (i % 3) * 4; for (let y = y0; y < y0 + 10 + (i % 2) * 8; y++) p.px(x, y, P.kelp); p.lit(x, y0 + 12 + (i % 2) * 8, P.soul, 1.4); }
         A.island = atlas.add('m:island', p); A.islandW = W; A.islandH = H; A.islandSea = sea;
