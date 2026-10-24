@@ -17,7 +17,20 @@ Ein Soulslike-Piratenspiel in Pixel-Art im Browser – Vogelperspektive wie *A L
 - **Musik**: synthetisierte Shantys (WebAudio, ohne Audiodateien) – „Salz auf der Haut“ an Land, „Hol die Leine“ auf See mit summender Crew, „Atem holen“ am Feuer. **F** auf See lässt die Crew lauter singen (Liedblatt in der Inseltruhe oder Startgeschenk „Bootsmannspfeife“).
 - **Karte** (M) mit Erkundungsnebel, Pausenmenü (Esc) mit Steuerung, Ton, Grafikqualität und Export.
 
+## Geräte, Auflösung und Bildformat
+
+Das Spiel erkennt beim Start, ob es auf einem Handy/Tablet oder am Computer läuft:
+
+- **Desktop:** Tastatur, Maus und Gamepad, Bild immer im Format 16:9 (bei anderen Fenstergrößen mit schwarzen Rändern).
+- **iPhone / Android / iPad:** Touch-Steuerung mit Daumen-Stick links und Aktionsknöpfen rechts. Hochkant nutzt das Spiel den ganzen Bildschirm und zeigt mehr von der Welt nach oben und unten; quer gibt es die breite Ansicht.
+- **Grafik:** „4K (Ultra)“ rendert mit bis zu 3840 × 2160 Pixeln (Standard am Desktop), „Bildschirm (Hoch)“ in der Auflösung des Geräts (Standard am Handy), „Niedrig“ ohne Schatten und Post-Processing. Umschalten im Menü.
+- Steuerung lässt sich im Menü manuell zwischen Touch und Tastatur wechseln.
+- **Tipp fürs iPhone:** In Safari „Teilen → Zum Home-Bildschirm“ – dann startet das Spiel im Vollbild ohne Browserleiste.
+
 ## Steuerung
+
+**Touch:** Daumen auf die linke Bildhälfte legen und ziehen zum Laufen bzw. Steuern. Rechts: Hieb, Rolle, Schwer, Parieren, Rum, Zielen (auf See: Breitseiten, Segel + / −, Shanty). Hinweise wie „Rasten“ oder „An Bord gehen“ antippen.
+
 
 | Aktion | Tastatur | Gamepad |
 | --- | --- | --- |

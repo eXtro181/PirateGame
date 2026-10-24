@@ -4,6 +4,7 @@ import { saberFire } from '../art/props.js';
 import { flameSheet } from '../art/sheets.js';
 import { ORIGINS, GIFTS, STAT_NAMES, WEAPONS, OFFHAND, levelCost, newSave } from '../game/data.js';
 import { T } from '../art/tiles.js';
+import { TouchControls } from './touch.js';
 
 const h = (tag, attrs = {}, ...kids) => {
     const el = document.createElement(tag);
@@ -16,6 +17,7 @@ const h = (tag, attrs = {}, ...kids) => {
     for (const k of kids.flat()) if (k != null) el.append(k.nodeType ? k : document.createTextNode(k));
     return el;
 };
+const TOUCH_KEYS = [['Linke Hälfte', 'Daumen auflegen und ziehen: laufen · auf See steuern'], ['Hieb / Schwer', 'Leichter und schwerer Angriff'], ['Rolle', 'Ausweichen mit Unverwundbarkeit'], ['Parieren', 'Im richtigen Moment für einen Gegenschlag'], ['Rum / Zielen', 'Heilen · Gegner fixieren'], ['Hinweisfeld', 'Antippen zum Interagieren, Rasten, An Bord gehen'], ['Auf See', 'Breitseiten links/rechts · Segel + / −']];
 const fmtTime = s => { s = Math.round(s); const hh = Math.floor(s / 3600), mm = Math.floor(s / 60) % 60; return hh ? `${hh} Std ${mm} Min` : `${mm} Min`; };
 
 function portrait(look) {
@@ -40,7 +42,11 @@ export class UI {
         document.addEventListener('pointerdown', () => this.audio.unlock(), { once: false });
         document.addEventListener('keydown', () => this.audio.unlock());
     }
-    bind(game) { this.game = game; this.hud.game = game; }
+    bind(game) {
+        this.game = game; this.hud.game = game;
+        this.hud.touch = new TouchControls(game.input, this.hud.el);
+        this.hud.promptEl.addEventListener('pointerdown', (e) => { e.preventDefault(); game.input.vPress('interact'); setTimeout(() => game.input.vRelease('interact'), 80); });
+    }
     modalOpen() { return !!this.modal; }
     closeModal() { if (this.modal) { this.modal.remove(); this.modal = null; } }
     openModal(el) { this.closeModal(); this.modal = el; this.root.append(el); const f = el.querySelector('button'); f?.focus(); }
@@ -322,17 +328,28 @@ export class UI {
     // --------------------------------------------------------------- pause + map
     pauseMenu() {
         const g = this.game;
+        const qualityLabel = q => `Grafik: ${{ ultra: '4K (Ultra)', high: 'Bildschirm (Hoch)', low: 'Niedrig' }[q]}`;
         const keys = [['WASD / Pfeile', 'Laufen · Schiff steuern (A/D) · Segel (W/S)'], ['J', 'Angriff · Breitseite links'], ['L / Shift+J', 'Schwerer Angriff'], ['K', 'Zweithand · Breitseite rechts'], ['Leertaste', 'Ausweichrolle'], ['Q', 'Parieren'], ['R', 'Rumflasche trinken'], ['Tab', 'Gegner fixieren'], ['E', 'Interagieren · Rasten · An Bord'], ['F', 'Shanty bestellen (auf See)'], ['M', 'Karte'], ['Esc', 'Menü']];
         const main = () => this.openModal(h('div', { class: 'modal' }, h('div', { class: 'menu' },
             h('h2', {}, g.save.name), h('div', { class: 'sub' }, `Stufe ${g.save.level} · ${fmtTime(g.save.playTime)} · ${g.save.deaths || 0}× ertrunken`),
             h('div', { class: 'items' },
                 h('button', { class: 'btn primary', onclick: () => this.closeModal() }, 'Fortsetzen'),
                 h('button', { class: 'btn', onclick: () => this.openModal(h('div', { class: 'modal' }, h('div', { class: 'menu' }, h('h2', {}, 'Steuerung'),
+                    g.stage.device.touch ? h('div', { class: 'keys' }, TOUCH_KEYS.flatMap(([k, v]) => [h('kbd', {}, k), h('span', {}, v)])) : null,
+                    g.stage.device.touch ? h('div', { class: 'rule' }) : null,
                     h('div', { class: 'keys' }, keys.flatMap(([k, v]) => [h('kbd', {}, k), h('span', {}, v)])),
                     h('p', { class: 'note' }, 'Gamepad: Stick bewegen · A Rolle · R1 Angriff · R2 schwer · L1 Parieren · X Interagieren · Steuerkreuz unten Rum.'),
                     h('button', { class: 'btn', onclick: main }, 'Zurück')))) }, 'Steuerung'),
                 h('button', { class: 'btn', onclick: (e) => { this.audio.setMuted(!this.audio.muted); e.target.textContent = this.audio.muted ? 'Ton an' : 'Ton aus'; } }, this.audio.muted ? 'Ton an' : 'Ton aus'),
-                h('button', { class: 'btn', onclick: (e) => { g.stage.setQuality(!g.stage.isLow()); e.target.textContent = `Grafik: ${g.stage.isLow() ? 'niedrig' : 'hoch'}`; } }, `Grafik: ${g.stage.isLow() ? 'niedrig' : 'hoch'}`),
+                h('button', { class: 'btn', onclick: (e) => {
+                    const order = ['ultra', 'high', 'low'];
+                    g.stage.setQuality(order[(order.indexOf(g.stage.quality) + 1) % 3]);
+                    e.target.textContent = qualityLabel(g.stage.quality);
+                } }, qualityLabel(g.stage.quality)),
+                h('button', { class: 'btn', onclick: (e) => {
+                    g.stage.setTouch(!g.stage.device.touch);
+                    e.target.textContent = `Steuerung: ${g.stage.device.touch ? 'Touch' : 'Tastatur / Gamepad'}`;
+                } }, `Steuerung: ${g.stage.device.touch ? 'Touch' : 'Tastatur / Gamepad'}`),
                 h('button', { class: 'btn', onclick: () => this.store.exportFile(g.save.name).catch(e => this.toast(e.message)) }, 'Spielstand exportieren'),
                 h('button', { class: 'btn ghost', onclick: () => { this.closeModal(); g.logout(); } }, 'Abmelden')),
             h('p', { class: 'note', style: 'margin-top:12px' }, 'Gespeichert wird automatisch, wenn du an einem Säbel- oder Wrackfeuer rastest.'))));
@@ -400,7 +417,7 @@ class HUD {
         if (label === this.lastPrompt) return;
         this.lastPrompt = label;
         if (!label) { this.promptEl.classList.add('hidden'); return; }
-        this.promptEl.replaceChildren(h('kbd', {}, 'E'), label);
+        this.promptEl.replaceChildren(h('kbd', {}, this.game?.stage.device.touch ? '●' : 'E'), label);
         this.promptEl.classList.remove('hidden');
     }
     setBar(b, frac, widthPx) {
@@ -412,11 +429,17 @@ class HUD {
         if (!g || !g.save || !g.player) return;
         const p = g.player, d = g.derived, s = g.save;
         const sea = g.mode === 'sea';
-        this.setBar(this.hp, p.hp / d.maxHp, d.maxHp * 2.4);
+        if (this.touch) {
+            const show = g.stage.device.touch && !this.ui.modalOpen() && g.dying === undefined;
+            this.touch.setVisible(show);
+            if (show) this.touch.setMode(g.mode, s.off);
+        }
+        const bw = Math.min(2.4, (window.innerWidth - (g.stage.device.touch ? 150 : 60)) / Math.max(d.maxHp, d.maxSt));
+        this.setBar(this.hp, p.hp / d.maxHp, d.maxHp * bw);
         const hf = p.hp / d.maxHp;
         this.lagHp = this.lagHp > hf ? Math.max(hf, this.lagHp - 0.006) : hf;
         this.hp.querySelector('.lag').style.transform = `scaleX(${this.lagHp})`;
-        this.setBar(this.st, p.st / d.maxSt, d.maxSt * 2.4);
+        this.setBar(this.st, p.st / d.maxSt, d.maxSt * bw);
         this.hull.classList.toggle('hidden', !sea);
         this.st.classList.toggle('hidden', sea);
         this.ship.classList.toggle('hidden', !sea);

@@ -58,7 +58,9 @@ export class Game {
         const fresh = save.playTime < 1;
         if (fresh) {
             this.ui.banner('Schwarzwasser', 'Du bist ertrunken. Die Flut hat dich zurückgegeben.', 'title', 5.5);
-            this.hint('controls', 'WASD bewegen · J Angriff · L schwerer Angriff · Leertaste Rolle · Q Parieren · R Rum · E Interagieren · Tab Zielen · M Karte · Esc Menü');
+            this.hint('controls', this.touch
+                ? 'Daumen links auflegen und ziehen zum Laufen. Rechts: Hieb, Rolle, Parieren, Rum. Tippe auf Hinweise wie „Rasten“, um zu interagieren.'
+                : 'WASD bewegen · J Angriff · L schwerer Angriff · Leertaste Rolle · Q Parieren · R Rum · E Interagieren · Tab Zielen · M Karte · Esc Menü');
         }
     }
 
@@ -114,6 +116,8 @@ export class Game {
         this.save.explored = this.explored.every(v => v) ? 'all' : encodeBits(this.explored);
         return this.store.save(this.profile, this.save).then(() => { if (msg) this.ui.saveIcon(); }).catch(e => { console.error(e); this.toast('Speichern fehlgeschlagen'); });
     }
+
+    get touch() { return this.stage.device.touch; }
 
     // ---------------------------------------------------------------- feedback
     sfx(name) { this.audio.sfx(name); }
@@ -205,7 +209,7 @@ export class Game {
         this.ship.dx += (this.ship.x - shark.x) * 1.5; this.ship.dz += (this.ship.z - shark.z) * 1.5;
         this.sfx('crash');
         this.splashFx(this.ship.x, this.ship.z);
-        this.hint('ram', 'Rostkiefer rammt dein Schiff! Breitseiten: J links, K rechts. W/S Segel, A/D steuern.');
+        this.hint('ram', this.touch ? 'Rostkiefer rammt dein Schiff! Dreh ihm die Breitseite zu und feuere.' : 'Rostkiefer rammt dein Schiff! Breitseiten: J links, K rechts. W/S Segel, A/D steuern.');
     }
 
     updateProjectiles(dt) {
@@ -332,7 +336,9 @@ export class Game {
         this.ship.sail = 0;
         this.sfx('board');
         this.audio.setMood('sea');
-        this.hint('sail', 'W/S: Segel setzen · A/D: steuern · J/K: Breitseite links/rechts · E: an Land gehen · F: Shanty');
+        this.hint('sail', this.touch
+            ? 'Stick links/rechts: steuern · Segel + / −: Fahrt · Breitseiten feuern zur Seite · Tippe „An Land gehen“, um anzulegen.'
+            : 'W/S: Segel setzen · A/D: steuern · J/K: Breitseite links/rechts · E: an Land gehen · F: Shanty');
     }
     disembark(spot) {
         this.mode = 'land';
