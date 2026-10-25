@@ -506,8 +506,9 @@ export class World {
             if (this.fires.some(f => Math.hypot(f.x - t.x, f.y - t.y) < 48) || this.npcs.some(n => Math.hypot(n.x - t.x, n.y - t.y) < 40) || this.spawns.some(s => Math.hypot(s.x - t.x, s.y - t.y) < 20)) continue;
             // trees in clusters (noise), bushes in between
             const forest = N.fbm(tx * 0.08 + z.seed * 3, ty * 0.08, 3, 0);
-            if (forest > 0.2 && rng.chance(0.06) && this.freeT(tx, ty, 1)) { this.grove(tx, ty, 0.1, rng, 1, F.grove); continue; }
-            if (rng.chance(0.025 + Math.max(0, forest) * 0.05) && this.freeT(tx, ty, 0)) this.prop(rng.pick(F.bush) + (rng.chance(0.4) && !['fern', 'banana', 'bigLeaf', 'reedClump', 'cattail', 'lanternPole', 'crystalBlue'].includes('x') ? '' : ''), t.x + rng.int(-4, 4), t.y, { flip: rng.chance(0.5) });
+            const dense = z.biome === 'earth' ? 2 : 1;
+            if (forest > 0.12 && rng.chance(0.1 * dense) && this.freeT(tx, ty, 1)) { this.grove(tx, ty, 0.1, rng, 1, F.grove); continue; }
+            if (rng.chance((0.04 + Math.max(0, forest) * 0.08) * dense) && this.freeT(tx, ty, 0)) this.prop(rng.pick(F.bush) + (rng.chance(0.4) && !['fern', 'banana', 'bigLeaf', 'reedClump', 'cattail', 'lanternPole', 'crystalBlue'].includes('x') ? '' : ''), t.x + rng.int(-4, 4), t.y, { flip: rng.chance(0.5) });
             else if (rng.chance(0.012) && this.freeT(tx, ty, 0)) this.prop(rng.pick(['rock0', 'rock1']), t.x, t.y, { flip: rng.chance(0.5) });
         }
     }

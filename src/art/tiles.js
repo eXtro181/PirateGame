@@ -111,15 +111,16 @@ function plank(p, v) {
         if (h01(i, v, 15) > 0.5) p.px(seam + 2, y + 1, '#C8CCD0');
     }
 }
-function hex(p, v, b) {
-    const S = b.stone;
+function hex(p, v, b) { // dusty ground with faint hexagon joints and a few glowing red veins
+    const S = b.path;
+    field(p, S, v + 71, 0.22, 0.5, 2);
     const pts = [];
     for (let j = -1; j <= 3; j++) for (let i = -1; i <= 3; i++) pts.push([i * 8 + (j & 1 ? 4 : 0), j * 7]);
     for (let y = 0; y < TS; y++) for (let x = 0; x < TS; x++) {
         let d1 = 99, d2 = 99, best = null;
         for (const q of pts) { const d = Math.hypot(x + 0.5 - q[0], (y + 0.5 - q[1]) * 1.15); if (d < d1) { d2 = d1; d1 = d; best = q; } else if (d < d2) d2 = d; }
-        if (d2 - d1 < 1.1) { p.px(x, y, S[0]); if (h01(best[0] + x, best[1] + y, v) > 0.9) { p.px(x, y, '#9A2A2E'); p.glow(x, y, '#C2502E', 0.35); } }
-        else { const ly = (y + 0.5 - best[1]); p.px(x, y, S[ly < -2 ? 3 : (x + 0.5 - best[0]) > 2 ? 1 : 2]); }
+        if (d2 - d1 < 0.9) { p.px(x, y, S[1]); if (h01(best[0] + x, best[1] + y, v) > 0.93) { p.px(x, y, '#B83A3E'); p.glow(x, y, '#C2502E', 0.3); } }
+        else if (d2 - d1 < 1.8 && y + 0.5 > best[1]) p.px(x, y, S[3]);
     }
 }
 function ash(p, v, b) { field(p, b.path, v + 21, 0.35, 0.8, 1); for (let i = 0; i < 2; i++) { const x = Math.floor(h01(i, v, 16) * 15), y = Math.floor(h01(i, v, 17) * 15); p.px(x, y, '#C2502E'); if (!i) p.glow(x, y, '#C2502E', 0.4); } }

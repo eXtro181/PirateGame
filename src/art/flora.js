@@ -151,22 +151,21 @@ export function defineFlora(def) {
     def('lanternPole', 10, 34, (p) => { p.vline(5, 10, 33, '#3A1E26'); p.vline(4, 14, 33, '#2A141A'); p.ellipse(5, 5, 4, 5, '#C83A3A'); for (let y = 2; y < 9; y++) for (let x = 2; x < 9; x++) if (p.a(x, y)) p.lit(x, y, y < 5 ? '#FFD08A' : '#F05A4A', 1.3); }, { ax: 5, ay: 33, shadow: [3, 1], r: 0.15, light: { dy: -28, r: 40, col: [1, 0.45, 0.3], i: 0.9, flicker: 0.15 } });
     def('glowFlower', 16, 18, (p) => { p.vline(8, 9, 17, '#3E6A3A'); for (let i = 0; i < 5; i++) { const a = i / 5 * Math.PI * 2 - Math.PI / 2; p.ellipse(8 + Math.cos(a) * 4, 7 + Math.sin(a) * 3, 2.5, 2, '#6E98E0'); } p.blob(8, 7, 3, 3, '#F8F4E8', { dither: false }); for (let y = 4; y < 11; y++) for (let x = 5; x < 12; x++) if (p.a(x, y)) p.glow(x, y, '#FFF4D8', 0.5); }, { ax: 8, ay: 17, shadow: [5, 2], light: { dy: -10, r: 30, col: [1, 0.95, 0.8], i: 0.6, pulse: 3 } });
     // ---------------------------------------------------------------- the soul tree of the hub
-    def('hubTree', 120, 92, (p) => {
-        const cx = 60;
-        // gnarled black trunk with roots spreading into the water
-        for (let y = 10; y < 80; y++) { const w = 9 + Math.max(0, y - 52) * 0.7 + Math.sin(y * 0.3) * 1.5; for (let k = -w; k <= w; k++) { const x = cx + k + Math.sin(y * 0.11) * 3; p.px(x, y, FOL.bark[k < -w * 0.45 ? 3 : k > w * 0.5 ? 0 : ((k + y) % 7 === 0 ? 0 : (Math.abs(k) < 2 ? 2 : 1))]); } }
-        for (let i = 0; i < 11; i++) {
-            const dir = (i / 10 - 0.5) * 2.2, len = 26 + h01(i, 2) * 26;
-            for (let t = 0; t < len; t++) { const x = cx + dir * t * 1.1 + Math.sin(t * 0.25 + i) * 2, y = 70 + t * 0.35 + Math.abs(dir) * t * 0.1; const w = Math.max(1, 5 - t / len * 5); for (let k = 0; k < w; k++) p.px(x, y + k, FOL.bark[k === 0 ? 4 : k === 1 ? 3 : 1]); }
+    def('hubTree', 180, 130, (p) => {
+        const cx = 90;
+        for (let y = 0; y < 112; y++) { const w = 14 + Math.max(0, y - 70) * 0.9 + Math.sin(y * 0.3) * 2; for (let k = -w; k <= w; k++) { const x = cx + k + Math.sin(y * 0.09) * 4; const tw = Math.sin((k + y * 0.6) * 0.45); p.px(x, y, FOL.bark[k < -w * 0.5 ? 3 : k > w * 0.55 ? 0 : tw > 0.6 ? 4 : tw > 0 ? 2 : 1]); } }
+        for (let i = 0; i < 14; i++) {
+            const dir = (i / 13 - 0.5) * 2.4, len = 36 + h01(i, 2) * 34;
+            for (let t = 0; t < len; t++) { const x = cx + dir * t * 1.15 + Math.sin(t * 0.22 + i) * 3, y = 100 + t * 0.4 + Math.abs(dir) * t * 0.08; const w = Math.max(1, 7 - t / len * 7); for (let k = 0; k < w; k++) p.px(x, y + k, FOL.bark[k === 0 ? 4 : k === 1 ? 3 : k < w - 1 ? 2 : 1]); }
         }
-        for (const [a, l] of [[-2.5, 40], [-0.6, 40], [-1.6, 34], [-2.9, 30], [-0.2, 30]]) trunk(p, cx, 26, cx + Math.cos(a) * l, 26 + Math.sin(a) * l * 0.7, 6, FOL.bark);
-    }, { ax: 60, ay: 78, shadow: [0, 0], box: [2.8, 1.2] });
-    def('hubCrown', 200, 120, (p) => {
-        clusterCrown(p, 100, 52, 92, 48, FOL.blossom, 77, 420, 6);
-        wisteria(p, 18, 182, 70, FOL.pink, 5, 34, 34);
-        wisteria(p, 30, 170, 76, FOL.violet, 9, 14, 26);
-        for (let i = 0; i < 9; i++) { const x = 30 + i * 18 + Math.floor(h01(i, 3) * 6), y = 80 + Math.floor(h01(i, 4) * 18); p.vline(x, y - 10, y, '#4A3A36'); p.rect(x - 1, y, 3, 4, '#3A2E2A'); p.lit(x, y + 1, '#B8FFE8', 1.4); p.lit(x, y + 2, '#5FF2C8', 1.3); }
-    }, { ax: 100, ay: 120, overhead: true, light: { dy: -40, r: 140, col: [0.9, 0.75, 0.85], i: 0.35 } });
+    }, { ax: 90, ay: 112, shadow: [0, 0], box: [3.4, 1.4] });
+    def('hubCrown', 300, 190, (p) => {
+        clusterCrown(p, 150, 80, 140, 72, FOL.blossom, 77, 900, 7);
+        clusterCrown(p, 150, 70, 100, 50, FOL.blossom, 79, 300, 7);
+        wisteria(p, 20, 280, 110, FOL.pink, 5, 56, 50);
+        wisteria(p, 40, 260, 118, FOL.violet, 9, 24, 34);
+        for (let i = 0; i < 12; i++) { const x = 40 + i * 20 + Math.floor(h01(i, 3) * 8), y = 128 + Math.floor(h01(i, 4) * 26); p.vline(x, y - 14, y, '#4A3A36'); p.rect(x - 1, y, 3, 4, '#3A2E2A'); p.lit(x, y + 1, '#B8FFE8', 1.4); p.lit(x, y + 2, '#5FF2C8', 1.3); }
+    }, { ax: 150, ay: 190, overhead: true, light: { dy: -60, r: 160, col: [0.9, 0.75, 0.85], i: 0.35 } });
     // ---------------------------------------------------------------- marble pieces (hub)
     def('marbleArch', 56, 50, (p) => {
         const M = 'marble';
