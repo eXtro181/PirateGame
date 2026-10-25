@@ -1,0 +1,535 @@
+//! Segeln: dein Schiff (16 Kurse, drei Segelstufen, Breitseiten), Geisterschiffe, Knochenhaie
+//! und der Kraken, der neben dem Kiel aufsteigt.
+
+use super::actors::*;
+use super::fx::*;
+use super::input::Act;
+use super::*;
+use std::f32::consts::{PI, TAU};
+
+pub fn wrap(a: f32) -> f32 {
+    a.rem_euclid(TAU)
+}
+fn turn_to(h: f32, want: f32, max: f32) -> f32 {
+    let d = (want - h + PI * 3.0).rem_euclid(TAU) - PI;
+    wrap(h + d.clamp(-max, max))
+}
+
+#[derive(Clone)]
+pub struct Hull {
+    pub x: f32,
+    pub y: f32,
+    pub h: f32,
+    pub v: f32,
+    pub bob: f32,
+    pub flash: f32,
+    pub alpha: f32,
+}
+impl Hull {
+    fn new(x: f32, y: f32, h: f32) -> Self {
+        Hull { x, y, h, v: 0.0, bob: rnd() * 6.0, flash: 0.0, alpha: 1.0 }
+    }
+    pub fn dir16(&self) -> usize {
+        ((wrap(self.h) / TAU * 16.0).round() as usize) % 16
+    }
+}
+
+pub struct Ship {
+    pub hull: Hull,
+    pub sail: i32,
+    pub hp: f32,
+    pub max_hp: f32,
+    pub cool: [f32; 2],
+    pub rise: Option<f32>,
+}
+pub struct GhostShip {
+    pub hull: Hull,
+    pub name: &'static str,
+    pub monster: &'static str,
+    pub route: Vec<(f32, f32)>,
+    pub wp: usize,
+    pub hp: f32,
+    pub max_hp: f32,
+    pub cool: f32,
+    pub sink_t: f32,
+}
+impl GhostShip {
+    pub fn dead(&self) -> bool {
+        self.hp <= 0.0
+    }
+}
+pub struct Shark {
+    pub x: f32,
+    pub y: f32,
+    pub home: (f32, f32),
+    pub a: f32,
+    pub hp: f32,
+    pub fx: f32,
+    pub cool: f32,
+    pub flash: f32,
+    pub t: f32,
+}
+impl Shark {
+    pub fn dead(&self) -> bool {
+        self.hp <= 0.0
+    }
+}
+pub struct Kraken {
+    pub x: f32,
+    pub y: f32,
+    pub home: (f32, f32),
+    pub hp: f32,
+    pub max_hp: f32,
+    pub up: bool,
+    pub t: f32,
+    pub flash: f32,
+    pub rise: f32,
+    pub cool: f32,
+    pub slams: Vec<(f32, f32, f32)>,
+}
+impl Kraken {
+    pub fn new(x: f32, y: f32) -> Self {
+        Kraken { x, y, home: (x, y), hp: 900.0, max_hp: 900.0, up: false, t: 0.0, flash: 0.0, rise: 0.0, cool: 2.0, slams: vec![] }
+    }
+    pub fn dead(&self) -> bool {
+        self.hp <= 0.0
+    }
+    pub fn hidden(&self) -> bool {
+        !self.up && self.rise <= 0.0
+    }
+}
+
+impl Ship {
+    pub fn new(x: f32, y: f32, h: f32) -> Self {
+        Ship { hull: Hull::new(x, y, h), sail: 0, hp: 120.0, max_hp: 120.0, cool: [0.0; 2], rise: None }
+    }
+}
+
+impl Game {
+    pub fn spawn_sea(&mut self) {
+        self.ghosts = self
+            .world
+            .ghost_routes
+            .iter()
+            .enumerate()
+            .map(|(i, r)| GhostShip {
+                hull: Hull::new(r[0].0, r[0].1, 0.0),
+                name: if i % 2 == 1 { "Fleisch-Geist-Schiff" } else { "Geister-Galeere-Chimäre" },
+                monster: if i % 2 == 1 { "fleshShip" } else { "ghostGalley" },
+                route: r.clone(),
+                wp: 1 % r.len().max(1),
+                hp: 160.0,
+                max_hp: 160.0,
+                cool: 2.0,
+                sink_t: 0.0,
+            })
+            .collect();
+        if !self.kraken.dead() {
+            self.kraken = Kraken::new(214.0 * TS as f32, 66.0 * TS as f32);
+        }
+        self.sharks = [(210, 140), (110, 80), (220, 60), (100, 150), (200, 170), (110, 200), (150, 30), (60, 120)]
+            .iter()
+            .map(|&(x, y)| {
+                let (x, y) = ((x * TS) as f32, (y * TS) as f32);
+                Shark { x, y, home: (x, y), a: rnd() * TAU, hp: 60.0, fx: 1.0, cool: 0.0, flash: 0.0, t: 0.0 }
+            })
+            .collect();
+    }
+
+    fn wake(&mut self, h: &mut Hull, dt: f32) {
+        if h.v > 16.0 && rnd() < h.v / 120.0 {
+            let (fx, fy) = (h.h.sin(), -h.h.cos() * 0.75);
+            for s in [-1.0f32, 1.0] {
+                self.fx.p(P {
+                    x: h.x - fx * 32.0 + h.h.cos() * s * 10.0,
+                    y: h.y - fy * 32.0 + h.h.sin() * s * 8.0,
+                    vx: -fx * 20.0 + h.h.cos() * s * 24.0,
+                    vy: -fy * 20.0,
+                    life: 0.9,
+                    col: [0.8, 0.9, 0.95, 0.8],
+                    drag: 1.5,
+                    size: 2.0,
+                    ..Default::default()
+                });
+            }
+        }
+        h.bob += dt * 2.0;
+    }
+
+    fn broadside(&mut self, h: &Hull, side: f32, dmg: f32, owner: Owner) {
+        let (fx, fy) = (h.h.sin(), -h.h.cos());
+        let (nx, ny) = (h.h.cos() * side, h.h.sin() * side);
+        for i in -1..=1 {
+            let i = i as f32;
+            let sx = h.x + fx * i * 16.0 + nx * 16.0;
+            let sy = h.y + fy * i * 12.0 * 0.75 + ny * 12.0;
+            let mut s = Shot::new(owner, "cannon", sx, sy, 12.0, nx * 340.0 + fx * h.v + rr(-20.0, 20.0), (ny * 340.0 + fy * h.v) * 0.8, dmg);
+            s.r = 8.0;
+            s.life = 0.9;
+            s.sea = true;
+            s.on_hit = OnHit::Splash;
+            self.shots.push(s);
+            self.fx.burst("smoke", sx, sy, 5, BurstOpt { speed: Some(60.0), up: Some(20.0), g: Some(-20.0), life: Some(0.9), ..Default::default() });
+        }
+        self.sfx("cannon");
+        self.shake(5.0);
+    }
+
+    pub fn update_ship(&mut self, dt: f32, steer: bool) {
+        let mut h = self.ship.hull.clone();
+        h.flash = (h.flash - dt).max(0.0);
+        self.ship.cool[0] = (self.ship.cool[0] - dt).max(0.0);
+        self.ship.cool[1] = (self.ship.cool[1] - dt).max(0.0);
+        if let Some(r) = self.ship.rise.as_mut() {
+            *r += dt;
+            h.alpha = (*r / 1.6).min(1.0);
+            if rnd() < 0.7 {
+                self.fx.burst("splash", h.x + rr(-60.0, 60.0), h.y, 2, BurstOpt { speed: Some(80.0), up: Some(120.0), ..Default::default() });
+            }
+            if *r > 1.8 {
+                self.ship.rise = None;
+                h.alpha = 1.0;
+            }
+        }
+        if !steer {
+            h.v *= (1.0 - dt * 2.0).max(0.0);
+            self.wake(&mut h, dt);
+            self.ship.hull = h;
+            return;
+        }
+        if self.input.pressed(Act::Up) {
+            self.ship.sail = (self.ship.sail + 1).min(3);
+            self.sfx("board");
+        }
+        if self.input.pressed(Act::Down) {
+            self.ship.sail = (self.ship.sail - 1).max(0);
+            self.sfx("board");
+        }
+        let st = self.input.stick;
+        if st.length() > 0.5 {
+            let want = st.x.atan2(-st.y);
+            h.h = turn_to(h.h, want, 1.6 * dt);
+            self.ship.sail = self.ship.sail.max(2);
+        } else {
+            let ax = self.input.axis();
+            h.h = wrap(h.h + ax.x * dt * (0.7 + h.v / 120.0));
+        }
+        let target = self.ship.sail as f32 * 60.0 * if self.shanty_t > 0.0 { 1.35 } else { 1.0 };
+        h.v += (target - h.v) * (dt * 0.8).min(1.0);
+        let (fx, fy) = (h.h.sin(), -h.h.cos());
+        let (nx, ny) = (h.x + fx * h.v * dt, h.y + fy * h.v * dt);
+        if !self.world.blocked(nx, ny, 20.0, true, None) {
+            h.x = nx;
+            h.y = ny;
+        } else {
+            let fast = h.v > 40.0;
+            h.v *= 0.3;
+            if fast {
+                self.ship.hull = h.clone();
+                self.ship_damage(4.0);
+            }
+        }
+        self.wake(&mut h, dt);
+        let dmg = 40.0 * if self.save.origin == "kanonier" { 1.3 } else { 1.0 };
+        if self.input.pressed(Act::Attack) && self.ship.cool[0] <= 0.0 {
+            self.broadside(&h, -1.0, dmg, Owner::Player);
+            self.ship.cool[0] = 1.6;
+        }
+        if (self.input.pressed(Act::Heavy) || self.input.pressed(Act::Item)) && self.ship.cool[1] <= 0.0 {
+            self.broadside(&h, 1.0, dmg, Owner::Player);
+            self.ship.cool[1] = 1.6;
+        }
+        let hp = self.ship.hp;
+        self.ship.hull = h;
+        self.ship.hp = hp.min(self.ship.hp);
+    }
+
+    pub fn ship_damage(&mut self, n: f32) {
+        self.ship.hp -= n;
+        self.ship.hull.flash = 0.12;
+        self.shake(5.0);
+        self.sfx("crash");
+        let (x, y) = (self.ship.hull.x, self.ship.hull.y);
+        self.fx.burst("dust", x, y, 10, BurstOpt { speed: Some(120.0), col: Some([0.4, 0.3, 0.22, 1.0]), ..Default::default() });
+        if self.ship.hp <= 0.0 && self.sailing {
+            self.ship.hp = 0.0;
+            self.ship_sunk();
+        }
+    }
+
+    pub fn update_sea(&mut self, dt: f32) {
+        let (sx, sy, sh) = (self.ship.hull.x, self.ship.hull.y, self.ship.hull.h);
+        let sailing = self.sailing;
+        // Geisterschiffe
+        for i in 0..self.ghosts.len() {
+            let mut h = self.ghosts[i].hull.clone();
+            h.flash = (h.flash - dt).max(0.0);
+            if self.ghosts[i].dead() {
+                self.ghosts[i].sink_t += dt;
+                h.alpha = (1.0 - self.ghosts[i].sink_t / 2.0).max(0.0);
+                self.ghosts[i].hull = h;
+                continue;
+            }
+            self.ghosts[i].cool -= dt;
+            let d = (h.x - sx).hypot(h.y - sy);
+            let chasing = sailing && d < 520.0;
+            let (tx, ty);
+            if chasing {
+                if d > 280.0 {
+                    tx = sx;
+                    ty = sy;
+                } else {
+                    tx = sx + (h.x - sx) / d * 220.0;
+                    ty = sy + (h.y - sy) / d * 220.0;
+                }
+                let rel = (sx - h.x).atan2(-(sy - h.y)) - h.h;
+                let side = rel.sin();
+                if self.ghosts[i].cool <= 0.0 && d < 340.0 && side.abs() > 0.75 {
+                    self.broadside(&h, if side > 0.0 { 1.0 } else { -1.0 }, 14.0, Owner::Enemy);
+                    self.ghosts[i].cool = 3.2;
+                }
+            } else {
+                let g = &mut self.ghosts[i];
+                (tx, ty) = g.route[g.wp];
+                if (tx - h.x).hypot(ty - h.y) < 60.0 {
+                    g.wp = (g.wp + 1) % g.route.len();
+                }
+            }
+            let want = (tx - h.x).atan2(-(ty - h.y));
+            h.h = turn_to(h.h, want, 0.9 * dt);
+            h.v += ((if chasing { 92.0 } else { 60.0 }) - h.v) * dt;
+            let (nx, ny) = (h.x + h.h.sin() * h.v * dt, h.y - h.h.cos() * h.v * dt);
+            if !self.world.blocked(nx, ny, 24.0, true, None) {
+                h.x = nx;
+                h.y = ny;
+            } else {
+                h.h += dt;
+            }
+            self.wake(&mut h, dt);
+            if rnd() < 0.2 {
+                self.fx.p(P { x: h.x + rr(-60.0, 60.0), y: h.y, z: 40.0 + rr(-20.0, 20.0), vz: 20.0, life: 1.4, col: c::SOUL, glow: 1.2, wobble: 12.0, ..Default::default() });
+            }
+            self.ghosts[i].hull = h;
+        }
+        // Haie
+        for i in 0..self.sharks.len() {
+            let s = &mut self.sharks[i];
+            s.t += dt;
+            s.flash = (s.flash - dt).max(0.0);
+            if s.dead() {
+                continue;
+            }
+            s.cool -= dt;
+            let (mut tx, mut ty) = (s.home.0 + s.a.cos() * 120.0, s.home.1 + s.a.sin() * 80.0);
+            s.a += dt * 0.5;
+            let d = (s.x - sx).hypot(s.y - sy);
+            if sailing && d < 320.0 {
+                tx = sx;
+                ty = sy;
+            }
+            let (dx, dy) = (tx - s.x, ty - s.y);
+            let l = dx.hypot(dy).max(1.0);
+            let (nx, ny) = (s.x + dx / l * 124.0 * dt, s.y + dy / l * 124.0 * dt);
+            let (ttx, tty) = ((nx / TS as f32).floor() as i32, (ny / TS as f32).floor() as i32);
+            if self.world.g(ttx, tty) == Mat::Water {
+                s.x = nx;
+                s.y = ny;
+            }
+            s.fx = dx;
+            if sailing && d < 36.0 && s.cool <= 0.0 {
+                s.cool = 2.5;
+                let (x, y) = (s.x, s.y);
+                self.fx.burst("splash", x, y, 12, BurstOpt { speed: Some(120.0), up: Some(120.0), ..Default::default() });
+                self.ship_damage(8.0);
+            }
+        }
+        // Kraken
+        let k = &mut self.kraken;
+        k.t += dt;
+        k.flash = (k.flash - dt).max(0.0);
+        if k.dead() {
+            k.rise = (k.rise - dt * 0.5).max(0.0);
+            return;
+        }
+        let near = sailing && (sx - k.home.0).hypot(sy - k.home.1) < 520.0;
+        if !k.up {
+            k.rise = (k.rise - dt).max(0.0);
+            if near {
+                k.up = true;
+                k.x = sx + (sh + 1.2).sin() * 160.0;
+                k.y = sy - (sh + 1.2).cos() * 120.0;
+                self.sfx("roar");
+                self.shake(8.0);
+                self.ui.banner("Der Kraken", "Etwas Großes regt sich unter dem Kiel", "boss", 2.6);
+            }
+            return;
+        }
+        k.rise = (k.rise + dt).min(1.0);
+        if !near {
+            k.up = false;
+            return;
+        }
+        k.cool -= dt;
+        k.x += (sx + (sh + 1.6).sin() * 180.0 - k.x) * dt * 0.3;
+        k.y += (sy - (sh + 1.6).cos() * 140.0 - k.y) * dt * 0.3;
+        if k.cool <= 0.0 {
+            k.cool = 3.2;
+            for j in 0..3 {
+                let (tx, ty) = (sx + rr(-60.0, 60.0), sy + rr(-40.0, 40.0));
+                let dur = 1.2 + j as f32 * 0.3;
+                self.kraken.slams.push((tx, ty, dur));
+                self.fx.mark(MarkKind::Circle, tx, ty, 44.0, 0.0, 0.0, dur, Some([0.55, 0.25, 0.45, 0.45]));
+            }
+        }
+        let mut hits = vec![];
+        for s in self.kraken.slams.iter_mut() {
+            s.2 -= dt;
+            if s.2 <= 0.0 {
+                hits.push((s.0, s.1));
+            }
+        }
+        self.kraken.slams.retain(|s| s.2 > 0.0);
+        for (tx, ty) in hits {
+            if !self.sailing {
+                continue;
+            }
+            self.fx.burst("splash", tx, ty, 20, BurstOpt { speed: Some(160.0), up: Some(240.0), ..Default::default() });
+            self.shake(6.0);
+            self.sfx("crash");
+            if (self.ship.hull.x - tx).hypot(self.ship.hull.y - ty) < 60.0 {
+                self.ship_damage(12.0);
+            }
+        }
+        if rnd() < 0.3 {
+            let (x, y) = (self.kraken.x + rr(-120.0, 120.0), self.kraken.y);
+            self.fx.burst("splash", x, y, 1, BurstOpt { speed: Some(60.0), up: Some(80.0), ..Default::default() });
+        }
+    }
+
+    pub fn hurt_ghost(&mut self, i: usize, n: f32) {
+        let g = &mut self.ghosts[i];
+        if g.dead() {
+            return;
+        }
+        g.hp -= n;
+        g.hull.flash = 0.1;
+        let (x, y, name) = (g.hull.x, g.hull.y, g.name);
+        self.fx.num(x, y - 60.0, n as i32, None);
+        self.fx.burst("dust", x, y - 12.0, 10, BurstOpt { speed: Some(120.0), col: Some([0.3, 0.45, 0.45, 1.0]), ..Default::default() });
+        if self.ghosts[i].hp <= 0.0 {
+            self.sfx("death");
+            self.fx.rise("soul", x, y, 40, 80.0, None);
+            self.gain_pearls(700, Some((x, y)));
+            self.ui.banner(&format!("{name} versenkt"), "", "small", 2.0);
+        }
+    }
+    pub fn hurt_shark(&mut self, i: usize, n: f32) {
+        let s = &mut self.sharks[i];
+        if s.dead() {
+            return;
+        }
+        s.hp -= n;
+        s.flash = 0.1;
+        let (x, y) = (s.x, s.y);
+        self.fx.num(x, y - 30.0, n as i32, None);
+        if self.sharks[i].hp <= 0.0 {
+            self.gain_pearls(90, Some((x, y)));
+            self.fx.burst("bone", x, y, 12, BurstOpt::default());
+        }
+    }
+    pub fn hurt_kraken(&mut self, n: f32) {
+        let k = &mut self.kraken;
+        if k.dead() || !k.up {
+            return;
+        }
+        k.hp -= n;
+        k.flash = 0.1;
+        let (x, y) = (k.x, k.y);
+        self.fx.num(x, y - 80.0, n as i32, None);
+        if self.kraken.hp <= 0.0 {
+            self.sfx("death");
+            self.fx.rise("soul", x, y, 50, 120.0, None);
+            self.gain_pearls(3000, Some((x, y)));
+            self.save.shards += 3;
+            self.ui.banner("DER KRAKEN SINKT", "3 Gezeitensplitter", "big", 3.0);
+        }
+    }
+
+    // ---------------------------------------------------------------- Zeichnen
+    pub fn draw_sea(&self, art: &Art, f: &mut Frame) {
+        let (vx, vy, vw, vh) = f.view();
+        let vis = |x: f32, y: f32, m: f32| x > vx - m && x < vx + vw + m && y > vy - m && y < vy + vh + m * 1.5;
+        // eigenes Schiff
+        let h = &self.ship.hull;
+        if vis(h.x, h.y, 200.0) {
+            let s = art.ship[h.dir16()];
+            let b = (h.bob.sin() * 2.0).round();
+            let a = (h.alpha * 255.0) as u8;
+            let fl = if h.flash > 0.0 { flags::FLASH } else { 0 } | if self.hover == Hover::Ship { flags::OUTLINE } else { 0 };
+            f.shadow(h.x, h.y + 4.0, 70.0, 20.0, 0.3);
+            f.sprite(&s, h.x, h.y + b, SprOpt { tint: [255, 255, 255, a], flags: fl, cut_bottom: 0.08, ..Default::default() });
+            if self.sailing {
+                f.light(LightDef { x: h.x, y: h.y, z: 60.0, r: 220.0, col: [1.0, 0.72, 0.42], flicker: 0.1 });
+            }
+        }
+        for (i, g) in self.ghosts.iter().enumerate() {
+            let h = &g.hull;
+            if h.alpha <= 0.0 || !vis(h.x, h.y, 200.0) {
+                continue;
+            }
+            let b = (h.bob.sin() * 2.0).round();
+            let a = (h.alpha * 220.0) as u8;
+            let fl = if h.flash > 0.0 { flags::FLASH } else { 0 } | if self.hover == Hover::T(Target::Ghost(i)) { flags::OUTLINE } else { 0 };
+            if let Some(m) = art.monsters.get(g.monster) {
+                let flip = h.h.sin() < 0.0;
+                f.sprite(m, h.x, h.y + b + 10.0, SprOpt { flip, tint: [255, 255, 255, a], flags: fl | flags::GHOST, cut_bottom: 0.1, ..Default::default() });
+            } else {
+                f.sprite(&art.ghost_ship[h.dir16()], h.x, h.y + b, SprOpt { tint: [255, 255, 255, a], flags: fl | flags::GHOST, ..Default::default() });
+            }
+            if !g.dead() {
+                f.light(LightDef { x: h.x, y: h.y, z: 50.0, r: 160.0, col: [0.35, 1.0, 0.82], flicker: 0.2 });
+            }
+        }
+        for (i, s) in self.sharks.iter().enumerate() {
+            if s.dead() || !vis(s.x, s.y, 60.0) {
+                continue;
+            }
+            let fr = art.shark[(s.t * 6.0) as usize % art.shark.len()];
+            let fl = if s.flash > 0.0 { flags::FLASH } else { 0 } | if self.hover == Hover::T(Target::Shark(i)) { flags::OUTLINE } else { 0 };
+            f.sprite(&fr, s.x, s.y, SprOpt { flip: s.fx < 0.0, tint: [255, 255, 255, 215], flags: fl, cut_bottom: 0.45, ..Default::default() });
+        }
+        let k = &self.kraken;
+        if k.rise > 0.0 && vis(k.x, k.y, 300.0) {
+            if let Some(m) = art.monsters.get("kraken") {
+                let b = ((k.t * 1.5).sin() * 4.0).round();
+                let cut = 1.0 - (0.35 + 0.45 * k.rise);
+                let a = ((k.rise * 1.5).min(1.0) * 255.0) as u8;
+                let fl = if k.flash > 0.0 { flags::FLASH } else { 0 } | if self.hover == Hover::T(Target::Kraken) { flags::OUTLINE } else { 0 };
+                // Unterteil im Wasser: nur der obere Teil ragt heraus
+                let vis_h = m.h as f32 * (1.0 - cut);
+                f.sprite(m, k.x, k.y + b + (m.h as f32 - vis_h) * 0.0, SprOpt { tint: [255, 255, 255, a], flags: fl, cut_bottom: cut, ..Default::default() });
+                f.light(LightDef { x: k.x, y: k.y, z: 80.0, r: 200.0, col: [0.7, 0.3, 0.6], flicker: 0.2 });
+            }
+        }
+        // Strudel
+        if self.whirlpool_open {
+            let (wx, wy) = self.world.whirlpool;
+            if vis(wx, wy, 300.0) {
+                let s = art.spr("fx:whirl");
+                let mut q = Frame::quad_spr(&s, wx, wy, &SprOpt { rot: self.t * 1.4, ..Default::default() });
+                q.ext[3] = 0;
+                f.decals.push(q);
+                for arm in 0..3 {
+                    for i in 0..60 {
+                        let t = i as f32 / 60.0;
+                        let a = arm as f32 * 2.09 + t * 9.0 - self.t * 2.2;
+                        let r = 12.0 + t * 150.0;
+                        let c = (1.0 - t) * 255.0;
+                        f.glow(wx + a.cos() * r, wy + a.sin() * r * 0.6, 3.0, [(0.37 * c) as u8, (0.95 * c) as u8, (0.78 * c) as u8, 200]);
+                    }
+                }
+                f.light(LightDef { x: wx, y: wy, z: 30.0, r: 260.0, col: [0.35, 1.0, 0.82], flicker: 0.3 });
+            }
+        }
+    }
+}

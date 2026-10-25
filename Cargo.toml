@@ -1,0 +1,53 @@
+[package]
+name = "schwarzwasser"
+version = "0.6.0"
+edition = "2021"
+publish = false
+
+[workspace]
+members = ["crates/art"]
+
+[dependencies]
+sw-art = { path = "crates/art" }
+bevy = { version = "=0.16.1", default-features = false, features = [
+  "std", "bevy_asset", "bevy_core_pipeline", "bevy_render", "bevy_sprite", "bevy_window",
+  "bevy_winit", "bevy_state", "bevy_log", "bevy_color", "png", "webgl2", "x11",
+  "multi_threaded", "async_executor", "web"
+] }
+wgpu = { version = "24.0.5", default-features = false, features = ["wgsl"] }
+bytemuck = { version = "1", features = ["derive"] }
+png = "0.18"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+pbkdf2 = { version = "0.12", default-features = false, features = ["hmac"] }
+sha2 = "0.10"
+hmac = "0.12"
+aes-gcm = "0.10"
+base64 = "0.22"
+getrandom = { version = "0.3", features = ["wasm_js"] }
+getrandom02 = { package = "getrandom", version = "0.2", features = ["js"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = "0.2"
+js-sys = "0.3"
+web-sys = { version = "0.3", features = ["Window", "Document", "Element", "HtmlElement", "HtmlInputElement", "Storage", "Location", "Navigator", "console", "CssStyleDeclaration", "Event", "KeyboardEvent", "HtmlCanvasElement", "Performance", "AudioContext", "BaseAudioContext", "AudioBuffer", "AudioBufferSourceNode", "AudioScheduledSourceNode", "GainNode", "AudioParam", "AudioNode", "AudioDestinationNode", "ConvolverNode", "DynamicsCompressorNode", "AudioContextState", "EventTarget", "Node", "HtmlBodyElement"] }
+console_error_panic_hook = "0.1"
+
+[profile.dev]
+opt-level = 1
+[profile.dev.package."*"]
+opt-level = 3
+
+[profile.release]
+opt-level = "s"
+lto = "thin"
+codegen-units = 1
+panic = "abort"
+strip = true
+
+[profile.fast]
+inherits = "release"
+opt-level = 2
+lto = false
+codegen-units = 16
+incremental = true

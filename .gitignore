@@ -1,2 +1,4 @@
-node_modules/
+target/
+target-art/
 dist/
+node_modules/

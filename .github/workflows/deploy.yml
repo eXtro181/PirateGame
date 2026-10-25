@@ -19,11 +19,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          node-version: 22
-      - run: npm install
-      - run: npm run build
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-bindgen@0.2.129
+      - name: binaryen (wasm-opt)
+        run: |
+          curl -sSL https://github.com/WebAssembly/binaryen/releases/download/version_123/binaryen-version_123-x86_64-linux.tar.gz | tar xz -C /tmp || true
+          ls /tmp/binaryen-version_123/bin/wasm-opt || true
+      - name: Bauen
+        run: |
+          if [ -x /tmp/binaryen-version_123/bin/wasm-opt ]; then export WASM_OPT=/tmp/binaryen-version_123/bin/wasm-opt; fi
+          PROFILE=release ./build.sh
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

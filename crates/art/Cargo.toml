@@ -1,0 +1,11 @@
+[package]
+name = "sw-art"
+version = "0.6.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+
+[[bin]]
+name = "preview"
+path = "src/bin/preview.rs"

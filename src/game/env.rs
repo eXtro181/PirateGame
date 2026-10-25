@@ -1,0 +1,217 @@
+//! Lichtstimmung je Zone (Dark Fantasy): Umgebungslicht, Sonne/Mond, Nebel, Wasser, Farbkorrektur.
+//! Die Albedo bleibt farbig wie in den Beispielbildern; die Stimmung kommt aus dem Licht.
+
+use crate::gfx::{lin, Globals};
+
+#[derive(Clone, Copy)]
+pub struct Env {
+    pub ambient: [f32; 3],
+    pub sky: f32,
+    pub sun_dir: [f32; 3],
+    pub sun: [f32; 3],
+    pub shadow: f32,
+    pub fog: [f32; 3],
+    pub fog_k: f32,
+    pub lift: [f32; 3],
+    pub gain: [f32; 3],
+    pub contrast: f32,
+    pub sat: f32,
+    pub bloom: f32,
+    pub vignette: f32,
+    pub water_a: [f32; 3],
+    pub water_b: [f32; 3],
+    pub water_c: [f32; 3],
+    pub light_k: f32,
+    pub abyss: f32,
+}
+
+fn l(c: u32, k: f32) -> [f32; 3] {
+    let v = lin(c);
+    [v[0] * k, v[1] * k, v[2] * k]
+}
+fn n3(v: [f32; 3]) -> [f32; 3] {
+    let m = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt();
+    [v[0] / m, v[1] / m, v[2] / m]
+}
+
+pub fn env(zone: &str, sailing_open_sea: bool) -> Env {
+    let base = Env {
+        ambient: l(0x8A94B8, 0.55),
+        sky: 0.6,
+        sun_dir: n3([-0.55, -0.2, 0.8]),
+        sun: l(0xF2D2A4, 0.75),
+        shadow: 0.55,
+        fog: l(0x4A6170, 1.0),
+        fog_k: 0.06,
+        lift: [0.012, 0.016, 0.03],
+        gain: [1.0, 1.0, 1.0],
+        contrast: 1.06,
+        sat: 1.0,
+        bloom: 0.55,
+        vignette: 0.75,
+        water_a: l(0x4EC4D0, 1.0),
+        water_b: l(0x1E6E9E, 1.0),
+        water_c: l(0xE8FAFA, 1.0),
+        light_k: 1.0,
+        abyss: 1.0,
+    };
+    if sailing_open_sea {
+        return Env {
+            ambient: l(0x7088B0, 0.5),
+            sun: l(0xD8C8B0, 0.55),
+            fog: l(0x3A5468, 1.0),
+            fog_k: 0.12,
+            water_a: l(0x2E8EAA, 1.0),
+            water_b: l(0x0E3A5E, 1.0),
+            water_c: l(0xD8F0F6, 1.0),
+            ..base
+        };
+    }
+    match zone {
+        // Strand der Ertränkten: neblige Morgendämmerung, kühles Licht
+        "kueste" => Env { ambient: l(0x8090B8, 0.52), sun: l(0xF0C8A0, 0.62), fog: l(0x6A7E8C, 1.0), fog_k: 0.1, ..base },
+        // Schiffshain: goldene Abendstunde, Seelenlicht in der Dämmerung
+        "hain" => Env {
+            ambient: l(0x7A84B8, 0.5),
+            sun: l(0xFFC890, 0.78),
+            sun_dir: n3([-0.7, -0.1, 0.55]),
+            fog: l(0x4E7080, 1.0),
+            fog_k: 0.05,
+            gain: [1.02, 0.99, 0.97],
+            water_a: l(0x58CCD8, 1.0),
+            water_b: l(0x2280A8, 1.0),
+            ..base
+        },
+        // Aschebucht: roter Nebel, Glut, kaum Sonne
+        "asche" => Env {
+            ambient: l(0x8C7480, 0.5),
+            sky: 0.4,
+            sun: l(0xFF8A6A, 0.3),
+            shadow: 0.35,
+            fog: l(0xA0404C, 1.0),
+            fog_k: 0.09,
+            lift: [0.05, 0.01, 0.02],
+            gain: [1.04, 0.96, 0.96],
+            sat: 0.82,
+            bloom: 0.75,
+            water_a: l(0x6A3A50, 1.0),
+            water_b: l(0x2A1426, 1.0),
+            water_c: l(0xE8A0A8, 1.0),
+            light_k: 1.2,
+            ..base
+        },
+        // Frostgrotte: kalte Nacht, Mondlicht
+        "frost" => Env {
+            ambient: l(0x5A78B8, 0.38),
+            sun: l(0xA8C8FF, 0.55),
+            sun_dir: n3([0.4, -0.3, 0.8]),
+            fog: l(0x6A88A8, 1.0),
+            fog_k: 0.05,
+            lift: [0.01, 0.02, 0.05],
+            gain: [0.95, 1.0, 1.06],
+            sat: 0.9,
+            water_a: l(0x6EA8C0, 1.0),
+            water_b: l(0x24506E, 1.0),
+            water_c: l(0xF0FAFF, 1.0),
+            ..base
+        },
+        // Rabenwacht: Sturm, grau, Regen
+        "raben" => Env {
+            ambient: l(0x6E7A90, 0.42),
+            sun: l(0xC8D0E0, 0.3),
+            shadow: 0.25,
+            fog: l(0x50606E, 1.0),
+            fog_k: 0.16,
+            sat: 0.82,
+            contrast: 1.1,
+            water_a: l(0x3E8E9E, 1.0),
+            water_b: l(0x18486A, 1.0),
+            water_c: l(0xC8E4EA, 1.0),
+            light_k: 1.15,
+            ..base
+        },
+        // Fluchmangroven: fauliges Grün, Dunkelheit unter den Kronen
+        "mangroven" => Env {
+            ambient: l(0x5A8068, 0.4),
+            sky: 0.35,
+            sun: l(0xB8D890, 0.32),
+            shadow: 0.4,
+            fog: l(0x4A6A48, 1.0),
+            fog_k: 0.18,
+            lift: [0.01, 0.03, 0.015],
+            gain: [0.97, 1.03, 0.95],
+            water_a: l(0x2E5A4E, 1.0),
+            water_b: l(0x12302E, 1.0),
+            water_c: l(0x9AC0B0, 1.0),
+            light_k: 1.2,
+            ..base
+        },
+        // Ende der Welt: Schwarz und Blutrot
+        "ende" => Env {
+            ambient: l(0x7A3A50, 0.35),
+            sky: 0.3,
+            sun: l(0xFF5A3A, 0.25),
+            shadow: 0.3,
+            fog: l(0x5A1426, 1.0),
+            fog_k: 0.12,
+            lift: [0.06, 0.0, 0.02],
+            gain: [1.06, 0.9, 0.94],
+            contrast: 1.14,
+            bloom: 0.9,
+            water_a: l(0x3A1A2A, 1.0),
+            water_b: l(0x120810, 1.0),
+            water_c: l(0xC06070, 1.0),
+            light_k: 1.3,
+            abyss: 1.4,
+            ..base
+        },
+        _ => base,
+    }
+}
+
+fn lerp3(a: [f32; 3], b: [f32; 3], t: f32) -> [f32; 3] {
+    [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]
+}
+fn lerp(a: f32, b: f32, t: f32) -> f32 {
+    a + (b - a) * t
+}
+pub fn mix(a: &Env, b: &Env, t: f32) -> Env {
+    Env {
+        ambient: lerp3(a.ambient, b.ambient, t),
+        sky: lerp(a.sky, b.sky, t),
+        sun_dir: n3(lerp3(a.sun_dir, b.sun_dir, t)),
+        sun: lerp3(a.sun, b.sun, t),
+        shadow: lerp(a.shadow, b.shadow, t),
+        fog: lerp3(a.fog, b.fog, t),
+        fog_k: lerp(a.fog_k, b.fog_k, t),
+        lift: lerp3(a.lift, b.lift, t),
+        gain: lerp3(a.gain, b.gain, t),
+        contrast: lerp(a.contrast, b.contrast, t),
+        sat: lerp(a.sat, b.sat, t),
+        bloom: lerp(a.bloom, b.bloom, t),
+        vignette: lerp(a.vignette, b.vignette, t),
+        water_a: lerp3(a.water_a, b.water_a, t),
+        water_b: lerp3(a.water_b, b.water_b, t),
+        water_c: lerp3(a.water_c, b.water_c, t),
+        light_k: lerp(a.light_k, b.light_k, t),
+        abyss: lerp(a.abyss, b.abyss, t),
+    }
+}
+
+/// In die Shader-Konstanten schreiben. `dark` = Option „Düster“, `exposure` = Helligkeit.
+pub fn apply(e: &Env, g: &mut Globals, dark: bool, exposure: f32, fx_high: bool) {
+    // Dark Fantasy: gedämpftes Umgebungslicht, tief stehende Sonne, Lichtinseln durch Laternen
+    let dk = if dark { 0.5 } else { 0.68 };
+    let sk = if dark { 0.55 } else { 0.72 };
+    g.ambient = [e.ambient[0] * dk, e.ambient[1] * dk, e.ambient[2] * dk, e.sky];
+    g.sun_dir = [e.sun_dir[0], e.sun_dir[1], e.sun_dir[2], if fx_high { e.shadow + 0.15 } else { 0.0 }];
+    g.sun_col = [e.sun[0] * sk, e.sun[1] * sk, e.sun[2] * sk, 0.6];
+    g.fog = [e.fog[0], e.fog[1], e.fog[2], e.fog_k];
+    g.lift = [e.lift[0] + 0.004, e.lift[1] + 0.008, e.lift[2] + 0.016, e.contrast + 0.06];
+    g.gain = [e.gain[0], e.gain[1], e.gain[2], e.sat * if dark { 0.75 } else { 1.0 }];
+    g.misc = [(e.vignette + 0.2).min(1.0), if fx_high { 0.018 } else { 0.0 }, if fx_high { e.bloom } else { 0.2 }, exposure];
+    g.water_a = [e.water_a[0], e.water_a[1], e.water_a[2], 1.0];
+    g.water_b = [e.water_b[0], e.water_b[1], e.water_b[2], 1.0];
+    g.water_c = [e.water_c[0], e.water_c[1], e.water_c[2], 0.3];
+    g.map[3] = e.abyss;
+}

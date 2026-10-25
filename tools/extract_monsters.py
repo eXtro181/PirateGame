@@ -12,6 +12,7 @@ import cv2, numpy as np, json, os
 from PIL import Image
 from sklearn.cluster import KMeans
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+SCALE = 2.0  # Spielgröße für 32-px-Kacheln (v0.6)
 TUNE = {"ghostGalley":[9,2],"abyssPirate":[8,3],"livingChest":[8,3],"mimicChest":[8,3],"cannonAngler":[8,3],"kraken":[12,2],"cannonEater":[16,1],"krakenBasilisk":[11,2],"manticore":[11,2],"gorgonQueen":[11,2],"stormHarpy":[10,2],"bellConstruct":[14,1]}
 POCKETS = {'kraken': 60, 'krakenBasilisk': 60, 'bellConstruct': 80, 'clockStorm': 60, 'gorgonQueen': 80, 'fleshShip': 60, 'wyvern': 80, 'trueMimic': 80}
 TARGET = {
@@ -68,15 +69,15 @@ def pixelize(img, tw):
     return Image.fromarray(arr, 'RGBA')
 if __name__ == '__main__':
     img = np.asarray(Image.open(os.path.join(ROOT, 'assets/monster-vorlage.jpg')).convert('RGB')).astype(np.float32)
-    sprites = {k: pixelize(cut(img, k, b), TARGET[k]) for k, b in BOXES.items()}
+    sprites = {k: pixelize(cut(img, k, b), round(TARGET[k] * SCALE)) for k, b in BOXES.items()}
     # shelf pack into 512 wide
-    W = 512; x = y = 2; rowh = 0; rects = {}
+    W = 1024; x = y = 2; rowh = 0; rects = {}
     for k, s in sorted(sprites.items(), key=lambda kv: -kv[1].height):
         if x + s.width + 2 > W: x = 2; y += rowh + 2; rowh = 0
         rects[k] = [x, y, s.width, s.height]; x += s.width + 2; rowh = max(rowh, s.height)
     H = y + rowh + 2
     atlas = Image.new('RGBA', (W, H), (0, 0, 0, 0))
     for k, s in sprites.items(): atlas.paste(s, tuple(rects[k][:2]))
-    atlas.save(os.path.join(ROOT, 'public/monsters.png'))
-    json.dump(rects, open(os.path.join(ROOT, 'public/monsters.json'), 'w'))
+    atlas.save(os.path.join(ROOT, 'assets/monsters.png'))
+    json.dump(rects, open(os.path.join(ROOT, 'assets/monsters.json'), 'w'))
     print('monsters.png', W, H, len(rects))
