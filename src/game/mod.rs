@@ -1316,6 +1316,31 @@ impl Game {
         self.shake(5.0);
         self.save.ship_dock = d.zone.def().key.into();
     }
+    pub fn debug_boss(&mut self, key: &str) {
+        let bi = if key == "mega" { self.bosses.len() - 1 } else { KINGS.iter().position(|k| k.key == key).unwrap_or(0) };
+        let zone = if key == "mega" { "ende" } else { KINGS[bi].zone };
+        if let Some(a) = self.world.arenas.get(zone).cloned() {
+            self.player.a.x = a.x - 120.0;
+            self.player.a.y = a.y + 40.0;
+            self.cam_f = (self.player.a.x, self.player.a.y);
+            self.boss_activate(bi);
+        }
+    }
+    pub fn debug_board(&mut self) {
+        let (px, py) = (self.player.a.x, self.player.a.y);
+        let di = (0..self.world.docks.len()).min_by(|a, b| {
+            let da = (self.world.docks[*a].px - px).hypot(self.world.docks[*a].py - py);
+            let db = (self.world.docks[*b].px - px).hypot(self.world.docks[*b].py - py);
+            da.partial_cmp(&db).unwrap()
+        });
+        if let Some(di) = di {
+            self.call_ship(di);
+            self.ship.rise = None;
+            self.ship.hull.alpha = 1.0;
+            self.board(di);
+            self.cam_f = (self.ship.hull.x, self.ship.hull.y);
+        }
+    }
     fn board(&mut self, _di: usize) {
         self.sailing = true;
         self.player.state = PS::Ship;

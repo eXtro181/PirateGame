@@ -190,6 +190,16 @@ fn setup(world: &mut bevy::ecs::world::World) {
                 s.pearls = 50000;
             }
             start_game(&mut app, None, s, &mut art, &mut f);
+            if let Some(k) = app.params.get("boss").cloned() {
+                if let Scene::Play(g) = &mut app.scene {
+                    g.debug_boss(&k);
+                }
+            }
+            if app.params.contains_key("sail") {
+                if let Scene::Play(g) = &mut app.scene {
+                    g.debug_board();
+                }
+            }
         }
     }
     let (lk, wpn) = app.menu.look_weapon();

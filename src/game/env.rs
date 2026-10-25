@@ -57,12 +57,13 @@ pub fn env(zone: &str, sailing_open_sea: bool) -> Env {
     };
     if sailing_open_sea {
         return Env {
-            ambient: l(0x7088B0, 0.5),
-            sun: l(0xD8C8B0, 0.55),
+            ambient: l(0x7898C0, 0.75),
+            sun: l(0xC8D8F0, 0.7),
+            sun_dir: n3([0.35, -0.45, 0.6]),
             fog: l(0x3A5468, 1.0),
             fog_k: 0.12,
-            water_a: l(0x2E8EAA, 1.0),
-            water_b: l(0x0E3A5E, 1.0),
+            water_a: l(0x3AA4BC, 1.0),
+            water_b: l(0x124A70, 1.0),
             water_c: l(0xD8F0F6, 1.0),
             ..base
         };
