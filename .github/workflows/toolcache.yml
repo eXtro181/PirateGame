@@ -1,0 +1,51 @@
+name: Werkzeug-Cache (Rust-Crates fuer lokale Builds)
+on:
+  push:
+    branches: [toolcache-req]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  vendor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.97.0
+          targets: wasm32-unknown-unknown
+      - name: Lockfile
+        run: cargo generate-lockfile
+      - name: Vendor (nur Linux + wasm)
+        run: |
+          cargo install cargo-vendor-filterer --locked
+          cargo vendor-filterer --platform=x86_64-unknown-linux-gnu --platform=wasm32-unknown-unknown out/vendor
+      - name: Werkzeuge
+        run: |
+          set -x
+          mkdir -p out/bin
+          curl -sSfL https://static.rust-lang.org/dist/rust-std-1.97.0-wasm32-unknown-unknown.tar.xz -o out/rust-std-wasm32.tar.xz
+          WBV=$(grep -A1 'name = "wasm-bindgen"$' Cargo.lock | grep version | head -1 | cut -d'"' -f2)
+          echo "wasm-bindgen $WBV"
+          cargo install wasm-bindgen-cli --version "$WBV" --locked
+          cp ~/.cargo/bin/wasm-bindgen out/bin/
+          for V in 123 122 121 120 119 118; do
+            if curl -sSfL "https://github.com/WebAssembly/binaryen/releases/download/version_$V/binaryen-version_$V-x86_64-linux.tar.gz" -o bin.tgz; then
+              tar -xzf bin.tgz && cp binaryen-version_$V/bin/wasm-opt out/bin/ && cp -r binaryen-version_$V/lib out/ 2>/dev/null; echo "binaryen $V"; break; fi
+          done
+          cp Cargo.lock out/
+      - name: Packen und in Branch toolcache legen
+        run: |
+          cd out
+          tar -cJf ../cache.tar.xz .
+          cd ..
+          ls -la cache.tar.xz
+          mkdir pub && cd pub
+          split -b 80m -d ../cache.tar.xz cache.tar.xz.part
+          cp ../Cargo.lock .
+          git init -q -b toolcache
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git add -A
+          git commit -qm "Werkzeug-Cache fuer lokale Rust-Builds"
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}" toolcache
