@@ -678,6 +678,7 @@ impl Game {
         let (sx, sy) = if self.shake_k > 0.0 { (rr(-1.0, 1.0) * self.shake_k, rr(-1.0, 1.0) * self.shake_k) } else { (0.0, 0.0) };
         self.cam = (self.cam_f.0 + sx, self.cam_f.1 + sy);
         frame.set_camera(self.cam.0, self.cam.1);
+        frame.focus_y = Some(if self.sailing { self.ship.hull.y } else { self.player.a.y });
     }
 
     fn update_zone(&mut self, dt: f32) {

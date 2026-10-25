@@ -23,6 +23,8 @@ pub struct Env {
     pub water_c: [f32; 3],
     pub light_k: f32,
     pub abyss: f32,
+    /// Lichtstrahlen (HD-2D), skaliert mit der Sonne
+    pub rays: f32,
 }
 
 fn l(c: u32, k: f32) -> [f32; 3] {
@@ -54,6 +56,7 @@ pub fn env(zone: &str, sailing_open_sea: bool) -> Env {
         water_c: l(0xE8FAFA, 1.0),
         light_k: 1.0,
         abyss: 1.0,
+        rays: 0.5,
     };
     if sailing_open_sea {
         return Env {
@@ -65,6 +68,7 @@ pub fn env(zone: &str, sailing_open_sea: bool) -> Env {
             water_a: l(0x3AA4BC, 1.0),
             water_b: l(0x124A70, 1.0),
             water_c: l(0xD8F0F6, 1.0),
+            rays: 0.3,
             ..base
         };
     }
@@ -73,6 +77,7 @@ pub fn env(zone: &str, sailing_open_sea: bool) -> Env {
         "kueste" => Env { ambient: l(0x8090B8, 0.52), sun: l(0xF0C8A0, 0.62), fog: l(0x6A7E8C, 1.0), fog_k: 0.1, ..base },
         // Schiffshain: goldene Abendstunde, Seelenlicht in der Dämmerung
         "hain" => Env {
+            rays: 0.85,
             ambient: l(0x7A84B8, 0.5),
             sun: l(0xFFC890, 0.78),
             sun_dir: n3([-0.7, -0.1, 0.55]),
@@ -85,6 +90,7 @@ pub fn env(zone: &str, sailing_open_sea: bool) -> Env {
         },
         // Aschebucht: roter Nebel, Glut, kaum Sonne
         "asche" => Env {
+            rays: 0.6,
             ambient: l(0x8C7480, 0.5),
             sky: 0.4,
             sun: l(0xFF8A6A, 0.3),
@@ -103,6 +109,7 @@ pub fn env(zone: &str, sailing_open_sea: bool) -> Env {
         },
         // Frostgrotte: kalte Nacht, Mondlicht
         "frost" => Env {
+            rays: 0.55,
             ambient: l(0x5A78B8, 0.38),
             sun: l(0xA8C8FF, 0.55),
             sun_dir: n3([0.4, -0.3, 0.8]),
@@ -118,6 +125,7 @@ pub fn env(zone: &str, sailing_open_sea: bool) -> Env {
         },
         // Rabenwacht: Sturm, grau, Regen
         "raben" => Env {
+            rays: 0.3,
             ambient: l(0x6E7A90, 0.42),
             sun: l(0xC8D0E0, 0.3),
             shadow: 0.25,
@@ -133,6 +141,7 @@ pub fn env(zone: &str, sailing_open_sea: bool) -> Env {
         },
         // Fluchmangroven: fauliges Grün, Dunkelheit unter den Kronen
         "mangroven" => Env {
+            rays: 0.75,
             ambient: l(0x5A8068, 0.4),
             sky: 0.35,
             sun: l(0xB8D890, 0.32),
@@ -149,6 +158,7 @@ pub fn env(zone: &str, sailing_open_sea: bool) -> Env {
         },
         // Ende der Welt: Schwarz und Blutrot
         "ende" => Env {
+            rays: 0.4,
             ambient: l(0x7A3A50, 0.35),
             sky: 0.3,
             sun: l(0xFF5A3A, 0.25),
@@ -196,6 +206,7 @@ pub fn mix(a: &Env, b: &Env, t: f32) -> Env {
         water_c: lerp3(a.water_c, b.water_c, t),
         light_k: lerp(a.light_k, b.light_k, t),
         abyss: lerp(a.abyss, b.abyss, t),
+        rays: lerp(a.rays, b.rays, t),
     }
 }
 
@@ -215,4 +226,8 @@ pub fn apply(e: &Env, g: &mut Globals, dark: bool, exposure: f32, fx_high: bool)
     g.water_b = [e.water_b[0], e.water_b[1], e.water_b[2], 1.0];
     g.water_c = [e.water_c[0], e.water_c[1], e.water_c[2], 0.3];
     g.map[3] = e.abyss;
+    // HD-2D: Schrägsicht immer, Tiefenschärfe, Verdeckung, Strahlen und Staub nur bei hohen Effekten
+    let hk = if fx_high { 1.0 } else { 0.0 };
+    g.hd = [crate::gfx::TILT, hk, g.hd[2], e.rays * hk * if dark { 0.7 } else { 1.0 }];
+    g.hd2 = [hk, 0.6 * hk, 0.55, 0.5 * hk];
 }

@@ -55,6 +55,8 @@ struct Targets {
     bright: wgpu::TextureView,
     blur_a: wgpu::TextureView,
     blur_b: wgpu::TextureView,
+    dof_a: wgpu::TextureView,
+    dof_b: wgpu::TextureView,
     _tex: Vec<wgpu::Texture>,
 }
 
@@ -80,6 +82,8 @@ pub struct Gpu {
     p_bright: wgpu::RenderPipeline,
     p_blur_h: wgpu::RenderPipeline,
     p_blur_v: wgpu::RenderPipeline,
+    p_dof_h: wgpu::RenderPipeline,
+    p_dof_v: wgpu::RenderPipeline,
     p_final: Option<(wgpu::TextureFormat, wgpu::RenderPipeline, wgpu::RenderPipeline)>,
     atlas: Option<(wgpu::Texture, wgpu::Texture)>,
     chunks: (wgpu::Texture, wgpu::Texture),
@@ -91,6 +95,8 @@ pub struct Gpu {
     bg_bright: Option<wgpu::BindGroup>,
     bg_blur_h: Option<wgpu::BindGroup>,
     bg_blur_v: Option<wgpu::BindGroup>,
+    bg_dof_h: Option<wgpu::BindGroup>,
+    bg_dof_v: Option<wgpu::BindGroup>,
     bg_final: Option<wgpu::BindGroup>,
     vbuf: wgpu::Buffer,
     vcap: u64,
@@ -98,6 +104,7 @@ pub struct Gpu {
     icap: u32,
     ranges: [(u32, u32); 6],
     ready: bool,
+    dof: bool,
 }
 
 const COMMON: &str = include_str!("shaders/common.wgsl");
@@ -265,12 +272,16 @@ impl Gpu {
             true,
             &[ct(ALB, Some(wgpu::BlendState::ALPHA_BLENDING), wgpu::ColorWrites::COLOR)],
         );
-        let p_over_a = pipe(d, "over_a", &pl_scene, &scene_mod, "vs_world", "fs_overlay", true, &[ct(hdr, Some(PREMUL), all)]);
-        let p_over_add = pipe(d, "over_add", &pl_scene, &scene_mod, "vs_world", "fs_overlay", true, &[ct(hdr, Some(ADD), all)]);
+        // Überlagerung schreibt nur Farbe: Alpha der Szene trägt die Bodenzeile für die Tiefenschärfe
+        let col = wgpu::ColorWrites::COLOR;
+        let p_over_a = pipe(d, "over_a", &pl_scene, &scene_mod, "vs_world", "fs_overlay", true, &[ct(hdr, Some(PREMUL), col)]);
+        let p_over_add = pipe(d, "over_add", &pl_scene, &scene_mod, "vs_world", "fs_overlay", true, &[ct(hdr, Some(ADD), col)]);
         let p_light = pipe(d, "light", &pl_post, &post_mod, "vs_full", "fs_light", false, &[ct(hdr, None, all)]);
         let p_bright = pipe(d, "bright", &pl_post, &post_mod, "vs_full", "fs_bright", false, &[ct(hdr, None, all)]);
         let p_blur_h = pipe(d, "blur_h", &pl_post, &post_mod, "vs_full", "fs_blur_h", false, &[ct(hdr, None, all)]);
         let p_blur_v = pipe(d, "blur_v", &pl_post, &post_mod, "vs_full", "fs_blur_v", false, &[ct(hdr, None, all)]);
+        let p_dof_h = pipe(d, "dof_h", &pl_post, &post_mod, "vs_full", "fs_dof_h", false, &[ct(hdr, None, all)]);
+        let p_dof_v = pipe(d, "dof_v", &pl_post, &post_mod, "vs_full", "fs_dof_v", false, &[ct(hdr, None, all)]);
         let chunks = (
             make_tex(d, "chunk_col", CHUNK as u32, CHUNK as u32, CHUNK_SLOTS, ALB, false),
             make_tex(d, "chunk_nrm", CHUNK as u32, CHUNK as u32, CHUNK_SLOTS, NRM, false),
@@ -300,6 +311,8 @@ impl Gpu {
             p_bright,
             p_blur_h,
             p_blur_v,
+            p_dof_h,
+            p_dof_v,
             p_final: None,
             atlas: None,
             chunks,
@@ -311,6 +324,8 @@ impl Gpu {
             bg_bright: None,
             bg_blur_h: None,
             bg_blur_v: None,
+            bg_dof_h: None,
+            bg_dof_v: None,
             bg_final: None,
             vbuf,
             vcap,
@@ -318,6 +333,7 @@ impl Gpu {
             icap,
             ranges: [(0, 0); 6],
             ready: false,
+            dof: false,
         }
     }
 }
@@ -404,6 +420,8 @@ fn prepare(mut gpu: ResMut<Gpu>, mut p: ResMut<Packed>, dev: Res<RenderDevice>, 
         let t_br = make_tex(d, "bright", bw, bh, 1, hdr, true);
         let t_ba = make_tex(d, "blur_a", bw, bh, 1, hdr, true);
         let t_bb = make_tex(d, "blur_b", bw, bh, 1, hdr, true);
+        let t_da = make_tex(d, "dof_a", bw, h, 1, hdr, true);
+        let t_db = make_tex(d, "dof_b", bw, bh, 1, hdr, true);
         let t = Targets {
             w,
             h,
@@ -414,13 +432,18 @@ fn prepare(mut gpu: ResMut<Gpu>, mut p: ResMut<Packed>, dev: Res<RenderDevice>, 
             bright: view2(&t_br),
             blur_a: view2(&t_ba),
             blur_b: view2(&t_bb),
-            _tex: vec![t_alb, t_nrm, t_emi, t_lit, t_br, t_ba, t_bb],
+            dof_a: view2(&t_da),
+            dof_b: view2(&t_db),
+            _tex: vec![t_alb, t_nrm, t_emi, t_lit, t_br, t_ba, t_bb, t_da, t_db],
         };
         gpu.bg_light = Some(post_bg(d, &gpu.bgl_post, [&t.alb, &t.nrm, &t.emi, &t.alb]));
         gpu.bg_bright = Some(post_bg(d, &gpu.bgl_post, [&t.lit, &t.lit, &t.lit, &t.lit]));
         gpu.bg_blur_h = Some(post_bg(d, &gpu.bgl_post, [&t.bright, &t.bright, &t.bright, &t.bright]));
         gpu.bg_blur_v = Some(post_bg(d, &gpu.bgl_post, [&t.blur_a, &t.blur_a, &t.blur_a, &t.blur_a]));
-        gpu.bg_final = Some(post_bg(d, &gpu.bgl_post, [&t.lit, &t.blur_b, &t.lit, &t.lit]));
+        gpu.bg_dof_h = Some(post_bg(d, &gpu.bgl_post, [&t.lit, &t.lit, &t.lit, &t.lit]));
+        gpu.bg_dof_v = Some(post_bg(d, &gpu.bgl_post, [&t.dof_a, &t.dof_a, &t.dof_a, &t.dof_a]));
+        let noise = view2(&gpu.noise);
+        gpu.bg_final = Some(post_bg(d, &gpu.bgl_post, [&t.lit, &t.blur_b, &t.dof_b, &noise]));
         gpu.targets = Some(t);
     }
     // Endbild-Pipelines für das Fensterformat
@@ -451,6 +474,7 @@ fn prepare(mut gpu: ResMut<Gpu>, mut p: ResMut<Packed>, dev: Res<RenderDevice>, 
     }
     queue.write_buffer(&gpu.ubuf, 0, bytemuck::bytes_of(&p.g));
     gpu.ranges = p.ranges;
+    gpu.dof = p.g.hd[1] > 0.0;
     gpu.ready = gpu.bg_scene.is_some() && gpu.targets.is_some() && gpu.p_final.is_some();
 }
 
@@ -560,6 +584,11 @@ impl Node for SwNode {
         full(enc, &t.bright, &gpu.p_bright, gpu.bg_bright.as_ref().unwrap());
         full(enc, &t.blur_a, &gpu.p_blur_h, gpu.bg_blur_h.as_ref().unwrap());
         full(enc, &t.blur_b, &gpu.p_blur_v, gpu.bg_blur_v.as_ref().unwrap());
+        // 3b) Tiefenschärfe: breite Unschärfe in halber Größe (erst waagrecht, dann senkrecht)
+        if gpu.dof {
+            full(enc, &t.dof_a, &gpu.p_dof_h, gpu.bg_dof_h.as_ref().unwrap());
+            full(enc, &t.dof_b, &gpu.p_dof_v, gpu.bg_dof_v.as_ref().unwrap());
+        }
         // 4) Endbild + UI auf den Bildschirm
         {
             let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor {

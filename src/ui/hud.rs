@@ -365,11 +365,11 @@ fn draw_legend(f: &mut Frame, art: &Art) {
     }
 }
 
-/// Weltpunkt → UI-Pixel
+/// Weltpunkt → UI-Pixel (mit Schrägsicht)
 pub fn w2ui(f: &Frame, x: f32, y: f32) -> (f32, f32) {
-    let (vx, vy, vw, _) = f.view();
-    let k = f.screen.0 as f32 / vw / f.ui_scale;
-    ((x - vx) * k, (y - vy) * k)
+    let (u, v, _) = f.world_to_screen(x, y);
+    let (w, h) = f.ui_size();
+    (u * w, v * h)
 }
 pub fn world_k(f: &Frame) -> f32 {
     f.screen.0 as f32 / f.view().2 / f.ui_scale

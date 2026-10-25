@@ -18,6 +18,8 @@ struct Globals {
     water_c: vec4<f32>,   // Schaum/Glanz rgb, Schaumbreite
     map: vec4<f32>,       // Kartengröße px, Maskentexelgröße px, Abgrund-Tiefe
     counts: vec4<f32>,    // Lichteranzahl, Blitz (Gewitter), Weiß-Blende, Rot-Blende
+    hd: vec4<f32>,        // HD-2D: Kippung, Tiefenschärfe, Fokuszeile, Lichtstrahlen
+    hd2: vec4<f32>,       // HD-2D: Verdeckung, Bokeh-Staub, Randlicht, Farbsaum
     lights: array<Light, 48>,
 };
 @group(0) @binding(0) var<uniform> G: Globals;
@@ -30,4 +32,12 @@ fn hash21(p: vec2<f32>) -> f32 {
 }
 fn luma(c: vec3<f32>) -> f32 {
     return dot(c, vec3<f32>(0.299, 0.587, 0.114));
+}
+
+// Schrägsicht (HD-2D-Diorama): Bildschirm (0..1) → Low-Res-Bild (0..1).
+// Oben liegt die Welt ferner (gestaucht), unten näher (vergrößert). Gegenstück: Frame::screen_to_src.
+fn tilt_src(uv: vec2<f32>) -> vec2<f32> {
+    let c = G.hd.x;
+    let d = 1.0 + c * uv.y;
+    return vec2<f32>(0.5 + (uv.x - 0.5) / d, uv.y * (1.0 + c) / d);
 }

@@ -293,8 +293,8 @@ fn tick(
         inp.mouse_moved = false;
     }
     let ui_size = f.ui_size();
-    let (vx, vy, vw, _) = f.view();
-    inp.mouse_world = Vec2::new(vx + inp.mouse.x * f.ui_scale * vw / f.screen.0.max(1) as f32, vy + inp.mouse.y * f.ui_scale * vw / f.screen.0.max(1) as f32);
+    let (mwx, mwy) = f.screen_to_world(inp.mouse.x * f.ui_scale / f.screen.0.max(1) as f32, inp.mouse.y * f.ui_scale / f.screen.1.max(1) as f32);
+    inp.mouse_world = Vec2::new(mwx, mwy);
     let touch_mode = match app.opt.touch {
         1 => true,
         2 => false,

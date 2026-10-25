@@ -12,6 +12,8 @@ use sw_art::atlas::Spr;
 pub const MAX_LIGHTS: usize = 48;
 pub const CHUNK: i32 = 256;
 pub const CHUNK_SLOTS: u32 = 40;
+/// Kippung der Schrägsicht (HD-2D-Diorama): unten ist die Welt um den Faktor 1 + TILT näher.
+pub const TILT: f32 = 0.32;
 
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable, Default)]
@@ -47,6 +49,10 @@ pub struct Globals {
     pub water_c: [f32; 4],
     pub map: [f32; 4],
     pub counts: [f32; 4],
+    /// HD-2D: Schrägsicht (Kippung), Tiefenschärfe, Fokuszeile (0..1), Lichtstrahlen
+    pub hd: [f32; 4],
+    /// HD-2D: Umgebungsverdeckung, Bokeh-Staub, Randlicht, Farbsaum
+    pub hd2: [f32; 4],
     pub lights: [GLight; MAX_LIGHTS],
 }
 impl Default for Globals {
@@ -66,6 +72,8 @@ impl Default for Globals {
             water_c: [0.9, 0.97, 1.0, 0.25],
             map: [8192.0, 6144.0, 8.0, 1.0],
             counts: [0.0; 4],
+            hd: [TILT, 1.0, 0.5, 0.5],
+            hd2: [1.0, 0.6, 0.5, 0.6],
             lights: [GLight::default(); MAX_LIGHTS],
         }
     }
@@ -176,6 +184,8 @@ pub struct Frame {
     /// Bildschirmgröße (phys. px) und UI-Skalierung
     pub screen: (u32, u32),
     pub ui_scale: f32,
+    /// Welt-y der Fokusebene für die Tiefenschärfe (Fuß des Spielers)
+    pub focus_y: Option<f32>,
     seq: u32,
 }
 
@@ -199,6 +209,29 @@ impl Frame {
     pub fn set_camera(&mut self, cx: f32, cy: f32) {
         let (w, h) = (self.low.0 as f32, self.low.1 as f32);
         self.g.view = [(cx - w * 0.5).round(), (cy - h * 0.5).round(), w, h];
+    }
+    /// Schrägsicht: Low-Res-Bild (0..1) → Bildschirm (0..1). Gleiche Formel wie `tilt_src` im Shader, umgekehrt.
+    pub fn src_to_screen(&self, sx: f32, sy: f32) -> (f32, f32) {
+        let c = self.g.hd[0];
+        let v = sy / (1.0 + c - c * sy);
+        (0.5 + (sx - 0.5) * (1.0 + c * v), v)
+    }
+    /// Schrägsicht: Bildschirm (0..1) → Low-Res-Bild (0..1).
+    pub fn screen_to_src(&self, u: f32, v: f32) -> (f32, f32) {
+        let c = self.g.hd[0];
+        let d = 1.0 + c * v;
+        (0.5 + (u - 0.5) / d, v * (1.0 + c) / d)
+    }
+    /// Weltpunkt → Bildschirm (0..1) und örtliche Vergrößerung gegenüber der Bildmitte
+    pub fn world_to_screen(&self, x: f32, y: f32) -> (f32, f32, f32) {
+        let (vx, vy, vw, vh) = self.view();
+        let (u, v) = self.src_to_screen((x - vx) / vw, (y - vy) / vh);
+        (u, v, (1.0 + self.g.hd[0] * v) / (1.0 + self.g.hd[0] * 0.5))
+    }
+    pub fn screen_to_world(&self, u: f32, v: f32) -> (f32, f32) {
+        let (vx, vy, vw, vh) = self.view();
+        let (sx, sy) = self.screen_to_src(u, v);
+        (vx + sx * vw, vy + sy * vh)
     }
     pub fn quad_spr(s: &Spr, x: f32, y: f32, o: &SprOpt) -> Q {
         // x,y = Fußpunkt in Welt; Sprite-Anker (ax, ay)
@@ -402,6 +435,7 @@ pub fn pack_frame(mut f: ResMut<Frame>, mut p: ResMut<Packed>, time: Res<Time>) 
         f.g.lights[i] = GLight { pos: [l.x, l.y, l.z, l.r], col: [l.col[0], l.col[1], l.col[2], l.flicker] };
     }
     f.g.counts[0] = n as f32;
+    f.g.hd[2] = f.focus_y.map(|y| ((y - vy) / vh).clamp(0.0, 1.0)).unwrap_or(0.55);
     f.g.screen = [f.screen.0 as f32, f.screen.1 as f32, time.elapsed_secs_wrapped(), f.ui_scale];
     p.g = f.g;
     p.low = f.low;

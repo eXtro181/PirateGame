@@ -575,7 +575,7 @@ impl Menu {
             changed = true;
         }
         y += 16.0;
-        let d = self.cycler(f, art, inp, x, y, cw, "Effekte", if o.fx_high { "Bloom, Nebel, Schatten" } else { "Sparsam" });
+        let d = self.cycler(f, art, inp, x, y, cw, "Effekte", if o.fx_high { "HD-2D, Bloom, Schatten" } else { "Sparsam" });
         if d != 0 {
             o.fx_high = !o.fx_high;
             changed = true;
