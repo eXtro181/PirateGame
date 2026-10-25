@@ -186,14 +186,14 @@ class Batch {
     // quad: x,y,w,h in target pixels; u0..v1 normalized; col rgba; mode, sway, worldX
     quad(x, y, w, h, u0, v0, u1, v1, r, g, b, a, mode = 0, sway = 0, wx = 0) {
         if (this.n >= this.max) this.flush();
-        const d = this.data, o = this.n * 4 * STRIDE;
-        const put = (k, px, py, u, v, top) => {
-            const p = o + k * STRIDE;
-            d[p] = px; d[p + 1] = py; d[p + 2] = u; d[p + 3] = v;
+        const d = this.data;
+        let p = this.n * 4 * STRIDE;
+        const X = [x, x + w, x + w, x], Y = [y, y, y + h, y + h], U = [u0, u1, u1, u0], V = [v0, v0, v1, v1];
+        for (let k = 0; k < 4; k++, p += STRIDE) {
+            d[p] = X[k]; d[p + 1] = Y[k]; d[p + 2] = U[k]; d[p + 3] = V[k];
             d[p + 4] = r; d[p + 5] = g; d[p + 6] = b; d[p + 7] = a;
-            d[p + 8] = mode; d[p + 9] = sway; d[p + 10] = top; d[p + 11] = wx;
-        };
-        put(0, x, y, u0, v0, 1); put(1, x + w, y, u1, v0, 1); put(2, x + w, y + h, u1, v1, 0); put(3, x, y + h, u0, v1, 0);
+            d[p + 8] = mode; d[p + 9] = sway; d[p + 10] = k < 2 ? 1 : 0; d[p + 11] = wx;
+        }
         this.n++;
     }
     flush() {
@@ -201,7 +201,8 @@ class Batch {
         const gl = this.gl;
         gl.bindVertexArray(this.vao);
         gl.bindBuffer(gl.ARRAY_BUFFER, this.vbo);
-        gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.data, 0, this.n * 4 * STRIDE);
+        // fresh storage for every draw (orphaning): no stall waiting for the previous draw on WebKit/Metal
+        gl.bufferData(gl.ARRAY_BUFFER, this.data.subarray(0, this.n * 4 * STRIDE), gl.STREAM_DRAW);
         gl.drawElements(gl.TRIANGLES, this.n * 6, gl.UNSIGNED_INT, 0);
         this.n = 0;
     }
