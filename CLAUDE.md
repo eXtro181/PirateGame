@@ -5,7 +5,7 @@ Kurzreferenz, damit neue Sitzungen sofort weiterarbeiten können. Bei Änderunge
 ## Projekt
 - **Schwarzwasser**: Soulslike-Piratenspiel im Browser (Dark-Souls-3-Stimmung) in **HD-Pixelart**, eigener WebGL2-Renderer (kein PlayCanvas mehr), gebündelt mit esbuild. Keine Bild-/Audiodateien: alles wird beim Start aus Code erzeugt.
 - Repo: `eXtro181/PirateGame`, live: https://extro181.github.io/PirateGame/ (GitHub Pages über Actions, `.github/workflows/deploy.yml` baut bei Push auf `main`).
-- **Grafik-Vorgabe (verbindlich)**: Claude-Doc „Dark Fantasy Pirate RPG – Grafik-Spezifikation“ https://claude.ai/artifact/V4yVVaGGr1YaLyLo4UUA19 (Palette, 640×360, 16er-Tiles, Figuren 16×32, selektive Outlines, Wasser-Shader, Hauptmenü mit 10 Parallax-Ebenen, HUD-Maße, Szenen Hub/Grotte/Hafen/Mangroven/Blutgezeiten). Die 3D-Version v0.3 wurde vom Nutzer als „Katastrophe“ verworfen.
+- **Grafik-Vorgabe (verbindlich, Stand 25.10.)**: Die Grafik soll „100 % wie die Beispiel-Bilder“ des Nutzers aussehen (helle HD-Pixelart: Blütenbäume aus Blütenbüscheln mit Glyzinien, Basaltklippen mit Graslippen und Wasserfällen, türkisfarbenes Wasser, Fachwerkhäuser mit türkisen Schuppendächern, Rotnebel-Zone). Standard ist Farbstimmung „Leuchtend“; „Düster“ (Optionen) wendet die Spec-Abdunklung an. Monster: genau die Vorlagen aus `assets/monster-vorlage.jpg` (ausgeschnitten per `tools/extract_monsters.py` → `public/monsters.png/json`, im Spiel als statische Bilder mit Code-Animation). Daneben gilt weiter: Claude-Doc „Dark Fantasy Pirate RPG – Grafik-Spezifikation“ https://claude.ai/artifact/V4yVVaGGr1YaLyLo4UUA19 (Palette, 640×360, 16er-Tiles, Figuren 16×32, selektive Outlines, Wasser-Shader, Hauptmenü mit 10 Parallax-Ebenen, HUD-Maße, Szenen Hub/Grotte/Hafen/Mangroven/Blutgezeiten). Die 3D-Version v0.3 wurde vom Nutzer als „Katastrophe“ verworfen.
 - Story: Schiffshain-Hub (Schiffsfriedhof ohne Galionsfiguren), 4 Geisterkönige mit 2 Phasen (Mythos-Monster), Strudel zum Ende der Welt, Endboss brennender Skelett-Megalodon mit zufälligem Elementwechsel. Das ursprüngliche Story-Doc war nicht lesbar; Namen sind erfunden (siehe unten).
 - Sprache für Spieltexte und Antworten an den Nutzer: **Deutsch**.
 
@@ -37,6 +37,14 @@ Kurzreferenz, damit neue Sitzungen sofort weiterarbeiten können. Bei Änderunge
 ## Namen
 - Könige: Admiral Brandvogt (Glut → Chimäre, Aschebucht), Königin Ysra Frostweh (Frost → Skylla, Frostgrotte), Kapitän Rabensturm (Sturm → Harpyienkönigin Aello, Rabenwacht), Morgrim Korallenhand (Tiefe → Talos aus Korallenstein, Fluchmangroven). Endboss: Moloch, der Weltschlinger.
 - Crew: Kanonierin Asra, Navigatorin Lene, Bootsmann Kalo, Zimmermann Ode. Hub: Laternenmagd, Schmied Harrow, Wirt Bilge. Start: Alter Galionsschnitzer.
+
+## Stand v0.5
+- Welt 320×240 Kacheln, Inseln doppelt so groß. Höhenebenen (`world.level`, 0–2): Plateaus begehbar, untere 3 Reihen sind Klippenwände (`cliff`, `face`), Wege über Wände werden automatisch Treppen (`stairs`). Kollision über Ebenen-Maske (`levelMask`).
+- Boden wird in 128-px-Chunks gebacken (`WorldView.bakeChunk`): Materialien mischen pro Pixel bilinear + Rauschen → runde Wegränder; Klippen, Treppen, Ränder, AO mit eingebacken. LRU-Cache, 3–4 neue Chunks pro Frame.
+- `art/flora.js`: Bäume aus Blütenbüscheln (`clusterCrown`, `wisteria`), Büsche, Farne, Bananenblätter, Marmorbögen/-säulen, Bambuszäune, Bänke, Tische, Stände, Brunnen, Boote, Stadthäuser (`townhouse0-2`), Hain-Baum `hubTree` + `hubCrown` (overhead).
+- `art/monsters.js` lädt die Vorlagen-Monster. Rollen: Könige Phase 2 = Mantikor (Glut), Gorgonen-Königin (Frost), Uhrwerk-Sturm-Monster (Sturm), Kraken-Basilisk (Tiefe); Eliten = Skelett-Kraken, Wyvern, Ork-Kapitän, Glocken-Konstrukt, Schildkröten-Wurm, Mimic-Kapitän; Gegner = Abgrund-Pirat, Voodoo-Kapitän, Harpyen-Konstrukt, Angel-/Fresser-Dämon, Mimic-Truhen; auf See Geister-Galeere, Fleisch-Geist-Schiff und der Kraken.
+- `game/critters.js`: Schmetterlinge, Möwen, Fische, Frösche, Motten. `Walker`: Dorfbewohner auf Routen.
+- Hauptmenü hat zwei Panoramen: hell (Beispiel) und düster (Spec).
 
 ## Offene Punkte / Ideen
 - Auf echter GPU feinjustieren (Helligkeit pro Zone, Bloom, Nebel), Balancing der Bosse.

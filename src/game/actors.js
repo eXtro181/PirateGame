@@ -25,12 +25,32 @@ export class Actor {
         const d = s.dirs[this.dir]; const a = d[this.anim] || d.idle;
         return a[(this.frame | 0) % a.length];
     }
-    drawPos(rect) { const s = this.sheet; return [Math.round(this.x - s.ax) , Math.round(this.y - s.ay - (this.z || 0))]; }
-    beastFlip() { return this.sheet.beast ? this.fx < -0.05 : this.flip; }
+    drawPos(rect) {
+        const s = this.sheet;
+        let ox = 0, oy = 0;
+        if (s.static) { // one picture, animated in code
+            const t = this.at || 0;
+            if (s.fly) oy -= 6 + Math.round(Math.sin(t * 3) * 2);
+            else if (this.anim === 'walk') oy -= Math.round(Math.abs(Math.sin(t * 7)) * 2);
+            else if (this.anim === 'idle' || this.anim === 'cast') oy -= Math.round((Math.sin(t * 2) + 1) * 0.6);
+            if (this.anim === 'atk') ox += Math.round((this.frame | 0) === 0 ? -this.fx * 3 : this.fx * 5);
+            if (this.anim === 'hurt') ox += Math.round(Math.sin(t * 60) * 1.5);
+            if (this.anim === 'dead') oy += 2;
+        }
+        return [Math.round(this.x - s.ax + ox), Math.round(this.y - s.ay - (this.z || 0) + oy)];
+    }
+    beastFlip() {
+        const s = this.sheet;
+        if (s.static) return s.facing ? this.fx * s.facing < -0.05 : false;
+        return s.beast ? this.fx < -0.05 : this.flip;
+    }
     draw(r, cam) {
         const rect = this.rect(); if (!rect) return;
         const [x, y] = this.drawPos(rect);
-        r.sprite(rect, x - cam[0], y - cam[1], { flip: this.beastFlip(), flash: this.flash > 0, outline: this.game.focus?.hover === this, color: this.alpha < 1 ? [1, 1, 1, this.alpha] : (this.tint || undefined) });
+        let color = this.alpha < 1 ? [1, 1, 1, this.alpha] : (this.tint || undefined);
+        if (this.sheet.static && this.anim === 'dead') color = [0.45, 0.42, 0.45, Math.max(0, 1 - (this.deadT || 0) / 3)];
+        if (this.sheet.static && this.anim === 'cast') color = [1.1, 1.1, 1.2, 1];
+        r.sprite(rect, x - cam[0], y - cam[1], { flip: this.beastFlip(), flash: this.flash > 0 || (this.sheet.static && this.anim === 'atk' && (this.frame | 0) === 0 && Math.floor(this.at * 12) % 2 === 0), outline: this.game.focus?.hover === this, color });
     }
     drawGlow(r, cam) {
         const rect = this.rect(); if (!rect) return;
@@ -214,18 +234,22 @@ export class Enemy extends Actor {
         super(game, spawn.x, spawn.y);
         this.spawn = spawn; this.type = spawn.type;
         this.def = ENEMIES[this.type];
-        this.sheet = this.def.beast ? game.app.art.beasts[this.def.beast] : game.app.art.chars[this.def.sheet];
+        this.sheet = this.def.monster ? game.app.art.monsters[this.def.monster] : this.def.beast ? game.app.art.beasts[this.def.beast] : game.app.art.chars[this.def.sheet];
         this.maxHp = this.hp = this.def.hp; this.state = 'idle'; this.st_t = Math.random(); this.home = { x: spawn.x, y: spawn.y };
-        this.r = this.def.beast === 'crabWarrior' ? 8 : 5; this.hurtR = this.r + 3;
+        this.r = this.def.monster ? Math.min(12, Math.max(5, Math.round(this.sheet.w * 0.12))) : this.def.beast === 'crabWarrior' ? 8 : 5; this.hurtR = this.def.monster ? Math.max(8, Math.round(this.sheet.w * 0.3)) : this.r + 3;
+        this.bodyY = this.def.monster ? Math.round(this.sheet.h * 0.45) : 10;
+        if (this.def.mimic) { this.state = 'lurk'; }
+        if (spawn.elite) { this.elite = true; }
         this.poise = this.def.poise; this.name = this.def.name;
         this.fx = Math.random() - 0.5; this.fy = 1;
-        this.shadow = this.def.beast ? this.sheet.shadow[0] : 6;
+        this.shadow = (this.def.beast || this.def.monster) ? this.sheet.shadow[0] : 6;
     }
     get dead() { return this.state === 'dead'; }
     update(dt) {
         const g = this.game, p = g.player, D = this.def;
         this.st_t += dt; this.at += dt; this.flash = Math.max(0, this.flash - dt);
-        if (this.state === 'dead') { this.anim = 'dead'; this.frame = 0; return; }
+        if (this.state === 'dead') { this.anim = 'dead'; this.frame = 0; this.deadT = (this.deadT || 0) + dt; return; }
+        if (this.state === 'lurk') { this.anim = 'idle'; this.frame = 0; this.at = 0; if (dist(this, p) < 26 && p.state !== 'dead') { this.state = 'chase'; this.st_t = 0; g.audio.sfx('roar'); g.fx.burst('spark', this.x, this.y - 10, 10, { speed: 60 }); g.ui.toast(this.name + '!'); } return; }
         const dp = dist(this, p);
         const canSee = p.state !== 'dead' && p.state !== 'ship' && dp < D.aggro && g.world.lineClear(this.x, this.y, p.x, p.y);
         const leash = dist(this, this.home) > 260;
@@ -271,7 +295,11 @@ export class Enemy extends Actor {
                 }
                 if (!this.hitDone) {
                     this.hitDone = true;
-                    if (D.ranged) { g.spawnShot(this, 'bullet', p.x, p.y - 8, D.dmg); g.audio.sfx('pistol'); }
+                    if (D.ranged) {
+                        const n = D.volley || 1;
+                        for (let k = 0; k < n; k++) { const a = Math.atan2(p.y - this.y, p.x - this.x) + (n > 1 ? (k / (n - 1) - 0.5) * 0.6 : 0); g.spawnShot(this, D.shot || 'bullet', this.x + Math.cos(a) * 60, this.y + Math.sin(a) * 60 - 8, D.dmg); }
+                        g.audio.sfx(D.shot === 'cannon' ? 'cannon' : D.shot === 'soul' ? 'zap' : 'pistol');
+                    }
                     else if (D.aoe) {
                         const ix = this.x + this.fx * 16, iy = this.y + this.fy * 12;
                         g.fx.ring(ix, iy, 4, D.aoe, 0.35, [0.8, 0.75, 0.6, 1]); g.fx.burst('dust', ix, iy, 14, { speed: 70 }); g.shake(3); g.audio.sfx('crush');
@@ -349,6 +377,25 @@ export class NPC extends Actor {
     }
 }
 
+// ------------------------------------------------------------------ villagers walking their routes
+export class Walker extends Actor {
+    constructor(game, def) {
+        super(game, def.pts[0].x, def.pts[0].y);
+        this.def = def; this.sheet = game.app.art.chars[def.preset]; this.shadow = 6; this.r = 4;
+        this.wp = 1; this.wait = Math.random() * 2; this.speed = 22 + Math.random() * 8;
+    }
+    update(dt) {
+        this.at += dt;
+        if (this.wait > 0) { this.wait -= dt; this.anim = 'idle'; this.frame = this.at * 1.4; return; }
+        const t = this.def.pts[this.wp], dx = t.x - this.x, dy = t.y - this.y, l = Math.hypot(dx, dy);
+        if (l < 3) { this.wp = (this.wp + 1) % this.def.pts.length; this.wait = 1 + Math.random() * 3; return; }
+        const p = this.game.player;
+        if (Math.hypot(p.x - this.x, p.y - this.y) < 14) { this.anim = 'idle'; this.face(p.x - this.x, p.y - this.y); return; }
+        this.x += dx / l * this.speed * dt; this.y += dy / l * this.speed * dt;
+        this.face(dx, dy); this.anim = 'walk'; this.frame = this.at * 8;
+    }
+}
+
 // ------------------------------------------------------------------ ground items
 export class GroundItem {
     constructor(game, def) { this.game = game; this.def = def; this.x = def.x; this.y = def.y; this.item = ITEMS[def.item]; this.t = Math.random() * 6; this.shadow = 4; this.name = this.item.name; this.hurtR = 6; }
@@ -381,7 +428,7 @@ export class Shot {
         if (this.kind === 'cannon' && Math.random() < 0.5) g.fx.p(this.x, this.y, { z: this.z, life: 0.5, col: FXCOL.smoke, size: 2 });
         // wall hits
         const tx = Math.floor(this.x / 16), ty = Math.floor(this.y / 16);
-        if (!this.sea && g.world.inb(tx, ty) && g.world.cliff[ty * 240 + tx]) { this.life = 0; this.onHitWall?.(this); }
+        if (!this.sea && g.world.inb(tx, ty) && g.world.cliff[g.world.idx(tx, ty)] && !g.world.stairs[g.world.idx(tx, ty)]) { this.life = 0; this.onHitWall?.(this); }
         if (this.life <= 0) { this.onExpire?.(this); return; }
         const targets = this.owner === 'player' ? g.hittables() : this.owner === 'enemy' ? (g.sailing ? [g.ship] : [g.player]) : [];
         for (const t of targets) {

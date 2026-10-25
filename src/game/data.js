@@ -68,15 +68,29 @@ export const ENEMIES = {
     crab: { name: 'Strandkrabbe', hp: 35, dmg: 10, speed: 52, aggro: 80, reach: 16, windup: 0.35, recover: 0.5, pearls: 30, beast: 'crab', poise: 5 },
     crabWarrior: { name: 'Krabbenkrieger', hp: 170, dmg: 28, speed: 32, aggro: 100, reach: 26, windup: 0.75, recover: 0.8, pearls: 220, beast: 'crabWarrior', poise: 70 },
     shell: { name: 'Muschelkriecher', hp: 70, dmg: 18, speed: 26, aggro: 90, reach: 18, windup: 0.6, recover: 0.6, pearls: 90, beast: 'shell', poise: 40, charge: true },
+    // monsters from the template sheet (static pictures, animated in code)
+    livingChest: { name: 'Lebendiger Schatzrechner', hp: 90, dmg: 22, speed: 44, aggro: 120, reach: 22, windup: 0.4, recover: 0.6, pearls: 260, monster: 'livingChest', poise: 40, mimic: true },
+    mimicChest: { name: 'Schatz-Mimic-Rechner', hp: 120, dmg: 26, speed: 40, aggro: 120, reach: 24, windup: 0.45, recover: 0.6, pearls: 320, monster: 'mimicChest', poise: 50, mimic: true },
+    skelkraken: { name: 'Skelett-Kraken · Leviathans Zorn', hp: 420, dmg: 30, speed: 30, aggro: 120, reach: 36, windup: 0.9, recover: 1.0, pearls: 900, monster: 'skelkraken', poise: 120, aoe: 34 },
+    cannonAngler: { name: 'Kanonen-Angel-Fisch-Dämon', hp: 120, dmg: 26, speed: 24, aggro: 170, reach: 150, windup: 1.1, recover: 1.4, pearls: 240, monster: 'cannonAngler', poise: 60, ranged: true, shot: 'cannon' },
+    cannonEater: { name: 'Kanonen-Fresser-Dämon', hp: 140, dmg: 28, speed: 30, aggro: 110, reach: 26, windup: 0.7, recover: 0.8, pearls: 260, monster: 'cannonEater', poise: 60, charge: true },
+    stormHarpy: { name: 'Sturm-Wind-Harpye-Konstrukt', hp: 70, dmg: 18, speed: 62, aggro: 140, reach: 22, windup: 0.4, recover: 0.6, pearls: 160, monster: 'stormHarpy', poise: 15 },
+    wyvern: { name: 'Küsten-Wyvern · Schiffszerschmetterer', hp: 520, dmg: 34, speed: 50, aggro: 150, reach: 34, windup: 0.8, recover: 1.0, pearls: 1400, monster: 'wyvern', poise: 140, charge: true },
+    orcCaptain: { name: 'Ork-Schlachter-Kapitän', hp: 560, dmg: 36, speed: 30, aggro: 130, reach: 34, windup: 0.9, recover: 1.0, pearls: 1400, monster: 'orcCaptain', poise: 160, aoe: 36 },
+    bellConstruct: { name: 'Uhrwerk-Glocken-Matrosen-Konstrukt', hp: 600, dmg: 34, speed: 24, aggro: 130, reach: 40, windup: 1.1, recover: 1.1, pearls: 1500, monster: 'bellConstruct', poise: 200, aoe: 44 },
+    abyssPirate: { name: 'Tiefen-Abgrund-Pirat', hp: 100, dmg: 22, speed: 36, aggro: 120, reach: 26, windup: 0.55, recover: 0.6, pearls: 180, monster: 'abyssPirate', poise: 35 },
+    voodoo: { name: 'Voodoo-Mutanten-Kapitän', hp: 160, dmg: 22, speed: 30, aggro: 160, reach: 140, windup: 0.9, recover: 1.0, pearls: 420, monster: 'voodoo', poise: 60, ranged: true, shot: 'soul', volley: 3 },
+    turtleWorm: { name: 'Schild-Kröten-Festungs-Wurm', hp: 720, dmg: 30, speed: 18, aggro: 170, reach: 160, windup: 1.2, recover: 1.3, pearls: 1800, monster: 'turtleWorm', poise: 260, ranged: true, shot: 'cannon', volley: 3 },
+    trueMimic: { name: 'Mimic-Kapitäns wahre Gestalt', hp: 650, dmg: 38, speed: 34, aggro: 130, reach: 40, windup: 0.9, recover: 0.9, pearls: 1800, monster: 'trueMimic', poise: 200, aoe: 40 },
     shark: { name: 'Knochenhai', hp: 60, dmg: 0, speed: 60, aggro: 140, reach: 20, windup: 0.6, recover: 1, pearls: 90, beast: 'shark', sea: true }
 };
 
 // the four ghost kings (phase 1 humanoid, phase 2 monster) and the megalodon
 export const KINGS = {
-    fire: { zone: 'asche', name: 'Admiral Brandvogt, der Glutkönig', monster: 'Brandvogt, die Chimäre', sheet: 'kingFire', beast: 'chimera', hp: 1300, dmg: 30, col: [1, 0.45, 0.15], el: 'fire', figurehead: 'figurehead_fire', pearls: 4000 },
-    ice: { zone: 'frost', name: 'Königin Ysra Frostweh', monster: 'Ysra, die Skylla', sheet: 'kingIce', beast: 'scylla', hp: 1250, dmg: 28, col: [0.55, 0.85, 1], el: 'ice', figurehead: 'figurehead_ice', pearls: 4000 },
-    wind: { zone: 'raben', name: 'Kapitän Rabensturm, der Sturmkönig', monster: 'Aello, die Harpyienkönigin', sheet: 'kingWind', beast: 'harpy', hp: 1200, dmg: 27, col: [0.8, 0.9, 1], el: 'wind', figurehead: 'figurehead_wind', pearls: 4000 },
-    earth: { zone: 'mangroven', name: 'Morgrim Korallenhand, König der Tiefe', monster: 'Talos aus Korallenstein', sheet: 'kingEarth', beast: 'talos', hp: 1450, dmg: 32, col: [0.55, 0.9, 0.4], el: 'earth', figurehead: 'figurehead_earth', pearls: 4000 }
+    fire: { zone: 'asche', name: 'Admiral Brandvogt, der Glutkönig', monster: 'Brandvogt, Dämonen-Kapitän-Mantikor', sheet: 'kingFire', beast: 'manticore', hp: 1300, dmg: 30, col: [1, 0.45, 0.15], el: 'fire', figurehead: 'figurehead_fire', pearls: 4000 },
+    ice: { zone: 'frost', name: 'Königin Ysra Frostweh', monster: 'Ysra, Abgrund-Gorgonen-Königin', sheet: 'kingIce', beast: 'gorgonQueen', hp: 1250, dmg: 28, col: [0.55, 0.85, 1], el: 'ice', figurehead: 'figurehead_ice', pearls: 4000 },
+    wind: { zone: 'raben', name: 'Kapitän Rabensturm, der Sturmkönig', monster: 'Rabensturm, Uhrwerk-Sturm-Monster', sheet: 'kingWind', beast: 'clockStorm', hp: 1200, dmg: 27, col: [0.8, 0.9, 1], el: 'wind', figurehead: 'figurehead_wind', pearls: 4000 },
+    earth: { zone: 'mangroven', name: 'Morgrim Korallenhand, König der Tiefe', monster: 'Morgrim, Kraken-Basilisk-Chimäre', sheet: 'kingEarth', beast: 'krakenBasilisk', hp: 1450, dmg: 32, col: [0.55, 0.9, 0.4], el: 'earth', figurehead: 'figurehead_earth', pearls: 4000 }
 };
 export const MEGALODON = { name: 'Moloch, der Weltschlinger', hp: 3200, dmg: 36, pearls: 20000 };
 export const EL_COL = { fire: [1, 0.45, 0.15], ice: [0.55, 0.85, 1], wind: [0.85, 0.92, 1], earth: [0.55, 0.9, 0.4] };

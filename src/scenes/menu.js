@@ -6,12 +6,13 @@ import { NOISE } from '../gfx/noise.js';
 
 const c3 = (h, a = 1) => { const v = rgb(h); return [v[0] / 255, v[1] / 255, v[2] / 255, a]; };
 const SKY = ['#0B1016', '#0F1820', '#121E29', '#172634', '#1D2F3F', '#24394A'].map(h => c3(h));
+const SKY_B = ['#2E5C9A', '#3A6EB0', '#4A80C0', '#5E94CE', '#76AAD8', '#92C2E4'].map(h => c3(h));
 const GOLD = c3('#E8A443'), BONE = c3('#D8CFB8', 0.7), BONE_FULL = c3('#D8CFB8');
 export const MENU_ITEMS = ['Neues Spiel', 'Fortsetzen', 'Optionen', 'Credits', 'Beenden'];
 
 export class MenuScene {
     constructor(app) {
-        this.app = app; this.mode = 'menu'; this.A = app.art.menu; this.U = app.art.ui;
+        this.app = app; this.mode = 'menu'; this.U = app.art.ui;
         this.t = 0; this.sel = 0; this.slide = MENU_ITEMS.map(() => 0);
         this.pressed = false; // "Drücke eine Taste"
         this.flashT = 0; this.nextFlash = 6;
@@ -20,12 +21,13 @@ export class MenuScene {
         this.runes = [0, 1, 2];
         this.enabled = true;
     }
+    get A() { return this.app.options.look === 'dark' ? this.app.art.menu : this.app.art.menuBright; }
     enter() { this.enabled = true; this.app.audio.setMood('title'); }
     update(dt, input) {
         this.t += dt;
         // lightning
         this.nextFlash -= dt;
-        if (this.nextFlash <= 0) { this.flashT = 2; this.nextFlash = 7 + Math.random() * 10; this.app.audio.thunder?.(); }
+        if (this.nextFlash <= 0) { this.flashT = 2; this.nextFlash = 7 + Math.random() * 10; if (!this.A.bright) this.app.audio.thunder?.(); }
         for (const d of this.rain) { d.y += d.v * dt; d.x -= d.v * dt * 0.36; if (d.y > MENU_H) { d.y = -6; d.x = Math.random() * (MENU_W + 60); } }
         for (let i = 0; i < MENU_ITEMS.length; i++) this.slide[i] += ((i === this.sel ? 4 : 0) - this.slide[i]) * Math.min(1, dt / 0.12 * 2.2);
         if (!this.enabled || this.app.ui.busy()) return;
@@ -45,6 +47,7 @@ export class MenuScene {
     }
     frame() {
         const A = this.A, t = this.t;
+        this.app.renderer.grade = A.bright ? { lift: [0.01, 0.01, 0.02], gain: [1, 1, 1], sat: 1.05, contrast: 1.03 } : { lift: [0.02, 0.03, 0.06], gain: [0.98, 1.0, 1.05], sat: 0.85, contrast: 1.06 };
         const drift = Math.sin(t * Math.PI * 2 / 30); // ±1 over 30 s
         const off = s => Math.round(-16 + drift * 15 * s); // layer x offset (max ±12 px at layer 8)
         const self = this;
@@ -55,18 +58,20 @@ export class MenuScene {
                 r.spriteBegin('alpha');
                 const white = self.app.art.atlas.white;
                 // 0: sky in 6 hard steps
-                for (let i = 0; i < 6; i++) r.rect(white.tex, 0, Math.floor(i * HORIZON / 6), MENU_W, Math.ceil(HORIZON / 6) + 1, SKY[i]);
+                for (let i = 0; i < 6; i++) r.rect(white.tex, 0, Math.floor(i * HORIZON / 6), MENU_W, Math.ceil(HORIZON / 6) + 1, (A.bright ? SKY_B : SKY)[i]);
                 // 1: stars + moon with halo rings
-                for (const s of self.stars) { const tw = 0.5 + 0.5 * Math.sin(t * 1.3 + s.p * 3); if (tw < 0.25) continue; r.rect(white.tex, s.x + off(0.02), s.y, 1, 1, [0.8, 0.86, 0.88, 0.4 + tw * 0.6]); }
+                if (!A.bright) for (const s of self.stars) { const tw = 0.5 + 0.5 * Math.sin(t * 1.3 + s.p * 3); if (tw < 0.25) continue; r.rect(white.tex, s.x + off(0.02), s.y, 1, 1, [0.8, 0.86, 0.88, 0.4 + tw * 0.6]); }
                 const mx = Math.round(MENU_W * 0.22) + off(0.02) + 16, my = Math.round(MENU_H * 0.18);
+                if (!A.bright) {
                 r.sprite(A.halo3, mx - 46, my - 46, { color: [0.6, 0.7, 0.72, 0.05] });
                 r.sprite(A.halo2, mx - 32, my - 32, { color: [0.6, 0.7, 0.72, 0.1] });
                 r.sprite(A.halo1, mx - 22, my - 22, { color: [0.65, 0.75, 0.76, 0.2] });
                 r.sprite(A.moon, mx - 15, my - 15);
+                }
                 // 2 + 3: clouds (wrap)
                 const cl = (rect, edge, y, speed, sc) => {
                     const x = -((t * speed) % 960) + off(sc);
-                    for (const xx of [x, x + 960]) { r.sprite(rect, xx, y); if (self.flashT > 0) r.sprite(edge, xx, y, { color: [0.72, 1, 0.91, 1] }); }
+                    for (const xx of [x, x + 960]) { r.sprite(rect, xx, y); if (self.flashT > 0 && !A.bright) r.sprite(edge, xx, y, { color: [0.72, 1, 0.91, 1] }); }
                 };
                 cl(A.cloudsFar, A.cloudsFarEdge, 4, 2, 0.05);
                 cl(A.cloudsNear, A.cloudsNearEdge, 26, 5, 0.1);
@@ -91,18 +96,18 @@ export class MenuScene {
                 for (let row = 0; row < A.fogH; row += 2) {
                     const dx = Math.round(Math.sin(t * 0.6 + row * 0.25) * 3);
                     const sub = { x: fogRect.x, y: fogRect.y + row, w: fogRect.w, h: 2, tex: fogRect.tex };
-                    r.sprite(sub, off(0.5) + dx, fy + row, { color: [0.56, 0.64, 0.66, fa] });
+                    r.sprite(sub, off(0.5) + dx, fy + row, { color: A.bright ? [1, 1, 1, fa * 0.6] : [0.56, 0.64, 0.66, fa] });
                 }
                 // 8: foreground silhouettes (sway)
                 r.sprite(A.fore, off(0.8), MENU_H - A.foreH, { sway: 1, wx: 0 });
                 // 9: rain at 20°
-                for (const d of self.rain) r.sprite(A.rain, d.x, d.y, { color: [0.55, 0.65, 0.72, 0.5] });
+                if (!A.bright) for (const d of self.rain) r.sprite(A.rain, d.x, d.y, { color: [0.55, 0.65, 0.72, 0.5] });
                 r.end();
             },
             drawGlow(r) {
                 r.spriteBegin('alpha');
                 const black = [0, 0, 0, 1];
-                r.sprite(A.moon, Math.round(MENU_W * 0.22) + off(0.02) + 1, Math.round(MENU_H * 0.18) - 15, { tex: A.moon.gtex, color: [0.6, 0.6, 0.6, 1] });
+                if (A.moon) r.sprite(A.moon, Math.round(MENU_W * 0.22) + off(0.02) + 1, Math.round(MENU_H * 0.18) - 15, { tex: A.moon.gtex, color: [0.6, 0.6, 0.6, 1] });
                 if (self.islandPos) {
                     const [ix, iy] = self.islandPos;
                     const k = 0.7 + 0.3 * Math.sin(t * Math.PI * 2 / 4);
@@ -115,11 +120,11 @@ export class MenuScene {
                         for (let i = 0; i < n; i++) {
                             const a = i / n * Math.PI * 2 + (t / 12) * Math.PI * 2 * (ring % 2 ? -1 : 1);
                             if (i % 3 === 2) continue;
-                            r.rect(white.tex, Math.round(cx + Math.cos(a) * rx), Math.round(cy + Math.sin(a) * ry), i % 3 ? 1 : 2, 1, [0.37 * k, 0.95 * k, 0.78 * k, 1]);
+                            r.rect(white.tex, Math.round(cx + Math.cos(a) * rx), Math.round(cy + Math.sin(a) * ry), i % 3 ? 1 : 2, 1, A.bright ? [1.3 * k, 1.0 * k, 0.35 * k, 1] : [0.37 * k, 0.95 * k, 0.78 * k, 1]);
                         }
                     }
                 }
-                if (self.plainPos) {
+                if (self.plainPos && !A.bright) {
                     const [px, py] = self.plainPos;
                     r.sprite(A.plain, px, py, { tex: A.plain.gtex });
                     const white = self.app.art.atlas.white;
@@ -148,7 +153,7 @@ export class MenuScene {
     drawUI(r) {
         const t = this.t, F = this.app.font, U = this.U, white = this.app.art.atlas.white;
         r.spriteBegin('alpha');
-        if (this.flashT > 0) { r.rect(white.tex, 0, 0, MENU_W, MENU_H, [0.72, 1, 0.9, 0.08]); this.flashT--; }
+        if (this.flashT > 0) { if (!this.A.bright) r.rect(white.tex, 0, 0, MENU_W, MENU_H, [0.72, 1, 0.9, 0.08]); this.flashT--; }
         // logo with emblem, top-left
         const lx = Math.round(MENU_W * 0.06), ly = Math.round(MENU_H * 0.1);
         r.sprite(U.emblem, lx, ly - 4);

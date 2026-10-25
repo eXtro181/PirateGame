@@ -352,6 +352,10 @@ export const PRESETS = {
     crewIce: { skinHex: '#C9A07E', hairHex: '#C9D6D8', hair: 2, coatHex: '#2E3E52', hat: 0, weapon: 'rapier' },
     crewWind: { skinHex: '#5E4030', hairHex: '#2A1E1A', hair: 4, beard: 1, coatHex: '#4A6170', hat: 1, weapon: 'dagger' },
     crewEarth: { skinHex: '#B08A6E', hairHex: '#5A3A22', hair: 1, beard: 2, body: 1, coatHex: '#3E4A34', hat: 2, bandHex: '#34473A', weapon: 'club' },
+    villagerA: { skinHex: '#C9A07E', hairHex: '#7A2A1E', hair: 3, coatHex: '#4A6A8A', robe: true, hat: 2, bandHex: '#E8DCC0', weapon: null },
+    villagerB: { skinHex: '#B08A6E', hairHex: '#9A9A92', hair: 1, beard: 2, coatHex: '#6A5A3A', hat: 0, weapon: null },
+    villagerC: { skinHex: '#8A6248', hairHex: '#2A1E1A', hair: 2, coatHex: '#8A3A4A', robe: true, hat: 0, weapon: null },
+    villagerD: { skinHex: '#C9A07E', hairHex: '#5A3A22', hair: 4, beard: 1, coatHex: '#3E6A5A', hat: 1, hatHex: '#4A3A2A', weapon: null },
     // ghost kings (scale 1.5)
     kingFire: { skinHex: '#4A2A28', hairHex: '#C2502E', hair: 4, beard: 3, coatHex: '#5A1A1E', hat: 4, hatHex: '#2A1A1A', crown: true, crownCol: P.lava, body: 1, weapon: 'greatsword', drowned: true, eyeCol: P.lava, aura: P.ember, castCol: P.lava },
     kingIce: { skinHex: '#9FC3D0', hairHex: '#E2ECEE', hair: 2, coatHex: '#3E5A6A', robe: true, crown: true, crownCol: '#B8FFE8', weapon: 'rapier', drowned: true, eyeCol: '#B8FFE8', aura: '#9FC3D0', castCol: '#B8FFE8' },

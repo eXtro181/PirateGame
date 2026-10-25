@@ -174,6 +174,7 @@ export class UI {
         const range = (key, min, max, step) => { const r = h('input', { type: 'range', min, max, step, value: o[key], oninput: () => { o[key] = +r.value; this.app.applyOptions(); } }); return r; };
         this.open(this.panelWrap('Optionen',
             h('div', { class: 'card' },
+                row('Farbstimmung', sel('look', [['bright', 'Leuchtend (wie die Beispiele)'], ['dark', 'Düster (Spezifikation)']])),
                 row('Effekte', sel('fx', [['high', 'Bloom, Körnung, Nebel'], ['low', 'Sparsam (schwache Geräte)']])),
                 row('Helligkeit', range('exposure', 0.7, 1.5, 0.05)),
                 row('Lautstärke', range('volume', 0, 1, 0.05)),

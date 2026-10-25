@@ -13,8 +13,9 @@ import { UI } from './ui/ui.js';
 import { Touch } from './ui/touch.js';
 import { newSave } from './game/data.js';
 import { DEFAULT_LOOK } from './art/chars.js';
-import { GRADES } from './art/pal.js';
+import { gradesFor } from './art/pal.js';
 import { TS } from './art/tiles.js';
+import { loadMonsters } from './art/monsters.js';
 
 const params = new URLSearchParams(location.search);
 const DEBUG = params.has('debug');
@@ -30,13 +31,15 @@ async function boot() {
     const renderer = new Renderer(canvas);
     say('Pixel für Pixel steigt die Welt aus der See …'); await nextFrame();
     const art = buildArt(renderer);
+    art.monsters = await loadMonsters(renderer);
+    Object.assign(art.beasts, art.monsters);
     const world = new World(art.props);
     const view = new WorldView(renderer, world, art);
     const input = new Input();
     const audio = new Audio();
     const app = {
         version: 'v0.4 · Pixel', renderer, art, font: art.font, world, view, input, audio, store: new ProfileStore(), hasProfiles: false, game: null,
-        options: { fx: 'high', exposure: 1, volume: 0.8, shake: 1, touch: 'auto' }
+        options: { fx: 'high', exposure: 1, volume: 0.8, shake: 1, touch: 'auto', look: 'bright' }
     };
     try { Object.assign(app.options, JSON.parse(localStorage.getItem(OPT_KEY) || '{}')); } catch { /* private mode */ }
     app.saveOptions = () => { try { localStorage.setItem(OPT_KEY, JSON.stringify(app.options)); } catch { /* ignore */ } };
@@ -133,9 +136,10 @@ class PreviewScene {
     frame() {
         const r = this.app.renderer, v = this.app.view;
         const cam = [Math.round(this.x - r.W / 2), Math.round(this.y - r.H / 2)];
-        const G = GRADES[ZONES[this.zone].grade];
+        const G = gradesFor(this.app.options.look)[ZONES[this.zone].grade];
         r.grade = G;
-        return { cam, ambient: G.ambient, lightmap: v.lightmap, lights: v.lights(cam, []), drawScene: (r) => { v.drawScene(r, cam, [], null); v.drawFog(r, cam, this.zone); }, drawGlow: (r) => v.drawGlow(r, cam, []) };
+        this.app.view.setWater(ZONES[this.zone].biome);
+        return { cam, ambient: G.ambient, lightK: G.light, lightmap: v.lightmap, lights: v.lights(cam, []), drawScene: (r) => { v.drawScene(r, cam, [], null); v.drawFog(r, cam, this.zone); }, drawGlow: (r) => v.drawGlow(r, cam, []) };
     }
 }
 

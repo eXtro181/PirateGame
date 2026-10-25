@@ -87,11 +87,11 @@ void main() {
 }`;
 // lights: ambient + baked lightmap (world space) ; dynamic lights are drawn on top additively
 const LIGHTMAP_FS = `
-uniform sampler2D uLM; uniform vec2 uLMSize; uniform vec2 uCam; uniform vec2 uRes; uniform vec3 uAmbient; uniform float uHasLM;
+uniform sampler2D uLM; uniform vec2 uLMSize; uniform vec2 uCam; uniform vec2 uRes; uniform vec3 uAmbient; uniform float uHasLM; uniform float uLMK;
 in vec2 vUv; out vec4 o;
 void main() {
     vec2 px = floor(vec2(vUv.x, 1.0 - vUv.y) * uRes) + uCam;
-    vec3 lm = uHasLM > 0.5 ? texture(uLM, vec2(px.x / uLMSize.x, 1.0 - px.y / uLMSize.y)).rgb * 2.0 : vec3(0.0);
+    vec3 lm = uHasLM > 0.5 ? texture(uLM, vec2(px.x / uLMSize.x, 1.0 - px.y / uLMSize.y)).rgb * 2.0 * uLMK : vec3(0.0);
     o = vec4(uAmbient + lm, 1.0);
 }`;
 const LIGHT_VS = `
@@ -327,6 +327,7 @@ export class Renderer {
             gl.uniform2f(u.uCam, frame.cam[0], frame.cam[1]);
             gl.uniform2f(u.uRes, this.W, this.H);
             gl.uniform1f(u.uHasLM, frame.lightmap ? 1 : 0);
+            gl.uniform1f(u.uLMK, frame.lightK ?? 1);
             if (frame.lightmap) { this.texUnit(0, frame.lightmap.tex, 'uLM'); gl.uniform2f(u.uLMSize, frame.lightmap.w, frame.lightmap.h); }
             this.fullscreen();
         }
@@ -338,7 +339,7 @@ export class Renderer {
             for (const L of frame.lights) {
                 const x = L.x - frame.cam[0], y = L.y - frame.cam[1];
                 if (x + L.r < 0 || y + L.r < 0 || x - L.r > this.W || y - L.r > this.H) continue;
-                this.batch.quad(Math.round(x - L.r), Math.round(y - L.r), L.r * 2, L.r * 2, 0, 0, 1, 1, L.col[0], L.col[1], L.col[2], L.i ?? 1);
+                this.batch.quad(Math.round(x - L.r), Math.round(y - L.r), L.r * 2, L.r * 2, 0, 0, 1, 1, L.col[0], L.col[1], L.col[2], (L.i ?? 1) * (frame.lightK ?? 1));
             }
             this.batch.flush();
         }

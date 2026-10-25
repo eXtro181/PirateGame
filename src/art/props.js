@@ -2,6 +2,7 @@
 // houses, statues, saber fire, chests, lanterns … Each prop: frames, anchor (feet), shadow, lights.
 import { Pix, BAYER } from './pix.js';
 import { P, rgb, ramp, shade } from './pal.js';
+import { defineFlora } from './flora.js';
 
 const h01 = (x, y, s = 0) => { const v = Math.sin(x * 127.1 + y * 311.7 + s * 74.7) * 43758.5453; return v - Math.floor(v); };
 const DEF = {};
@@ -78,8 +79,9 @@ def('coral', 18, 16, (p) => {
 // ---------------------------------------------------------------- rocks
 for (let v = 0; v < 3; v++) def(`rock${v}`, 18 + v * 6, 14 + v * 4, (p) => {
     const w = 18 + v * 6, h = 14 + v * 4;
-    p.blob(w / 2, h / 2 + 1, w / 2 - 1, h / 2 - 1, P.basalt);
-    for (let x = 2; x < w - 2; x++) if (p.a(x, 2) && h01(x, v) > 0.5) p.px(x, 2, P.pale);
+    p.blob(w / 2, h / 2 + 1, w / 2 - 1, h / 2 - 1, '#7E848A');
+    for (let x = 3; x < w - 3; x++) if (h01(x, v, 5) > 0.6) p.px(x, Math.round(h / 2 - h * 0.28), '#4AA444');
+    
 }, { ax: 9 + v * 3, ay: 13 + v * 4, shadow: [8 + v * 3, 3], r: 0.45 + v * 0.2 });
 
 // ---------------------------------------------------------------- hub: soul tree, arches, statues
@@ -246,6 +248,7 @@ function flameFrame(p, f, w, h, cols) {
         p.lit(x, y, c, k < 0.45 ? 1.6 : 1.1);
     }
 }
+defineFlora(def);
 export function buildProps(atlas) {
     const out = {};
     for (const [name, d] of Object.entries(DEF)) {

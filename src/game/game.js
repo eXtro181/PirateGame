@@ -1,12 +1,13 @@
 // The game scene: player, enemies, bosses, NPCs, sailing, fires, death and pearls, saving.
-import { Player, Enemy, NPC, GroundItem, Shot, dist } from './actors.js';
+import { Player, Enemy, NPC, GroundItem, Shot, Walker, dist } from './actors.js';
 import { Boss } from './boss.js';
-import { Ship, GhostShip, Shark } from './ship.js';
+import { Ship, GhostShip, Shark, Kraken } from './ship.js';
 import { FX, FXCOL } from './fx.js';
 import { dialogFor, levelEntries, weaponEntries, shopEntries, CREW } from './dialog.js';
 import { ITEMS, KINGS, SPELLS, EL_NAME, levelCost, upgradeCost, WEAPONS, derived } from './data.js';
-import { ZONES } from '../world/world.js';
-import { GRADES } from '../art/pal.js';
+import { ZONES, MW, MH } from '../world/world.js';
+import { gradesFor } from '../art/pal.js';
+import { makeCritters, updateCritters, drawCritters } from './critters.js';
 import { TS } from '../art/tiles.js';
 
 const lerp = (a, b, t) => a + (b - a) * t;
@@ -23,9 +24,11 @@ export class GameScene {
         this.cam = [0, 0]; this.camF = [0, 0];
         this.shakeK = 0; this.flashC = [1, 1, 1, 0]; this.slowT = 0; this.shantyT = 0; this.hpGhost = 0; this.bossGhost = 0;
         this.pearlShown = save.pearls; this.pearlGain = 0; this.pearlGainT = 0;
-        this.zoneKey = null; this.zoneT = 0; this.gradeCur = { ...GRADES.coast };
+        this.zoneKey = null; this.zoneT = 0; this.gradeCur = { ...gradesFor(app.options.look).coast };
         this.shots = []; this.lock = null; this.focus = null; this.talkTo = null;
         this.npcs = this.world.npcs.map(n => new NPC(this, n));
+        this.walkers = this.world.walkers.map(w => new Walker(this, w));
+        this.critters = makeCritters(this);
         this.items = this.world.items.filter(i => !save.picked.includes(i.id)).map(i => new GroundItem(this, i));
         for (const c of this.world.chests) { c.opened = save.chests.includes(c.chestId); c.def = this.app.art.props[c.opened ? 'chestopen' : 'chest']; }
         this.bosses = {};
@@ -52,8 +55,9 @@ export class GameScene {
     // ---------------------------------------------------------------- spawning
     spawnAll() {
         this.enemies = this.world.spawns.map(s => new Enemy(this, s));
-        this.ghosts = this.world.ghostRoutes.map(r => new GhostShip(this, r));
-        this.sharks = [[140, 120], [100, 60], [170, 100], [80, 150], [150, 170]].map(([x, y]) => new Shark(this, x * TS, y * TS));
+        this.ghosts = this.world.ghostRoutes.map((r, i) => new GhostShip(this, r, i));
+        if (!this.kraken || !this.kraken.dead) this.kraken = new Kraken(this, 214 * TS, 66 * TS);
+        this.sharks = [[210, 140], [110, 80], [220, 60], [100, 150], [200, 170], [110, 200]].map(([x, y]) => new Shark(this, x * TS, y * TS));
     }
     placeAtFire(id, initial = false) {
         const f = this.world.fires.find(f => f.id === id) || this.world.fires[0];
@@ -93,12 +97,15 @@ export class GameScene {
             for (const e of this.enemies) e.update(dt);
             for (const b of Object.values(this.bosses)) b.update(dt);
             for (const n of this.npcs) n.update(dt);
+            for (const w of this.walkers) w.update(dt);
+            updateCritters(this, dt);
             for (const it of this.items) it.update(dt);
             for (const s of this.shots) s.update(dt);
             this.shots = this.shots.filter(s => s.life > 0);
             this.ship.update(dt, input, this.sailing && !modal);
             for (const g of this.ghosts) g.update(dt);
             for (const s of this.sharks) s.update(dt);
+            this.kraken.update(dt);
             this.fx.update(dt);
         }
         if (this.stain) this.stain.t += dt;
@@ -132,8 +139,10 @@ export class GameScene {
     updateZone(dt) {
         const t = this.sailing ? this.ship : this.player;
         const z = this.world.zoneAt(t.x, t.y);
-        const tile = this.world.zone[Math.floor(t.y / TS) * 240 + Math.floor(t.x / TS)];
-        const onIsland = !this.sailing || (tile && this.world.shoreDist[Math.floor(t.y / TS) * 240 + Math.floor(t.x / TS)] < 8);
+        const ti = this.world.idx(Math.max(0, Math.min(MW - 1, Math.floor(t.x / TS))), Math.max(0, Math.min(MH - 1, Math.floor(t.y / TS))));
+        const tile = this.world.zone[ti];
+        const onIsland = !this.sailing || (tile && this.world.shoreDist[ti] < 8);
+        this.view.setWater(this.sailing && !onIsland ? 'sea' : ZONES[z].biome);
         if (z !== this.zoneKey) {
             this.zoneKey = z;
             if (!this.sailing || onIsland) this.zoneT = 4;
@@ -141,7 +150,9 @@ export class GameScene {
         }
         this.zoneT = Math.max(0, this.zoneT - dt);
         // grading towards the zone (or the sea)
-        const G = this.sailing && !onIsland ? GRADES.sea : GRADES[ZONES[z].grade];
+        const GR = gradesFor(this.app.options.look);
+        const G = this.sailing && !onIsland ? GR.sea : GR[ZONES[z].grade];
+        this.lightK = (this.lightK ?? G.light) + (G.light - (this.lightK ?? G.light)) * Math.min(1, dt * 1.5);
         const k = Math.min(1, dt * 1.5), c = this.gradeCur;
         c.lift = lerp3(c.lift || G.lift, G.lift, k); c.gain = lerp3(c.gain || G.gain, G.gain, k); c.ambient = lerp3(c.ambient || G.ambient, G.ambient, k);
         c.sat = lerp(c.sat ?? G.sat, G.sat, k); c.contrast = lerp(c.contrast ?? G.contrast, G.contrast, k);
@@ -202,7 +213,7 @@ export class GameScene {
     hittables() {
         const out = this.enemies.filter(e => !e.dead);
         for (const b of Object.values(this.bosses)) if (!b.hidden && !b.dead) out.push(b);
-        if (this.sailing) { for (const g of this.ghosts) if (!g.dead) out.push(g); for (const s of this.sharks) if (!s.dead) out.push(s); }
+        if (this.sailing) { for (const g of this.ghosts) if (!g.dead) out.push(g); for (const s of this.sharks) if (!s.dead) out.push(s); if (!this.kraken.dead && !this.kraken.hidden) out.push(this.kraken); }
         return out;
     }
     // ---------------------------------------------------------------- combat hooks
@@ -280,7 +291,9 @@ export class GameScene {
     }
     spawnShot(e, kind, tx, ty, dmg) {
         const a = Math.atan2(ty - e.y, tx - e.x);
-        this.shots.push(new Shot(this, { owner: 'enemy', kind, x: e.x + Math.cos(a) * 10, y: e.y + Math.sin(a) * 8, z: 14, vx: Math.cos(a) * 190, vy: Math.sin(a) * 170, dmg, r: 3, life: 1.2, src: e,
+        const sp = kind === 'cannon' ? 140 : kind === 'soul' ? 110 : 190;
+        this.shots.push(new Shot(this, { owner: 'enemy', kind, x: e.x + Math.cos(a) * 10, y: e.y + Math.sin(a) * 8, z: Math.max(10, (e.bodyY || 10)), vx: Math.cos(a) * sp, vy: Math.sin(a) * sp * 0.9, dmg, r: kind === 'cannon' ? 5 : 3, life: kind === 'bullet' ? 1.2 : 1.8, src: e,
+            glow: kind === 'soul' ? [0.4, 1.4, 1.0, 1] : undefined, col: kind === 'soul' ? [0.4, 0.95, 0.8, 1] : undefined, light: kind === 'soul' ? [0.35, 1, 0.8] : undefined,
             onHit: (s, t) => t.hurt(s.dmg, { parryable: false }) }));
         this.fx.burst('smoke', e.x + Math.cos(a) * 12, e.y + Math.sin(a) * 9, 4, { speed: 20, up: 10, g: -10 });
     }
@@ -578,11 +591,13 @@ export class GameScene {
         for (const e of this.enemies) add(e, e.dead ? e.y - 6 : undefined);
         for (const b of Object.values(this.bosses)) if (!b.hidden && b.state !== 'dormant') add(b);
         for (const n of this.npcs) add(n);
+        for (const w of this.walkers) add(w);
         for (const it of this.items) add(it);
         for (const s of this.shots) { s.shadow = s.kind === 'bomb' ? 4 : 0; add(s); }
         add(this.ship);
         for (const g of this.ghosts) if (!g.dead || g.alpha > 0) add(g);
         for (const s of this.sharks) add(s);
+        if (!this.kraken.hidden) add(this.kraken);
         if (this.stain) add(this.stainEntity());
         return out;
     }
@@ -626,13 +641,14 @@ export class GameScene {
         const ents = this.entities();
         const focus = this.focus ? { ...this.focus, x: this.player.x, y: this.player.y } : { x: this.player.x, y: this.player.y };
         return {
-            cam, ambient: this.gradeCur.ambient, lightmap: v.lightmap, lights: this.lights(),
+            cam, ambient: this.gradeCur.ambient, lightmap: v.lightmap, lights: this.lights(), lightK: this.lightK ?? 1,
             drawScene: (r) => {
                 v.drawScene(r, cam, ents, focus, { under: (r) => { this.drawWhirlpool(r, cam, false); this.fx.drawUnder(r, cam); } });
+                drawCritters(this, r, cam, false);
                 this.fx.drawParticles(r, cam, false);
                 v.drawFog(r, cam, this.zoneKey || 'kueste', this.sailing ? 0.6 : 1);
             },
-            drawGlow: (r) => { v.drawGlow(r, cam, ents); this.drawWhirlpool(r, cam, true); this.fx.drawParticles(r, cam, true); },
+            drawGlow: (r) => { v.drawGlow(r, cam, ents); this.drawWhirlpool(r, cam, true); drawCritters(this, r, cam, true); this.fx.drawParticles(r, cam, true); },
             drawUI: (r) => { this.fx.drawNumbers(r, cam, this.app.font); this.ui.draw(r, this); this.ui.drawHudGlow(r, this); }
         };
     }

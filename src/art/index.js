@@ -4,7 +4,7 @@ import { buildTiles, buildDeco } from './tiles.js';
 import { buildProps } from './props.js';
 import { buildUI, buildLogo } from './ui.js';
 import { Font } from './font.js';
-import { buildMenuArt } from './menu.js';
+import { buildMenuArt, buildMenuArtBright } from './menu.js';
 import { buildBeasts } from './creatures.js';
 import { buildHumanSheet, PRESETS } from './chars.js';
 
@@ -16,6 +16,7 @@ export function buildArt(renderer) {
     const logo = buildLogo(atlas, font, 'SCHWARZWASSER');
     const menuAtlas = new Atlas(2048, 1024);
     const menu = buildMenuArt(menuAtlas);
+    const menuBright = buildMenuArtBright(menuAtlas);
     const beastAtlas = new Atlas(2048, 2048);
     const beasts = buildBeasts(beastAtlas);
     const charAtlas = new Atlas(2048, 2048);
@@ -23,7 +24,7 @@ export function buildArt(renderer) {
     for (const [k, look] of Object.entries(PRESETS)) chars[k] = buildHumanSheet(charAtlas, k, look, { S: k.startsWith('king') ? 1.5 : 1 });
     atlas.upload(renderer); menuAtlas.upload(renderer); beastAtlas.upload(renderer); charAtlas.upload(renderer);
     console.log(`Grafik erzeugt in ${Math.round(performance.now() - t0)} ms · Atlas-Füllung: welt ${atlas.y}, figuren ${charAtlas.y}, wesen ${beastAtlas.y}, menü ${menuAtlas.y}`);
-    return { atlas, font, tiles, deco, props, ui, logo, menu, beasts, chars, charAtlas, renderer,
+    return { atlas, font, tiles, deco, props, ui, logo, menu, menuBright, beasts, chars, charAtlas, renderer,
         // player sheets are rebuilt when the look or the weapon changes (own small atlas)
         playerSheet(look, weapon) {
             const a = new Atlas(1024, 1024);

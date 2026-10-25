@@ -74,3 +74,19 @@ export const GRADES = {
     sea: { lift: [0.01, 0.03, 0.06], gain: [0.96, 1.0, 1.06], sat: 0.8, contrast: 1.04, ambient: [0.45, 0.52, 0.6] },
     end: { lift: [0.07, 0.01, 0.03], gain: [1.05, 0.92, 0.95], sat: 0.9, contrast: 1.12, ambient: [0.5, 0.28, 0.3] }
 };
+
+// "Leuchtend": the look of the reference shots (default). "Düster" (above) follows the spec:
+// the same art with saturation −40 % and brightness −30 %.
+export const GRADES_BRIGHT = {
+    menu: GRADES.menu,
+    coast: { lift: [0.01, 0.015, 0.02], gain: [1.02, 1.01, 0.98], sat: 1.05, contrast: 1.03, ambient: [1.0, 0.98, 0.94], light: 0.45 },
+    hub: { lift: [0.01, 0.02, 0.025], gain: [1.02, 1.01, 1.0], sat: 1.06, contrast: 1.03, ambient: [0.98, 0.98, 0.96], light: 0.45 },
+    fire: { lift: [0.04, 0.01, 0.02], gain: [1.04, 0.96, 0.96], sat: 1.0, contrast: 1.05, ambient: [0.92, 0.72, 0.74], light: 0.6 },
+    ice: { lift: [0.01, 0.02, 0.04], gain: [0.98, 1.0, 1.04], sat: 0.95, contrast: 1.03, ambient: [0.88, 0.93, 1.0], light: 0.5 },
+    wind: { lift: [0.01, 0.015, 0.02], gain: [1.0, 1.0, 1.0], sat: 1.0, contrast: 1.03, ambient: [0.9, 0.92, 0.94], light: 0.5 },
+    earth: { lift: [0.01, 0.025, 0.015], gain: [0.98, 1.02, 0.96], sat: 1.0, contrast: 1.04, ambient: [0.66, 0.78, 0.66], light: 0.7 },
+    sea: { lift: [0.01, 0.02, 0.03], gain: [1.0, 1.0, 1.02], sat: 1.04, contrast: 1.03, ambient: [0.96, 0.98, 1.0], light: 0.45 },
+    end: { lift: [0.05, 0.01, 0.03], gain: [1.04, 0.92, 0.95], sat: 0.95, contrast: 1.08, ambient: [0.62, 0.42, 0.48], light: 0.8 }
+};
+export const GRADES_DARK = Object.fromEntries(Object.entries(GRADES_BRIGHT).map(([k, g]) => [k, k === 'menu' ? g : { ...g, sat: g.sat * 0.6, gain: g.gain.map(v => v * 0.82), ambient: g.ambient.map(v => v * 0.62), light: 1 }]));
+export const gradesFor = (look) => look === 'dark' ? GRADES_DARK : GRADES_BRIGHT;

@@ -4,6 +4,7 @@
 import { Pix, BAYER } from './pix.js';
 import { P, ramp } from './pal.js';
 import { Noise } from '../gfx/noise.js';
+import { clusterCrown, FOL, wisteria } from './flora.js';
 
 const N = new Noise(7);
 const h01 = (x, y, s = 0) => { const v = Math.sin(x * 127.1 + y * 311.7 + s * 74.7) * 43758.5453; return v - Math.floor(v); };
@@ -148,5 +149,76 @@ export function buildMenuArt(atlas) {
     }
     // rune ring dot + lighthouse beam texel use the white texel; rain drop
     { const p = new Pix(3, 5); p.px(2, 0, [255, 255, 255]); p.px(1, 2, [255, 255, 255]); p.px(1, 3, [255, 255, 255]); p.px(0, 4, [255, 255, 255]); A.rain = atlas.add('m:rain', p); }
+    return A;
+}
+
+// ------------------------------------------------------------------ bright panorama (the look of the reference)
+export function buildMenuArtBright(atlas) {
+    const A = {};
+    { const c = clouds(960, 80, 5, '#E4EEF8', '#A8C0DC', '#FFFFFF', 0.05); A.cloudsFar = atlas.add('mb:cf', c.p); A.cloudsFarEdge = atlas.add('mb:cfe', c.e); }
+    { const c = clouds(960, 64, 13, '#F4F8FC', '#B8CCE4', '#FFFFFF', 0.02); A.cloudsNear = atlas.add('mb:cn', c.p); A.cloudsNearEdge = atlas.add('mb:cne', c.e); }
+    // blue mountains on the left, a forest band and the sea on the right
+    {
+        const H = 120, p = new Pix(LAYER_W, H), base = H - 30;
+        for (const [amp, off, col, seed, from, to] of [[80, 6, '#7FA4CE', 2, 0, 220], [56, 0, '#5A86B8', 6, 0, 170]]) {
+            const R = ramp(col, 0.8);
+            for (let x = from; x < to; x++) {
+                const fall = Math.max(0, (x - (to - 90)) / 90);
+                const top = base - off - Math.pow(N.ridged(x * 0.008 + seed, seed, 4), 1.6) * amp * (1 - fall);
+                for (let y = Math.max(0, Math.floor(top)); y < base; y++) p.px(x, y, R[y - top < 2 ? 4 : (N.n2(x * 0.08, y * 0.08) > 0.2 ? 3 : 2)]);
+            }
+        }
+        for (let x = 0; x < LAYER_W; x++) { const top = base - 6 - Math.abs(N.fbm(x * 0.06, 2, 2, 0)) * 8; for (let y = Math.floor(top); y < base; y++) p.px(x, y, (x * 7 + y * 3) % 11 === 0 ? '#3E7A5A' : '#4E8A6A'); }
+        for (let y = base; y < H; y++) for (let x = 0; x < LAYER_W; x++) { const t = (y - base) / (H - base); p.px(x, y, x < 300 ? '#5AA048' : t < 0.2 ? '#6EB8E0' : '#3E8EC8'); if (x >= 300 && h01(x, y, 2) > 0.97) p.px(x, y, '#C8EEF8'); }
+        A.mountains = atlas.add('mb:mtn', p); A.mountainsH = H; A.mountainsBase = base;
+    }
+    { const p = new Pix(40, 30); for (let x = 4; x < 36; x++) { const d = Math.round(Math.sin((x - 4) / 32 * Math.PI) * 3); for (let y = 22; y < 25 + d; y++) p.px(x, y, '#7A5A3E'); } for (const mx of [14, 26]) { p.vline(mx, 4, 22, '#4A3326'); for (let y = 6; y < 18; y++) for (let s = -6; s <= 5; s++) p.px(mx + s + Math.round(Math.sin(y * 0.3)), y, y % 4 ? '#F4F0E4' : '#D8D0BC'); } A.ghostShip = atlas.add('mb:gship', p); }
+    // golden hill with a white terraced temple and the great tree
+    {
+        const W = 200, H = 176, p = new Pix(W, H), cx = W / 2, sea = H - 18;
+        const GOLD = ramp('#C8A84A');
+        // rounded golden hill made of foliage clusters
+        clusterCrown(p, cx, sea - 30, 96, 36, [GOLD[0], GOLD[1], GOLD[2], GOLD[3], GOLD[4]], 21, 520, 4);
+        for (let y = sea - 20; y < sea; y++) for (let x = 0; x < W; x++) { const w = 96 - (sea - y) * 0.6; if (Math.abs(x - cx) < w && !p.a(x, y)) p.px(x, y, GOLD[1]); }
+        // white terraced temple
+        for (const [w, y] of [[16, 86], [24, 102], [32, 118]]) { p.rect(cx - w, y, w * 2, 12, '#E8F0F4'); p.hline(cx - w, cx + w - 1, y, '#FFFFFF'); for (let x = cx - w + 3; x < cx + w - 2; x += 5) p.rect(x, y + 3, 2, 8, '#7AB4D8'); p.hline(cx - w, cx + w - 1, y + 11, '#9AB4C4'); p.vline(cx - w, y, y + 11, '#FFFFFF'); }
+        p.rect(cx - 5, 124, 10, 6, '#5A86B8');
+        // the great tree with a white and pink crown
+        for (let y = 34; y < 88; y++) { const w = 4 + Math.max(0, y - 72) * 0.5; for (let k = -w; k <= w; k++) p.px(cx + k + Math.sin(y * 0.1) * 2, y, k < -w / 3 ? '#4A5878' : '#2E3A58'); }
+        for (const [a, l] of [[-2.5, 30], [-0.6, 32], [-1.6, 24]]) p.line(cx, 50, cx + Math.cos(a) * l, 50 + Math.sin(a) * l * 0.8, '#2E3A58');
+        clusterCrown(p, cx, 30, 46, 28, FOL.blossom, 33, 150, 6);
+        wisteria(p, cx - 40, cx + 40, 44, FOL.pink, 3, 16, 16);
+        A.island = atlas.add('mb:island', p); A.islandW = W; A.islandH = H; A.islandSea = sea;
+    }
+    // green plain with meadows, rivers and a walled town with teal roofs
+    {
+        const W = LAYER_W, H = 150, p = new Pix(W, H);
+        const greens = ['#9AD86A', '#7CC85A', '#62B04A', '#4E9A44', '#3E8040'];
+        for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+            const top = 46 + N.fbm(x * 0.012, 3, 3, 0) * 6;
+            if (y < top) continue;
+            const t = (y - top) / (H - top) * 3 + N.fbm(x * 0.03, y * 0.06, 3, 0) * 1.6 + (BAYER[(y & 3) * 4 + (x & 3)] - 0.5) * 0.7;
+            p.px(x, y, greens[Math.max(0, Math.min(4, Math.round(t)))]);
+            if (N.fbm(x * 0.02 + 9, y * 0.05, 2, 0) > 0.3 && y > top + 10) p.px(x, y, (x + y) % 3 ? '#E8D86A' : '#D4C454');
+        }
+        for (const [x0, ph] of [[150, 0], [330, 2]]) for (let y = 52; y < H; y++) { const x = x0 + Math.sin(y * 0.06 + ph) * 22 + (y - 52) * 0.5; const w = 1 + (y - 52) / 22; for (let k = -w; k <= w; k++) p.px(x + k, y, Math.abs(k) > w - 1 ? '#6EB8E0' : '#3E8EC8'); }
+        const fx = 236, fy = 70;
+        p.rect(fx - 40, fy + 6, 110, 22, '#8C9098'); p.hline(fx - 40, fx + 69, fy + 6, '#B8BCC2');
+        for (let x = fx - 40; x < fx + 70; x += 4) p.rect(x, fy + 3, 2, 3, '#8C9098');
+        for (let i = 0; i < 10; i++) { const hx = fx - 34 + i * 10, hy = fy - 2 - (i % 3) * 3; p.rect(hx, hy + 4, 8, 6, '#E8E0CC'); for (let k = 0; k < 5; k++) p.hline(hx - 1 + k, hx + 8 - k, hy + 4 - k, k % 2 ? '#2A8A90' : '#46AEAE'); }
+        p.rect(fx + 10, fy + 16, 8, 12, '#3A3E46');
+        A.plain = atlas.add('mb:plain', p); A.plainH = H; A.lighthouse = [460, 20]; A.windows = [];
+    }
+    { const W = LAYER_W, H = 46, p = new Pix(W, H); for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const n = N.fbm(x * 0.02, y * 0.08, 3, 0) + 0.2 - Math.abs(y / H - 0.5) * 1.4; const q = Math.floor(Math.max(0, n) * 4) / 4; if (q <= 0 || BAYER[(y & 3) * 4 + (x & 3)] > q * 1.6) continue; p.px(x, y, '#F4F8FC'); } A.fog = atlas.add('mb:fog', p); A.fogH = H; }
+    // foreground: lush bushes and a blossom tree edge
+    {
+        const W = LAYER_W, H = 130, p = new Pix(W, H);
+        const G2 = ramp('#3E8040');
+        for (let x = 0; x < W; x++) { const top = H - 14 - Math.abs(N.fbm(x * 0.03, 9, 3, 0)) * 22 - (x < 90 ? 18 : 0) - (x > 440 ? 14 : 0); for (let y = Math.floor(top); y < H; y++) p.px(x, y, G2[y - top < 2 ? 3 : y - top < 6 ? 2 : 1]); }
+        for (let i = 0; i < 22; i++) { const x = h01(i, 3) * W, y = H - 16 - h01(i, 4) * 16; clusterCrown(p, x, y, 12 + h01(i, 5) * 8, 8 + h01(i, 6) * 4, [FOL.green, FOL.teal, FOL.blue][i % 3], i, 14, 5); }
+        clusterCrown(p, 40, 36, 40, 30, FOL.pink, 8, 60, 6); wisteria(p, 6, 76, 50, FOL.violet, 2, 10, 18);
+        A.fore = atlas.add('mb:fore', p); A.foreH = H;
+    }
+    A.moon = null; A.rain = null; A.bright = true;
     return A;
 }

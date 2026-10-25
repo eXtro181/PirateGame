@@ -8,13 +8,15 @@ const wrap = a => ((a % TAU) + TAU) % TAU;
 
 class Hull {
     constructor(game, x, y, h, sheet) { this.game = game; this.x = x; this.y = y; this.h = h; this.v = 0; this.sheet = sheet; this.bob = Math.random() * 6; this.hurtR = 16; this.shadow = 0; this.flash = 0; }
-    rect() { return this.sheet.frames[Math.round(wrap(this.h) / TAU * 16) % 16]; }
+    rect() { return this.sheet.static ? this.sheet.anims.idle[0] : this.sheet.frames[Math.round(wrap(this.h) / TAU * 16) % 16]; }
+    get sflip() { return this.sheet.static ? Math.sin(this.h) * this.sheet.facing < 0 : false; }
     draw(r, cam) {
         const rect = this.rect(), b = Math.round(Math.sin(this.bob) * 1);
-        r.sprite(rect, Math.round(this.x - this.sheet.ax - cam[0]), Math.round(this.y - this.sheet.ay + b - (this.rise ?? 0) * 0 - cam[1]), { flash: this.flash > 0, color: this.alpha !== undefined ? [1, 1, 1, this.alpha] : undefined, outline: this.game.focus?.hover === this });
+        r.sprite(rect, Math.round(this.x - this.sheet.ax - cam[0]), Math.round(this.y - this.sheet.ay + b - cam[1]), { flip: this.sflip, flash: this.flash > 0, color: this.alpha !== undefined ? [1, 1, 1, this.alpha] : undefined, outline: this.game.focus?.hover === this });
     }
     drawGlow(r, cam) {
         const rect = this.rect(), b = Math.round(Math.sin(this.bob) * 1);
+        if (this.sheet.static) { r.sprite(rect, Math.round(this.x - this.sheet.ax - cam[0]), Math.round(this.y - this.sheet.ay + b - cam[1]), { flip: this.sflip, color: [0, 0, 0, 1] }); return; }
         r.sprite(rect, Math.round(this.x - this.sheet.ax - cam[0]), Math.round(this.y - this.sheet.ay + b - cam[1]), { tex: rect.gtex });
     }
     wake(dt) {
@@ -76,11 +78,12 @@ export class Ship extends Hull {
 }
 
 export class GhostShip extends Hull {
-    constructor(game, route) {
+    constructor(game, route, i = 0) {
         const [x, y] = route[0];
-        super(game, x * 16, y * 16, 0, game.app.art.beasts.ghostship);
+        super(game, x * 16, y * 16, 0, game.app.art.monsters?.[i % 2 ? 'fleshShip' : 'ghostGalley'] || game.app.art.beasts.ghostship);
+        this.name = i % 2 ? 'Fleisch-Geist-Schiff' : 'Geister-Galeere-Chimäre';
         this.route = route.map(([a, b]) => [a * 16, b * 16]); this.wp = 1;
-        this.hp = this.maxHp = 160; this.cool = 2; this.name = 'Geisterschiff'; this.hurtR = 18; this.isGhost = true; this.home = { x: this.x, y: this.y };
+        this.hp = this.maxHp = 160; this.cool = 2; this.hurtR = 18; this.isGhost = true; this.home = { x: this.x, y: this.y };
     }
     get dead() { return this.hp <= 0; }
     update(dt) {
@@ -118,7 +121,7 @@ export class GhostShip extends Hull {
         if (this.dead) return;
         this.hp -= n; this.flash = 0.1; g.fx.num(this.x, this.y - 30, n);
         g.fx.burst('dust', this.x, this.y - 6, 10, { speed: 60, col: [0.3, 0.45, 0.45, 1] });
-        if (this.hp <= 0) { g.audio.sfx('death'); g.fx.rise('soul', this.x, this.y, 40, { w: 40 }); g.gainPearls(700, this); g.ui.banner('Geisterschiff versenkt', '', 'small', 2); }
+        if (this.hp <= 0) { g.audio.sfx('death'); g.fx.rise('soul', this.x, this.y, 40, { w: 40 }); g.gainPearls(700, this); g.ui.banner(this.name + ' versenkt', '', 'small', 2); }
     }
 }
 
@@ -148,4 +151,45 @@ export class Shark {
         r.sprite({ ...fr, h: Math.floor(fr.h * 0.55) }, Math.round(this.x - this.sheet.ax - cam[0]), Math.round(this.y - 14 - cam[1]), { flip: this.fx < 0, flash: this.flash > 0, color: [1, 1, 1, 0.85] });
     }
     drawGlow(r, cam) { if (this.dead) return; const fr = this.sheet.anims.walk[Math.floor(this.t * 6) % 4]; r.sprite({ ...fr, h: Math.floor(fr.h * 0.55) }, Math.round(this.x - this.sheet.ax - cam[0]), Math.round(this.y - 14 - cam[1]), { tex: fr.gtex, flip: this.fx < 0 }); }
+}
+
+// the Kraken: rises next to the ship in the deep sea and slams its tentacles down
+export class Kraken {
+    constructor(game, x, y) { this.game = game; this.x = x; this.y = y; this.home = { x, y }; this.sheet = game.app.art.monsters.kraken; this.hp = this.maxHp = 900; this.name = 'Kraken'; this.hurtR = 30; this.state = 'deep'; this.t = 0; this.flash = 0; this.isKraken = true; this.rise = 0; }
+    get dead() { return this.hp <= 0; }
+    get hidden() { return this.state === 'deep' && this.rise <= 0; }
+    update(dt) {
+        const g = this.game, s = g.ship;
+        this.t += dt; this.flash = Math.max(0, this.flash - dt);
+        if (this.dead) { this.rise = Math.max(0, this.rise - dt * 0.5); return; }
+        const near = g.sailing && dist(s, this.home) < 260;
+        if (this.state === 'deep') { this.rise = Math.max(0, this.rise - dt); if (near) { this.state = 'up'; this.x = s.x + Math.sin(s.h + 1.2) * 80; this.y = s.y - Math.cos(s.h + 1.2) * 60; g.audio.sfx('roar'); g.shake(5); g.ui.banner('Der Kraken', 'Etwas Großes regt sich unter dem Kiel', 'boss', 2.6); } return; }
+        this.rise = Math.min(1, this.rise + dt);
+        if (!near) { this.state = 'deep'; return; }
+        this.cool = (this.cool ?? 2) - dt;
+        // drift alongside the ship
+        this.x += (s.x + Math.sin(s.h + 1.6) * 90 - this.x) * dt * 0.3; this.y += (s.y - Math.cos(s.h + 1.6) * 70 - this.y) * dt * 0.3;
+        if (this.cool <= 0) {
+            this.cool = 3.2;
+            for (let k = 0; k < 3; k++) {
+                const tx = s.x + (Math.random() - 0.5) * 60, ty = s.y + (Math.random() - 0.5) * 40;
+                g.fx.mark({ kind: 'circle', x: tx, y: ty, r: 22, dur: 1.2 + k * 0.3, col: [0.55, 0.25, 0.45, 0.45] });
+                setTimeout(() => { if (this.dead || !g.sailing) return; g.fx.burst('splash', tx, ty, 20, { speed: 80, up: 120 }); g.shake(4); g.audio.sfx('crash'); if (Math.hypot(g.ship.x - tx, g.ship.y - ty) < 30) g.ship.damage(12); }, (1.2 + k * 0.3) * 1000);
+            }
+        }
+        if (Math.random() < 0.3) g.fx.burst('splash', this.x + (Math.random() - 0.5) * 60, this.y, 1, { speed: 30, up: 40 });
+    }
+    hurt(n) {
+        const g = this.game;
+        if (this.dead || this.state === 'deep') return;
+        this.hp -= n; this.flash = 0.1; g.fx.num(this.x, this.y - 40, n);
+        if (this.hp <= 0) { g.audio.sfx('death'); g.fx.rise('soul', this.x, this.y, 50, { w: 60 }); g.gainPearls(3000, this); g.save.shards += 3; g.ui.banner('DER KRAKEN SINKT', '3 Gezeitensplitter', 'big', 3); }
+    }
+    draw(r, cam) {
+        if (this.rise <= 0) return;
+        const fr = this.sheet.anims.idle[0], vis = Math.floor(fr.h * (0.35 + 0.45 * this.rise));
+        const b = Math.round(Math.sin(this.t * 1.5) * 2);
+        r.sprite({ ...fr, h: vis }, Math.round(this.x - this.sheet.ax - cam[0]), Math.round(this.y - vis + b - cam[1]), { flash: this.flash > 0, color: [1, 1, 1, Math.min(1, this.rise * 1.5)] });
+    }
+    drawGlow(r, cam) { if (this.rise <= 0) return; const fr = this.sheet.anims.idle[0], vis = Math.floor(fr.h * (0.35 + 0.45 * this.rise)); r.sprite({ ...fr, h: vis }, Math.round(this.x - this.sheet.ax - cam[0]), Math.round(this.y - vis + Math.round(Math.sin(this.t * 1.5) * 2) - cam[1]), { color: [0, 0, 0, 1] }); }
 }
