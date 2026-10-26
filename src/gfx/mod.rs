@@ -53,6 +53,8 @@ pub struct Globals {
     pub hd: [f32; 4],
     /// HD-2D: Umgebungsverdeckung, Bokeh-Staub, Randlicht, Farbsaum
     pub hd2: [f32; 4],
+    /// FullHD: weiche Normalen (0/1), interne Auflösungsstufe, frei, frei
+    pub hd3: [f32; 4],
     pub lights: [GLight; MAX_LIGHTS],
 }
 impl Default for Globals {
@@ -74,6 +76,7 @@ impl Default for Globals {
             counts: [0.0; 4],
             hd: [TILT, 1.0, 0.5, 0.5],
             hd2: [1.0, 0.6, 0.5, 0.6],
+            hd3: [0.0, 1.0, 0.0, 0.0],
             lights: [GLight::default(); MAX_LIGHTS],
         }
     }
@@ -181,6 +184,8 @@ pub struct Frame {
     pub init: Option<GfxInit>,
     /// Low-Res-Größe der Welt (b, h)
     pub low: (u32, u32),
+    /// interne Auflösungsstufe (1 = Pixel, 2 = FullHD): Renderziele sind `low * rs` groß
+    pub rs: u32,
     /// Bildschirmgröße (phys. px) und UI-Skalierung
     pub screen: (u32, u32),
     pub ui_scale: f32,
@@ -441,7 +446,7 @@ pub fn pack_frame(mut f: ResMut<Frame>, mut p: ResMut<Packed>, time: Res<Time>) 
     f.g.hd[2] = f.focus_y.map(|y| ((y - vy) / vh).clamp(0.0, 1.0)).unwrap_or(0.55);
     f.g.screen = [f.screen.0 as f32, f.screen.1 as f32, time.elapsed_secs_wrapped(), f.ui_scale];
     p.g = f.g;
-    p.low = f.low;
+    p.low = (f.low.0 * f.rs.max(1), f.low.1 * f.rs.max(1));
     p.uploads.append(&mut f.uploads);
     if let Some(i) = f.init.take() {
         p.init = Some(i);

@@ -20,6 +20,7 @@ struct Globals {
     counts: vec4<f32>,    // Lichteranzahl, Blitz (Gewitter), Weiß-Blende, Rot-Blende
     hd: vec4<f32>,        // HD-2D: Kippung, Tiefenschärfe, Fokuszeile, Lichtstrahlen
     hd2: vec4<f32>,       // HD-2D: Verdeckung, Bokeh-Staub, Randlicht, Farbsaum
+    hd3: vec4<f32>,       // FullHD: weiche Normalen, Auflösungsstufe, frei, frei
     lights: array<Light, 48>,
 };
 @group(0) @binding(0) var<uniform> G: Globals;

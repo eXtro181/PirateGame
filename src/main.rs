@@ -118,22 +118,24 @@ struct OptStore {
     volume: f32,
     shake: bool,
     touch: u8,
+    #[serde(default)]
+    pixel: bool,
 }
 fn load_opts() -> Options {
     let s: Option<OptStore> = save::load_options().and_then(|s| serde_json::from_str(&s).ok());
     match s {
-        Some(o) => Options { dark: o.dark, fx_high: o.fx_high, exposure: o.exposure, volume: o.volume, shake: o.shake, touch: o.touch },
-        None => Options { dark: false, fx_high: true, exposure: 1.0, volume: 0.8, shake: true, touch: 0 },
+        Some(o) => Options { dark: o.dark, fx_high: o.fx_high, exposure: o.exposure, volume: o.volume, shake: o.shake, touch: o.touch, hd: !o.pixel },
+        None => Options { dark: false, fx_high: true, exposure: 1.0, volume: 0.8, shake: true, touch: 0, hd: true },
     }
 }
 fn store_opts(o: &Options) {
-    let s = OptStore { dark: o.dark, fx_high: o.fx_high, exposure: o.exposure, volume: o.volume, shake: o.shake, touch: o.touch };
+    let s = OptStore { dark: o.dark, fx_high: o.fx_high, exposure: o.exposure, volume: o.volume, shake: o.shake, touch: o.touch, pixel: !o.hd };
     if let Ok(j) = serde_json::to_string(&s) {
         save::store_options(&j);
     }
 }
 fn copy_opts(o: &Options) -> Options {
-    Options { dark: o.dark, fx_high: o.fx_high, exposure: o.exposure, volume: o.volume, shake: o.shake, touch: o.touch }
+    Options { dark: o.dark, fx_high: o.fx_high, exposure: o.exposure, volume: o.volume, shake: o.shake, touch: o.touch, hd: o.hd }
 }
 
 fn setup(world: &mut bevy::ecs::world::World) {
@@ -298,6 +300,10 @@ fn tick(
     let dt = time.delta_secs().min(0.05);
     let app = &mut *app;
     let f = &mut *f;
+    // FullHD: interne Auflösung verdoppeln, sobald der Bildschirm groß genug ist
+    let short = f.screen.0.min(f.screen.1);
+    f.rs = if app.opt.hd && short >= 900 { 2 } else { 1 };
+    f.g.hd3 = [if app.opt.hd { 1.0 } else { 0.0 }, f.rs as f32, 0.0, 0.0];
     let art = &mut *art;
     app.t += dt;
     f.begin();

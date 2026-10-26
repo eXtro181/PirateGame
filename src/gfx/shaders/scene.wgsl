@@ -139,11 +139,33 @@ fn sample_sprite(uv: vec2<f32>, layer: u32, chunk: bool) -> vec4<f32> {
     }
     return textureSampleLevel(t_acol, s_near, uv, i32(layer), 0.0);
 }
-fn sample_nrm(uv: vec2<f32>, layer: u32, chunk: bool) -> vec4<f32> {
+fn nrm_texel(uv: vec2<f32>, layer: u32, chunk: bool) -> vec4<f32> {
     if (chunk) {
         return textureSampleLevel(t_cnrm, s_near, uv, i32(layer), 0.0);
     }
     return textureSampleLevel(t_anrm, s_near, uv, i32(layer), 0.0);
+}
+fn sample_nrm(uv: vec2<f32>, layer: u32, chunk: bool) -> vec4<f32> {
+    let c = nrm_texel(uv, layer, chunk);
+    // FullHD: Neigung weich zwischen den Kunstpixeln (eigene bilineare Mischung, WebGL erlaubt
+    // nur einen Sampler je Textur); Höhe und Glanz bleiben pixelgenau, die Farbe ohnehin
+    if (G.hd3.x > 0.5) {
+        var dim = vec2<f32>(textureDimensions(t_anrm).xy);
+        if (chunk) {
+            dim = vec2<f32>(textureDimensions(t_cnrm).xy);
+        }
+        let px = uv * dim - 0.5;
+        let fr = fract(px);
+        let b = (floor(px) + 0.5) / dim;
+        let d = 1.0 / dim;
+        let n00 = nrm_texel(b, layer, chunk).rg;
+        let n10 = nrm_texel(b + vec2<f32>(d.x, 0.0), layer, chunk).rg;
+        let n01 = nrm_texel(b + vec2<f32>(0.0, d.y), layer, chunk).rg;
+        let n11 = nrm_texel(b + d, layer, chunk).rg;
+        let n = mix(mix(n00, n10, fr.x), mix(n01, n11, fr.x), fr.y);
+        return vec4<f32>(n, c.b, c.a);
+    }
+    return c;
 }
 
 @fragment
@@ -226,7 +248,9 @@ fn fs_decal(v: VOut) -> @location(0) vec4<f32> {
     if (v.ext.y == 6u) {
         let d = length(v.uv * 2.0 - 1.0);
         a *= 1.0 - smoothstep(0.55, 1.0, d);
-        a = floor(a * 4.0 + hash21(floor(v.world)) * 0.9) / 4.0;
+        if (G.hd3.x < 0.5) {
+            a = floor(a * 4.0 + hash21(floor(v.world)) * 0.9) / 4.0;
+        }
     } else if (v.ext.y == 0u) {
         let c = textureSampleLevel(t_acol, s_near, v.uv, i32(v.ext.x), 0.0);
         a *= step(0.45, c.a);
@@ -248,7 +272,13 @@ fn fs_overlay(v: VOut) -> @location(0) vec4<f32> {
         // weicher Rand am Quad
         let e = min(min(v.uv.x, 1.0 - v.uv.x), min(v.uv.y, 1.0 - v.uv.y));
         a *= smoothstep(0.0, 0.25, e);
-        a = floor(a * 6.0 + hash21(p) * 0.8) / 6.0;
+        // Pixelmodus: gerasterte Stufen; FullHD: weicher, fotografischer Nebel
+        if (G.hd3.x < 0.5) {
+            a = floor(a * 6.0 + hash21(p) * 0.8) / 6.0;
+        } else {
+            let pf = v.world * 0.5;
+            a = smoothstep(0.35, 0.85, noise_at(pf * 0.25 + vec2<f32>(t * v.prm.y, t * v.prm.y * 0.3)).r * 0.6 + noise_at(pf * 0.12 - vec2<f32>(t * v.prm.y * 0.6, 0.0)).b * 0.5) * v.col.a * smoothstep(0.0, 0.25, e) * 0.8;
+        }
         return vec4<f32>(v.col.rgb * a, a);
     }
     if (mode == 6u) {

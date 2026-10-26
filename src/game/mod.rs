@@ -88,6 +88,8 @@ pub struct Options {
     pub volume: f32,
     pub shake: bool,
     pub touch: u8,
+    /// FullHD: doppelte interne Auflösung, weiche Schattierung
+    pub hd: bool,
 }
 
 pub struct Game {

@@ -1038,6 +1038,10 @@ fn face_pixel<M: TerrainMap>(m: &M, mats: &mut Materials, en: &EdgeNoise, c: &mu
             return;
         }
     }
+    if b == Biome::Hub {
+        masonry_pixel(c, x, y, px, fy, hgt, &bp, ev_at(fy), m.mat(tx, ty + (rows - row)) == Mat::Water);
+        return;
+    }
     if fy < cap_here {
         put_top(c, mats, 0.92);
         return;
@@ -1124,6 +1128,77 @@ fn face_pixel<M: TerrainMap>(m: &M, mats: &mut Materials, en: &EdgeNoise, c: &mu
     }
     if below == Mat::Water && to_bottom < 10 {
         c.spec(x, y, 150);
+    }
+}
+
+/// Festungsmauer der Glutwacht: Quader in versetzten Lagen, helle Deckplatten, dunkle Fugen
+/// (manchmal glühend), Schießscharten und Wasserlinie am Seeufer.
+#[allow(clippy::too_many_arguments)]
+fn masonry_pixel(c: &mut Canvas, x: i32, y: i32, px: i32, fy: i32, hgt: i32, bp: &BiomePal, ev: f32, water: bool) {
+    let st = pal(&[0x2A262C, 0x3C3640, 0x524A56, 0x6A6070, 0x847A88, 0xA0969E]);
+    let (mut v, mut rel, mut up) = (0.5f32, 2.0f32, 255u8);
+    if fy < 6 {
+        // Deckplatten mit Vorsprung und Schattenkante
+        v = if fy < 4 { 0.86 - fy as f32 * 0.04 } else { 0.22 };
+        up = if fy < 4 { 60 } else { 230 };
+        rel = 3.0;
+        if px.rem_euclid(22) == 0 {
+            v -= 0.25;
+        }
+    } else {
+        let row = (fy - 6) / 9;
+        let ry = (fy - 6) % 9;
+        let off = if row % 2 == 0 { 0 } else { 9 };
+        let bw = 18 + (hash(row, 3, 9) % 5) as i32;
+        let bx = (px + off).rem_euclid(bw);
+        let bk = (px + off).div_euclid(bw);
+        let tint = (hash(bk, row, 41) % 100) as f32 / 100.0 * 0.16 - 0.08;
+        let mortar = ry == 8 || bx == 0;
+        if mortar {
+            v = 0.12;
+            rel = 0.0;
+        } else {
+            // Quader: oben/links Licht, unten/rechts Schatten, leicht gewölbt
+            v = 0.58 + tint - (ry as f32 / 8.0) * 0.16 + if bx == 1 { 0.12 } else if bx == bw - 1 { -0.12 } else { 0.0 };
+            v += (bayer(px, fy) - 0.5) * 0.06;
+            rel = 2.5 - ((bx as f32 / bw as f32) - 0.5).abs() * 2.0;
+            if hash(px, fy / 2, 77) % 53 == 0 {
+                v -= 0.18;
+            }
+        }
+        // Schießscharten in manchen Feldern
+        let slit = hash(px.div_euclid(64), 5, 13) % 3 == 0 && (px.rem_euclid(64) - 32).abs() <= 1 && fy > 14 && fy < hgt - 14;
+        if slit {
+            v = 0.04;
+            rel = -2.0;
+        }
+        let t = fy as f32 / hgt as f32;
+        v -= t * 0.18;
+        if mortar && bx == 0 && hash(bk, row, 31) % 7 == 0 {
+            if let Some(gc) = bp.crack_glow {
+                c.put(x, y, gc, 0.0);
+                c.glow(x, y, gc, 0.55);
+                let i = c.idx(x, y);
+                c.up[i] = 255;
+                c.ev[i] = ev;
+                return;
+            }
+        }
+    }
+    let to_bottom = hgt - fy;
+    let mut col = pick(&st, v.clamp(0.0, 1.0));
+    if to_bottom < 8 {
+        col = shade(col, 0.72 + to_bottom as f32 * 0.035);
+        if water {
+            col = mix(col, hex(0x1A3846), 0.45);
+        }
+    }
+    c.put(x, y, col, rel);
+    let i = c.idx(x, y);
+    c.up[i] = up;
+    c.ev[i] = ev;
+    if water && to_bottom < 10 {
+        c.spec(x, y, 160);
     }
 }
 

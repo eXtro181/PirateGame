@@ -581,6 +581,12 @@ impl Menu {
             changed = true;
         }
         y += 16.0;
+        let d = self.cycler(f, art, inp, x, y, cw, "Auflösung", if o.hd { "FullHD, weiche Schattierung" } else { "Pixel (540)" });
+        if d != 0 {
+            o.hd = !o.hd;
+            changed = true;
+        }
+        y += 16.0;
         let d = self.cycler(f, art, inp, x, y, cw, "Helligkeit", &format!("{:.0} %", o.exposure * 100.0));
         if d != 0 {
             o.exposure = (o.exposure + d as f32 * 0.05).clamp(0.6, 1.6);

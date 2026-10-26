@@ -1,9 +1,9 @@
-# CLAUDE.md – Gedächtnis für Schwarzwasser
+# CLAUDE.md – Gedächtnis für Throne of the Drowned
 
 Kurzreferenz, damit neue Sitzungen sofort weiterarbeiten können. Bei Änderungen an Architektur oder Entscheidungen hier nachtragen.
 
 ## Projekt
-- **Schwarzwasser**: Soulslike-Piratenspiel im Browser in **HD-Pixelart**, seit v0.6 komplett in **Rust/Bevy 0.16** mit eigenem wgpu-Renderer (WebGL2 im Browser). Keine Bild-/Audiodateien: alles wird beim Start aus Code erzeugt (`assets/monsters.png/json` = alte Monster-Vorlage, wird nicht mehr geladen, nur Referenz). Die alte JS-Version liegt in `legacy-js/` (nur Referenz).
+- **Throne of the Drowned** (bis 26.10. „Schwarzwasser“, Wasm-Dateien heißen weiter `schwarzwasser*`): Soulslike-Piratenspiel im Browser in **HD-Pixelart**, seit v0.6 komplett in **Rust/Bevy 0.16** mit eigenem wgpu-Renderer (WebGL2 im Browser). Keine Bild-/Audiodateien: alles wird beim Start aus Code erzeugt (`assets/monsters.png/json` = alte Monster-Vorlage, wird nicht mehr geladen, nur Referenz). Die alte JS-Version liegt in `legacy-js/` (nur Referenz).
 - Repo: `eXtro181/PirateGame`, live: https://extro181.github.io/PirateGame/ (GitHub Pages, `.github/workflows/deploy.yml` baut Rust → wasm bei Push auf `main`, ca. 10–15 min).
 - **Vorgaben des Nutzers (verbindlich, 25.10.)**: Detailgrad wie die Beispielbilder (Blütenbäume mit Glyzinien, Basaltklippen, türkises Wasser, Fachwerkhäuser, Rotnebel-Zone), **Dark Fantasy** (gedämpftes Licht, Lichtinseln, Nebel, Zonenstimmung), **3D-Effekte an Wänden, Abgründen, Küsten** (Normal-/Höhenpuffer, Abgrund-Shader), höhere Auflösung (kürzere Bildseite 540 px Welt). **Gegner (26.10., ersetzt „Monster aus der Vorlage“)**: alle Gegner in derselben Grafikqualität und mit denselben Animationen wie Spieler/NPCs. Grafik-Spezifikation: Claude-Doc https://claude.ai/artifact/V4yVVaGGr1YaLyLo4UUA19.
 - Sprache für Spieltexte und Antworten an den Nutzer: **Deutsch**.
@@ -11,7 +11,7 @@ Kurzreferenz, damit neue Sitzungen sofort weiterarbeiten können. Bei Änderunge
 ## Bauen, testen, veröffentlichen
 - Lokal (vendorte Crates, offline über `~/.cargo/config.toml` → `/home/claude/toolcache/vendor`, NICHT ins Repo): `cd /home/claude/sw && cargo build --target wasm32-unknown-unknown --profile fast`, dann `PROFILE=fast WASM_BINDGEN=/home/claude/toolcache/bin/wasm-bindgen ./build.sh` → `dist/`. Skript `/tmp/claude-0/rb.sh` macht beides.
 - Server: `python3 -m http.server 8790` in `dist/`. Screenshots: `python3 /tmp/claude-0/shot.py URL out.png wartezeit [down:KeyS wait:1 up:KeyS click:x,y type:text shot:a.png eval:js]` (Playwright + Swiftshader, langsam).
-- URL-Parameter: `?debug&start=<feuer-id>` startet ein Testspiel ohne Profil (`&origin=`, `&all` = alle Galionsfiguren + Perlen, `&zoo` = jeder Gegnertyp schlafend um den Spieler, `&sail&zoo` = Haie/Geisterschiffe/Kraken am Schiff, `&boss=<fire|ice|wind|earth|mega>` mit `&phase2` = gleich zweite Gestalt, `&seaboss=<el>` (+`&phase2`) = Seeboss, `&open` = Throne + Wracks voll/Strudel offen, `&wrecks` = alle Wracks erbeutet, `&pos=x,y|whirl` = Spieler versetzen).
+- URL-Parameter: `?debug&start=<feuer-id>` startet ein Testspiel ohne Profil (`&origin=`, `&all` = alle Galionsfiguren + Perlen, `&zoo` = jeder Gegnertyp schlafend um den Spieler, `&sail&zoo` = Haie/Geisterschiffe/Kraken am Schiff, `&boss=<fire|ice|wind|earth|mega>` mit `&phase2` = gleich zweite Gestalt, `&seaboss=<el>` (+`&phase2`) = Seeboss, `&open` = Throne + Wracks voll/Strudel offen, `&wrecks` = alle Wracks erbeutet, `&pos=x,y|whirl` = Spieler versetzen, `&crew` = volle Crew, `&endsea` = mit dem Schiff am Ende der Welt).
 - Arbeitskopie `/home/claude/sw`, Git-Klon `/home/claude/pirategame`. Veröffentlichen: `tar --exclude=target --exclude=target-art --exclude=dist --exclude=.github/workflows/toolcache.yml -cf - . | (cd /home/claude/pirategame && tar -xf -)`, committen, `git push -q origin HEAD:main`, `gh run list -R eXtro181/PirateGame -L 1`. Kein `rm -rf` im Klon.
 - Kunst-Vorschau ohne Spiel: `CARGO_TARGET_DIR=/home/claude/sw/target-art cargo run -q --release -p sw-art --bin preview -- /tmp/claude-0/prev <trees|props|chars|beasts|monsters [key,key]|humans|budget>` (`budget` = Atlasfläche je Bogen; Ziel ≤ 4 Atlasseiten, sonst fehlen im Software-Renderer alle Sprites).
 - Nie Passwörter auf der Live-Seite eingeben; Tests per `?debug&start=`.
@@ -40,6 +40,18 @@ Kurzreferenz, damit neue Sitzungen sofort weiterarbeiten können. Bei Änderunge
 - Seebosse (Phase 1 Ungeheuer, nur Seitenansicht, Maßstab 2,1; Phase 2 Schiff): Tiamat, Mutter der Glut → Die Glutkrone (Glutsee); Krallgard, der Eishummer → Die Frostwitwe (Eismeer); Sturmzunge, die Seeschlange → Die Rabenbraut (Sturmsee); Der Abgrundangler → Die Tiefenlaterne (Tiefengrund). Belohnung: Wrack (`save.sea_kings`), abgelegt an den Stegen im Glutwacht-See (`save.wrecks`).
 - Strudel öffnet sich, wenn alle 4 Galionsfiguren auf den Thronen und alle 4 Wracks abgelegt sind (`Game::whirl_ready`); Einstieg zu Fuß am Stegende („In den Strudel springen“) → Ende der Welt.
 - Glutwacht (früher Schiffshain, Zonen-Schlüssel bleibt `hain`): Händlerin Sabeth (Dialog `merchant`), Schmied Harrow, Laternenmagd am Säbelfeuer, Crew an der Tafel.
+
+## Großes Update (26.10., zweite Runde)
+- Karte 560×420 (alles um 80/60 Kacheln verschoben, Spielstand v4 verschiebt den Perlenfleck). Ende der Welt = Meer in der Südost-Ecke (`World::end_rect`, Riff im Westen/Norden, Abgrund + Wasserfälle `view::draw_world_edge` im Süden/Osten), Insel `end_island` steigt nach der Seeschlacht auf (`raise_end_island`, `WorldView::refresh`).
+- Endkampf (`game/endboss.rs`): Phase 1–2 „Die Letzte Fahrt“ (Schiffsstil `ghost`), dann Boss `mega` an Land: Kapitän Schwarzwasser (`ghostCaptain`) → brennender Skelettkapitän (`burningCaptain`, `Look::four_arms`, `Look::burning`). Moloch gibt es nicht mehr.
+- Glutwacht: fünf Ebenen (`terrace`/`stair`), großer See mit Seetor im Osten, Hafen im See, Strudel nur per Schiff (`enter_whirlpool` bei Abstand < 90). Festungsmauern als Quader (`terrain::masonry_pixel`, Biom Hub).
+- Hochland: `World::highlands` (Ebenen 0–4 je Festlandgebiet, geschützte Bereiche), `auto_stairs`, `settle_on_cliffs`. Herunterspringen genau eine Ebene: `Game::jump_target`, `Player::jump`.
+- Schiffe: eigenes Schiff Maßstab 1,5 mit Ausbauten (`ships::Upg`, Schiffsmeister Brack, `save.ship_speed/def/atk` bis 10), Bossschiffe 2,32 mit eigenen Entwürfen. Atlas: reservierte Bereiche `ship_slot` (eigenes Schiff) und `boss_slot` (aktiver Seeboss/Endschiff/Titelbild), gezeichnet bei Bedarf (`art::build_ship`, `build_sea_boss`, `build_title`). Atlas jetzt 5 Seiten.
+- Crew-Geschütze (`game/crew.rs`): 1 Crew Mörser, 2 Kettenkugeln, 3 Flammenwerfer, 4 Kraken-Begleiter (Taste C auf See).
+- Titelbild (`ui/title.rs`): brennendes schwarzes Schiff (`ships::title_ship`) mit acht Krakenarmen aus Segmenten.
+- Musik (`synth.rs`): alle Stücke neu, Moll, instrumental, neue Instrumente `Cello`, `Harp` (Karplus-Strong).
+- FullHD (`Options::hd`, Standard an): Renderziele `low * rs` (rs = 2 ab 900 px kürzerer Seite), weiche Normalen per eigener bilinearer Mischung (WebGL: nur ein Sampler je Textur!), weicher Nebel/Schatten; Uniform `hd3`. Lichtpass rechnet Höhen mit `rs` um.
+- Pause-Menü: Cheat +1 Mio Perlen. Bild +15 % (`exposure * 1.15` in `env::apply`). Nebeltor goldgelb; Gegner meiden Bossräume (`Game::move_enemy`).
 
 ## Offene Punkte
 - Auf echter GPU und iPhone feinjustieren (Helligkeit, Bloom, Leistung), Balancing.

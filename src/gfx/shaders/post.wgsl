@@ -39,27 +39,29 @@ fn fs_light(f: FOut) -> @location(0) vec4<f32> {
     let spec_k = nr.a;
     let sp = gpos((vec2<f32>(ip) + 0.5) / dim);
     let p3 = vec3<f32>(sp.x, sp.y + elev, elev);
+    // interne Auflösungsstufe: Höhen (Welt-px) in Zielpixel umrechnen
+    let rs = max(G.hd3.y, 1.0);
 
     // Bodenzeile (0..1, fern = oben): wo dieser Pixel auf dem Boden steht
-    let ground = (f32(ip.y) + 0.5 + elev) / dim.y;
+    let ground = (f32(ip.y) + 0.5 + elev * rs) / dim.y;
 
     // Umgebungsverdeckung aus dem Höhenpuffer: Boden am Fuß von Wänden, Klippen und Stämmen
     // wird dunkler. Nur Verdecker zählen, die am selben Bodenort stehen (nicht Figuren davor).
     var ao = 1.0;
     // nur ebene Flächen empfangen Verdeckung: auf Wänden, Kronen und Figuren steigt die Höhe nach oben hin an
-    let e_up = textureLoad(t_b, vec2<i32>(ip.x, max(ip.y - 2, 0)), 0).b * 510.0;
+    let e_up = textureLoad(t_b, vec2<i32>(ip.x, max(ip.y - i32(2.0 * rs), 0)), 0).b * 510.0;
     let flat = 1.0 - smoothstep(0.8, 1.6, abs(e_up - elev));
     if (G.hd2.x > 0.0 && flat > 0.0) {
         var occ = 0.0;
-        let g1 = f32(ip.y) + elev;
+        let g1 = f32(ip.y) / rs + elev;
         for (var k = 0; k < 12; k = k + 1) {
             let ang = f32(k) * 2.39996;
             let rad = 2.0 + f32(k) * 1.1;
-            let o = vec2<f32>(cos(ang), sin(ang)) * rad;
+            let o = vec2<f32>(cos(ang), sin(ang)) * rad * rs;
             let q = vec2<i32>(clamp(vec2<f32>(ip) + o, vec2<f32>(0.0), dim - 1.0));
             let e2 = textureLoad(t_b, q, 0).b * 510.0;
             let dh = e2 - elev;
-            let g2 = f32(q.y) + e2;
+            let g2 = f32(q.y) / rs + e2;
             if (dh > 2.0 && abs(g2 - g1) < 6.0 + rad) {
                 occ += clamp(dh / (rad * 2.0 + 6.0), 0.0, 1.0);
             }
@@ -85,8 +87,10 @@ fn fs_light(f: FOut) -> @location(0) vec4<f32> {
     var sh = 1.0;
     if (G.sun_dir.w > 0.0 && nd > 0.0) {
         var occl = 0.0;
+        // versetzter Start je Pixel (kein Streifenmuster), Schatten werden zum Ende hin weicher
+        let jit = hash21(vec2<f32>(ip) * 0.73 + vec2<f32>(3.1, 7.7));
         for (var k = 1; k <= 12; k = k + 1) {
-            let tq = f32(k) * 5.0;
+            let tq = (f32(k) - jit) * 5.0;
             let q = p3 + sd * tq;
             let sp2 = vec2<f32>(q.x, q.y - q.z);
             let suv = (sp2 - G.view.xy) / G.view.zw;
@@ -95,7 +99,7 @@ fn fs_light(f: FOut) -> @location(0) vec4<f32> {
             // Verdecker: höher als der Strahl und am selben Bodenort
             let ground2 = sp2.y + e2;
             if (e2 > q.z + 3.0 && abs(ground2 - q.y) < 22.0) {
-                occl = 1.0;
+                occl = 1.0 - f32(k) / 15.0;
                 break;
             }
         }
