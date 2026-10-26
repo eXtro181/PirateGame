@@ -369,7 +369,7 @@ impl Game {
             EP::Dive => {
                 let t = self.end.st_t;
                 self.end.twin.alpha = (1.0 - t / 2.0).max(0.0);
-                if t > 1.6 {
+                if t > 1.6 && self.sailing {
                     self.ui.fade = ((t - 1.6) * 1.4).clamp(0.0, 1.0);
                 }
                 if t > 2.5 && self.sailing {
