@@ -462,6 +462,7 @@ impl Game {
                 Target::Ghost(i) => self.ghosts.get(i).map(|g| g.name.to_string()),
                 Target::Shark(_) => Some("Knochenhai".into()),
                 Target::Kraken => Some("Kraken".into()),
+                Target::SeaBoss(_) => None,
                 _ => None,
             };
             if let (Some(n), Some((x, y, _, by))) = (name, self.target_pos(t)) {
@@ -597,7 +598,28 @@ impl Game {
         }
     }
 
+    fn draw_sea_boss_bar(&self, f: &mut Frame, art: &Art) {
+        if let Some(si) = self.sea_boss {
+            let b = &self.sea_bosses[si];
+            let (w, h) = f.ui_size();
+            let bw = (w - 60.0).min(320.0);
+            let bx = (w / 2.0 - bw / 2.0).round();
+            let by = h - 28.0;
+            text::t(f, art, b.name(), bx, by - 12.0, col::BONE);
+            Ui::rect(f, bx - 1.0, by - 1.0, bw + 2.0, 7.0, col::BRASS_D);
+            Ui::rect(f, bx, by, bw, 5.0, [15, 10, 12, 255]);
+            if self.boss_ghost > b.hp {
+                Ui::rect(f, bx, by, (bw * self.boss_ghost / b.max_hp).round(), 5.0, [190, 150, 115, 200]);
+            }
+            let kk = (b.hp / b.max_hp).max(0.0);
+            Ui::rect(f, bx, by, (bw * kk).round(), 5.0, col::BLOOD);
+            Ui::rect(f, bx, by, (bw * kk).round(), 1.0, col::BLOOD_L);
+            Ui::rect(f, bx + bw / 2.0, by - 1.0, 1.0, 7.0, col::BRASS);
+        }
+    }
+
     fn draw_ship_hud(&self, f: &mut Frame, art: &Art) {
+        self.draw_sea_boss_bar(f, art);
         let (w, h) = f.ui_size();
         let sh = &self.ship;
         text::t(f, art, "Rumpf", 8.0, 6.0, col::BONE_DIM);
@@ -698,6 +720,21 @@ impl Game {
             } else {
                 Ui::rect(f, mx + zx - rx - 3.0, my + zy - ry - 3.0, rx * 2.0 + 6.0, ry * 2.0 + 6.0, [26, 30, 38, 235]);
                 text::tc(f, art, "?", mx + zx, my + zy - 3.0, col::BONE_DIM);
+            }
+        }
+        // Seegebiete der Seebosse
+        for sr in crate::world::SEAS.iter() {
+            let (cx, cy) = sr.center();
+            let done = self.save.sea_kings.get(sr.el).copied().unwrap_or(false);
+            let c = match sr.el {
+                "fire" => [220, 110, 60, 255],
+                "ice" => [150, 210, 240, 255],
+                "wind" => [180, 190, 220, 255],
+                _ => [120, 210, 120, 255],
+            };
+            text::tc(f, art, sr.name, mx + cx * k, my + cy * k - 12.0, if done { col::BONE_DIM } else { c });
+            if !done {
+                Ui::rect(f, mx + cx * k - 2.0, my + cy * k - 2.0, 4.0, 4.0, c);
             }
         }
         for fi in &self.world.fires {

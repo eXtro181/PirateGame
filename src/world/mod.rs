@@ -1,5 +1,6 @@
-//! Die Welt: eine Kachelkarte (32 px) mit sieben Inseln – Strand der Ertränkten, Schiffshain,
-//! die vier Königsgebiete und das Ende der Welt (nur durch den Strudel erreichbar).
+//! Die Welt: eine Kachelkarte (32 px) mit sieben Inseln – Strand der Ertränkten, Glutwacht,
+//! die vier Königsgebiete und das Ende der Welt (nur durch den Strudel im See der Glutwacht
+//! erreichbar) – und vier Seegebiete der Seebosse (Glutsee, Eismeer, Sturmsee, Tiefengrund).
 //! Höhenebenen: Plateaus sind begehbar, ihre unteren zwei Reihen sind Basaltwände, Wege über
 //! Wände werden Treppen. Die Erzeugung ist deterministisch; Positionen sind Welt-Pixel.
 
@@ -10,8 +11,8 @@ use sw_art::noise::{Noise, Rng};
 use sw_art::terrain::{Biome, Mat, TerrainMap, FACE_ROWS};
 
 pub const TS: i32 = 32;
-pub const MW: i32 = 320;
-pub const MH: i32 = 240;
+pub const MW: i32 = 400;
+pub const MH: i32 = 300;
 const FH: i32 = FACE_ROWS;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
@@ -49,7 +50,7 @@ impl Zone {
 }
 pub static ZONE_DEFS: [ZoneDef; 7] = [
     ZoneDef { key: "kueste", name: "Strand der Ertränkten", biome: Biome::Coast, music: "salz", cx: 160, cy: 200, rx: 46, ry: 26, seed: 1, king: None, sealed: false },
-    ZoneDef { key: "hain", name: "Schiffshain", biome: Biome::Hub, music: "hain", cx: 160, cy: 112, rx: 48, ry: 34, seed: 2, king: None, sealed: false },
+    ZoneDef { key: "hain", name: "Glutwacht", biome: Biome::Hub, music: "hain", cx: 160, cy: 112, rx: 48, ry: 34, seed: 2, king: None, sealed: false },
     ZoneDef { key: "asche", name: "Aschebucht", biome: Biome::Fire, music: "glut", cx: 268, cy: 100, rx: 42, ry: 30, seed: 3, king: Some("fire"), sealed: false },
     ZoneDef { key: "frost", name: "Frostgrotte", biome: Biome::Frost, music: "frost", cx: 56, cy: 58, rx: 44, ry: 32, seed: 4, king: Some("ice"), sealed: false },
     ZoneDef { key: "raben", name: "Hafen Rabenwacht", biome: Biome::Wind, music: "sturm", cx: 56, cy: 176, rx: 44, ry: 32, seed: 5, king: Some("wind"), sealed: false },
@@ -60,7 +61,7 @@ pub static ZONE_DEFS: [ZoneDef; 7] = [
 pub fn fire_name(id: &str) -> &'static str {
     match id {
         "kueste" => "Strand der Ertränkten",
-        "hain" => "Schiffshain · Seelenbaum",
+        "hain" => "Glutwacht · Säbelfeuer",
         "asche" => "Aschebucht · Landung",
         "asche2" => "Vor dem Glutthron",
         "frost" => "Frostgrotte · Eingang",
@@ -71,6 +72,27 @@ pub fn fire_name(id: &str) -> &'static str {
         "mangroven2" => "Wurzelkathedrale",
         "ende" => "Ende der Welt",
         _ => "Feuer",
+    }
+}
+
+/// Seegebiet eines Seebosses (Kachelkoordinaten, Radius in Kacheln).
+pub struct SeaRegion {
+    pub el: &'static str,
+    pub key: &'static str,
+    pub name: &'static str,
+    pub cx: i32,
+    pub cy: i32,
+    pub r: i32,
+}
+pub static SEAS: [SeaRegion; 4] = [
+    SeaRegion { el: "fire", key: "glutsee", name: "Glutsee", cx: 360, cy: 110, r: 30 },
+    SeaRegion { el: "ice", key: "eismeer", name: "Eismeer", cx: 150, cy: 26, r: 24 },
+    SeaRegion { el: "wind", key: "sturmsee", name: "Sturmsee", cx: 56, cy: 264, r: 30 },
+    SeaRegion { el: "earth", key: "tiefengrund", name: "Tiefengrund", cx: 340, cy: 264, r: 30 },
+];
+impl SeaRegion {
+    pub fn center(&self) -> (f32, f32) {
+        ((self.cx * TS + TS / 2) as f32, (self.cy * TS + TS / 2) as f32)
     }
 }
 
@@ -88,9 +110,9 @@ fn flora(b: Biome) -> Flora {
             deco: &["flowersW", "flowersY", "tuft", "tuft", "shell", "pebbles", "tallgrass", "mushroomR"],
         },
         Biome::Hub => Flora {
-            grove: &[("blossomTree0", 2), ("blossomTree1", 1), ("pinkTree0", 2), ("violetTree0", 2), ("violetTree1", 1), ("blueTree0", 2), ("blueTree1", 1), ("tealTree0", 2), ("redTree0", 1)],
-            bush: &["bushBlue", "bushTeal", "bushPink", "bushViolet", "bushGreen", "fern", "bushRed"],
-            deco: &["flowersW", "flowersW", "flowersY", "flowersP", "flowersB", "tuft", "tuft", "tallgrass", "mushroomR"],
+            grove: &[("deadTree", 4), ("emberTree0", 2)],
+            bush: &["lanternPole", "bushRed", "rock1"],
+            deco: &["ember", "ember", "skull", "bones", "pebbles", "tuftDark", "tuftDark", "lanternStalk"],
         },
         Biome::Fire => Flora {
             grove: &[("berryTree0", 3), ("berryTree1", 1), ("emberTree0", 1), ("deadTree", 2)],
@@ -129,7 +151,11 @@ pub struct PropInst {
     pub loot: Option<String>,
     pub mimic: Option<String>,
     pub slot: Option<&'static str>,
+    /// Liegeplatz für ein Wrack (Element)
+    pub berth: Option<&'static str>,
     pub gate: Option<&'static str>,
+    /// Hindernis auf See (blockiert auch das Schiff)
+    pub sea: bool,
     pub hidden: bool,
     pub open: bool,
     pub lit: bool,
@@ -203,6 +229,13 @@ pub struct Slot {
     pub y: f32,
 }
 #[derive(Clone, Debug)]
+pub struct Berth {
+    pub el: &'static str,
+    pub prop: usize,
+    pub x: f32,
+    pub y: f32,
+}
+#[derive(Clone, Debug)]
 pub struct WalkerDef {
     pub preset: &'static str,
     pub pts: Vec<(f32, f32)>,
@@ -257,6 +290,9 @@ pub struct World {
     pub gates: Vec<Gate>,
     pub arenas: HashMap<&'static str, Arena>,
     pub slots: Vec<Slot>,
+    pub berths: Vec<Berth>,
+    /// Ende des Stegs im See der Glutwacht (dort zieht der Strudel hinab)
+    pub pier_end: (f32, f32),
     pub walkers: Vec<WalkerDef>,
     pub waterfalls: Vec<Waterfall>,
     pub ghost_routes: Vec<Vec<(f32, f32)>>,
@@ -304,6 +340,8 @@ impl World {
             gates: vec![],
             arenas: HashMap::new(),
             slots: vec![],
+            berths: vec![],
+            pier_end: (0.0, 0.0),
             walkers: vec![],
             waterfalls: vec![],
             ghost_routes: vec![],
@@ -393,7 +431,8 @@ impl World {
             let mut rng = Rng::new(z.def().seed as u64 * 131);
             self.scatter(z, &mut rng);
         }
-        self.whirlpool = ((160 * TS) as f32, (64 * TS) as f32);
+        let mut rng = Rng::new(9191);
+        self.sea_props(&mut rng);
         let rt = |v: &[(i32, i32)]| v.iter().map(|&(x, y)| ((x * TS) as f32, (y * TS) as f32)).collect::<Vec<_>>();
         self.ghost_routes = vec![
             rt(&[(214, 150), (226, 160), (206, 168), (196, 150)]),
@@ -948,115 +987,270 @@ impl World {
         self.item("pearls", cx + 28, cy - 20);
         self.npc("herald", cx - 6, cy + 6, "carver", "Alter Galionsschnitzer", "herald", true, None);
     }
+    /// Die Glutwacht: dunkle Piratenfestung im Stil eines Feuerbandschreins. Im Norden der
+    /// Schreinbau, davor das Säbelfeuer mit den vier Thronen der Galionsfiguren, in der Mitte der
+    /// See mit Steg und den Liegeplätzen der Wracks, Schmiede im Westen, Händlerin im Osten,
+    /// die Crew an der Tafel im Südosten, das Tor im Süden zum Anleger.
     fn layout_hub(&mut self, rng: &mut Rng) {
         let d = self.cur.def();
         let (cx, cy) = (d.cx, d.cy);
-        let (bx, by) = (cx, cy - 6);
-        for (ox, oy, rx, ry) in [(0, -3, 7, 5), (-6, 1, 5, 4), (6, 1, 5, 4), (0, 4, 4, 3)] {
-            self.pond(bx + ox, by + oy, rx, ry, None, 0.0);
-        }
-        for y in by - 12..=by + 10 {
-            for x in bx - 15..=bx + 15 {
-                let i = idx(x, y);
-                if self.ground[i] == Mat::Water {
+        let (wx0, wx1, wy0, wy1) = (cx - 26, cx + 26, cy - 26, cy + 22);
+        let px = |tx: i32| (tx * TS) as f32;
+        let py = |ty: i32| (ty * TS) as f32;
+        // Hof pflastern (auch wo die Insel ausfranst)
+        for y in wy0 - 1..=wy1 + 1 {
+            for x in wx0 - 1..=wx1 + 1 {
+                if !inb(x, y) {
                     continue;
                 }
-                let mut near = false;
-                'o: for k in -1..=1 {
-                    for j in -1..=1 {
-                        if self.g(x + j, y + k) == Mat::Water {
-                            near = true;
-                            break 'o;
-                        }
-                    }
-                }
-                if near {
-                    self.ground[i] = Mat::Marble;
-                    self.path[i] = true;
-                }
+                let i = idx(x, y);
+                self.ground[i] = Mat::Cobble;
+                self.level[i] = 0;
+                self.path[i] = true;
+                self.zone[i] = Some(Zone::Hain);
+                self.biome[i] = Biome::Hub;
             }
         }
-        self.plaza(bx, by + 10, 4, 2, Mat::Marble, Some(0));
-        self.plaza(bx, by + 13, 2, 2, Mat::Marble, Some(0));
-        self.prop("hubTree", (bx * TS + TS / 2) as f32, ((by - 1) * TS + TS / 2) as f32);
-        self.prop_x("hubCrown", (bx * TS + TS / 2) as f32, ((by + 2) * TS) as f32, |p| p.no_collide = true);
-        self.fire("hain", bx, by + 10);
-        self.prop_tn("marbleArch", bx, by + 6);
-        for (x, y) in [(-9, -1), (9, -1), (-6, 6), (6, 6), (-12, 3), (12, 3)] {
-            self.prop_t("marblePillar", bx + x, by + y);
-        }
-        for (x, y) in [(-13, 7), (13, 7), (-15, -4), (15, -4)] {
-            self.prop_t("marbleStone", bx + x, by + y);
-        }
-        for (x, y) in [(-4, 12), (4, 12)] {
-            self.prop_t("rimPost", bx + x, by + y);
-        }
-        self.prop_t("guardian", bx - 10, by - 9);
-        self.prop_t("guardian", bx + 10, by - 9);
-        let mut x = bx - 14;
-        while x <= bx + 14 {
-            if (x - bx).abs() > 8 {
-                self.prop_t("fencePost", x, by - 12 + ((x - bx).abs() as f32 / 6.0).round() as i32);
+        // ---- See mit Steg
+        let (lx, ly) = (cx, cy - 2);
+        self.pond(lx, ly, 11, 7, Some(Mat::Marble), 0.06);
+        for y in ly + 2..=ly + 10 {
+            for x in [lx - 1, lx] {
+                let i = idx(x, y);
+                self.ground[i] = Mat::Plank;
+                self.path[i] = true;
             }
-            x += 2;
         }
-        self.road(&[(bx, by + 14), (bx, cy + 22), (bx, cy + 30)], Mat::Dirt, 1);
-        self.road(&[(bx - 4, by + 11), (bx - 18, by + 10), (cx - 30, cy - 12), (cx - 34, cy - 18)], Mat::Dirt, 1);
-        self.road(&[(bx + 4, by + 11), (bx + 18, by + 10), (cx + 30, cy - 12), (cx + 34, cy - 18)], Mat::Dirt, 1);
-        self.road(&[(bx - 18, by + 10), (cx - 26, cy + 14), (cx - 34, cy + 22)], Mat::Dirt, 1);
-        self.road(&[(bx + 18, by + 10), (cx + 26, cy + 14), (cx + 34, cy + 22)], Mat::Dirt, 1);
-        self.road(&[(cx - 30, cy - 12), (cx - 40, cy - 2)], Mat::Dirt, 1);
-        self.road(&[(cx + 30, cy - 12), (cx + 40, cy - 2)], Mat::Dirt, 1);
-        // Schmiede
-        self.plaza(cx - 32, cy - 20, 7, 4, Mat::Cobble, Some(0));
-        self.prop_t("forge", cx - 33, cy - 22);
-        self.prop_t("crates", cx - 26, cy - 22);
-        self.prop_t("barrels", cx - 38, cy - 18);
-        self.prop_t("logPile", cx - 27, cy - 17);
-        self.prop_t("cannon", cx - 38, cy - 23);
-        self.prop_t("anchorDeco", cx - 29, cy - 25);
-        self.fence_row(cx - 40, cx - 26, cy - 15);
-        // Taverne
-        self.plaza(cx + 32, cy - 20, 9, 5, Mat::Dirt, Some(0));
-        self.prop_t("tavern", cx + 34, cy - 24);
-        self.prop_t("flag", cx + 42, cy - 24);
-        for (x, y) in [(26, -18), (36, -16)] {
-            self.prop_t("table", cx + x, cy + y);
-            self.prop_t("bench", cx + x, cy + y + 2);
+        for y in (ly + 3..=ly + 9).step_by(2) {
+            self.prop_tn("bridgePost", lx - 2, y);
+            self.prop_tn("bridgePost", lx + 1, y);
         }
-        self.prop_t("stall0", cx + 24, cy - 24);
-        self.prop_t("barrels", cx + 42, cy - 19);
-        self.prop_t("laundry", cx + 30, cy - 12);
-        self.prop_t("well", cx + 44, cy - 14);
-        // Schiffsfriedhof
-        for (el, x, y, flip) in [("fire", cx + 30, cy + 24, false), ("ice", cx - 30, cy + 24, true), ("wind", cx - 42, cy + 2, true), ("earth", cx + 42, cy + 2, false)] {
-            self.prop_tf("wreck", x, y, flip);
-            let sx = if flip { x + 7 } else { x - 7 };
-            let (px, py) = tpos(sx, y + 1);
-            let pi = self.prop_x("figureheadSlot", px, py, |p| {
+        self.prop_t("lamppost", lx - 2, ly + 2);
+        self.prop_t("lamppost", lx + 1, ly + 2);
+        self.whirlpool = (px(lx), py(ly - 2) + 16.0);
+        self.pier_end = (px(lx), py(ly + 2) + 8.0);
+        // Liegeplätze der Wracks an den Ecken des Sees
+        for (el, tx, ty) in [("fire", lx - 9, ly - 3), ("ice", lx + 9, ly - 3), ("wind", lx - 8, ly + 4), ("earth", lx + 8, ly + 4)] {
+            let (bx, by) = tpos(tx, ty);
+            let pi = self.prop_x("berth", bx, by, |p| {
+                p.berth = Some(el);
+                p.interact = Some("berth");
+                p.no_collide = true;
+            });
+            self.berths.push(Berth { el, prop: pi, x: bx, y: by });
+        }
+        // ---- Säbelfeuer auf dem Podest und die Throne der Galionsfiguren
+        let (fx, fy) = (cx, cy - 14);
+        self.plaza(fx, fy, 5, 3, Mat::Marble, Some(0));
+        self.fire("hain", fx, fy);
+        for (el, tx, ty) in [("fire", fx - 7, fy - 1), ("ice", fx - 4, fy - 3), ("wind", fx + 4, fy - 3), ("earth", fx + 7, fy - 1)] {
+            let (sx, sy) = tpos(tx, ty);
+            let pi = self.prop_x("figureheadSlot", sx, sy, |p| {
                 p.slot = Some(el);
                 p.interact = Some("slot");
             });
-            self.slots.push(Slot { el, prop: pi, x: px, y: py });
+            self.slots.push(Slot { el, prop: pi, x: sx, y: sy });
         }
-        self.plateau(cx - 24, cy - 34, 16, 9, 1);
-        self.plateau(cx + 10, cy - 34, 16, 9, 1);
-        self.waterfall(cx - 17, cy - 27, 3);
-        self.pond(cx - 16, cy - 21, 4, 2, Some(Mat::Marble), 0.1);
-        self.road(&[(cx + 18, cy - 20), (cx + 18, cy - 28)], Mat::Dirt, 1);
-        self.chest("h1", cx + 20, cy - 31, "shard", None);
-        self.dock(Zone::Hain, bx, cy + 26, 0, 1);
-        for (x, y, r, n) in [(-38, -6, 6.0, 7), (38, -6, 6.0, 7), (-24, 18, 6.0, 6), (24, 18, 6.0, 6), (-16, -24, 5.0, 4), (16, -24, 5.0, 4), (-44, 14, 4.0, 4), (44, 14, 4.0, 4), (0, 28, 6.0, 3), (-6, -30, 6.0, 3)] {
+        for (i, (tx, ty)) in [(fx - 3, fy + 2), (fx + 3, fy + 2), (fx - 5, fy + 1), (fx + 5, fy + 1)].iter().enumerate() {
+            self.prop_t(&format!("swordGrave{}", i % 3), *tx, *ty);
+        }
+        for (i, (tx, ty)) in [(fx - 9, fy - 2), (fx - 2, fy - 4), (fx + 2, fy - 4), (fx + 9, fy - 2), (fx - 1, fy + 3), (fx + 1, fy + 3)].iter().enumerate() {
+            self.prop_tn(&format!("candles{}", i % 3), *tx, *ty);
+        }
+        for (tx, ty) in [(fx - 3, fy - 1), (fx + 3, fy - 1)] {
+            self.prop_t("brazier", tx, ty);
+        }
+        // ---- Schreinbau im Norden mit Statuen und Bannern
+        let (kx, ky) = (px(cx) + 16.0, py(cy - 21) + 24.0);
+        self.prop("fortKeep", kx, ky);
+        for dx in [-12, 12] {
+            self.prop_t("hoodedStatue", cx + dx, cy - 20);
+        }
+        for dx in [-6, 6] {
+            self.prop_t("bannerPole", cx + dx, cy - 19);
+        }
+        // ---- Mauern und Türme
+        let mut k = 0;
+        let mut x = wx0 + 2;
+        while x <= wx1 - 2 {
+            // Nordmauer
+            self.prop_x(&format!("fortWall{}", k % 2), px(x), py(wy0) + 24.0, |_| {});
+            // Südmauer (mit Tor in der Mitte)
+            if (x - cx).abs() > 4 {
+                self.prop_x(&format!("fortWall{}", (k + 1) % 2), px(x), py(wy1) + 24.0, |_| {});
+            }
+            k += 1;
+            x += 4;
+        }
+        let mut y = wy0 + 4;
+        while y <= wy1 {
+            for wx in [wx0, wx1] {
+                self.prop("fortWallV", px(wx) + 16.0, py(y));
+            }
+            y += 4;
+        }
+        for (tx, ty) in [(wx0, wy0), (wx1, wy0), (wx0, wy1), (wx1, wy1), (wx0, cy - 2), (wx1, cy - 2)] {
+            self.prop("fortTower", px(tx) + 16.0, py(ty) + 16.0);
+        }
+        // Tor
+        let gy = py(wy1) + 24.0;
+        for dx in [-70.0f32, 70.0] {
+            self.prop("gateTower", px(cx) + 16.0 + dx, gy - 6.0);
+        }
+        self.prop_x("fortArch", px(cx) + 16.0, gy, |p| p.no_collide = true);
+        // ---- Schmiede (Westflügel) und Händlerin (Ostflügel)
+        self.plaza(wx0 + 8, cy - 8, 5, 3, Mat::Dirt, Some(0));
+        self.prop_t("forge", wx0 + 7, cy - 11);
+        self.prop_t("cannon", wx0 + 3, cy - 6);
+        self.prop_t("barrels", wx0 + 12, cy - 11);
+        self.prop_t("crates", wx0 + 3, cy - 10);
+        self.prop_t("anchorDeco", wx0 + 11, cy - 6);
+        self.prop_t("brazier", wx0 + 10, cy - 7);
+        self.npc("smith", wx0 + 8, cy - 7, "smith", "Schmied Harrow", "smith", false, None);
+        self.plaza(wx1 - 8, cy - 8, 5, 3, Mat::Dirt, Some(0));
+        self.prop_t("stall0", wx1 - 8, cy - 11);
+        self.prop_t("stall1", wx1 - 4, cy - 10);
+        self.prop_t("crates", wx1 - 12, cy - 10);
+        self.prop_t("barrels", wx1 - 3, cy - 6);
+        self.prop_t("brazier", wx1 - 11, cy - 7);
+        self.npc("merchant", wx1 - 8, cy - 7, "merchant", "Händlerin Sabeth", "merchant", false, None);
+        self.npc("maid", fx - 2, fy + 2, "lanternMaid", "Die Laternenmagd", "maid", false, None);
+        // ---- Tafel der Crew (Südosten)
+        let (tx, ty) = (cx + 14, cy + 14);
+        self.prop_t("table", tx, ty);
+        self.prop_t("bench", tx, ty + 2);
+        self.prop_t("table", tx + 5, ty);
+        self.prop_t("bench", tx + 5, ty + 2);
+        self.prop_t("brazier", tx + 2, ty - 3);
+        self.prop_t("barrels", tx + 8, ty - 2);
+        self.crew_spots = [(tx - 1, ty + 1), (tx + 1, ty + 1), (tx + 4, ty + 1), (tx + 6, ty + 1)].iter().map(|&(x, y)| tpos(x, y)).collect();
+        // ---- Friedhof (Südwesten) mit Schwertgräbern
+        for gy in 0..3 {
+            for gx in 0..4 {
+                let (tx, ty) = (wx0 + 4 + gx * 3, cy + 10 + gy * 3);
+                if (gx + gy) % 3 == 0 {
+                    self.prop_t(&format!("swordGrave{}", (gx + gy) % 3), tx, ty);
+                } else {
+                    self.prop_t(if (gx + gy) % 2 == 0 { "grave0" } else { "grave1" }, tx, ty);
+                }
+            }
+        }
+        self.prop_t("skullpile", wx0 + 15, cy + 18);
+        self.prop_t("hoodedStatue", wx0 + 2, cy + 18);
+        // ---- Feuerbecken entlang des Weges vom Tor zum Steg
+        for (tx, ty) in [(cx - 3, wy1 - 2), (cx + 3, wy1 - 2), (cx - 3, ly + 11), (cx + 3, ly + 11), (wx0 + 4, wy0 + 4), (wx1 - 4, wy0 + 4)] {
+            self.prop_t("brazier", tx, ty);
+        }
+        for (tx, ty) in [(wx0 + 3, wy0 + 3), (wx1 - 3, wy0 + 3), (wx0 + 3, wy1 - 4), (wx1 - 3, cy + 6)] {
+            self.prop_t("emberTree0", tx, ty);
+        }
+        for (tx, ty) in [(wx0 + 6, wy1 - 2), (wx1 - 6, wy1 - 2)] {
+            self.prop_t("cannon", tx, ty);
+        }
+        // ---- Draußen: Weg zum Anleger, tote Bäume, Ruinen
+        self.road(&[(cx, wy1 + 1), (cx, cy + 26)], Mat::Cobble, 1);
+        self.dock(Zone::Hain, cx, cy + 26, 0, 1);
+        for (x, y, r, n) in [(-38, -6, 6.0, 5), (38, -6, 6.0, 5), (-36, 18, 5.0, 4), (36, 18, 5.0, 4), (0, -32, 6.0, 3)] {
             self.grove(cx + x, cy + y, r, rng, n, None);
         }
-        self.npc("maid", bx - 3, by + 11, "lanternMaid", "Die Laternenmagd", "maid", false, None);
-        self.npc("smith", cx - 30, cy - 19, "smith", "Schmied Harrow", "smith", false, None);
-        self.npc("innkeep", cx + 30, cy - 20, "innkeep", "Wirt Bilge", "innkeep", false, None);
-        self.crew_spots = [(cx + 25, cy - 16), (cx + 28, cy - 16), (cx + 35, cy - 14), (cx + 38, cy - 14)].iter().map(|&(x, y)| tpos(x, y)).collect();
-        self.walker("villagerA", &[(bx - 18, by + 10), (cx - 30, cy - 12), (cx - 26, cy + 14)]);
-        self.walker("villagerB", &[(bx + 18, by + 10), (cx + 30, cy - 12), (cx + 26, cy + 14)]);
-        self.walker("villagerC", &[(bx, cy + 22), (bx + 18, by + 10), (bx - 18, by + 10)]);
-        self.walker("villagerD", &[(cx + 26, cy - 18), (cx + 38, cy - 17), (cx + 32, cy - 12)]);
+        let _ = rng;
+    }
+
+    /// Requisiten auf See: in den vier Seegebieten nach Element, sonst Felsnadeln, Klippen,
+    /// brennende Wracks, versunkene Masten und Bojen an den Anlegern.
+    fn sea_props(&mut self, rng: &mut Rng) {
+        let docks: Vec<(f32, f32)> = self.docks.iter().map(|d| (d.x, d.y)).collect();
+        let near_dock = |x: f32, y: f32| docks.iter().any(|d| (d.0 - x).hypot(d.1 - y) < 12.0 * TS as f32);
+        let open = |w: &World, tx: i32, ty: i32, m: f32| -> bool { inb(tx, ty) && w.g(tx, ty) == Mat::Water && w.shore[idx(tx, ty)] >= m };
+        let place = |w: &mut World, kind: &str, x: f32, y: f32, collide: bool, flip: bool| {
+            w.prop_x(kind, x, y, |p| {
+                p.sea = true;
+                p.no_collide = !collide;
+                p.flip = flip;
+            });
+        };
+        // ---- Seegebiete
+        for sr in SEAS.iter() {
+            let table: &[(&str, u32, bool)] = match sr.el {
+                "fire" => &[("lavaSpire0", 3, true), ("lavaSpire1", 3, true), ("lavaSpire2", 2, true), ("burningWreck0", 2, true), ("burningWreck1", 2, true), ("seaRocks0", 2, true)],
+                "ice" => &[("iceberg0", 3, true), ("iceberg1", 3, true), ("iceberg2", 2, true), ("iceFloe0", 4, false), ("iceFloe1", 4, false), ("iceFloe2", 3, false), ("sunkMast0", 1, true)],
+                "wind" => &[("seaStack0d", 3, true), ("seaStack1d", 3, true), ("seaStack2d", 2, true), ("seaRocks1", 3, true), ("sunkMast1", 2, true), ("sunkMast0", 1, true)],
+                _ => &[("coralSpire0", 3, true), ("coralSpire1", 3, true), ("coralSpire2", 2, true), ("kelpTall0", 4, false), ("kelpTall1", 4, false), ("kelpTall2", 3, false), ("seaRocks0", 1, true)],
+            };
+            let sum: u32 = table.iter().map(|t| t.1).sum();
+            let mut placed = 0;
+            let mut tries = 0;
+            while placed < 30 && tries < 600 {
+                tries += 1;
+                let a = rng.f() * std::f32::consts::TAU;
+                let d = (0.32 + rng.f() * 0.68) * sr.r as f32;
+                let (tx, ty) = ((sr.cx as f32 + a.cos() * d) as i32, (sr.cy as f32 + a.sin() * d) as i32);
+                if !open(self, tx, ty, 3.0) {
+                    continue;
+                }
+                let (x, y) = tpos(tx, ty);
+                if near_dock(x, y) || self.props.iter().rev().take(placed + 1).any(|p| p.sea && (p.x - x).hypot(p.y - y) < 90.0) {
+                    continue;
+                }
+                let mut kk = rng.f() * sum as f32;
+                let mut pick = table[0];
+                for t in table {
+                    kk -= t.1 as f32;
+                    if kk <= 0.0 {
+                        pick = *t;
+                        break;
+                    }
+                }
+                let flip = rng.chance(0.5);
+                place(self, pick.0, x, y, pick.2, flip);
+                placed += 1;
+            }
+        }
+        // ---- offene See
+        let in_region = |tx: i32, ty: i32| SEAS.iter().any(|sr| ((tx - sr.cx).pow(2) + (ty - sr.cy).pow(2)) as f32 <= ((sr.r + 4) * (sr.r + 4)) as f32);
+        let mut ty = 2;
+        while ty < MH - 2 {
+            let mut tx = 2;
+            while tx < MW - 2 {
+                if in_region(tx, ty) || !open(self, tx, ty, 4.0) || self.zone_at((tx * TS) as f32, (ty * TS) as f32) == Zone::Ende {
+                    tx += 3;
+                    continue;
+                }
+                let (x, y) = tpos(tx, ty);
+                if near_dock(x, y) {
+                    tx += 3;
+                    continue;
+                }
+                let sh = self.shore[idx(tx, ty)];
+                let r = rng.f();
+                let flip = rng.chance(0.5);
+                if r < 0.012 && sh < 14.0 {
+                    let k = rng.int(0, 2);
+                    place(self, &format!("seaStack{k}"), x, y, true, flip);
+                } else if r < 0.024 {
+                    let k = rng.int(0, 1);
+                    place(self, &format!("seaRocks{k}"), x, y, true, flip);
+                } else if r < 0.0265 {
+                    let k = rng.int(0, 1);
+                    place(self, &format!("burningWreck{k}"), x, y, true, flip);
+                } else if r < 0.029 {
+                    let k = rng.int(0, 1);
+                    place(self, &format!("sunkMast{k}"), x, y, true, flip);
+                }
+                tx += 3;
+            }
+            ty += 3;
+        }
+        // Bojen vor jedem Anleger
+        for (dx, dy) in docks {
+            for off in [-110.0f32, 110.0] {
+                let (x, y) = (dx + off, dy + 70.0);
+                let (tx, ty) = ((x / TS as f32) as i32, (y / TS as f32) as i32);
+                if open(self, tx, ty, 1.0) {
+                    place(self, "buoy", x, y, false, false);
+                }
+            }
+        }
     }
     fn layout_fire(&mut self, rng: &mut Rng) {
         let d = self.cur.def();
@@ -1388,8 +1582,8 @@ impl World {
                 }
             }
         }
-        if sailing {
-            return self.zone_at(x, y) == Zone::Ende;
+        if sailing && self.zone_at(x, y) == Zone::Ende {
+            return true;
         }
         for by in ((y - r) / 128.0).floor() as i32..=((y + r) / 128.0).floor() as i32 {
             for bx in ((x - r) / 128.0).floor() as i32..=((x + r) / 128.0).floor() as i32 {
@@ -1398,7 +1592,7 @@ impl World {
                         match *c {
                             Collider::Circle { x: cx, y: cy, r: cr, prop } => {
                                 let p = &self.props[prop];
-                                if p.open || p.hidden {
+                                if p.open || p.hidden || sailing != p.sea {
                                     continue;
                                 }
                                 if (cx - x).powi(2) + (cy - y).powi(2) < (cr + r).powi(2) {
@@ -1407,7 +1601,7 @@ impl World {
                             }
                             Collider::Box { x0, x1, y0, y1, prop } => {
                                 let p = &self.props[prop];
-                                if p.open || p.hidden {
+                                if p.open || p.hidden || sailing != p.sea {
                                     continue;
                                 }
                                 let nx = x.clamp(x0, x1);
@@ -1420,6 +1614,9 @@ impl World {
                     }
                 }
             }
+        }
+        if sailing {
+            return false;
         }
         for &(x0, y0, x1, y1, active) in &self.dyn_blockers {
             if active && x > x0 && x < x1 && y > y0 && y < y1 {

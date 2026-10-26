@@ -26,7 +26,7 @@ pub struct Hull {
     pub alpha: f32,
 }
 impl Hull {
-    fn new(x: f32, y: f32, h: f32) -> Self {
+    pub fn new(x: f32, y: f32, h: f32) -> Self {
         Hull { x, y, h, v: 0.0, bob: rnd() * 6.0, flash: 0.0, alpha: 1.0 }
     }
     pub fn dir16(&self) -> usize {
@@ -124,6 +124,7 @@ impl Game {
                 sink_t: 0.0,
             })
             .collect();
+        self.spawn_sea_bosses();
         if !self.kraken.dead() {
             self.kraken = Kraken::new(214.0 * TS as f32, 66.0 * TS as f32);
         }
@@ -156,7 +157,7 @@ impl Game {
         h.bob += dt * 2.0;
     }
 
-    fn broadside(&mut self, h: &Hull, side: f32, dmg: f32, owner: Owner) {
+    pub fn broadside(&mut self, h: &Hull, side: f32, dmg: f32, owner: Owner) {
         let (fx, fy) = (h.h.sin(), -h.h.cos());
         let (nx, ny) = (h.h.cos() * side, h.h.sin() * side);
         for i in -1..=1 {
@@ -462,12 +463,13 @@ impl Game {
         // eigenes Schiff
         let h = &self.ship.hull;
         if vis(h.x, h.y, 200.0) {
-            let s = art.ship[h.dir16()];
+            let (k, flip) = sw_art::ships::ship_dir(h.dir16());
+            let s = art.ships["player"][k];
             let b = (h.bob.sin() * 2.0).round();
             let a = (h.alpha * 255.0) as u8;
             let fl = if h.flash > 0.0 { flags::FLASH } else { 0 } | if self.hover == Hover::Ship { flags::OUTLINE } else { 0 };
             f.shadow(h.x, h.y + 4.0, 70.0, 20.0, 0.3);
-            f.sprite(&s, h.x, h.y + b, SprOpt { tint: [255, 255, 255, a], flags: fl, cut_bottom: 0.08, ..Default::default() });
+            f.sprite(&s, h.x, h.y + b, SprOpt { flip, tint: [255, 255, 255, a], flags: fl, ..Default::default() });
             if self.sailing {
                 f.light(LightDef { x: h.x, y: h.y, z: 60.0, r: 220.0, col: [1.0, 0.72, 0.42], flicker: 0.1 });
             }
@@ -482,7 +484,8 @@ impl Game {
             let fl = if h.flash > 0.0 { flags::FLASH } else { 0 } | if self.hover == Hover::T(Target::Ghost(i)) { flags::OUTLINE } else { 0 };
             // Geisterschiffe wie das eigene Schiff in 16 Richtungen; das Fleischschiff blutrot getönt
             let tint = if g.monster == "fleshShip" { [255, 150, 150, a] } else { [255, 255, 255, a] };
-            f.sprite(&art.ghost_ship[h.dir16()], h.x, h.y + b, SprOpt { tint, flags: fl | flags::GHOST, ..Default::default() });
+            let (k, flip) = sw_art::ships::ship_dir(h.dir16());
+            f.sprite(&art.ships["player"][k], h.x, h.y + b, SprOpt { flip, tint, flags: fl | flags::GHOST, ..Default::default() });
             if !g.dead() {
                 f.light(LightDef { x: h.x, y: h.y, z: 50.0, r: 160.0, col: [0.35, 1.0, 0.82], flicker: 0.2 });
             }
@@ -510,24 +513,30 @@ impl Game {
                 f.light(LightDef { x: k.x, y: k.y, z: 80.0, r: 200.0, col: [0.7, 0.3, 0.6], flicker: 0.2 });
             }
         }
-        // Strudel
+        // Strudel im See der Glutwacht: Trichter, zwei Schaumkränze, kreisendes Treibgut
         if self.whirlpool_open {
             let (wx, wy) = self.world.whirlpool;
             if vis(wx, wy, 300.0) {
-                let s = art.spr("fx:whirl");
-                let mut q = Frame::quad_spr(&s, wx, wy, &SprOpt { rot: self.t * 1.4, ..Default::default() });
-                q.ext[3] = 0;
-                f.decals.push(q);
-                for arm in 0..3 {
-                    for i in 0..60 {
-                        let t = i as f32 / 60.0;
-                        let a = arm as f32 * 2.09 + t * 9.0 - self.t * 2.2;
-                        let r = 12.0 + t * 150.0;
-                        let c = (1.0 - t) * 255.0;
-                        f.glow(wx + a.cos() * r, wy + a.sin() * r * 0.6, 3.0, [(0.37 * c) as u8, (0.95 * c) as u8, (0.78 * c) as u8, 200]);
-                    }
+                let base = wy - 140.0;
+                let t = self.t;
+                f.sprite_z(&art.spr("fx:whirl"), wx, wy, base, SprOpt { rot: t * 0.7, ..Default::default() });
+                f.sprite_z(&art.spr("fx:whirlFoam0"), wx, wy, base + 0.1, SprOpt { rot: t * 1.3, tint: [255, 255, 255, 235], ..Default::default() });
+                f.sprite_z(&art.spr("fx:whirlFoam1"), wx, wy, base + 0.2, SprOpt { rot: t * 2.2 + 1.0, scale: 0.78, tint: [255, 255, 255, 220], ..Default::default() });
+                for i in 0..7 {
+                    // Treibgut zieht spiralförmig nach innen und taucht wieder am Rand auf
+                    let ph = (t * 0.09 + i as f32 / 7.0).fract();
+                    let r = 112.0 * (1.0 - ph) + 10.0;
+                    let a = i as f32 * 2.3 + t * (0.6 + 50.0 / r);
+                    let s = art.spr(&format!("fx:debris{}", i % 3));
+                    let al = ((1.0 - ph) * 4.0).min(1.0) * (ph * 8.0).min(1.0);
+                    f.sprite_z(&s, wx + a.cos() * r, wy + a.sin() * r, base + 0.3, SprOpt { rot: a + 1.6, tint: [255, 255, 255, (al * 255.0) as u8], ..Default::default() });
                 }
-                f.light(LightDef { x: wx, y: wy, z: 30.0, r: 260.0, col: [0.35, 1.0, 0.82], flicker: 0.3 });
+                for k in 0..10 {
+                    let a = k as f32 / 10.0 * TAU - t * 1.1;
+                    f.glow(wx + a.cos() * 24.0, wy + a.sin() * 24.0, 5.0, [95, 242, 200, 120]);
+                }
+                f.glow(wx, wy, 26.0, [95, 242, 200, 160]);
+                f.light(LightDef { x: wx, y: wy, z: 20.0, r: 280.0, col: [0.35, 1.0, 0.82], flicker: 0.3 });
             }
         }
     }

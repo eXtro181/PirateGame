@@ -73,6 +73,14 @@ impl Atlas {
     pub fn has(&self, name: &str) -> bool {
         self.map.contains_key(name)
     }
+    /// Freie Fläche reservieren (z. B. für Bilder, die später ersetzt werden): Seite, x, y.
+    pub fn reserve(&mut self, w: i32, h: i32) -> (usize, i32, i32) {
+        self.place(w, h)
+    }
+    /// Belegte Seiten (letzte Seite anteilig) – für das Log.
+    pub fn used(&self) -> f32 {
+        (self.pages.len() - 1) as f32 + (self.y + self.row) as f32 / PAGE as f32
+    }
     fn place(&mut self, w: i32, h: i32) -> (usize, i32, i32) {
         if self.x + w + 2 > PAGE {
             self.x = 4;

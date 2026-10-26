@@ -68,17 +68,23 @@ pub struct Kind {
     pub only: Option<&'static str>,
     /// Maßstab des Modells (Bosse größer, in voller Auflösung gerendert)
     pub sc: f32,
+    /// Seeboss: ragt aus dem Wasser (unter der Wasserlinie nichts), nur Stehen/Angriff/Treffer
+    pub swim: bool,
 }
 
 /// Bildgröße wächst mit dem Maßstab mit.
 const fn k(key: &'static str, w: i32, h: i32, big: bool, shoot: bool, shadow: f32, roll: f32) -> Kind {
-    Kind { key, w, h, foot: 8, big, shoot, shadow, roll, only: None, sc: 1.0 }
+    Kind { key, w, h, foot: 8, big, shoot, shadow, roll, only: None, sc: 1.0, swim: false }
 }
 const fn ks(key: &'static str, w: i32, h: i32, shadow: f32, roll: f32, sc: f32) -> Kind {
-    Kind { key, w: (w as f32 * sc) as i32, h: (h as f32 * sc) as i32, foot: 8, big: true, shoot: false, shadow: shadow * sc, roll, only: None, sc }
+    Kind { key, w: (w as f32 * sc) as i32, h: (h as f32 * sc) as i32, foot: 8, big: true, shoot: false, shadow: shadow * sc, roll, only: None, sc, swim: false }
+}
+/// Seeboss (Wasserlinie am Fußpunkt, Fußrand für den Teil vor dem Körper).
+const fn kw(key: &'static str, w: i32, h: i32, sc: f32) -> Kind {
+    Kind { key, w: (w as f32 * sc) as i32, h: (h as f32 * sc) as i32, foot: (40.0 * sc) as i32, big: true, shoot: false, shadow: 0.0, roll: 0.0, only: None, sc, swim: true }
 }
 
-pub const KINDS: [Kind; 16] = [
+pub const KINDS: [Kind; 20] = [
     k("crab", 64, 48, false, false, 14.0, PI),
     k("crabWarrior", 120, 96, true, false, 28.0, PI),
     k("shell", 72, 72, false, false, 15.0, 1.3),
@@ -94,9 +100,19 @@ pub const KINDS: [Kind; 16] = [
     ks("krakenBasilisk", 170, 170, 36.0, 1.3, 1.6),
     // ein Bogen: Glühteile neutral hell, das Element färbt das Spiel beim Zeichnen ein
     ks("moloch", 230, 210, 58.0, 0.6, 1.3),
-    Kind { key: "seaKraken", w: 210, h: 195, foot: 4, big: true, shoot: false, shadow: 0.0, roll: 0.0, only: Some("down"), sc: 1.5 },
-    Kind { key: "shark", w: 100, h: 52, foot: 14, big: false, shoot: false, shadow: 0.0, roll: 0.0, only: Some("side"), sc: 1.0 },
+    Kind { key: "seaKraken", w: 210, h: 195, foot: 4, big: true, shoot: false, shadow: 0.0, roll: 0.0, only: Some("down"), sc: 1.5, swim: false },
+    Kind { key: "shark", w: 100, h: 52, foot: 14, big: false, shoot: false, shadow: 0.0, roll: 0.0, only: Some("side"), sc: 1.0, swim: false },
+    // Seebosse (erste Gestalt)
+    kw("seaTiamat", 200, 190, 2.1),
+    kw("seaLobster", 190, 170, 2.1),
+    kw("seaSerpent", 200, 180, 2.1),
+    kw("seaAngler", 190, 170, 2.1),
 ];
+
+/// Seebosse: ein Bogen nur in Seitenansicht (gespiegelt), dafür groß.
+pub fn sea_boss(key: &str) -> bool {
+    matches!(key, "seaTiamat" | "seaLobster" | "seaSerpent" | "seaAngler")
+}
 
 pub fn kind(key: &str) -> Kind {
     *KINDS.iter().find(|k| k.key == key).unwrap_or(&KINDS[0])
@@ -110,6 +126,7 @@ pub fn canon(key: &str, anim: &str, f: usize) -> usize {
     match anim {
         "idle" => [0, 0, 2, 2][f % 4],
         "walk" => [0, 0, 2, 2, 4, 4][f % 6],
+        "atk" if kind(key).swim => [1, 1, 3, 3, 3][f % 5],
         "atk" => [1, 1, 3, 3, 4][f % 5],
         "cast" => [0, 0, 2][f % 3],
         _ => f,
@@ -124,6 +141,9 @@ pub fn beast_frame(key: &str, dir: &str, anim: &str, f: usize) -> Canvas {
     build(key, &p, &mut r);
     if kd.sc != 1.0 {
         r.scale(kd.sc);
+    }
+    if kd.swim {
+        r.water = Some(0.0);
     }
     if p.hurt {
         r.rotate(0, 0.16, [0.0; 3]);
@@ -159,6 +179,10 @@ fn build(key: &str, p: &P, r: &mut Rig) {
         "krakenBasilisk" => basilisk(r, p),
         "moloch" => moloch(r, p, 0xF4F0EA),
         "seaKraken" => sea_kraken(r, p),
+        "seaTiamat" => tiamat(r, p),
+        "seaLobster" => lobster(r, p),
+        "seaSerpent" => serpent(r, p),
+        "seaAngler" => abyss_angler(r, p),
         "shark" => shark(r, p),
         _ => crab(r, p, 0),
     }
@@ -1057,4 +1081,262 @@ fn shark(r: &mut Rig, p: &P) {
         r.dot(v(5.5, 13.0 - k as f32 * 1.6, 0.5 - k as f32 * 0.3), 0x2A3A4A, 0.0, 1);
     }
     r.dot(v(3.6, 23.0, -2.0), 0x2A0A10, 0.0, 1);
+}
+
+// ================================================================= Seebosse (erste Gestalt)
+
+/// Tiamat (Glut): fünfköpfige Drachin, deren Rücken aus dem brennenden Meer ragt.
+fn tiamat(r: &mut Rig, p: &P) {
+    let scale = r.mat(mat(0x7A2418).pat(Pat::Scales(3.2)).spec(110));
+    let belly = r.mat(mat(0xD08A3A).pat(Pat::Stripes(2.4)));
+    let horn = r.mat(mat(0x1E1416).spec(120));
+    let ember = r.mat(mat(0xF07A2A).glow(1.5).bias(0.3));
+    let wingm = r.mat(mat(0xA0381E).pat(Pat::Grain).glow(0.15));
+    let tooth = r.mat(mat(0xF0E6D0).bias(0.1));
+    let fire = r.mat(mat(0xFFB04A).glow(2.2).bias(0.5).soft());
+    let lava = r.mat(mat(0xC8401A).glow(0.6).bias(0.2));
+    let lunge = if p.atk > 0.0 { p.atk * 14.0 } else if p.atk < 0.0 { p.atk * 8.0 } else { 0.0 };
+    let bob = p.bob * 1.5;
+    // ---- Rumpf und Flügel
+    r.part();
+    r.ell(v(0.0, -10.0, 4.0 + bob), v(30.0, 34.0, 18.0), scale);
+    for i in 0..7 {
+        let y = 16.0 - i as f32 * 7.0;
+        let b = v(0.0, y - 10.0, 20.0 + bob - (i as f32 - 2.0).abs() * 0.8);
+        r.spike(b, add(b, v(0.0, -4.0, 10.0 - (i as f32 - 3.0).abs())), 3.0, horn);
+        r.dot(add(b, v(0.0, -3.0, 9.0 - (i as f32 - 3.0).abs())), 0xF07A2A, 1.6, 2);
+    }
+    let flap = if p.atk < 0.0 { 1.0 } else { (p.t * TAU).sin() * 0.3 };
+    for side in [-1.0f32, 1.0] {
+        wing(r, v(side * 18.0, -4.0, 18.0 + bob), v(side * 12.0, -26.0, 14.0 + bob), side, 60.0, flap, 0.35, horn, wingm);
+    }
+    // ---- fünf Hälse mit Köpfen
+    for i in 0..5 {
+        r.part();
+        let fi = i as f32 - 2.0;
+        let sway = (p.t * TAU + i as f32 * 1.3).sin() * 3.0;
+        let reach = lunge * (1.0 - fi.abs() * 0.2);
+        let base = v(fi * 9.0, 12.0, 10.0 + bob);
+        let hz = 46.0 - fi.abs() * 7.0 + bob;
+        let head = v(fi * 22.0 + sway, 30.0 + reach - fi.abs() * 4.0, hz);
+        let mid = v(fi * 16.0, 22.0 + reach * 0.4, hz * 0.75);
+        r.curve(&[base, mid, head], 6.5, 4.4, scale);
+        // Kehle hell
+        r.curve(&[add(base, v(0.0, 2.0, -1.0)), add(mid, v(0.0, 2.5, -1.5)), add(head, v(0.0, 1.0, -2.5))], 4.0, 2.6, belly);
+        let dir = norm(v(fi * 0.25, 1.0, -0.15));
+        r.ell_dir(head, dir, v(4.6, 8.0, 4.2), scale);
+        let gape = if p.atk < 0.0 { -p.atk * 0.5 } else if p.atk > 0.0 { 0.45 } else { 0.08 };
+        let jaw = r.mark();
+        r.ell_dir(add(head, v(0.0, 2.5, -3.6)), dir, v(3.6, 6.4, 1.6), belly);
+        teeth(r, add(head, v(-2.4, 6.5, -2.4)), add(head, v(2.4, 6.5, -2.4)), 3, v(0.0, 0.0, 1.0), 1.8, 0.8, tooth);
+        r.rotate_since(jaw, 0, -gape, add(head, v(0.0, -4.0, -2.5)));
+        teeth(r, add(head, v(-2.6, 6.0, -1.6)), add(head, v(2.6, 6.0, -1.6)), 3, v(0.0, 0.0, -1.0), 1.8, 0.8, tooth);
+        for sx in [-1.0f32, 1.0] {
+            r.spike(add(head, v(sx * 2.6, -3.0, 3.0)), add(head, v(sx * 4.6, -11.0, 8.0)), 1.4, horn);
+            r.dot(add(head, v(sx * 3.0, 3.0, 1.6)), 0xFFB04A, 2.0, 1);
+        }
+        if p.atk > 0.0 {
+            let m = add(head, mulv(dir, 9.0));
+            r.ball(add(m, v(0.0, 0.0, -2.0)), 3.4, fire);
+            r.ball(add(m, mulv(dir, 6.0)), 2.6, fire);
+            r.ball(add(m, mulv(dir, 11.0)), 1.8, ember);
+        }
+    }
+    // ---- Glutwellen um den Rumpf
+    for i in 0..10 {
+        let a = i as f32 / 10.0 * TAU;
+        r.ell(v(a.cos() * 34.0, -10.0 + a.sin() * 36.0, 0.4), v(5.0, 4.0, 1.2), lava);
+    }
+}
+
+/// Krallgard (Frost): Riesenhummer mit eisverkrustetem Panzer und gewaltigen Scheren.
+fn lobster(r: &mut Rig, p: &P) {
+    let shell = r.mat(mat(0x4A7AA0).pat(Pat::Spots(4.0)).spec(150));
+    let shell_d = r.mat(mat(0x2E4E6E).pat(Pat::Stripes(3.0)).spec(120));
+    let belly = r.mat(mat(0xC8D8E4));
+    let ice = r.mat(mat(0xBEE8F8).spec(240).glow(0.35).bias(0.2));
+    let joint = r.mat(mat(0x1E2E40));
+    let raise = if p.atk < 0.0 { -p.atk * 16.0 } else { 0.0 };
+    let fwd = if p.atk > 0.0 { p.atk * 16.0 } else { 0.0 };
+    let bob = p.bob * 1.2;
+    // ---- Hinterleib (Segmente ins Wasser) und Schwanzfächer
+    r.part();
+    for i in 0..6 {
+        let y = -20.0 - i as f32 * 9.0;
+        let z = 6.0 - i as f32 * 1.6 + bob * 0.5;
+        r.ell(v(0.0, y, z), v(16.0 - i as f32 * 1.4, 6.0, 9.0 - i as f32 * 0.8), if i % 2 == 0 { shell } else { shell_d });
+    }
+    // ---- Kopfbruststück
+    r.part();
+    r.ell(v(0.0, 0.0, 10.0 + bob), v(19.0, 26.0, 13.0), shell);
+    r.ell(v(0.0, 4.0, 4.0 + bob), v(16.0, 22.0, 6.0), belly);
+    r.spike(v(0.0, 22.0, 16.0 + bob), v(0.0, 34.0, 18.0 + bob), 3.0, shell_d);
+    // Eiskristalle auf dem Rücken
+    for i in 0..8 {
+        let a = -PI * 0.15 - i as f32 / 7.0 * PI * 0.7;
+        let b = v(a.cos() * 13.0, -6.0 + (i as f32 * 3.1) % 18.0, 18.0 + bob);
+        r.spike(b, add(b, v(a.cos() * 2.0, -2.0, 7.0 + (i % 3) as f32 * 3.0)), 2.2, ice);
+    }
+    // Augen und Fühler
+    for side in [-1.0f32, 1.0] {
+        let e = v(side * 6.0, 22.0, 20.0 + bob);
+        r.tube(&[v(side * 5.0, 18.0, 16.0 + bob), e], 1.6, 1.4, shell_d);
+        r.eye(e, 2.4, 0x0A1420, 0.0, v(side * 0.3, 1.0, 0.2));
+        r.dot(add(e, v(-0.5, 2.0, 1.4)), 0xFFFFFF, 0.0, 1);
+        let sway = (p.t * TAU + side).sin() * 6.0;
+        r.curve(&[v(side * 4.0, 24.0, 17.0 + bob), v(side * 20.0, 50.0, 30.0 + sway), v(side * 40.0 + sway, 70.0, 22.0), v(side * 52.0, 76.0 + sway, 10.0)], 1.4, 0.6, shell_d);
+    }
+    // ---- Laufbeine an der Wasserlinie
+    r.part();
+    for side in [-1.0f32, 1.0] {
+        for i in 0..4 {
+            let y = 10.0 - i as f32 * 7.0;
+            let hip = v(side * 16.0, y, 6.0 + bob);
+            let foot = v(side * 32.0, y * 1.2 + (p.t * TAU + i as f32).sin() * 2.0, -2.0);
+            leg(r, hip, foot, 12.0, 14.0, v(side, 0.0, 1.0), 2.6, 1.4, shell_d, Some(joint));
+        }
+    }
+    // ---- Scheren
+    r.part();
+    for side in [-1.0f32, 1.0] {
+        let sh = v(side * 14.0, 18.0, 12.0 + bob);
+        let hand = v(side * (30.0 - fwd * 0.5), 44.0 + fwd, 22.0 + raise + bob + (p.t * TAU + side).sin() * 2.0);
+        leg(r, sh, hand, 18.0, 18.0, v(side, 0.2, 0.6), 5.4, 4.6, shell, Some(joint));
+        let open = if p.atk < 0.0 { 0.8 } else if p.atk > 0.5 { 0.05 } else { 0.3 };
+        let c = add(hand, v(0.0, 6.0, 0.0));
+        r.ell_dir(c, v(0.0, 1.0, 0.2), v(8.0, 12.0, 6.5), shell);
+        let tip = add(c, v(0.0, 10.0, 0.0));
+        r.ell_dir(add(tip, v(0.0, 2.0, 3.0 + open * 5.0)), v(0.0, 1.0, 0.5 + open), v(3.4, 9.0, 3.2), shell);
+        r.ell_dir(add(tip, v(0.0, 2.0, -3.0)), v(0.0, 1.0, -0.3 - open * 0.6), v(3.0, 8.0, 2.8), shell_d);
+        for k in 0..3 {
+            r.spike(add(c, v(side * 5.0, -2.0 + k as f32 * 4.0, 5.0)), add(c, v(side * 8.0, -2.0 + k as f32 * 4.0, 10.0)), 1.6, ice);
+        }
+    }
+}
+
+/// Sturmzunge (Sturm): Seeschlange, deren Windungen in Bögen aus dem Wasser steigen.
+fn serpent(r: &mut Rig, p: &P) {
+    let scale = r.mat(mat(0x2E4A5A).pat(Pat::Scales(3.0)).spec(130));
+    let belly = r.mat(mat(0xB8C8C8).pat(Pat::Stripes(2.2)));
+    let fin = r.mat(mat(0x8AA8C0).pat(Pat::Stripes(3.0)));
+    let spark = r.mat(mat(0xD8F0FF).glow(2.2).bias(0.5).soft());
+    let tooth = r.mat(mat(0xF0F0E6).bias(0.1));
+    let wave = p.t * TAU;
+    let lunge = if p.atk > 0.0 { p.atk * 18.0 } else if p.atk < 0.0 { p.atk * 8.0 } else { 0.0 };
+    let rear = if p.atk < 0.0 { -p.atk * 12.0 } else { 0.0 };
+    // ---- Windungen: Sinusbögen entlang der Längsachse (unter Wasser abgeschnitten)
+    r.part();
+    let mut pts = vec![];
+    for k in 0..40 {
+        let y = -90.0 + k as f32 * 3.0;
+        let x = (y * 0.035 + wave * 0.5).sin() * 14.0;
+        let z = (y * 0.11 + wave).sin() * 15.0 - 3.0;
+        pts.push(v(x, y, z));
+    }
+    r.tube(&pts, 10.0, 10.0, scale);
+    // Rückenflosse über den Bögen
+    for k in (0..40).step_by(3) {
+        let q = pts[k];
+        if q[2] > 4.0 {
+            r.tri(add(q, v(0.0, -3.0, 6.0)), add(q, v(0.0, 3.0, 6.0)), add(q, v(0.0, -1.0, 14.0)), fin);
+        }
+    }
+    // ---- aufgerichteter Hals und Kopf
+    r.part();
+    let base = v(0.0, 28.0, 0.0);
+    let head = v((wave).sin() * 4.0, 44.0 + lunge, 56.0 + rear);
+    r.curve(&[base, v(0.0, 30.0, 22.0), v(0.0, 36.0 + lunge * 0.4, 42.0 + rear * 0.6), head], 9.0, 6.0, scale);
+    r.curve(&[add(base, v(0.0, 3.0, 2.0)), v(0.0, 33.0, 22.0), v(0.0, 39.0 + lunge * 0.4, 40.0 + rear * 0.6), add(head, v(0.0, 3.0, -3.0))], 5.0, 3.6, belly);
+    let dir = norm(v(0.0, 1.0, -0.25));
+    r.ell_dir(head, dir, v(6.4, 11.0, 5.4), scale);
+    // Kragenflossen
+    for side in [-1.0f32, 1.0] {
+        for k in 0..4 {
+            let b = add(head, v(side * 4.0, -5.0, 1.0));
+            let t1 = add(b, v(side * (10.0 + k as f32 * 2.0), -6.0 - k as f32 * 3.0, 8.0 - k as f32 * 3.0));
+            let t2 = add(b, v(side * (8.0 + k as f32 * 2.0), -8.0 - k as f32 * 3.0, 4.0 - k as f32 * 3.0));
+            r.tri(b, t1, t2, fin);
+        }
+        r.dot(add(head, v(side * 4.0, 5.0, 2.0)), 0xD8F0FF, 2.2, 2);
+    }
+    let gape = if p.atk < 0.0 { -p.atk * 0.55 } else if p.atk > 0.0 { 0.25 } else { 0.1 };
+    let jaw = r.mark();
+    r.ell_dir(add(head, v(0.0, 3.0, -4.6)), dir, v(5.0, 8.6, 2.0), belly);
+    teeth(r, add(head, v(-3.6, 9.0, -3.4)), add(head, v(3.6, 9.0, -3.4)), 4, v(0.0, 0.0, 1.0), 2.4, 0.9, tooth);
+    r.rotate_since(jaw, 0, -gape, add(head, v(0.0, -5.0, -3.0)));
+    teeth(r, add(head, v(-3.8, 8.4, -2.4)), add(head, v(3.8, 8.4, -2.4)), 4, v(0.0, 0.0, -1.0), 2.6, 0.9, tooth);
+    // Blitze entlang des Rückens
+    for k in (2..40).step_by(6) {
+        let q = pts[k];
+        if q[2] > 2.0 {
+            r.ball(add(q, v(0.0, 0.0, 10.0 + (k % 4) as f32)), 1.6, spark);
+        }
+    }
+    if p.atk > 0.0 {
+        for k in 0..4 {
+            r.ball(add(head, add(mulv(dir, 12.0 + k as f32 * 6.0), v((k as f32 * 2.1).sin() * 3.0, 0.0, 0.0))), 2.2, spark);
+        }
+    }
+}
+
+/// Der Abgrundangler (Tiefe): riesiger Anglerfisch, halb aufgetaucht, mit Leuchtköder.
+fn abyss_angler(r: &mut Rig, p: &P) {
+    let skin = r.mat(mat(0x1E2A22).pat(Pat::Spots(5.0)).spec(110));
+    let skin_l = r.mat(mat(0x3A4A36).pat(Pat::Grain));
+    let maw = r.mat(mat(0x0A0408).soft());
+    let tooth = r.mat(mat(0xE8E2CC).spec(80).bias(0.1));
+    let fin = r.mat(mat(0x2E5A3A).pat(Pat::Stripes(3.0)));
+    let lure = r.mat(mat(0xB8FF7A).glow(2.2).bias(0.5));
+    let lunge = if p.atk > 0.0 { p.atk * 14.0 } else if p.atk < 0.0 { p.atk * 6.0 } else { 0.0 };
+    let gape = if p.atk < 0.0 { 1.0 } else if p.atk > 0.0 { 0.35 } else { 0.4 + p.bob * 0.05 };
+    let bob = p.bob * 1.6;
+    // ---- Leib
+    r.part();
+    r.ell(v(0.0, lunge, 6.0 + bob), v(32.0, 30.0, 26.0), skin);
+    r.ell(v(0.0, -26.0 + lunge, 2.0 + bob), v(12.0, 16.0, 10.0), skin_l);
+    // leuchtende Punkte
+    for i in 0..22 {
+        let a = i as f32 * 2.39;
+        let z = 4.0 + (i as f32 * 1.7) % 24.0 + bob;
+        r.dot(v(a.cos() * 31.0, a.sin() * 28.0 + lunge, z), 0x9AFF6A, 1.6, 1);
+    }
+    // Rückenstacheln und Brustflossen
+    for i in 0..5 {
+        let b = v(0.0, -6.0 - i as f32 * 5.0 + lunge, 28.0 + bob - i as f32 * 2.0);
+        r.spike(b, add(b, v(0.0, -4.0, 9.0)), 2.0, fin);
+    }
+    for side in [-1.0f32, 1.0] {
+        let b = v(side * 28.0, -4.0 + lunge, 6.0 + bob);
+        let fl = (p.t * TAU + side).sin() * 4.0;
+        r.tri(b, add(b, v(side * 18.0, -8.0, 10.0 + fl)), add(b, v(side * 16.0, -16.0, -2.0 + fl)), fin);
+    }
+    // ---- Maul mit Zähnen
+    r.part();
+    let mc = v(0.0, 26.0 + lunge, 6.0 + bob);
+    let (mrx, mrz) = (22.0, 6.0 + gape * 12.0);
+    r.ell(add(mc, v(0.0, -2.0, 0.0)), v(mrx, 6.0, mrz), maw);
+    for i in 0..16 {
+        let a = i as f32 / 16.0 * TAU;
+        if a.sin() < -0.2 && mc[2] + a.sin() * mrz < 0.0 {
+            continue;
+        }
+        let rim = add(mc, v(a.cos() * mrx * 0.98, 1.0, a.sin() * mrz * 0.98));
+        let l = 4.0 + (i % 3) as f32 * 2.5;
+        r.spike(rim, add(rim, v(-a.cos() * 2.0, 2.5, -a.sin() * l)), 1.8, tooth);
+    }
+    // Unterkiefer vorstehend
+    r.ell(add(mc, v(0.0, 2.0, -mrz - 2.0)), v(mrx + 2.0, 8.0, 4.0), skin);
+    // kleine Augen
+    for side in [-1.0f32, 1.0] {
+        r.eye(add(mc, v(side * 18.0, -8.0, mrz + 8.0)), 2.6, 0xD8FF9A, 1.4, v(side * 0.4, 1.0, 0.1));
+    }
+    // ---- Angel mit Leuchtköder
+    r.part();
+    let sway = (p.t * TAU).sin() * 4.0;
+    let rod = r.mat(mat(0x1E2A22));
+    let l0 = v(0.0, 10.0 + lunge, 30.0 + bob);
+    let l3 = v(sway, 46.0 + lunge * 1.4, 34.0 + bob);
+    r.curve(&[l0, v(0.0, 18.0 + lunge, 52.0 + bob), v(sway * 0.5, 36.0 + lunge, 52.0 + bob), l3], 2.0, 1.2, rod);
+    r.ball(l3, 5.0, lure);
+    r.ball(add(l3, v(0.0, 0.0, -6.0)), 2.0, lure);
 }

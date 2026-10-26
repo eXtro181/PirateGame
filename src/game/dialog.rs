@@ -67,6 +67,7 @@ pub fn dialog_for(g: &mut Game, ni: usize) -> Script {
     let def = g.npcs[ni].def.clone();
     let s = &mut g.save;
     let missing = FIGS.iter().filter(|f| !s.mounted.get(**f).copied().unwrap_or(false)).count();
+    let wrecks_missing = FIGS.iter().filter(|f| !s.wrecks.get(**f).copied().unwrap_or(false)).count();
     let n = s.talked.entry(def.id.to_string()).or_insert(0);
     let first = *n == 0;
     *n += 1;
@@ -77,36 +78,49 @@ pub fn dialog_for(g: &mut Game, ni: usize) -> Script {
                 return Script {
                     pages: pages(&[
                         "Ah … noch einer, den die See wieder ausgespuckt hat.",
-                        "Hör zu, Ertränkter. Nördlich von hier liegt der Schiffshain. Ein Friedhof für Schiffe, die nicht sterben durften.",
-                        "Ihre Galionsfiguren wurden geraubt. Vier Könige der Geisterflotte tragen sie in sich: Glut, Frost, Sturm und Tiefe.",
-                        "Bring die Seelen zurück an die Buge. Dann öffnet sich der Strudel, und du kannst bis ans Ende der Welt segeln.",
+                        "Hör zu, Ertränkter. Nördlich von hier liegt die Glutwacht, die letzte Festung der Freibeuter. Dort brennt das Säbelfeuer.",
+                        "Um das Feuer stehen vier leere Throne. Vier Könige der Geisterflotte tragen ihre Galionsfiguren in sich: Glut, Frost, Sturm und Tiefe.",
+                        "Und draußen auf der See schlafen vier Ungeheuer, die einst Schiffe waren. Versenk sie und bring ihre Wracks an die Stege im Festungssee.",
+                        "Erst wenn Throne und Stege voll sind, öffnet sich der See zum Ende der Welt.",
                         "Dein Schiff wartet am Steg. Es steigt aus der Tiefe, wenn du es rufst.",
                     ]),
                     choices: vec![bye],
                 };
             }
             if missing == 0 {
-                return Script { pages: pages(&["Der Strudel ruft dich. Nördlich des Hains, wo das Wasser schwarz wird.", "Und wenn du am Ende der Welt stehst … grüß den Moloch nicht von mir."]), choices: vec![bye] };
+                if wrecks_missing == 0 {
+                    return Script { pages: pages(&["Der Strudel ruft dich. Mitten in der Glutwacht, wo der See schwarz wird.", "Und wenn du am Ende der Welt stehst … grüß den Moloch nicht von mir."]), choices: vec![bye] };
+                }
+                return Script {
+                    pages: vec![
+                        format!("Die Throne sind voll. Aber {wrecks_missing} Steg{} im Festungssee noch leer.", if wrecks_missing > 1 { "e sind" } else { " ist" }),
+                        "Die Ungeheuer schlafen in den vier Ecken der See: Glutsee im Osten, Eismeer im Norden, Sturmsee im Südwesten, Tiefengrund im Südosten.".into(),
+                    ],
+                    choices: vec![bye],
+                };
             }
             Script {
                 pages: vec![
-                    format!("Noch {missing} Galionsfigur{}. Die Buge im Hain warten.", if missing > 1 { "en fehlen" } else { " fehlt" }),
+                    format!("Noch {missing} Galionsfigur{}. Die Throne der Glutwacht warten.", if missing > 1 { "en fehlen" } else { " fehlt" }),
                     "Die Glut liegt im Osten, der Frost im Nordwesten. Rabenwacht im Westen, die Mangroven im Südosten.".into(),
+                    "Und vergiss die See nicht. Dort draußen schlafen Dinge, die größer sind als jeder König.".into(),
                 ],
                 choices: vec![bye],
             }
         }
         "maid" => Script {
             pages: if first {
-                pages(&["Willkommen am Seelenbaum, Ertränkter.", "Ich hüte die Laternen. Bring mir Perlen, und ich gieße dein Licht stärker."])
+                pages(&["Willkommen in der Glutwacht, Ertränkter.", "Ich bin die Hüterin des Säbelfeuers. Bring mir Perlen, und ich gieße deine Seele in neue Stärke."])
             } else if missing > 0 {
-                pages(&["Der Baum flüstert. Er vermisst seine Kinder."])
+                pages(&["Die Throne um das Feuer sind kalt. Sie warten auf ihre Gesichter."])
+            } else if wrecks_missing > 0 {
+                pages(&["Die Gesichter sind heimgekehrt. Doch der See ist noch nicht satt. Er will die Wracks."])
             } else {
-                pages(&["Der Baum ist voll. Hörst du es? Das Wasser im Norden singt."])
+                pages(&["Hörst du es? Der See singt. Er wird sich öffnen, und du wirst fallen. Fürchte dich nicht."])
             },
             choices: vec![
                 ch("Stufe aufsteigen", Cmd::LevelMenu),
-                ch("Über den Baum", Cmd::TalkPages(pages(&["Der Baum wuchs aus dem Kiel des ersten Schiffes, das die See verschlang.", "Seine Laternen sind die Seelen jener, die nie heimkamen. Auch deine hing einmal hier."]))),
+                ch("Über das Säbelfeuer", Cmd::TalkPages(pages(&["Das Feuer brennt auf den Klingen aller Kapitäne, die hier fielen. Es verlöscht nie ganz.", "Solange es brennt, kehrst du zurück. Wie wir alle. Das ist der Fluch der Glutwacht – und ihr Trost."]))),
                 bye,
             ],
         },
@@ -122,10 +136,14 @@ pub fn dialog_for(g: &mut Game, ni: usize) -> Script {
                 ],
             }
         }
-        "innkeep" => {
+        "merchant" => {
             let crew = crew_talk(s);
             Script {
-                pages: if first { pages(&["Rum, Kugeln, Pulver. Und Geschichten, wenn du zuhörst.", "Die Leute hier trinken nicht, um zu vergessen. Sie trinken, um sich zu erinnern."]) } else { pages(&["Noch einen?"]) },
+                pages: if first {
+                    pages(&["Oh, ein neues Gesicht. Wie selten, und wie schnell es wieder geht.", "Ich bin Sabeth. Ich verkaufe, was die See anspült: Kugeln, Pulver, Phiolen. Für Perlen, versteht sich."])
+                } else {
+                    pages(&["Wieder da? Die See lässt dich nicht los, was?"])
+                },
                 choices: vec![ch("Handeln", Cmd::Shop), ch("Die Crew", Cmd::TalkPages(crew)), bye],
             }
         }
@@ -135,7 +153,7 @@ pub fn dialog_for(g: &mut Game, ni: usize) -> Script {
                 if s.crew.iter().any(|x| x == el) {
                     let hub = g.zone_key == crate::world::Zone::Hain;
                     return Script {
-                        pages: vec![format!("Unser Lied heißt „{}“. Wenn wir auf See sind, drück F, und wir singen.", c.song_name), if hub { "Der Rum hier schmeckt nach Teer. Ich mag ihn.".into() } else { "Wir sehen uns im Hain.".into() }],
+                        pages: vec![format!("Unser Lied heißt „{}“. Wenn wir auf See sind, drück F, und wir singen.", c.song_name), if hub { "Das Feuer hier wärmt nicht. Aber es erinnert.".into() } else { "Wir sehen uns in der Glutwacht.".into() }],
                         choices: vec![bye],
                     };
                 }
@@ -148,7 +166,7 @@ pub fn dialog_for(g: &mut Game, ni: usize) -> Script {
                 return Script { pages: pages(lines), choices: vec![ch("Komm an Bord", Cmd::Recruit(c.el)), ch("Später", Cmd::EndTalk)] };
             }
             if def.dialog == "villager" {
-                let lines = ["Der Hain war früher voller Lieder.", "Hast du die Laternen gesehen? Jede ist eine Seele.", "Mein Mann fuhr mit der Sturmflotte. Er kam nie zurück.", "Pass auf dich auf, Ertränkter."];
+                let lines = ["Die Glutwacht war früher voller Lieder.", "Hast du die Throne am Feuer gesehen? Jeder wartet auf ein Gesicht.", "Mein Mann fuhr mit der Sturmflotte. Er kam nie zurück.", "Pass auf dich auf, Ertränkter."];
                 return Script { pages: vec![lines[(def.x as usize / 7) % 4].into()], choices: vec![bye] };
             }
             Script { pages: pages(&["…"]), choices: vec![bye] }

@@ -376,6 +376,12 @@ pub struct Save {
     pub mounted: HashMap<String, bool>,
     #[serde(default)]
     pub megalodon: bool,
+    /// besiegte Seebosse (Wrack erbeutet)
+    #[serde(default)]
+    pub sea_kings: HashMap<String, bool>,
+    /// in der Glutwacht abgelegte Wracks
+    #[serde(default)]
+    pub wrecks: HashMap<String, bool>,
     #[serde(default)]
     pub crew: Vec<String>,
     #[serde(default)]
@@ -459,6 +465,8 @@ pub fn new_save(name: &str, look: LookIdx, origin: &str, gift: &str, now: f64) -
         figureheads: HashMap::new(),
         mounted: HashMap::new(),
         megalodon: false,
+        sea_kings: HashMap::new(),
+        wrecks: HashMap::new(),
         crew: vec![],
         talked: HashMap::new(),
         ship_dock: "kueste".into(),

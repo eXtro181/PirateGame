@@ -68,6 +68,10 @@ pub enum Pat {
     Spots(f32),
     /// Bretter mit Fugen (Breite)
     Planks(f32),
+    /// Deckplanken längs (Breite, quer zur Fahrtrichtung gemessen)
+    Deck(f32),
+    /// Mauerwerk: Steinlagen (Höhe), versetzte Stoßfugen
+    Bricks(f32),
     /// Nieten im Raster (Abstand)
     Rivets(f32),
     /// Fell/Federn: Strähnen (Länge)
@@ -125,6 +129,8 @@ enum Shape {
     /// Quader: Mitte, Achsen, halbe Kantenlängen
     Box { c: V3, ax: [V3; 3], r: V3 },
     Tri { a: V3, b: V3, c: V3 },
+    /// senkrechter Zylinder: Bodenmitte, Achsen, (Halbachse x, Halbachse y, Höhe)
+    Cyl { c: V3, ax: [V3; 3], r: V3 },
 }
 
 #[derive(Clone, Copy)]
@@ -133,6 +139,9 @@ struct Prim {
     m: u16,
     /// Gruppe (für Innenkonturen): Teile derselben Gruppe bilden keine Kontur gegeneinander
     g: u16,
+    /// Höhenschnitt: nur Treffer mit lo <= z <= hi zählen (Deck, Wasserlinie)
+    lo: f32,
+    hi: f32,
 }
 
 #[derive(Clone, Copy)]
@@ -143,12 +152,20 @@ struct Dot {
     size: i32,
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct Rig {
     pub mats: Vec<Mat>,
     prims: Vec<Prim>,
     dots: Vec<Dot>,
     group: u16,
+    clip: (f32, f32),
+    /// Wasserlinie: alles darunter wird nicht gezeichnet
+    pub water: Option<f32>,
+}
+impl Default for Rig {
+    fn default() -> Self {
+        Rig { mats: vec![], prims: vec![], dots: vec![], group: 0, clip: (f32::MIN, f32::MAX), water: None }
+    }
 }
 
 const ID: [V3; 3] = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
@@ -175,7 +192,14 @@ impl Rig {
         self.group += 1;
     }
     fn push(&mut self, s: Shape, m: u16) {
-        self.prims.push(Prim { s, m, g: self.group });
+        self.prims.push(Prim { s, m, g: self.group, lo: self.clip.0, hi: self.clip.1 });
+    }
+    /// Höhenschnitt für alle folgenden Teile (z. B. Rumpf oben am Deck abschneiden).
+    pub fn clip(&mut self, lo: f32, hi: f32) {
+        self.clip = (lo, hi);
+    }
+    pub fn noclip(&mut self) {
+        self.clip = (f32::MIN, f32::MAX);
     }
     pub fn ell(&mut self, c: V3, r: V3, m: u16) {
         self.push(Shape::Ell { c, ax: ID, r }, m);
@@ -191,6 +215,10 @@ impl Rig {
     pub fn ell_rot(&mut self, c: V3, r: V3, pitch: f32, yaw: f32, m: u16) {
         let ax = ID.map(|a| rotd(rotd(a, 0, pitch), 2, yaw));
         self.push(Shape::Ell { c, ax, r }, m);
+    }
+    /// Senkrechter (elliptischer) Zylinder ab Bodenmitte `c`, Radien rx/ry, Höhe h.
+    pub fn cyl(&mut self, c: V3, rx: f32, ry: f32, h: f32, m: u16) {
+        self.push(Shape::Cyl { c, ax: ID, r: [rx, ry, h] }, m);
     }
     pub fn cube(&mut self, c: V3, r: V3, m: u16) {
         self.push(Shape::Box { c, ax: ID, r }, m);
@@ -270,6 +298,7 @@ impl Rig {
             p.s = match p.s {
                 Shape::Ell { c, ax, r } => Shape::Ell { c: f(c), ax: ax.map(&fd), r },
                 Shape::Box { c, ax, r } => Shape::Box { c: f(c), ax: ax.map(&fd), r },
+                Shape::Cyl { c, ax, r } => Shape::Cyl { c: f(c), ax: ax.map(&fd), r },
                 Shape::Tri { a, b, c } => Shape::Tri { a: f(a), b: f(b), c: f(c) },
             };
         }
@@ -282,6 +311,7 @@ impl Rig {
             p.s = match p.s {
                 Shape::Ell { c, ax, r } => Shape::Ell { c: f(c), ax: ax.map(&fd), r },
                 Shape::Box { c, ax, r } => Shape::Box { c: f(c), ax: ax.map(&fd), r },
+                Shape::Cyl { c, ax, r } => Shape::Cyl { c: f(c), ax: ax.map(&fd), r },
                 Shape::Tri { a, b, c } => Shape::Tri { a: f(a), b: f(b), c: f(c) },
             };
         }
@@ -292,9 +322,16 @@ impl Rig {
     /// Ganzes Wesen um den Ursprung vergrößern (Formen und Radien; feinere Details bleiben 1 px).
     pub fn scale(&mut self, k: f32) {
         for p in self.prims.iter_mut() {
+            if p.lo > f32::MIN {
+                p.lo *= k;
+            }
+            if p.hi < f32::MAX {
+                p.hi *= k;
+            }
             p.s = match p.s {
                 Shape::Ell { c, ax, r } => Shape::Ell { c: mulv(c, k), ax, r: mulv(r, k) },
                 Shape::Box { c, ax, r } => Shape::Box { c: mulv(c, k), ax, r: mulv(r, k) },
+                Shape::Cyl { c, ax, r } => Shape::Cyl { c: mulv(c, k), ax, r: mulv(r, k) },
                 Shape::Tri { a, b, c } => Shape::Tri { a: mulv(a, k), b: mulv(b, k), c: mulv(c, k) },
             };
         }
@@ -321,6 +358,7 @@ impl Rig {
                     m = m.min(c[2] - ext * if matches!(p.s, Shape::Ell { .. }) { 0.8 } else { 1.0 });
                 }
                 Shape::Tri { a, b, c } => m = m.min(a[2]).min(b[2]).min(c[2]),
+                Shape::Cyl { c, .. } => m = m.min(c[2]),
             }
         }
         m
@@ -430,6 +468,30 @@ fn pat_off(p: Pat, q: V3) -> f32 {
                 grain
             }
         }
+        Pat::Bricks(s) => {
+            let row = (q[2] / s).floor();
+            let fz = q[2] / s - row;
+            let along = (q[0] + q[1]) / (s * 2.2) + if (row as i32) % 2 == 0 { 0.0 } else { 0.5 };
+            let fx = along - along.floor();
+            let n = (h01(along.floor() as i32, row as i32, 13) - 0.5) * 0.7;
+            if fz < 0.16 || fx < 0.07 {
+                -1.4
+            } else if fz > 0.84 {
+                0.35 + n
+            } else {
+                n
+            }
+        }
+        Pat::Deck(s) => {
+            let f = q[0] / s;
+            let fr = f - f.floor();
+            let seam = ((q[1] / (s * 9.0) + f.floor() * 0.37).fract() < 0.03) as i32 as f32;
+            if fr < 0.16 {
+                -1.2
+            } else {
+                (h01(f.floor() as i32, (q[1] * 0.2) as i32, 9) - 0.5) * 0.5 - seam
+            }
+        }
         Pat::Rivets(s) => {
             let (fx, fz) = (q[0] / s, q[2] / s + q[1] / s);
             let (dx, dz) = (fx - fx.round(), fz - fz.round());
@@ -461,27 +523,49 @@ pub fn render(rig: &Rig, dir: &str, w: i32, h: i32, foot: i32) -> Canvas {
 
 /// Wie `render`, aber mit freiem Gierwinkel (z. B. Krabben laufen seitwärts: Seite = leicht gedreht).
 pub fn render_yaw(rig: &Rig, yaw: f32, w: i32, h: i32, foot: i32) -> Canvas {
-    let (sp, cp) = PITCH.sin_cos();
+    render_full(rig, yaw, w, h, foot, false)
+}
+
+/// Schrägprojektion wie die Spielwelt (Bildschirm-y = y − z, Boden 1:1): für Bauwerke und
+/// Requisiten, die zum Kachelraster passen müssen.
+pub fn render_oblique(rig: &Rig, yaw: f32, w: i32, h: i32, foot: i32) -> Canvas {
+    render_full(rig, yaw, w, h, foot, true)
+}
+
+fn render_full(rig: &Rig, yaw: f32, w: i32, h: i32, foot: i32, oblique: bool) -> Canvas {
+    let (sp, cp) = if oblique { (1.0, 1.0) } else { PITCH.sin_cos() };
     let ox = w as f32 / 2.0;
     let oy = (h - foot) as f32;
-    let b: V3 = [0.0, cp, sp]; // zur Kamera
-    let down: V3 = [0.0, sp, -cp]; // Bildschirm-unten im Raum
+    let s2 = std::f32::consts::FRAC_1_SQRT_2;
+    let b: V3 = if oblique { [0.0, s2, s2] } else { [0.0, cp, sp] }; // zur Kamera
+    let down: V3 = if oblique { [0.0, s2, -s2] } else { [0.0, sp, -cp] }; // Bildschirm-unten im Raum
+    let kk = sp * sp + cp * cp;
     let mut buf: Vec<Option<Hit>> = (0..(w * h) as usize).map(|_| None).collect();
+    let water = rig.water.unwrap_or(f32::MIN);
     let rz = |p: V3| rot(p, 2, yaw, [0.0; 3]);
-    let proj = |p: V3| -> (f32, f32, f32) { (ox + p[0], oy + p[1] * sp - p[2] * cp, p[1] * cp + p[2] * sp) };
-    // Strahl durch Pixel (px, py): P(d) = P0 + d * b
+    let proj = |p: V3| -> (f32, f32, f32) { (ox + p[0], oy + p[1] * sp - p[2] * cp, dot(p, b)) };
+    // Strahl durch Pixel (px, py): P(d) = P0 + d * b (P0 liegt in Tiefe 0)
     let ray0 = |px: f32, py: f32| -> V3 {
         let q = py - oy;
-        [px - ox, q * sp, -q * cp]
+        [px - ox, q * sp / kk, -q * cp / kk]
     };
     for pr in &rig.prims {
         match pr.s {
-            Shape::Ell { c, ax, r } | Shape::Box { c, ax, r } => {
+            Shape::Ell { c, ax, r } | Shape::Box { c, ax, r } | Shape::Cyl { c, ax, r } => {
                 let is_box = matches!(pr.s, Shape::Box { .. });
+                let is_cyl = matches!(pr.s, Shape::Cyl { .. });
                 let cw = rz(c);
                 let aw = ax.map(rz);
-                let ext = if is_box { (r[0] * r[0] + r[1] * r[1] + r[2] * r[2]).sqrt() } else { r[0].max(r[1]).max(r[2]) };
-                let (sx, sy, _) = proj(cw);
+                // Zylinder: Mitte des Begrenzungskörpers auf halber Höhe
+                let cmid = if is_cyl { add(cw, mulv(aw[2], r[2] * 0.5)) } else { cw };
+                let ext = if is_box {
+                    (r[0] * r[0] + r[1] * r[1] + r[2] * r[2]).sqrt()
+                } else if is_cyl {
+                    (r[0].max(r[1]).powi(2) + (r[2] * 0.5).powi(2)).sqrt()
+                } else {
+                    r[0].max(r[1]).max(r[2])
+                };
+                let (sx, sy, _) = proj(cmid);
                 let x0 = ((sx - ext - 1.0).floor() as i32).max(0);
                 let x1 = ((sx + ext + 1.0).ceil() as i32).min(w - 1);
                 let y0 = ((sy - ext - 1.0).floor() as i32).max(0);
@@ -492,7 +576,34 @@ pub fn render_yaw(rig: &Rig, yaw: f32, w: i32, h: i32, foot: i32) -> Canvas {
                     for x in x0..=x1 {
                         let p0 = sub(ray0(x as f32 + 0.5, y as f32 + 0.5), cw);
                         let l0 = [dot(p0, aw[0]), dot(p0, aw[1]), dot(p0, aw[2])];
-                        let hit = if is_box {
+                        let hit = if is_cyl {
+                            // Mantel (näherer Schnittpunkt) und Deckel
+                            let (rx, ry, hh) = (r[0], r[1], r[2]);
+                            let mut best: Option<(f32, V3, V3)> = None;
+                            let qa = (lb[0] / rx).powi(2) + (lb[1] / ry).powi(2);
+                            if qa > 1e-8 {
+                                let qb = l0[0] * lb[0] / (rx * rx) + l0[1] * lb[1] / (ry * ry);
+                                let qc = (l0[0] / rx).powi(2) + (l0[1] / ry).powi(2) - 1.0;
+                                let disc = qb * qb - qa * qc;
+                                if disc >= 0.0 {
+                                    let t = (-qb + disc.sqrt()) / qa;
+                                    let lh = [l0[0] + lb[0] * t, l0[1] + lb[1] * t, l0[2] + lb[2] * t];
+                                    if lh[2] >= 0.0 && lh[2] <= hh {
+                                        let nl = norm([lh[0] / (rx * rx), lh[1] / (ry * ry), 0.0]);
+                                        let n = norm(add(add(mulv(aw[0], nl[0]), mulv(aw[1], nl[1])), mulv(aw[2], nl[2])));
+                                        best = Some((t, n, lh));
+                                    }
+                                }
+                            }
+                            if lb[2].abs() > 1e-6 {
+                                let t = (hh - l0[2]) / lb[2];
+                                let lh = [l0[0] + lb[0] * t, l0[1] + lb[1] * t, hh];
+                                if (lh[0] / rx).powi(2) + (lh[1] / ry).powi(2) <= 1.0 && best.map(|b| t > b.0).unwrap_or(true) {
+                                    best = Some((t, aw[2], lh));
+                                }
+                            }
+                            best
+                        } else if is_box {
                             // Platten-Methode: Austritt in Richtung Kamera
                             let mut tmin = f32::MIN;
                             let mut tmax = f32::MAX;
@@ -545,7 +656,9 @@ pub fn render_yaw(rig: &Rig, yaw: f32, w: i32, h: i32, foot: i32) -> Canvas {
                             if buf[i].as_ref().map(|hh| t > hh.d).unwrap_or(true) {
                                 // Muster im Wesensraum (vor dem Gieren): Mitte + lokaler Treffer
                                 let q = add(c, add(add(mulv(ax[0], lq[0]), mulv(ax[1], lq[1])), mulv(ax[2], lq[2])));
-                                buf[i] = Some(Hit { d: t, n, q, m: pr.m, g: pr.g });
+                                if q[2] >= pr.lo && q[2] <= pr.hi && q[2] >= water {
+                                    buf[i] = Some(Hit { d: t, n, q, m: pr.m, g: pr.g });
+                                }
                             }
                         }
                     }
@@ -579,7 +692,9 @@ pub fn render_yaw(rig: &Rig, yaw: f32, w: i32, h: i32, foot: i32) -> Canvas {
                         let i = (y * w + x) as usize;
                         if buf[i].as_ref().map(|hh| t > hh.d).unwrap_or(true) {
                             let q = add(add(mulv(a, w0), mulv(bb, w1)), mulv(c, w2));
-                            buf[i] = Some(Hit { d: t, n, q, m: pr.m, g: pr.g });
+                            if q[2] >= pr.lo && q[2] <= pr.hi && q[2] >= water {
+                                buf[i] = Some(Hit { d: t, n, q, m: pr.m, g: pr.g });
+                            }
                         }
                     }
                 }
@@ -624,6 +739,8 @@ pub fn render_yaw(rig: &Rig, yaw: f32, w: i32, h: i32, foot: i32) -> Canvas {
             cv.cur_up = ((1.0 - hh.n[2].max(0.0)) * 255.0) as u8;
             cv.cur_spec = m.spec;
             cv.put(x, y, col, (hh.d - dmin) * 0.6);
+            // Höhe über dem eigenen Bodenpunkt (Bildschirm-px): Schatten und Tiefenschärfe folgen der Grundfläche
+            cv.set_ev(x, y, (hh.q[2] * cp).max(0.0));
             if m.glow > 0.0 {
                 cv.glow(x, y, col, m.glow);
             }
@@ -631,6 +748,9 @@ pub fn render_yaw(rig: &Rig, yaw: f32, w: i32, h: i32, foot: i32) -> Canvas {
     }
     // ---------------- Punkte (Pupillen, Glanz, Funken)
     for d in &rig.dots {
+        if d.p[2] < water {
+            continue;
+        }
         let (sx, sy, dz) = proj(rz(d.p));
         for oy2 in 0..d.size {
             for ox2 in 0..d.size {
@@ -643,6 +763,7 @@ pub fn render_yaw(rig: &Rig, yaw: f32, w: i32, h: i32, foot: i32) -> Canvas {
                 if visible {
                     if cv.a(x, y) == 0 {
                         cv.put(x, y, d.col, 1.0);
+                        cv.set_ev(x, y, (d.p[2] * cp).max(0.0));
                     } else {
                         let r = cv.rel[i];
                         cv.put(x, y, d.col, r);
@@ -657,5 +778,6 @@ pub fn render_yaw(rig: &Rig, yaw: f32, w: i32, h: i32, foot: i32) -> Canvas {
     cv.cur_up = 255;
     cv.cur_spec = 0;
     cv.outline(true, 0.95);
+    cv.fill_ev();
     cv
 }

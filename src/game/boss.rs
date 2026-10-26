@@ -781,7 +781,7 @@ impl Game {
                     bk.4 = false;
                 }
             }
-            self.timers.push((5.2, Timed::Banner(item(king(key).figurehead).name.to_string(), "Bring sie zum Schiffshain.".into())));
+            self.timers.push((5.2, Timed::Banner(item(king(key).figurehead).name.to_string(), "Bring sie zur Glutwacht.".into())));
         }
         self.boss = None;
         self.persist(true);

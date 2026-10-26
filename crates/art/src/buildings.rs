@@ -404,35 +404,154 @@ pub fn wreck() -> PropArt {
     PropArt::new("wreck", c, 120, 126).shadow(110.0, 12.0).boxc(100.0, 26.0).overhead(60)
 }
 
-/// Galionsfigur je Element (aufgestellt im Schiffshain).
+fn el_glow(el: &str) -> Rgba {
+    hex(match el {
+        "fire" => 0xF0642A,
+        "ice" => 0x8AD8F8,
+        "wind" => 0xD8E4F0,
+        _ => 0x8ACF5A,
+    })
+}
+
+/// Thron der Glutwacht: dunkle Basaltstufen mit hoher, spitzer Rückenlehne und Elementrune.
+/// `bust` = Galionsfigur darauf (sonst leerer Thron).
+fn throne(c: &mut Canvas, el: Option<&str>) {
+    let (w, h) = (c.w, c.h);
+    let cx = w as f32 / 2.0;
+    let bas = p6(&[0x0E0C10, 0x1A171C, 0x28242A, 0x38323A, 0x4A434C, 0x5E565E]);
+    // Rückenlehne: spitzbogig, mit Kanten und Rissen
+    let top = 18.0;
+    let bot = h as f32 - 26.0;
+    for y in top as i32..bot as i32 {
+        let t = (y as f32 - top) / (bot - top);
+        let hw = 12.0 + (t * 1.6).min(1.0) * 20.0;
+        let tip = if t < 0.12 { (t / 0.12) * hw } else { hw };
+        let mut x = cx - tip;
+        while x <= cx + tip {
+            let dx = (x - cx) / tip.max(1.0);
+            let mut v = 0.5 - dx * 0.22 - t * 0.12;
+            if dx.abs() > 0.82 {
+                v += 0.18;
+            }
+            if h01(x as i32, y / 3, 17) > 0.96 {
+                v -= 0.3;
+            }
+            c.put(x as i32, y, pick(&bas, v), 3.0 + (1.0 - dx * dx).max(0.0) * 2.0);
+            x += 1.0;
+        }
+    }
+    // Stufen
+    block(c, (cx - 40.0) as i32, h - 28, 80, 6, 10, &bas, &bas, 2.0);
+    block(c, (cx - 30.0) as i32, h - 36, 60, 5, 8, &bas, &bas, 3.0);
+    // Rune und Glutfugen
+    if let Some(e) = el {
+        let g = el_glow(e);
+        let ry = h - 17;
+        for k in -5i32..=5 {
+            c.lit(cx as i32 + k, ry + (k.abs() % 3) - 1, g, 1.1);
+        }
+        for k in -3..=3 {
+            c.lit(cx as i32, ry - 4 + k, g, 1.2);
+        }
+        for y in (top as i32 + 6)..(bot as i32) {
+            if (y % 7) == 0 {
+                for xo in [-20.0f32, 20.0] {
+                    c.lit((cx + xo * ((y as f32 - top) / (bot - top)).min(1.0)) as i32, y, g, 0.6);
+                }
+            }
+        }
+    } else {
+        for k in -4i32..=4 {
+            c.put(cx as i32 + k, h - 17, bas[1], 4.0);
+        }
+    }
+    // Ketten an den Seiten
+    let iron = p6(&[0x14141A, 0x24242C, 0x38383F, 0x50505A, 0x6A6A74, 0x8A8A94]);
+    for xo in [-35.0f32, 35.0] {
+        let mut y = h as f32 - 34.0;
+        while y > h as f32 - 70.0 {
+            c.dome(cx + xo, y, 1.6, 2.2, &iron, 1.0, 5.0, 0.2, 0.1);
+            y -= 3.5;
+        }
+    }
+}
+
+/// Galionsfigur je Element: Büste mit dem Kopf des Landbosses (aus dem Figuren-Maler),
+/// auf einem geschnitzten Bugsockel, vor einem Thron der Glutwacht.
 pub fn figurehead(el: &str) -> PropArt {
-    let (w, h) = (52, 84);
+    let (w, h) = (110, 172);
     let mut c = Canvas::new(w, h);
-    let (body, glow) = match el {
-        "fire" => (p6(&[0x3A120E, 0x6A1E14, 0x9E3420, 0xCE5A30, 0xEE8A4A, 0xFFC27A]), hex(0xF0642A)),
-        "ice" => (p6(&[0x1E3A52, 0x2E5A78, 0x4A82A2, 0x74AAC6, 0xA6D0E4, 0xDAF2FA]), hex(0x8AD8F8)),
-        "wind" => (p6(&[0x2A2E3A, 0x444A5A, 0x646C7E, 0x8A92A2, 0xB4BAC6, 0xE0E4EA]), hex(0xE0E8FF)),
-        _ => (p6(&[0x14301E, 0x1E4A2A, 0x2E6A3A, 0x46904E, 0x6CB46A, 0xA0D490]), hex(0x6AE07A)),
+    throne(&mut c, Some(el));
+    let cx = w as f32 / 2.0;
+    let wd = p6(&[0x24140C, 0x3A2214, 0x56341E, 0x74482A, 0x94623A, 0xB4824E]);
+    let g = gold();
+    // Büste: Kopf und Schultern des Königs, groß
+    let key = match el {
+        "fire" => "kingFire",
+        "ice" => "kingIce",
+        "wind" => "kingWind",
+        _ => "kingEarth",
     };
-    let st = stone();
-    block(&mut c, 10, 66, 32, 5, 12, &st, &st, 2.0);
-    // Körper (Meerjungfrau-Büste mit Flügeln/Armen)
-    c.tube(&[(26.0, 68.0), (24.0, 50.0), (28.0, 30.0)], 16.0, 12.0, &body, 0.6, 4.0);
-    c.dome(28.0, 20.0, 8.0, 9.0, &body, 5.0, 10.0, 0.4, 0.1);
-    c.tube(&[(20.0, 36.0), (10.0, 28.0), (6.0, 16.0)], 6.0, 3.0, &body, 0.5, 6.0);
-    c.tube(&[(34.0, 36.0), (44.0, 28.0), (48.0, 16.0)], 6.0, 3.0, &body, 0.5, 6.0);
-    c.lit(26, 19, glow, 1.5);
-    c.lit(30, 19, glow, 1.5);
-    for y in 6..66 {
-        for x in 4..50 {
-            if c.a(x, y) > 0 && h01(x, y, 7) > 0.93 {
-                c.lit(x, y, glow, 0.8);
+    let (mut look, _) = crate::chars::preset(key);
+    look.weapon = None;
+    look.aura = None;
+    let s = 2.0;
+    let fr = crate::chars::frame(&look, "down", "idle", 0, s);
+    let cut = (fr.h as f32 - 4.0 * s - 17.0 * s) as i32;
+    let mut bust = Canvas::new(fr.w, cut);
+    for y in 0..cut {
+        for x in 0..fr.w {
+            let i = fr.idx(x, y);
+            if fr.col[i][3] == 0 {
+                continue;
+            }
+            let j = bust.idx(x, y);
+            // geschnitzt und bemalt: Farben leicht ins Holz gemischt
+            bust.col[j] = mix(fr.col[i], wd[3], 0.15);
+            bust.rel[j] = fr.rel[i] + 5.0;
+            bust.emi[j] = fr.emi[i];
+            bust.up[j] = fr.up[i];
+        }
+    }
+    let base_y = h as f32 - 40.0;
+    let bust_bot = base_y - 22.0;
+    // Bugsockel: Keil wie ein Schiffsbug, mit Goldkanten und Schnitzrillen
+    let mut sock = Canvas::new(w, h);
+    sock.poly(&[(cx - 20.0, bust_bot - 2.0), (cx + 20.0, bust_bot - 2.0), (cx + 6.0, base_y + 2.0), (cx - 6.0, base_y + 2.0)], wd[3]);
+    for y in 0..h {
+        for x in 0..w {
+            if sock.a(x, y) > 0 {
+                let dx = (x as f32 - cx) / 20.0;
+                let v = 0.6 - dx * 0.35 - if (y + (dx * 3.0) as i32) % 5 == 0 { 0.15 } else { 0.0 };
+                c.put(x, y, pick(&wd, v), 6.0 + (1.0 - dx * dx).max(0.0) * 3.0);
             }
         }
     }
+    for t in 0..24 {
+        let f = t as f32 / 23.0;
+        let yy = bust_bot - 2.0 + f * (base_y + 2.0 - bust_bot + 2.0);
+        let hw = 20.0 - f * 14.0;
+        c.put((cx - hw) as i32, yy as i32, g[4], 8.0);
+        c.put((cx + hw) as i32 - 1, yy as i32, g[2], 8.0);
+    }
+    c.dome(cx, base_y - 4.0, 4.0, 4.0, &g, 2.0, 9.0, 0.3, 0.1);
+    let by = (bust_bot - cut as f32 + 6.0) as i32;
+    c.blit(&bust, (cx - fr.w as f32 / 2.0) as i32, by, false);
+    for k in -16i32..=16 {
+        c.put(cx as i32 + k, by + cut - 1, g[if k < 0 { 4 } else { 2 }], 10.0);
+    }
     c.outline(true, 0.8);
-    let col = rgbf(glow);
-    PropArt::new(&format!("figurehead_{el}"), c, 26, 78).shadow(18.0, 5.0).circle(13.0).light(0.0, -50.0, 50.0, 140.0, [col[0] * 1.6, col[1] * 1.6, col[2] * 1.6], 0.05)
+    let col = rgbf(el_glow(el));
+    PropArt::new(&format!("figurehead_{el}"), c, w / 2, h - 8).shadow(38.0, 8.0).circle(24.0).light(0.0, -80.0, 70.0, 180.0, [col[0] * 1.6, col[1] * 1.6, col[2] * 1.6], 0.05)
+}
+
+/// Leerer Thron (Sockel für eine Galionsfigur).
+pub fn figurehead_slot() -> PropArt {
+    let (w, h) = (110, 172);
+    let mut c = Canvas::new(w, h);
+    throne(&mut c, None);
+    c.outline(true, 0.8);
+    PropArt::new("figureheadSlot", c, w / 2, h - 8).shadow(38.0, 8.0).circle(24.0).light(0.0, -50.0, 40.0, 80.0, [0.9, 0.55, 0.3], 0.15)
 }
 
 /// Der Seelenbaum: riesiger verdrehter Stamm mit Wurzeln (Kollision) …

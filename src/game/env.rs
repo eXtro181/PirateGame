@@ -75,17 +75,24 @@ pub fn env(zone: &str, sailing_open_sea: bool) -> Env {
     match zone {
         // Strand der Ertränkten: neblige Morgendämmerung, kühles Licht
         "kueste" => Env { ambient: l(0x8090B8, 0.52), sun: l(0xF0C8A0, 0.62), fog: l(0x6A7E8C, 1.0), fog_k: 0.1, ..base },
-        // Schiffshain: goldene Abendstunde, Seelenlicht in der Dämmerung
+        // Glutwacht: Aschedämmerung wie am Feuerbandschrein, nur Glut und Laternen spenden Wärme
         "hain" => Env {
-            rays: 0.85,
-            ambient: l(0x7A84B8, 0.5),
-            sun: l(0xFFC890, 0.78),
-            sun_dir: n3([-0.7, -0.1, 0.55]),
-            fog: l(0x4E7080, 1.0),
-            fog_k: 0.05,
-            gain: [1.02, 0.99, 0.97],
-            water_a: l(0x58CCD8, 1.0),
-            water_b: l(0x2280A8, 1.0),
+            rays: 0.7,
+            ambient: l(0x6A6890, 0.42),
+            sky: 0.45,
+            sun: l(0xFFA070, 0.5),
+            sun_dir: n3([-0.7, -0.15, 0.5]),
+            shadow: 0.5,
+            fog: l(0x3E3C4A, 1.0),
+            fog_k: 0.08,
+            lift: [0.03, 0.015, 0.02],
+            gain: [1.04, 0.98, 0.94],
+            sat: 0.9,
+            bloom: 0.7,
+            water_a: l(0x2E7A86, 1.0),
+            water_b: l(0x0E3448, 1.0),
+            water_c: l(0xC8E8E0, 1.0),
+            light_k: 1.25,
             ..base
         },
         // Aschebucht: roter Nebel, Glut, kaum Sonne
@@ -177,6 +184,83 @@ pub fn env(zone: &str, sailing_open_sea: bool) -> Env {
             ..base
         },
         _ => base,
+    }
+}
+
+/// Elementare Seegebiete der Seebosse (werden mit der offenen See gemischt).
+pub fn sea_env(el: &str) -> Env {
+    let base = env("", true);
+    match el {
+        // Glutsee: brennendes Wasser, Rauch, Glut am Himmel
+        "fire" => Env {
+            rays: 0.7,
+            ambient: l(0x8C6A64, 0.48),
+            sky: 0.4,
+            sun: l(0xFF8A5A, 0.36),
+            sun_dir: n3([-0.5, -0.3, 0.6]),
+            shadow: 0.4,
+            fog: l(0x8A3428, 1.0),
+            fog_k: 0.13,
+            lift: [0.05, 0.012, 0.0],
+            gain: [1.06, 0.95, 0.9],
+            bloom: 0.85,
+            water_a: l(0x9A4A2A, 1.0),
+            water_b: l(0x2A0C0E, 1.0),
+            water_c: l(0xFFB070, 1.0),
+            light_k: 1.25,
+            ..base
+        },
+        // Eismeer: Polarlicht-Kälte, heller Nebel
+        "ice" => Env {
+            rays: 0.6,
+            ambient: l(0x7A9AC8, 0.5),
+            sun: l(0xC8E0FF, 0.6),
+            sun_dir: n3([0.45, -0.35, 0.75]),
+            fog: l(0x9AB8D0, 1.0),
+            fog_k: 0.14,
+            lift: [0.01, 0.025, 0.05],
+            gain: [0.94, 1.0, 1.08],
+            sat: 0.85,
+            water_a: l(0x7EC8D8, 1.0),
+            water_b: l(0x1E5A7A, 1.0),
+            water_c: l(0xFFFFFF, 1.0),
+            ..base
+        },
+        // Sturmsee: schwarze Wolken, Regen, Blitze
+        "wind" => Env {
+            rays: 0.25,
+            ambient: l(0x5E6A80, 0.4),
+            sky: 0.35,
+            sun: l(0xB0C0D8, 0.25),
+            shadow: 0.2,
+            fog: l(0x4A5866, 1.0),
+            fog_k: 0.2,
+            contrast: 1.12,
+            sat: 0.75,
+            water_a: l(0x3A6E7E, 1.0),
+            water_b: l(0x10283C, 1.0),
+            water_c: l(0xB8D0D8, 1.0),
+            light_k: 1.2,
+            ..base
+        },
+        // Tiefengrund: grünes Leuchten aus der Tiefe, schwerer Nebel
+        _ => Env {
+            rays: 0.5,
+            ambient: l(0x4A7060, 0.38),
+            sky: 0.35,
+            sun: l(0x98C878, 0.26),
+            shadow: 0.35,
+            fog: l(0x2E5040, 1.0),
+            fog_k: 0.2,
+            lift: [0.0, 0.03, 0.02],
+            gain: [0.94, 1.04, 0.98],
+            water_a: l(0x1E5A44, 1.0),
+            water_b: l(0x061C18, 1.0),
+            water_c: l(0x7AE0A0, 1.0),
+            light_k: 1.3,
+            abyss: 1.3,
+            ..base
+        },
     }
 }
 

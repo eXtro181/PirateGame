@@ -183,6 +183,19 @@ fn setup(world: &mut bevy::ecs::world::World) {
                 s.last_fire = fire.clone();
                 s.lit_fires = vec![fire];
             }
+            if app.params.contains_key("open") {
+                // alles erfüllt: Throne und Stege voll, Strudel offen
+                for k in ["fire", "ice", "wind", "earth"] {
+                    s.figureheads.insert(k.into(), true);
+                    s.mounted.insert(k.into(), true);
+                    s.wrecks.insert(k.into(), true);
+                }
+            }
+            if app.params.contains_key("wrecks") {
+                for k in ["fire", "ice", "wind", "earth"] {
+                    s.sea_kings.insert(k.into(), true);
+                }
+            }
             if app.params.contains_key("all") {
                 for k in ["fire", "ice", "wind", "earth"] {
                     s.figureheads.insert(k.into(), true);
@@ -195,7 +208,27 @@ fn setup(world: &mut bevy::ecs::world::World) {
                     g.debug_boss(&k, app.params.contains_key("phase2"));
                 }
             }
-            if app.params.contains_key("sail") {
+            if let Some(pos) = app.params.get("pos").cloned() {
+                // Testlauf: Spieler an eine Weltposition (Pixel) setzen, z. B. pos=whirl
+                if let Scene::Play(g) = &mut app.scene {
+                    let p = if pos == "whirl" {
+                        Some((g.world.pier_end.0, g.world.pier_end.1 + 20.0))
+                    } else {
+                        let v: Vec<f32> = pos.split(',').filter_map(|x| x.parse().ok()).collect();
+                        (v.len() == 2).then(|| (v[0], v[1]))
+                    };
+                    if let Some((x, y)) = p {
+                        g.player.a.x = x;
+                        g.player.a.y = y;
+                        g.cam_f = (x, y);
+                    }
+                }
+            }
+            if let Some(el) = app.params.get("seaboss").cloned() {
+                if let Scene::Play(g) = &mut app.scene {
+                    g.debug_sea_boss(&el, app.params.contains_key("phase2"));
+                }
+            } else if app.params.contains_key("sail") {
                 if let Scene::Play(g) = &mut app.scene {
                     g.debug_board();
                     if app.params.contains_key("zoo") {
@@ -381,7 +414,7 @@ fn tick(
                 app.input.mouse = starts[0].1;
                 app.input.click = true;
             }
-            // Langsamer Kameraflug über den Schiffshain
+            // Langsamer Kameraflug über die Glutwacht
             if let Some((w, v)) = app.title.as_mut() {
                 let hub = w.fires.iter().find(|x| x.id == "hain").map(|x| (x.x, x.y)).unwrap_or((5000.0, 3600.0));
                 let t = app.t * 0.05;

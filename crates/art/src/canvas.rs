@@ -167,6 +167,39 @@ impl Canvas {
             self.rel[i] = 0.0;
         }
     }
+    /// Pixel ohne eigene Höhe (Umriss, Zusätze) übernehmen sie von den Nachbarn.
+    pub fn fill_ev(&mut self) {
+        for _ in 0..3 {
+            let mut upd = vec![];
+            for y in 0..self.h {
+                for x in 0..self.w {
+                    let i = self.idx(x, y);
+                    if self.col[i][3] == 0 || self.ev[i] >= 0.0 {
+                        continue;
+                    }
+                    let (mut sum, mut n) = (0.0, 0);
+                    for (dx, dy) in [(-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (1, -1), (-1, 1), (1, 1)] {
+                        if self.inb(x + dx, y + dy) {
+                            let e = self.ev[self.idx(x + dx, y + dy)];
+                            if e >= 0.0 {
+                                sum += e;
+                                n += 1;
+                            }
+                        }
+                    }
+                    if n > 0 {
+                        upd.push((i, sum / n as f32));
+                    }
+                }
+            }
+            if upd.is_empty() {
+                break;
+            }
+            for (i, e) in upd {
+                self.ev[i] = e;
+            }
+        }
+    }
     pub fn set_ev(&mut self, x: i32, y: i32, e: f32) {
         if self.inb(x, y) {
             let i = self.idx(x, y);

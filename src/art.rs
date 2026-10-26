@@ -61,10 +61,11 @@ pub struct Art {
     pub props: HashMap<String, PropDef>,
     pub chars: HashMap<String, CharSheet>,
     pub glyphs: HashMap<char, (Spr, i32)>,
-    pub ship: Vec<Spr>,
-    pub ghost_ship: Vec<Spr>,
+    /// Schiffe je Stil (player, fire, ice, wind, earth): Kurse 0..=8, Rest gespiegelt (`ships::ship_dir`)
+    pub ships: HashMap<String, Vec<Spr>>,
     pub player: CharSheet,
-    pub player_page: u32,
+    /// reservierter Streifen für den Spieler-Bogen: Seite, x, y
+    pub player_slot: (u32, i32, i32),
     pub pages: u32,
 }
 impl Art {
@@ -138,6 +139,10 @@ fn sheet(a: &mut Atlas, key: &str, l: &chars::Look, s: f32, role: chars::Role) -
         f.push(per);
     }
     // Tod nur von vorn: für die anderen Richtungen übernehmen
+    if sw_art::beasts::sea_boss(key) {
+        f[0] = f[2].clone();
+        f[1] = f[2].clone();
+    }
     let dead = anim_index("dead");
     for d in 1..3 {
         if f[d][dead].is_empty() {
@@ -160,6 +165,9 @@ fn beast_sheet(a: &mut Atlas, key: &str) -> CharSheet {
             let mut v = vec![];
             let wanted = if kd.only.is_some() {
                 anim == "idle"
+            } else if beasts::sea_boss(key) {
+                // Seebosse: nur Seitenansicht, kein Gehen (fällt auf Stehen zurück)
+                di == 2 && matches!(anim, "idle" | "atk" | "hurt")
             } else {
                 matches!(anim, "idle" | "walk" | "atk" | "hurt") || (anim == "dead" && di == 0) || (anim == "shoot" && kd.shoot)
             };
@@ -178,6 +186,10 @@ fn beast_sheet(a: &mut Atlas, key: &str) -> CharSheet {
         }
         f.push(per);
     }
+    if beasts::sea_boss(key) {
+        f[0] = f[2].clone();
+        f[1] = f[2].clone();
+    }
     let dead = anim_index("dead");
     for d in 1..3 {
         if f[d][dead].is_empty() {
@@ -187,21 +199,40 @@ fn beast_sheet(a: &mut Atlas, key: &str) -> CharSheet {
     CharSheet { f, s: 1.0, shadow: kd.shadow }
 }
 
-/// Spieler-Bilderbogen auf einer eigenen Atlasseite (wird bei Änderungen neu hochgeladen).
+/// Höhe des reservierten Streifens für den Spieler-Bogen (volle Seitenbreite).
+const PLAYER_STRIP: i32 = 208;
+
+/// Spieler-Bilderbogen in einem reservierten Streifen der ersten Atlasseite
+/// (wird bei Änderungen des Aussehens neu gebaut und nur dieser Ausschnitt hochgeladen).
 pub fn build_player(art: &mut Art, frame: &mut Frame, l: &chars::Look) {
     let mut a = Atlas::new();
     let mut sh = sheet(&mut a, "player", l, 1.0, chars::Role::Player);
+    let (page, rx, ry) = art.player_slot;
+    let (sw, shh) = (PAGE - 8, PLAYER_STRIP);
+    if a.pages.len() > 1 || a.used() * PAGE as f32 > shh as f32 {
+        warn!("Spieler-Bogen passt nicht in den Streifen ({:.0} px)", a.used() * PAGE as f32);
+    }
     for d in sh.f.iter_mut() {
         for an in d.iter_mut() {
             for s in an.iter_mut() {
-                s.page = art.player_page as u16;
+                s.page = page as u16;
+                s.x = (s.x as i32 + rx) as u16;
+                s.y = (s.y as i32 + ry) as u16;
             }
         }
     }
     art.player = sh;
     let pg = &a.pages[0];
-    frame.uploads.push(Upload { tex: Tex::AtlasCol, layer: art.player_page, x: 0, y: 0, w: PAGE as u32, h: PAGE as u32, data: pg.col.clone() });
-    frame.uploads.push(Upload { tex: Tex::AtlasNrm, layer: art.player_page, x: 0, y: 0, w: PAGE as u32, h: PAGE as u32, data: pg.nrm.clone() });
+    let cut = |src: &Vec<u8>| -> Vec<u8> {
+        let mut out = vec![0u8; (sw * shh * 4) as usize];
+        for y in 0..shh {
+            let o = (y * PAGE * 4) as usize;
+            out[(y * sw * 4) as usize..((y + 1) * sw * 4) as usize].copy_from_slice(&src[o..o + (sw * 4) as usize]);
+        }
+        out
+    };
+    frame.uploads.push(Upload { tex: Tex::AtlasCol, layer: page, x: rx as u32, y: ry as u32, w: sw as u32, h: shh as u32, data: cut(&pg.col) });
+    frame.uploads.push(Upload { tex: Tex::AtlasNrm, layer: page, x: rx as u32, y: ry as u32, w: sw as u32, h: shh as u32, data: cut(&pg.nrm) });
 }
 
 pub fn build(frame: &mut Frame) -> Art {
@@ -211,6 +242,8 @@ pub fn build(frame: &mut Frame) -> Art {
     let mut c = Canvas::new(4, 4);
     c.rect(0, 0, 4, 4, hex(0xFFFFFF));
     a.add("white", &c, 0, 0);
+    let (pp, px, py) = a.reserve(PAGE - 8, PLAYER_STRIP);
+    let player_slot = (pp as u32, px, py);
 
     // ---------------------------------------------------------------- Schrift und UI
     let mut glyphs = HashMap::new();
@@ -324,7 +357,7 @@ pub fn build(frame: &mut Frame) -> Art {
         pr::chest(false),
         pr::chest(true),
         pr::skull_pile(),
-        pr::pedestal("figureheadSlot", None),
+        bd::figurehead_slot(),
         pr::fog_gate(),
         pr::sunken_figurehead(),
         bd::townhouse(0),
@@ -351,6 +384,46 @@ pub fn build(frame: &mut Frame) -> Art {
     }
     for el in ["fire", "ice", "wind", "earth"] {
         add_prop(&mut a, &mut props, bd::figurehead(el));
+    }
+    // ---------------------------------------------------------------- Glutwacht und See (Rig)
+    {
+        use sw_art::structures as stc;
+        let mut list: Vec<PropArt> = vec![
+            stc::keep(),
+            stc::tower("fortTower", 30.0, 130.0),
+            stc::tower("gateTower", 20.0, 104.0),
+            stc::wall_h(0),
+            stc::wall_h(1),
+            stc::wall_v(),
+            stc::gate_arch(),
+            stc::brazier(),
+            stc::hooded_statue(),
+            stc::banner_pole(),
+            stc::berth(),
+            stc::buoy(),
+        ];
+        for i in 0..3 {
+            list.push(stc::sword_grave(i));
+            list.push(stc::candles(i));
+            list.push(stc::sea_stack(i, false));
+            list.push(stc::sea_stack(i, true));
+            list.push(stc::iceberg(i));
+            list.push(stc::ice_floe(i));
+            list.push(stc::lava_spire(i));
+            list.push(stc::coral_spire(i));
+            list.push(stc::kelp_tall(i));
+        }
+        for i in 0..2 {
+            list.push(stc::sea_rocks(i));
+            list.push(stc::burning_wreck(i));
+            list.push(stc::sunk_mast(i));
+        }
+        for el in ["fire", "ice", "wind", "earth"] {
+            list.push(stc::wreck(el));
+        }
+        for pa in list {
+            add_prop(&mut a, &mut props, pa);
+        }
     }
 
     // ---------------------------------------------------------------- Boden-Deko
@@ -426,15 +499,38 @@ pub fn build(frame: &mut Frame) -> Art {
         let sh = beast_sheet(&mut a, k.key);
         chs.insert(k.key.to_string(), sh);
     }
-    let ship = cr::ship_frames("player").iter().enumerate().map(|(i, c)| a.add(&format!("s:ship{i}"), c, 75, 100)).collect();
-    let ghost_ship = cr::ship_frames("ghost").iter().enumerate().map(|(i, c)| a.add(&format!("s:ghost{i}"), c, 75, 100)).collect();
+    let mut ships = HashMap::new();
+    for st in ["player", "fire", "ice", "wind", "earth"] {
+        let (_, h, foot) = sw_art::ships::ship_size(st);
+        // Bossschiffe nur in geraden Kursen (Atlasfläche), ungerade nehmen den Nachbarn
+        let step = if st == "player" { 1 } else { 2 };
+        let mut v: Vec<Spr> = vec![];
+        for k in 0..=8usize {
+            if k % step == 0 {
+                let c = sw_art::ships::ship_frame(st, k);
+                v.push(a.add_trim(&format!("s:{st}{k}"), &c, c.w / 2, h - foot));
+            } else {
+                v.push(v[k - 1]);
+            }
+        }
+        ships.insert(st.to_string(), v);
+    }
     let wp = cr::whirlpool();
     a.add("fx:whirl", &wp, wp.w / 2, wp.h / 2);
+    for i in 0..2 {
+        let c = cr::whirl_foam(i);
+        a.add(&format!("fx:whirlFoam{i}"), &c, c.w / 2, c.h / 2);
+    }
+    for i in 0..3 {
+        let c = cr::whirl_debris(i);
+        a.add(&format!("fx:debris{i}"), &c, c.w / 2, c.h / 2);
+    }
 
     let pages = a.pages.len() as u32;
-    let player_page = pages;
+
     info!("Grafik erzeugt in {:?} · {} Atlasseiten", t0.elapsed(), pages);
-    frame.init = Some(GfxInit { atlas_pages: pages + 1, mask_w: (crate::world::MW * crate::world::TS / 8) as u32, mask_h: (crate::world::MH * crate::world::TS / 8) as u32 });
+    info!("Atlas belegt: {:.2} Seiten", a.used());
+    frame.init = Some(GfxInit { atlas_pages: pages, mask_w: (crate::world::MW * crate::world::TS / 8) as u32, mask_h: (crate::world::MH * crate::world::TS / 8) as u32 });
     for (i, pg) in a.pages.iter().enumerate() {
         frame.uploads.push(Upload { tex: Tex::AtlasCol, layer: i as u32, x: 0, y: 0, w: PAGE as u32, h: PAGE as u32, data: pg.col.clone() });
         frame.uploads.push(Upload { tex: Tex::AtlasNrm, layer: i as u32, x: 0, y: 0, w: PAGE as u32, h: PAGE as u32, data: pg.nrm.clone() });
@@ -444,10 +540,9 @@ pub fn build(frame: &mut Frame) -> Art {
         props,
         chars: chs,
         glyphs,
-        ship,
-        ghost_ship,
+        ships,
         player: CharSheet::default(),
-        player_page,
+        player_slot,
         pages: pages + 1,
     };
     let look = chars::player_look(&[0, 1, 1, 5, 0, 0, 0, 0], "cutlass");

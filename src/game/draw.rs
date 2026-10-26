@@ -243,6 +243,7 @@ impl Game {
             self.flash_light = None;
         }
         self.draw_sea(art, f);
+        self.draw_sea_bosses(art, f);
         self.draw_critters(f);
         self.fx.draw(f);
         self.fx.lights(f);

@@ -213,6 +213,7 @@ pub enum Target {
     Ghost(usize),
     Shark(usize),
     Kraken,
+    SeaBoss(usize),
     Player,
     Ship,
 }

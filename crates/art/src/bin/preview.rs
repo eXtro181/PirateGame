@@ -155,10 +155,6 @@ fn main() {
         "beasts" => {
             use sw_art::creatures::*;
             let mut bg = bake_chunk(&Flat(Biome::Coast, Mat::Sand), &mut mats, &en, 0, 0, 1280).crop(0, 0, 640, 360);
-            let ships = ship_frames("player");
-            for (i, sh) in ships.iter().enumerate().take(8) { bg.place(sh, 40 + i as i32 * 75, 250, 75, 100); }
-            let g = ship_frames("ghost");
-            bg.place(&g[3], 600, 250, 75, 100);
             let wp = whirlpool();
             bg.place(&wp, 470, 350, 110, 150);
             save_lit(&bg, &format!("{out}/beasts.png"), 2);
@@ -223,6 +219,78 @@ fn main() {
                 eprintln!("{:16} {:4} Bilder {:8} px", nm, cnt, area);
             }
             eprintln!("gesamt {} px = {:.2} Seiten", total, total as f64 / (2048.0 * 2048.0));
+        }
+        "ships" => {
+            use sw_art::ships::*;
+            let styles: Vec<&str> = std::env::args().nth(3).map(|a| a.split(',').map(|s| Box::leak(s.to_string().into_boxed_str()) as &str).collect()).unwrap_or_else(|| vec!["player", "fire", "ice", "wind", "earth"]);
+            let mut bg = Canvas::new(1600, 330 * styles.len() as i32);
+            let water = sw_art::color::ramp_n(sw_art::color::hex(0x1E5A7A), 6, 1.0);
+            for y in 0..bg.h { for x in 0..bg.w { let v = ((x / 7 + y / 5) % 9 == 0) as usize + 2; let i = bg.idx(x, y); bg.col[i] = water[v]; } }
+            let t = std::time::Instant::now();
+            for (ri, st) in styles.iter().enumerate() {
+                let (w, h, foot) = ship_size(st);
+                let mut x = 20;
+                for k in [0usize, 2, 4, 6, 8, 3] {
+                    let c = ship_frame(st, k);
+                    if let Some((x0, _, x1, _)) = c.bounds() {
+                        bg.place(&c, x - x0 + c.w / 2, ri as i32 * 330 + 300, c.w / 2, h - foot);
+                        x += x1 - x0 + 14;
+                    }
+                    let _ = w;
+                }
+            }
+            eprintln!("Schiffe: {:?}", t.elapsed());
+            save_lit(&bg, &format!("{out}/ships.png"), 1);
+        }
+        "heads" => {
+            use sw_art::buildings::*;
+            let mut bg = bake_chunk(&Flat(Biome::Fire, Mat::Ash), &mut mats, &en, 0, 0, 1280).crop(0, 0, 640, 220);
+            let mut x = 70;
+            for el in ["fire", "ice", "wind", "earth"] {
+                let f = figurehead(el);
+                bg.place(&f.c, x, 200, f.ax, f.ay);
+                x += 110;
+            }
+            let f = figurehead_slot();
+            bg.place(&f.c, x, 200, f.ax, f.ay);
+            save_lit(&bg, &format!("{out}/heads.png"), 2);
+        }
+        "fort" => {
+            use sw_art::structures::*;
+            let mut bg = bake_chunk(&Flat(Biome::Fire, Mat::Cobble), &mut mats, &en, 0, 0, 1280).crop(0, 0, 1280, 720);
+            let t = std::time::Instant::now();
+            let items = vec![
+                (keep(), 170, 330),
+                (tower("fortTower", 30.0, 130.0), 400, 330),
+                (tower("gateTower", 20.0, 104.0), 500, 330),
+                (wall_h(0), 640, 330),
+                (wall_h(1), 790, 330),
+                (wall_v(), 900, 330),
+                (gate_arch(), 1000, 330),
+                (brazier(), 1100, 330),
+                (sword_grave(0), 1150, 330),
+                (candles(0), 1200, 330),
+                (hooded_statue(), 1240, 330),
+                (banner_pole(), 60, 700),
+                (berth(), 110, 700),
+                (wreck("fire"), 250, 700),
+                (wreck("earth"), 450, 700),
+                (sea_stack(0, false), 580, 700),
+                (iceberg(1), 680, 700),
+                (lava_spire(2), 760, 700),
+                (burning_wreck(0), 900, 700),
+                (coral_spire(1), 1030, 700),
+                (kelp_tall(2), 1090, 700),
+                (buoy(), 1130, 700),
+                (sunk_mast(0), 1200, 700),
+                (ice_floe(1), 1240, 610),
+                (sea_rocks(0), 1240, 680),
+            ];
+            eprintln!("Bauwerke: {:?}", t.elapsed());
+            for (pa, x, y) in items {
+                bg.place(&pa.c, x, y, pa.ax, pa.ay);
+            }
+            save_lit(&bg, &format!("{out}/fort.png"), 1);
         }
         "monsters" => {
             // alle Wesen: je Zeile vorn/Seite/hinten stehend, Lauf, Angriff, Treffer, Tod

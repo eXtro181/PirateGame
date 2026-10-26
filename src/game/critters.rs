@@ -1,5 +1,5 @@
 //! Kleines Leben: Schmetterlinge über Wiesen, Möwen über Küsten, Fische im Flachwasser,
-//! Motten an Lichtern, Frösche im Sumpf, Glühwürmchen im Hain.
+//! Motten an Lichtern, Frösche im Sumpf, Glühwürmchen in der Glutwacht.
 
 use super::fx::*;
 use super::*;
