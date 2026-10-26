@@ -155,6 +155,9 @@ pub struct Game {
     pub pearl_gain_t: f32,
     pub zone_key: Zone,
     pub zone_t: f32,
+    /// Schrittzähler für Fußspuren und Staub, letzte Spielerposition
+    pub step_t: f32,
+    pub last_pos: (f32, f32),
     pub env_cur: Env,
     pub focus: Option<Focus>,
     pub hover: Hover,
@@ -255,6 +258,8 @@ impl Game {
             pearl_gain_t: 0.0,
             zone_key: Zone::Kueste,
             zone_t: 0.0,
+            step_t: 0.0,
+            last_pos: (0.0, 0.0),
             env_cur: env::env("kueste", false),
             focus: None,
             hover: Hover::None,
@@ -650,6 +655,7 @@ impl Game {
             }
             self.update_npcs(dt);
             self.update_critters(dt, frame);
+            self.update_life(dt, art);
             self.update_shots(dt);
             let steer = self.sailing && !modal && self.cutscene.is_none();
             self.update_ship(dt, steer);
@@ -1550,6 +1556,62 @@ impl Game {
     pub fn whirl_ready(&self) -> bool {
         let s = &self.save;
         ["fire", "ice", "wind", "earth"].iter().all(|e| s.mounted.get(*e).copied().unwrap_or(false) && s.sea_kings.get(*e).copied().unwrap_or(false))
+    }
+    /// Lebendige Welt: Fußspuren und Staub unter dem Spieler, Rauch aus den Schornsteinen.
+    fn update_life(&mut self, dt: f32, art: &Art) {
+        // Schritte: Spuren in Sand, Schnee, Asche und Schlamm, Staub auf Wegen
+        let (x, y) = (self.player.a.x, self.player.a.y);
+        let moved = (x - self.last_pos.0).hypot(y - self.last_pos.1);
+        self.last_pos = (x, y);
+        if !self.sailing && !self.player.hidden && moved > 0.4 && moved < 20.0 {
+            self.step_t -= dt;
+            if self.step_t <= 0.0 {
+                self.step_t = 0.26;
+                let g = self.world.g((x / TS as f32) as i32, (y / TS as f32) as i32);
+                let side = if (self.t * 3.85) as i32 % 2 == 0 { -3.0 } else { 3.0 };
+                let (px, py) = (x + side * self.player.a.fy.abs().max(0.3), y + side * self.player.a.fx.abs() * 0.5);
+                let print = match g {
+                    Mat::Sand => Some([96, 76, 52, 120]),
+                    Mat::Snow => Some([120, 140, 176, 150]),
+                    Mat::Ash | Mat::Hex => Some([34, 28, 30, 120]),
+                    Mat::Mud | Mat::Moss => Some([40, 32, 24, 140]),
+                    _ => None,
+                };
+                if let Some(c) = print {
+                    if self.fx.prints.len() < 160 {
+                        self.fx.prints.push((px, py, 7.0, c));
+                    }
+                }
+                let puff = match g {
+                    Mat::Dirt | Mat::Sand | Mat::Ash | Mat::Hex => Some(if g == Mat::Ash || g == Mat::Hex { [0.3, 0.27, 0.27, 0.6] } else { [0.62, 0.54, 0.42, 0.5] }),
+                    Mat::Snow => Some([0.9, 0.94, 1.0, 0.6]),
+                    Mat::Mud => Some([0.25, 0.32, 0.22, 0.6]),
+                    _ => None,
+                };
+                if let Some(col) = puff {
+                    for _ in 0..2 {
+                        self.fx.p(P { x: px + rr(-3.0, 3.0), y: py, z: 1.0, vx: rr(-14.0, 14.0), vz: 10.0 + rnd() * 12.0, g: 30.0, life: 0.5, col, size: 2.0, drag: 2.0, ..Default::default() });
+                    }
+                }
+            }
+        }
+        // Schornsteine der Häuser in der Nähe rauchen
+        let (cx, cy) = self.cam_f;
+        if rnd() < dt * 8.0 {
+            for p in self.world.props.iter() {
+                if p.hidden || !(p.kind.starts_with("townhouse") || p.kind == "tavern" || p.kind == "forge") {
+                    continue;
+                }
+                if (p.x - cx).abs() > 700.0 || (p.y - cy).abs() > 500.0 || rnd() > 0.35 {
+                    continue;
+                }
+                let Some(d) = art.prop(&p.kind) else { continue };
+                let (w, h) = (d.spr.w as f32, d.spr.h as f32);
+                let side = if p.flip { 1.0 } else { -1.0 };
+                let (sx, sz) = (p.x + side * w * 0.22, h * 0.86);
+                self.fx.p(P { x: sx + rr(-2.0, 2.0), y: p.y - 2.0, z: sz, vx: 8.0 + rnd() * 8.0, vz: 16.0 + rnd() * 10.0, life: 4.5, col: [0.32, 0.31, 0.33, 0.55], size: 5.0 + rnd() * 3.0, wobble: 6.0, drag: 0.2, ..Default::default() });
+            }
+        }
     }
     /// Glut und Rauch über den brennenden Bossschiffen im See der Glutwacht.
     fn update_hub_wrecks(&mut self, dt: f32) {

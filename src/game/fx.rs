@@ -152,6 +152,8 @@ pub struct Fx {
     pub nums: Vec<Num>,
     pub marks: Vec<Mark>,
     rings: Vec<Ring>,
+    /// Fußspuren: x, y, Rest, Farbe (Sand, Schnee, Asche, Schlamm)
+    pub prints: Vec<(f32, f32, f32, [u8; 4])>,
     pub t: f32,
 }
 
@@ -163,6 +165,7 @@ impl Fx {
         self.nums.clear();
         self.marks.clear();
         self.rings.clear();
+        self.prints.clear();
     }
     pub fn p(&mut self, p: P) {
         if self.parts.len() > 1400 {
@@ -287,6 +290,10 @@ impl Fx {
 
     pub fn update(&mut self, dt: f32) {
         self.t += dt;
+        for p in self.prints.iter_mut() {
+            p.2 -= dt;
+        }
+        self.prints.retain(|p| p.2 > 0.0);
         let t = self.t;
         for p in self.parts.iter_mut() {
             p.life -= dt;
@@ -340,6 +347,10 @@ impl Fx {
 
     /// Telegraphen auf den Boden (unter den Figuren).
     pub fn draw_under(&self, f: &mut Frame) {
+        for &(x, y, rest, c) in &self.prints {
+            let a = (rest / 3.0).min(1.0) * c[3] as f32;
+            f.decals.push(Frame::quad_rect(x - 2.0, y - 1.0, 4.0, 2.5, [c[0], c[1], c[2], a as u8], modes::SOFT, 0));
+        }
         for m in &self.marks {
             let k = (m.t / m.dur.max(0.01)).min(1.0);
             let pulse = 0.75 + 0.25 * (m.t * 18.0).sin();

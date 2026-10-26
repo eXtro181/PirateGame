@@ -478,6 +478,30 @@ impl Game {
             let fl = if h.flash > 0.0 { flags::FLASH } else { 0 } | if self.hover == Hover::Ship { flags::OUTLINE } else { 0 };
             f.shadow(h.x, h.y + 4.0, 92.0, 26.0, 0.3);
             f.sprite(&s, h.x, h.y + b, SprOpt { flip, tint: [255, 255, 255, a], flags: fl, ..Default::default() });
+            // Crew an Deck, der Kapitän am Steuer (nur wenn man segelt)
+            if self.sailing && h.alpha > 0.9 {
+                let (fx, fy) = (h.h.sin(), -h.h.cos() * 0.52);
+                let side_flip = fx < 0.0;
+                let mut deck: Vec<(&CharSheet, f32, f32)> = vec![(&art.player, -46.0, 0.0)];
+                for (i, el) in self.save.crew.iter().enumerate() {
+                    let key = match el.as_str() {
+                        "fire" => "crewFire",
+                        "ice" => "crewIce",
+                        "wind" => "crewWind",
+                        _ => "crewEarth",
+                    };
+                    if let Some(sh) = art.chars.get(key) {
+                        deck.push((sh, [-18.0, 6.0, 26.0, 44.0][i % 4], [6.0, -6.0, 5.0, -4.0][i % 4]));
+                    }
+                }
+                for (sh, along, across) in deck {
+                    let (x, y) = (h.x + fx * along * 1.5 - fy * across, h.y + fy * along * 1.5 + fx * across * 0.5);
+                    let z = 20.0 + b;
+                    let fr = ((self.t * 2.0 + along) as usize) % 4;
+                    let spr = sh.get(1, 0, fr);
+                    f.sprite_z(&spr, x, y - z, h.y + 1.0 + along * 0.001, SprOpt { flip: side_flip, scale: 0.62, ev: z, tint: [255, 255, 255, a], ..Default::default() });
+                }
+            }
             if self.sailing {
                 f.light(LightDef { x: h.x, y: h.y, z: 60.0, r: 220.0, col: [1.0, 0.72, 0.42], flicker: 0.1 });
             }

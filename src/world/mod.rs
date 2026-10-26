@@ -522,13 +522,13 @@ impl World {
         self.compute_faces();
         self.auto_stairs();
         self.compute_field();
-        self.settle_on_cliffs();
         self.compute_shore();
         for z in ZONES {
             self.cur = z;
             let mut rng = Rng::new(z.def().seed as u64 * 131);
             self.scatter(z, &mut rng);
         }
+        self.settle_on_cliffs();
         let mut rng = Rng::new(9191);
         self.sea_props(&mut rng);
         let rt = |v: &[(i32, i32)]| v.iter().map(|&(x, y)| ((x * TS) as f32, (y * TS) as f32)).collect::<Vec<_>>();
@@ -1792,6 +1792,15 @@ impl World {
 
     /// Requisiten, die nun auf einer Felswand stehen, verschwinden; Gegner rücken auf festen Boden.
     fn settle_on_cliffs(&mut self) {
+        // Boden-Deko auf Wänden und Böschungen entfernen
+        let deco = std::mem::take(&mut self.deco);
+        self.deco = deco
+            .into_iter()
+            .filter(|d| {
+                let (tx, ty) = ((d.x / TS as f32) as i32, (d.y / TS as f32) as i32);
+                !inb(tx, ty) || self.ground[idx(tx, ty)] == Mat::Water || self.px_walk(d.x as i32, d.y as i32).1
+            })
+            .collect();
         for pi in 0..self.props.len() {
             let p = &self.props[pi];
             if p.sea || p.hidden || p.interact.is_some() {
@@ -2314,7 +2323,7 @@ impl World {
                 if self.cliff[i] || g == Mat::Abyss {
                     continue;
                 }
-                let dens = 0.22 + self.nz.fbm(tx as f32 * 0.15 + d.seed as f32, ty as f32 * 0.15, 2).max(0.0) * 0.6 + if g == Mat::Meadow { 0.35 } else { 0.0 };
+                let dens = 0.3 + self.nz.fbm(tx as f32 * 0.15 + d.seed as f32, ty as f32 * 0.15, 2).max(0.0) * 0.6 + if g == Mat::Meadow { 0.35 } else { 0.0 };
                 let nd = if rng.f() < dens { if rng.f() < 0.4 { 2 } else { 1 } } else { 0 };
                 for _ in 0..nd {
                     let mut dk = *rng.pick(fl.deco);
