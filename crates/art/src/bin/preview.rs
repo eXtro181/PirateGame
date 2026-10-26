@@ -155,19 +155,106 @@ fn main() {
         "beasts" => {
             use sw_art::creatures::*;
             let mut bg = bake_chunk(&Flat(Biome::Coast, Mat::Sand), &mut mats, &en, 0, 0, 1280).crop(0, 0, 640, 360);
-            for f in 0..6 { let c = crab(f, false); bg.place(&c, 30 + f as i32 * 50, 60, c.w / 2, c.h - 4); }
-            for f in 0..3 { let c = crab(f * 2, true); bg.place(&c, 360 + f as i32 * 90, 80, c.w / 2, c.h - 4); }
-            for f in 0..5 { let c = shell_beast(f); bg.place(&c, 30 + f as i32 * 56, 130, c.w / 2, c.h - 4); }
-            for f in 0..2 { let c = shark(f); bg.place(&c, 340 + f as i32 * 96, 130, c.w / 2, c.h / 2); }
             let ships = ship_frames("player");
             for (i, sh) in ships.iter().enumerate().take(8) { bg.place(sh, 40 + i as i32 * 75, 250, 75, 100); }
             let g = ship_frames("ghost");
             bg.place(&g[3], 600, 250, 75, 100);
-            let m = megalodon(0, 0xF07A2A);
-            bg.place(&m, 160, 360, 150, 160);
             let wp = whirlpool();
             bg.place(&wp, 470, 350, 110, 150);
             save_lit(&bg, &format!("{out}/beasts.png"), 2);
+        }
+        "humans" => {
+            use sw_art::chars::*;
+            let mut bg = bake_chunk(&Flat(Biome::Hub, Mat::Grass), &mut mats, &en, 0, 0, 1280).crop(0, 0, 1280, 720);
+            let names = ["abyssPirate", "voodoo", "orcCaptain", "stormHarpy", "bellConstruct", "gorgonQueen", "clockStorm"];
+            for (ri, nm) in names.iter().enumerate() {
+                let (l, s) = preset(nm);
+                let y = 20 + (ri as i32 + 1) * 98;
+                let mut x = 40;
+                for (d, a, f) in [("down", "idle", 0), ("side", "idle", 1), ("up", "idle", 2), ("side", "walk", 1), ("down", "walk", 4), ("side", "atk", 0), ("side", "atk", 3), ("down", "atk", 3), ("down", "cast", 2), ("down", "shoot", 1), ("down", "hurt", 0), ("down", "dead", 0)] {
+                    let fr = frame(&l, d, a, f, s);
+                    bg.place(&fr, x, y, fr.w / 2, fr.h - (4.0 * s) as i32);
+                    x += (fr.w as f32 * 0.8) as i32;
+                }
+            }
+            save_lit(&bg, &format!("{out}/humans.png"), 1);
+        }
+        "budget" => {
+            // Atlasfläche je Bogen (beschnittene Bilder, einzigartige Bilder)
+            use sw_art::beasts::*;
+            use sw_art::chars;
+            let mut total = 0i64;
+            for k in KINDS.iter() {
+                let t = std::time::Instant::now();
+                let mut seen = std::collections::HashSet::new();
+                let mut area = 0i64;
+                for (di, d) in chars::DIRS.iter().enumerate() {
+                    for (anim, n) in chars::ANIMS {
+                        let wanted = if k.only.is_some() { anim == "idle" } else { matches!(anim, "idle" | "walk" | "atk" | "hurt") || (anim == "dead" && di == 0) || (anim == "shoot" && k.shoot) };
+                        if !wanted { continue; }
+                        for i in 0..n {
+                            let ci = canon(k.key, anim, i);
+                            let rd = if anim == "dead" { "down" } else { k.only.unwrap_or(d) };
+                            if !seen.insert((rd, anim, ci)) { continue; }
+                            let c = beast_frame(k.key, rd, anim, ci);
+                            if let Some((x0, y0, x1, y1)) = c.bounds() { area += ((x1 - x0 + 3) * (y1 - y0 + 3)) as i64; }
+                        }
+                    }
+                }
+                total += area;
+                eprintln!("{:16} {:4} Bilder {:8} px  {:?}", k.key, seen.len(), area, t.elapsed());
+            }
+            for nm in chars::PRESET_NAMES {
+                let (l, s) = chars::preset(nm);
+                let role = chars::preset_role(nm);
+                let mut area = 0i64;
+                let mut cnt = 0;
+                for d in chars::DIRS {
+                    for (anim, n) in chars::ANIMS {
+                        let wanted = chars::wants_anim(role, anim);
+                        if !wanted || (d != "down" && anim == "dead") { continue; }
+                        for i in 0..n {
+                            let c = chars::frame(&l, d, anim, i, s);
+                            if let Some((x0, y0, x1, y1)) = c.bounds() { area += ((x1 - x0 + 3) * (y1 - y0 + 3)) as i64; cnt += 1; }
+                        }
+                    }
+                }
+                total += area;
+                eprintln!("{:16} {:4} Bilder {:8} px", nm, cnt, area);
+            }
+            eprintln!("gesamt {} px = {:.2} Seiten", total, total as f64 / (2048.0 * 2048.0));
+        }
+        "monsters" => {
+            // alle Wesen: je Zeile vorn/Seite/hinten stehend, Lauf, Angriff, Treffer, Tod
+            use sw_art::beasts::*;
+            let which: Vec<&str> = std::env::args().nth(3).map(|a| a.split(',').map(|s| Box::leak(s.to_string().into_boxed_str()) as &str).collect()).unwrap_or_else(|| KINDS.iter().map(|k| k.key).collect());
+            let rows = which.len() as i32;
+            let mut maxh = 0;
+            for k in &which { maxh = maxh.max(kind(k).h); }
+            let rh = maxh + 6;
+            let mut bg = bake_chunk(&Flat(Biome::Coast, Mat::Sand), &mut mats, &en, 0, 0, 1280);
+            let mut big = Canvas::new(1280, (rows * rh).max(64));
+            for y in 0..big.h { for x in 0..big.w { let i = bg.idx(x % bg.w, y % bg.h); let j = big.idx(x, y); big.col[j] = bg.col[i]; } }
+            bg = big;
+            for (ri, key) in which.iter().enumerate() {
+                let kd = kind(key);
+                let y = ri as i32 * rh + rh - 4;
+                let mut x = 10;
+                let list: Vec<(&str, &str, usize)> = vec![("down", "idle", 0), ("side", "idle", 1), ("up", "idle", 2), ("side", "walk", 0), ("side", "walk", 2), ("down", "walk", 3), ("side", "atk", 1), ("side", "atk", 3), ("down", "atk", 1), ("down", "atk", 3), ("down", "hurt", 0), ("down", "dead", 0), ("down", "shoot", 1)];
+                for (d, a, f) in list {
+                    let c = beast_frame(key, d, a, f);
+                    if let Some((x0, _, x1, _)) = c.bounds() {
+                        let w = x1 - x0 + 1;
+                        bg.place(&c, x - x0 + c.w / 2 - c.w / 2, y, 0, c.h - kd.foot);
+                        x += w + 6;
+                    }
+                    if x > 1240 { break; }
+                }
+            }
+            let t = std::time::Instant::now();
+            for k in KINDS.iter() { let _ = beast_frame(k.key, "down", "idle", 0); }
+            eprintln!("alle Wesen einmal: {:?}", t.elapsed());
+            save_lit(&bg, &format!("{out}/monsters.png"), 1);
         }
         _ => {}
     }

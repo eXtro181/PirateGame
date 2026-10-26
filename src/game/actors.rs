@@ -786,31 +786,22 @@ impl Game {
         let di = self.edefs.iter().position(|d| d.key == sp.kind).unwrap_or(0);
         let d = &self.edefs[di];
         let mut a = Actor::new(sp.x, sp.y);
-        let (w, h) = match d.body {
-            Body::Monster(m) => art.monsters.get(m).map(|s| (s.w as f32, s.h as f32)).unwrap_or((60.0, 60.0)),
-            Body::Beast(b) => {
-                if b == "crabWarrior" {
-                    (90.0, 70.0)
-                } else if b == "shell" {
-                    (56.0, 46.0)
-                } else {
-                    (56.0, 42.0)
-                }
+        // Größe aus dem Bilderbogen: Wesen nach ihrem Stehbild, Figuren nach ihrem Maßstab
+        let (w, h, sc) = match d.body {
+            Body::Beast(b) => art.chars.get(b).map(|sh| sh.get(0, 0, 0)).map(|s| (s.w as f32, s.h as f32, 1.0)).unwrap_or((50.0, 40.0, 1.0)),
+            Body::Sheet(n) => {
+                let s = art.chars.get(n).map(|sh| sh.s).unwrap_or(1.0);
+                (32.0 * s, 56.0 * s, s)
             }
-            Body::Sheet(_) => (32.0, 56.0),
         };
         match d.body {
-            Body::Monster(_) => {
-                a.r = (w * 0.12).clamp(10.0, 26.0);
-                a.hurt_r = (w * 0.3).max(16.0);
+            Body::Beast(_) => {
+                a.r = (w * 0.2).clamp(10.0, 26.0);
+                a.hurt_r = (w * 0.36).max(16.0);
             }
-            Body::Beast(b) => {
-                a.r = if b == "crabWarrior" { 16.0 } else { 10.0 };
-                a.hurt_r = a.r + 6.0;
-            }
-            _ => {
-                a.r = 10.0;
-                a.hurt_r = 16.0;
+            Body::Sheet(_) => {
+                a.r = 10.0 * sc.min(1.5);
+                a.hurt_r = 16.0 * sc;
             }
         }
         a.fx = rnd() - 0.5;
@@ -828,7 +819,7 @@ impl Game {
             elite: sp.elite,
             hit_done: false,
             dead_t: 0.0,
-            body_y: if matches!(d.body, Body::Monster(_)) { h * 0.45 } else { 22.0 },
+            body_y: if matches!(d.body, Body::Beast(_)) { h * 0.45 } else { 22.0 * sc },
             h,
             valid: true,
         }
@@ -940,7 +931,7 @@ impl Game {
                 }
             }
             ES::Windup => {
-                e.a.anim = if ranged && !is_beast { "shoot" } else { "atk" };
+                e.a.anim = if ranged { "shoot" } else { "atk" };
                 e.a.frame = 0.0;
                 if !charge {
                     e.a.face(px - e.a.x, py - e.a.y);
@@ -952,8 +943,8 @@ impl Game {
                 }
             }
             ES::Strike => {
-                e.a.anim = if ranged && !is_beast { "shoot" } else { "atk" };
-                e.a.frame = if is_beast { 1.0 } else { 3.0 };
+                e.a.anim = if ranged { "shoot" } else { "atk" };
+                e.a.frame = 3.0;
                 if charge {
                     let mut a = e.a;
                     self.move_actor(&mut a, e.a.fx * 260.0 * dt, e.a.fy * 260.0 * dt);

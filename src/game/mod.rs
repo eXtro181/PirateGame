@@ -159,25 +159,6 @@ pub fn now_ms() -> f64 {
     }
 }
 
-pub fn monster_facing(name: &str) -> f32 {
-    match name {
-        "abyssPirate" | "ghostGalley" | "cannonAngler" | "fleshShip" | "cannonEater" | "gorgonQueen" | "krakenBasilisk" | "manticore" | "orcCaptain" | "wyvern" | "turtleWorm" => -1.0,
-        _ => 0.0,
-    }
-}
-pub fn monster_fly(name: &str) -> bool {
-    matches!(name, "stormHarpy" | "clockStorm" | "wyvern")
-}
-pub fn monster_scale(h: i32) -> f32 {
-    if h < 90 {
-        1.45
-    } else if h < 130 {
-        1.2
-    } else {
-        1.0
-    }
-}
-
 impl Game {
     pub fn new(world: World, view: WorldView, mut save: Save, art: &mut Art, frame: &mut Frame, opt: Options) -> Game {
         migrate(&mut save);
@@ -1317,7 +1298,7 @@ impl Game {
         self.shake(5.0);
         self.save.ship_dock = d.zone.def().key.into();
     }
-    pub fn debug_boss(&mut self, key: &str) {
+    pub fn debug_boss(&mut self, key: &str, phase2: bool) {
         let bi = if key == "mega" { self.bosses.len() - 1 } else { KINGS.iter().position(|k| k.key == key).unwrap_or(0) };
         let zone = if key == "mega" { "ende" } else { KINGS[bi].zone };
         if let Some(a) = self.world.arenas.get(zone).cloned() {
@@ -1325,7 +1306,47 @@ impl Game {
             self.player.a.y = a.y + 40.0;
             self.cam_f = (self.player.a.x, self.player.a.y);
             self.boss_activate(bi);
+            if phase2 {
+                // gleich in der zweiten Gestalt beginnen
+                let b = &mut self.bosses[bi];
+                b.phase = 2;
+                b.hp = b.max_hp * 0.49;
+                if !b.mega {
+                    b.set_body(false);
+                    b.name = king(b.key).monster.into();
+                }
+            }
         }
+    }
+    /// Testansicht: jeden Gegnertyp schlafend in Reihen neben dem Spieler aufstellen.
+    pub fn debug_zoo(&mut self, art: &Art) {
+        let (px, py) = (self.player.a.x, self.player.a.y);
+        let keys: Vec<&'static str> = self.edefs.iter().map(|d| d.key).collect();
+        for (i, k) in keys.iter().enumerate() {
+            // Raster um den Spieler; die Mitte bleibt frei
+            let cell = if i >= 14 { i + 1 } else { i };
+            let (cx, cy) = ((cell % 6) as f32 - 2.5, (cell / 6) as f32 - 2.0);
+            let sp = Spawn { id: format!("zoo{i}"), kind: k, x: px + cx * 130.0, y: py + cy * 105.0 + 30.0, elite: false };
+            let mut e = self.make_enemy(&sp, art);
+            e.state = ES::Lurk;
+            e.a.fy = 1.0;
+            e.a.fx = 0.0;
+            self.enemies.push(e);
+        }
+    }
+    /// Testansicht auf See: Haie, beide Geisterschiffe und der Kraken nahe am Schiff.
+    pub fn debug_sea_zoo(&mut self) {
+        let (sx, sy) = (self.ship.hull.x, self.ship.hull.y);
+        for (i, s) in self.sharks.iter_mut().take(3).enumerate() {
+            s.x = sx - 140.0 + i as f32 * 140.0;
+            s.y = sy + 110.0;
+            s.home = (s.x, s.y);
+        }
+        for (i, g) in self.ghosts.iter_mut().take(2).enumerate() {
+            g.hull.x = sx - 260.0 + i as f32 * 520.0;
+            g.hull.y = sy - 40.0;
+        }
+        self.kraken.home = (sx, sy - 160.0);
     }
     pub fn debug_board(&mut self) {
         let (px, py) = (self.player.a.x, self.player.a.y);

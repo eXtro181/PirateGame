@@ -246,10 +246,13 @@ impl Frame {
         let v0 = s.y as f32 / ATLAS_PX;
         let u1 = (s.x as f32 + s.w as f32) / ATLAS_PX;
         let mut v1 = (s.y as f32 + s.h as f32) / ATLAS_PX;
+        let mut ev = o.ev;
         if o.cut_bottom > 0.0 {
             let cut = (s.h as f32 * o.cut_bottom).round();
             h -= cut * sc;
             v1 -= cut / ATLAS_PX;
+            // Höhe auf die sichtbare Unterkante (Wasserlinie) beziehen, nicht auf den verdeckten Fuß
+            ev -= (cut - (s.h as f32 - s.ay as f32)).max(0.0) * sc;
         }
         let (ua, ub) = if o.flip { (u1, u0) } else { (u0, u1) };
         let mut p = [[x0, y0], [x0 + w, y0], [x0 + w, y0 + h], [x0, y0 + h]];
@@ -267,7 +270,7 @@ impl Frame {
             uv: [[ua, v0], [ub, v0], [ub, v1], [ua, v1]],
             col: o.tint,
             ext: [s.page as u8, modes::ATLAS, 0, o.flags],
-            prm: [o.ev, 0.0],
+            prm: [ev, 0.0],
             sway: o.sway,
         }
     }

@@ -412,7 +412,7 @@ impl Game {
             if !e.valid || e.state == ES::Dead || e.hp >= e.max_hp || e.state == ES::Lurk {
                 continue;
             }
-            let hh = if matches!(self.edefs[e.def].body, Body::Sheet(_)) { 70.0 } else { e.h * if e.h < 90.0 { 1.45 } else { 1.0 } };
+            let hh = if matches!(self.edefs[e.def].body, Body::Sheet(_)) { e.h + 14.0 } else { e.h + 8.0 };
             let (x, y) = w2ui(f, e.a.x, e.a.y - hh - 8.0);
             let bw = 30.0;
             Ui::rect(f, x - bw / 2.0 - 1.0, y - 1.0, bw + 2.0, 4.0, [10, 8, 10, 200]);

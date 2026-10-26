@@ -192,12 +192,19 @@ fn setup(world: &mut bevy::ecs::world::World) {
             start_game(&mut app, None, s, &mut art, &mut f);
             if let Some(k) = app.params.get("boss").cloned() {
                 if let Scene::Play(g) = &mut app.scene {
-                    g.debug_boss(&k);
+                    g.debug_boss(&k, app.params.contains_key("phase2"));
                 }
             }
             if app.params.contains_key("sail") {
                 if let Scene::Play(g) = &mut app.scene {
                     g.debug_board();
+                    if app.params.contains_key("zoo") {
+                        g.debug_sea_zoo();
+                    }
+                }
+            } else if app.params.contains_key("zoo") {
+                if let Scene::Play(g) = &mut app.scene {
+                    g.debug_zoo(&art);
                 }
             }
         }

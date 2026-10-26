@@ -32,6 +32,8 @@ pub struct CharSheet {
     /// [Richtung][Animation][Bild]
     pub f: Vec<Vec<Vec<Spr>>>,
     pub s: f32,
+    /// Schattenradius (x) am Boden
+    pub shadow: f32,
 }
 impl CharSheet {
     pub fn get(&self, dir: usize, anim: usize, frame: usize) -> Spr {
@@ -59,12 +61,6 @@ pub struct Art {
     pub props: HashMap<String, PropDef>,
     pub chars: HashMap<String, CharSheet>,
     pub glyphs: HashMap<char, (Spr, i32)>,
-    pub monsters: HashMap<String, Spr>,
-    pub crab: Vec<Spr>,
-    pub crab_big: Vec<Spr>,
-    pub shell: Vec<Spr>,
-    pub shark: Vec<Spr>,
-    pub mega: Vec<Vec<Spr>>,
     pub ship: Vec<Spr>,
     pub ghost_ship: Vec<Spr>,
     pub player: CharSheet,
@@ -123,13 +119,13 @@ fn tree_prop(name: &str, t: flora::TreeOut, circle: f32, sway: u8) -> PropArt {
     pa
 }
 
-fn sheet(a: &mut Atlas, key: &str, l: &chars::Look, s: f32, full: bool) -> CharSheet {
+fn sheet(a: &mut Atlas, key: &str, l: &chars::Look, s: f32, role: chars::Role) -> CharSheet {
     let mut f = vec![];
     for dir in chars::DIRS {
         let mut per = vec![];
         for (anim, n) in chars::ANIMS {
             let mut v = vec![];
-            let wanted = full || chars::NPC_ANIMS.iter().any(|x| x.0 == anim);
+            let wanted = chars::wants_anim(role, anim);
             if wanted && !(dir != "down" && anim == "dead") {
                 for i in 0..n {
                     let c = chars::frame(l, dir, anim, i, s);
@@ -148,13 +144,53 @@ fn sheet(a: &mut Atlas, key: &str, l: &chars::Look, s: f32, full: bool) -> CharS
             f[d][dead] = f[0][dead].clone();
         }
     }
-    CharSheet { f, s }
+    CharSheet { f, s, shadow: 15.0 * s }
+}
+
+/// Bilderbogen eines Wesens aus dem Kreaturen-Rig (gleiche Richtungen und Animationen wie Figuren).
+/// Große Wesen teilen sich gleiche Bilder (`beasts::canon`), See-Wesen haben nur eine Richtung.
+fn beast_sheet(a: &mut Atlas, key: &str) -> CharSheet {
+    use sw_art::beasts;
+    let kd = beasts::kind(key);
+    let mut cache: HashMap<(&str, &str, usize), Spr> = HashMap::new();
+    let mut f = vec![];
+    for (di, dir) in chars::DIRS.iter().enumerate() {
+        let mut per = vec![];
+        for (anim, n) in chars::ANIMS {
+            let mut v = vec![];
+            let wanted = if kd.only.is_some() {
+                anim == "idle"
+            } else {
+                matches!(anim, "idle" | "walk" | "atk" | "hurt") || (anim == "dead" && di == 0) || (anim == "shoot" && kd.shoot)
+            };
+            if wanted {
+                for i in 0..n {
+                    let ci = beasts::canon(key, anim, i);
+                    let rd: &str = if anim == "dead" { "down" } else { kd.only.unwrap_or(dir) };
+                    let spr = *cache.entry((rd, anim, ci)).or_insert_with(|| {
+                        let c = beasts::beast_frame(key, rd, anim, ci);
+                        a.add_trim(&format!("k:{key}:{rd}:{anim}:{ci}"), &c, c.w / 2, c.h - kd.foot)
+                    });
+                    v.push(spr);
+                }
+            }
+            per.push(v);
+        }
+        f.push(per);
+    }
+    let dead = anim_index("dead");
+    for d in 1..3 {
+        if f[d][dead].is_empty() {
+            f[d][dead] = f[0][dead].clone();
+        }
+    }
+    CharSheet { f, s: 1.0, shadow: kd.shadow }
 }
 
 /// Spieler-Bilderbogen auf einer eigenen Atlasseite (wird bei Änderungen neu hochgeladen).
 pub fn build_player(art: &mut Art, frame: &mut Frame, l: &chars::Look) {
     let mut a = Atlas::new();
-    let mut sh = sheet(&mut a, "player", l, 1.0, true);
+    let mut sh = sheet(&mut a, "player", l, 1.0, chars::Role::Player);
     for d in sh.f.iter_mut() {
         for an in d.iter_mut() {
             for s in an.iter_mut() {
@@ -166,29 +202,6 @@ pub fn build_player(art: &mut Art, frame: &mut Frame, l: &chars::Look) {
     let pg = &a.pages[0];
     frame.uploads.push(Upload { tex: Tex::AtlasCol, layer: art.player_page, x: 0, y: 0, w: PAGE as u32, h: PAGE as u32, data: pg.col.clone() });
     frame.uploads.push(Upload { tex: Tex::AtlasNrm, layer: art.player_page, x: 0, y: 0, w: PAGE as u32, h: PAGE as u32, data: pg.nrm.clone() });
-}
-
-fn decode_png(bytes: &[u8]) -> (u32, u32, Vec<u8>) {
-    let dec = png::Decoder::new(std::io::Cursor::new(bytes));
-    let mut r = dec.read_info().expect("png");
-    let mut buf = vec![0; r.output_buffer_size().unwrap_or(0)];
-    let info = r.next_frame(&mut buf).expect("png frame");
-    let (w, h) = (info.width, info.height);
-    let mut rgba = vec![0u8; (w * h * 4) as usize];
-    match info.color_type {
-        png::ColorType::Rgba => {
-            let n = rgba.len();
-            rgba.copy_from_slice(&buf[..n])
-        }
-        png::ColorType::Rgb => {
-            for i in 0..(w * h) as usize {
-                rgba[i * 4..i * 4 + 3].copy_from_slice(&buf[i * 3..i * 3 + 3]);
-                rgba[i * 4 + 3] = 255;
-            }
-        }
-        _ => {}
-    }
-    (w, h, rgba)
 }
 
 pub fn build(frame: &mut Frame) -> Art {
@@ -404,78 +417,19 @@ pub fn build(frame: &mut Frame) -> Art {
     let mut chs = HashMap::new();
     for name in chars::PRESET_NAMES {
         let (l, s) = chars::preset(name);
-        let full = !name.starts_with("villager") && !matches!(name, "lanternMaid" | "smith" | "innkeep" | "carver");
-        let sh = sheet(&mut a, name, &l, s, full);
+        let sh = sheet(&mut a, name, &l, s, chars::preset_role(name));
         chs.insert(name.to_string(), sh);
     }
 
-    // ---------------------------------------------------------------- Wesen
-    let mut crab = vec![];
-    let mut crab_big = vec![];
-    for f in 0..6 {
-        let c1 = cr::crab(f, false);
-        crab.push(a.add_trim(&format!("b:crab{f}"), &c1, c1.w / 2, c1.h - 4));
-        let c2 = cr::crab(f, true);
-        crab_big.push(a.add_trim(&format!("b:crabW{f}"), &c2, c2.w / 2, c2.h - 4));
-    }
-    let shell = (0..5)
-        .map(|f| {
-            let c = cr::shell_beast(f);
-            a.add_trim(&format!("b:shell{f}"), &c, c.w / 2, c.h - 4)
-        })
-        .collect();
-    let shark = (0..4)
-        .map(|f| {
-            let c = cr::shark(f);
-            a.add_trim(&format!("b:shark{f}"), &c, c.w / 2, c.h / 2)
-        })
-        .collect();
-    let mut mega = vec![];
-    for el in [0xF07A2A, 0x7AC8F0, 0xD8E4F0, 0x8ACF5A] {
-        mega.push(
-            (0..4)
-                .map(|f| {
-                    let c = cr::megalodon(f, el);
-                    a.add_trim(&format!("b:mega{el:x}{f}"), &c, c.w / 2, c.h - 30)
-                })
-                .collect(),
-        );
+    // ---------------------------------------------------------------- Wesen (Kreaturen-Rig)
+    for k in sw_art::beasts::KINDS.iter() {
+        let sh = beast_sheet(&mut a, k.key);
+        chs.insert(k.key.to_string(), sh);
     }
     let ship = cr::ship_frames("player").iter().enumerate().map(|(i, c)| a.add(&format!("s:ship{i}"), c, 75, 100)).collect();
     let ghost_ship = cr::ship_frames("ghost").iter().enumerate().map(|(i, c)| a.add(&format!("s:ghost{i}"), c, 75, 100)).collect();
     let wp = cr::whirlpool();
     a.add("fx:whirl", &wp, wp.w / 2, wp.h / 2);
-
-    // ---------------------------------------------------------------- Monster aus der Vorlage
-    let mut monsters = HashMap::new();
-    let (mw, _mh, rgba) = decode_png(include_bytes!("../assets/monsters.png"));
-    let meta: HashMap<String, [i32; 4]> = serde_json::from_str(include_str!("../assets/monsters.json")).unwrap_or_default();
-    for (k, [x, y, w, h]) in meta.iter() {
-        let mut c = Canvas::new(*w, *h);
-        for j in 0..*h {
-            for i in 0..*w {
-                let o = (((y + j) as u32 * mw + (x + i) as u32) * 4) as usize;
-                if rgba[o + 3] > 100 {
-                    c.put(i, j, [rgba[o], rgba[o + 1], rgba[o + 2], 255], 0.0);
-                }
-            }
-        }
-        // leuchtende Augen/Laternen: sehr helle, gesättigte Pixel
-        for j in 0..*h {
-            for i in 0..*w {
-                let p = c.get(i, j);
-                if p[3] > 0 {
-                    let [_, s, l] = to_hsl(p);
-                    if l > 0.62 && s > 0.55 {
-                        c.glow(i, j, p, 0.8);
-                    }
-                }
-            }
-        }
-        c.auto_relief(1.6, 9.0);
-        let spr = a.add(&format!("m:{k}"), &c, w / 2, h - 2);
-        monsters.insert(k.clone(), spr);
-    }
 
     let pages = a.pages.len() as u32;
     let player_page = pages;
@@ -490,12 +444,6 @@ pub fn build(frame: &mut Frame) -> Art {
         props,
         chars: chs,
         glyphs,
-        monsters,
-        crab,
-        crab_big,
-        shell,
-        shark,
-        mega,
         ship,
         ghost_ship,
         player: CharSheet::default(),

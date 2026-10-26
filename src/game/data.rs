@@ -136,9 +136,10 @@ pub fn item(k: &str) -> &'static Item {
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum Body {
+    /// Figur aus dem Figuren-Maler (Mensch, Untoter, Monster in Menschengestalt)
     Sheet(&'static str),
+    /// Wesen aus dem Kreaturen-Rig (Krabben, Mimics, Drachen …)
     Beast(&'static str),
-    Monster(&'static str),
 }
 
 pub struct EnemyDef {
@@ -180,19 +181,19 @@ pub fn enemies() -> Vec<EnemyDef> {
         en("crab", "Strandkrabbe", 35.0, 10.0, 52.0, 80.0, 16.0, 0.35, 0.5, 30.0, Beast("crab"), 5.0),
         en("crabWarrior", "Krabbenkrieger", 170.0, 28.0, 32.0, 100.0, 26.0, 0.75, 0.8, 220.0, Beast("crabWarrior"), 70.0),
         EnemyDef { charge: true, ..en("shell", "Muschelkriecher", 70.0, 18.0, 26.0, 90.0, 18.0, 0.6, 0.6, 90.0, Beast("shell"), 40.0) },
-        EnemyDef { mimic: true, ..en("livingChest", "Lebendiger Schatzrechner", 90.0, 22.0, 44.0, 120.0, 22.0, 0.4, 0.6, 260.0, Monster("livingChest"), 40.0) },
-        EnemyDef { mimic: true, ..en("mimicChest", "Schatz-Mimic-Rechner", 120.0, 26.0, 40.0, 120.0, 24.0, 0.45, 0.6, 320.0, Monster("mimicChest"), 50.0) },
-        EnemyDef { aoe: 68.0, ..en("skelkraken", "Skelett-Kraken · Leviathans Zorn", 420.0, 30.0, 30.0, 120.0, 36.0, 0.9, 1.0, 900.0, Monster("skelkraken"), 120.0) },
-        EnemyDef { ranged: true, shot: "cannon", ..en("cannonAngler", "Kanonen-Angel-Fisch-Dämon", 120.0, 26.0, 24.0, 170.0, 150.0, 1.1, 1.4, 240.0, Monster("cannonAngler"), 60.0) },
-        EnemyDef { charge: true, ..en("cannonEater", "Kanonen-Fresser-Dämon", 140.0, 28.0, 30.0, 110.0, 26.0, 0.7, 0.8, 260.0, Monster("cannonEater"), 60.0) },
-        en("stormHarpy", "Sturm-Wind-Harpye-Konstrukt", 70.0, 18.0, 62.0, 140.0, 22.0, 0.4, 0.6, 160.0, Monster("stormHarpy"), 15.0),
-        EnemyDef { charge: true, ..en("wyvern", "Küsten-Wyvern · Schiffszerschmetterer", 520.0, 34.0, 50.0, 150.0, 34.0, 0.8, 1.0, 1400.0, Monster("wyvern"), 140.0) },
-        EnemyDef { aoe: 72.0, ..en("orcCaptain", "Ork-Schlachter-Kapitän", 560.0, 36.0, 30.0, 130.0, 34.0, 0.9, 1.0, 1400.0, Monster("orcCaptain"), 160.0) },
-        EnemyDef { aoe: 88.0, ..en("bellConstruct", "Uhrwerk-Glocken-Matrosen-Konstrukt", 600.0, 34.0, 24.0, 130.0, 40.0, 1.1, 1.1, 1500.0, Monster("bellConstruct"), 200.0) },
-        en("abyssPirate", "Tiefen-Abgrund-Pirat", 100.0, 22.0, 36.0, 120.0, 26.0, 0.55, 0.6, 180.0, Monster("abyssPirate"), 35.0),
-        EnemyDef { ranged: true, shot: "soul", volley: 3, ..en("voodoo", "Voodoo-Mutanten-Kapitän", 160.0, 22.0, 30.0, 160.0, 140.0, 0.9, 1.0, 420.0, Monster("voodoo"), 60.0) },
-        EnemyDef { ranged: true, shot: "cannon", volley: 3, ..en("turtleWorm", "Schild-Kröten-Festungs-Wurm", 720.0, 30.0, 18.0, 170.0, 160.0, 1.2, 1.3, 1800.0, Monster("turtleWorm"), 260.0) },
-        EnemyDef { aoe: 80.0, ..en("trueMimic", "Mimic-Kapitäns wahre Gestalt", 650.0, 38.0, 34.0, 130.0, 40.0, 0.9, 0.9, 1800.0, Monster("trueMimic"), 200.0) },
+        EnemyDef { mimic: true, ..en("livingChest", "Lebendiger Schatzrechner", 90.0, 22.0, 44.0, 120.0, 22.0, 0.4, 0.6, 260.0, Beast("livingChest"), 40.0) },
+        EnemyDef { mimic: true, ..en("mimicChest", "Schatz-Mimic-Rechner", 120.0, 26.0, 40.0, 120.0, 24.0, 0.45, 0.6, 320.0, Beast("mimicChest"), 50.0) },
+        EnemyDef { aoe: 68.0, ..en("skelkraken", "Skelett-Kraken · Leviathans Zorn", 420.0, 30.0, 30.0, 120.0, 36.0, 0.9, 1.0, 900.0, Beast("skelkraken"), 120.0) },
+        EnemyDef { ranged: true, shot: "cannon", ..en("cannonAngler", "Kanonen-Angel-Fisch-Dämon", 120.0, 26.0, 24.0, 170.0, 150.0, 1.1, 1.4, 240.0, Beast("cannonAngler"), 60.0) },
+        EnemyDef { charge: true, ..en("cannonEater", "Kanonen-Fresser-Dämon", 140.0, 28.0, 30.0, 110.0, 26.0, 0.7, 0.8, 260.0, Beast("cannonEater"), 60.0) },
+        en("stormHarpy", "Sturm-Wind-Harpye-Konstrukt", 70.0, 18.0, 62.0, 140.0, 22.0, 0.4, 0.6, 160.0, Sheet("stormHarpy"), 15.0),
+        EnemyDef { charge: true, ..en("wyvern", "Küsten-Wyvern · Schiffszerschmetterer", 520.0, 34.0, 50.0, 150.0, 34.0, 0.8, 1.0, 1400.0, Beast("wyvern"), 140.0) },
+        EnemyDef { aoe: 72.0, ..en("orcCaptain", "Ork-Schlachter-Kapitän", 560.0, 36.0, 30.0, 130.0, 34.0, 0.9, 1.0, 1400.0, Sheet("orcCaptain"), 160.0) },
+        EnemyDef { aoe: 88.0, ..en("bellConstruct", "Uhrwerk-Glocken-Matrosen-Konstrukt", 600.0, 34.0, 24.0, 130.0, 40.0, 1.1, 1.1, 1500.0, Sheet("bellConstruct"), 200.0) },
+        en("abyssPirate", "Tiefen-Abgrund-Pirat", 100.0, 22.0, 36.0, 120.0, 26.0, 0.55, 0.6, 180.0, Sheet("abyssPirate"), 35.0),
+        EnemyDef { ranged: true, shot: "soul", volley: 3, ..en("voodoo", "Voodoo-Mutanten-Kapitän", 160.0, 22.0, 30.0, 160.0, 140.0, 0.9, 1.0, 420.0, Sheet("voodoo"), 60.0) },
+        EnemyDef { ranged: true, shot: "cannon", volley: 3, ..en("turtleWorm", "Schild-Kröten-Festungs-Wurm", 720.0, 30.0, 18.0, 170.0, 160.0, 1.2, 1.3, 1800.0, Beast("turtleWorm"), 260.0) },
+        EnemyDef { aoe: 80.0, ..en("trueMimic", "Mimic-Kapitäns wahre Gestalt", 650.0, 38.0, 34.0, 130.0, 40.0, 0.9, 0.9, 1800.0, Beast("trueMimic"), 200.0) },
     ]
 }
 

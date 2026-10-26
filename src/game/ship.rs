@@ -480,12 +480,9 @@ impl Game {
             let b = (h.bob.sin() * 2.0).round();
             let a = (h.alpha * 220.0) as u8;
             let fl = if h.flash > 0.0 { flags::FLASH } else { 0 } | if self.hover == Hover::T(Target::Ghost(i)) { flags::OUTLINE } else { 0 };
-            if let Some(m) = art.monsters.get(g.monster) {
-                let flip = h.h.sin() < 0.0;
-                f.sprite(m, h.x, h.y + b + 10.0, SprOpt { flip, tint: [255, 255, 255, a], flags: fl | flags::GHOST, cut_bottom: 0.1, ..Default::default() });
-            } else {
-                f.sprite(&art.ghost_ship[h.dir16()], h.x, h.y + b, SprOpt { tint: [255, 255, 255, a], flags: fl | flags::GHOST, ..Default::default() });
-            }
+            // Geisterschiffe wie das eigene Schiff in 16 Richtungen; das Fleischschiff blutrot getönt
+            let tint = if g.monster == "fleshShip" { [255, 150, 150, a] } else { [255, 255, 255, a] };
+            f.sprite(&art.ghost_ship[h.dir16()], h.x, h.y + b, SprOpt { tint, flags: fl | flags::GHOST, ..Default::default() });
             if !g.dead() {
                 f.light(LightDef { x: h.x, y: h.y, z: 50.0, r: 160.0, col: [0.35, 1.0, 0.82], flicker: 0.2 });
             }
@@ -494,13 +491,15 @@ impl Game {
             if s.dead() || !vis(s.x, s.y, 60.0) {
                 continue;
             }
-            let fr = art.shark[(s.t * 6.0) as usize % art.shark.len()];
+            let Some(sh) = art.chars.get("shark") else { continue };
+            let fr = sh.get(2, 0, (s.t * 6.0) as usize);
             let fl = if s.flash > 0.0 { flags::FLASH } else { 0 } | if self.hover == Hover::T(Target::Shark(i)) { flags::OUTLINE } else { 0 };
             f.sprite(&fr, s.x, s.y, SprOpt { flip: s.fx < 0.0, tint: [255, 255, 255, 215], flags: fl, cut_bottom: 0.45, ..Default::default() });
         }
         let k = &self.kraken;
         if k.rise > 0.0 && vis(k.x, k.y, 300.0) {
-            if let Some(m) = art.monsters.get("kraken") {
+            if let Some(m) = art.chars.get("seaKraken").map(|sh| sh.get(0, 0, (k.t * 3.0) as usize)) {
+                let m = &m;
                 let b = ((k.t * 1.5).sin() * 4.0).round();
                 let cut = 1.0 - (0.35 + 0.45 * k.rise);
                 let a = ((k.rise * 1.5).min(1.0) * 255.0) as u8;

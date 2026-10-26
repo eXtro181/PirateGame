@@ -1,5 +1,5 @@
-//! Zeichnen der Spielszene: Welt, Figuren, Monster (Vorlagenbilder mit Code-Animation),
-//! Geschosse, Seelenflecken, Partikel, Nebel und Licht.
+//! Zeichnen der Spielszene: Welt, Figuren und Wesen (alle aus Bilderbögen mit denselben
+//! Richtungen und Animationen), Geschosse, Seelenflecken, Partikel, Nebel und Licht.
 
 use super::actors::*;
 use super::boss::*;
@@ -15,48 +15,39 @@ pub fn draw_char(f: &mut Frame, sh: &CharSheet, a: &Actor, fl: u8, tint: [u8; 4]
     let n = sh.f[dir.min(2)][ai].len().max(1);
     let fi = (a.frame.max(0.0) as usize) % n;
     let s = sh.get(dir, ai, fi);
-    if shadow > 0.0 {
-        f.shadow(a.x, a.y, 15.0 * sh.s.max(1.0), 5.0 * sh.s.max(1.0), shadow);
+    if shadow > 0.0 && sh.shadow > 0.0 {
+        f.shadow(a.x, a.y, sh.shadow, sh.shadow * 0.33, shadow);
     }
     f.sprite(&s, a.x, a.y, SprOpt { flip: a.flip(), flags: fl, tint, ..Default::default() });
 }
 
-/// Statisches Monsterbild lebendig machen: Atmen, Schritt-Wippen, Ausholen, Zustoßen, Fallen.
-#[allow(clippy::too_many_arguments)]
-pub fn draw_monster(f: &mut Frame, s: &sw_art::atlas::Spr, name: &str, a: &Actor, fl: u8, tint: [u8; 4], phase: &str, k: f32, scale: f32) {
-    let facing = monster_facing(name);
-    let flip = facing != 0.0 && a.fx * facing < -0.05;
-    let fly = monster_fly(name);
-    let t = a.at;
-    let mut y = a.y;
-    let mut rot = 0.0;
-    let mut sc = scale * (1.0 + (t * 2.2).sin() * 0.012);
-    let lean = if flip { -1.0 } else { 1.0 } * if facing == 0.0 { a.fx.signum() } else { -facing };
-    match phase {
-        "walk" => {
-            y -= ((t * 9.0).sin().abs() * 4.0).round();
-            rot = (t * 9.0).sin() * 0.04;
+/// Bossposen (Angriffsphasen) auf die Bilder des Bogens abbilden.
+fn boss_pose(a: &Actor, ph: &str) -> Actor {
+    let mut b = *a;
+    match ph {
+        "strike" => {
+            b.anim = "atk";
+            b.frame = 3.0;
         }
         "wind" => {
-            rot = -0.10 * lean;
-            sc *= 1.04;
+            b.anim = "atk";
+            b.frame = 1.0;
         }
-        "strike" => {
-            rot = 0.14 * lean;
-            sc *= 0.97;
+        "hurt" => {
+            b.anim = "hurt";
+            b.frame = 0.0;
         }
-        "hurt" => rot = -0.06 * lean,
         "dead" => {
-            rot = 1.2 * k.min(1.0) * lean;
+            b.anim = "dead";
+            b.frame = 0.0;
         }
-        _ => {}
+        "walk" => b.anim = "walk",
+        _ => {
+            b.anim = "idle";
+            b.frame = a.at * 2.0;
+        }
     }
-    if fly {
-        y -= 24.0 + (t * 3.0).sin() * 8.0;
-    }
-    let w = s.w as f32 * scale;
-    f.shadow(a.x, a.y, w * 0.32, w * 0.08, if fly { 0.25 } else { 0.4 });
-    f.sprite_z(s, a.x, y, a.y, SprOpt { flip, flags: fl, tint, rot, scale: sc, ..Default::default() });
+    b
 }
 
 impl Game {
@@ -97,55 +88,13 @@ impl Game {
                 continue;
             }
             let tint = if e.elite { [255, 214, 200, (255.0 * dead_a) as u8] } else { [255, 255, 255, (255.0 * dead_a) as u8] };
-            match d.body {
-                Body::Sheet(sname) => {
-                    if let Some(sh) = art.chars.get(sname) {
-                        draw_char(f, sh, &e.a, fl, tint, 0.4);
-                    }
-                }
-                Body::Monster(m) => {
-                    if let Some(s) = art.monsters.get(m) {
-                        let ph = match e.state {
-                            ES::Dead => "dead",
-                            ES::Windup => "wind",
-                            ES::Strike => "strike",
-                            ES::Hurt | ES::Stagger => "hurt",
-                            ES::Lurk => "lurk",
-                            _ => {
-                                if e.a.anim == "walk" {
-                                    "walk"
-                                } else {
-                                    "idle"
-                                }
-                            }
-                        };
-                        let sc = monster_scale(s.h as i32) * if e.elite { 1.1 } else { 1.0 };
-                        draw_monster(f, s, m, &e.a, fl, tint, ph, e.dead_t, sc);
-                        if ph == "lurk" {
-                            // Mimic schläft: schwaches Glimmen im Schlitz
-                            f.glow(e.a.x, e.a.y - 20.0, 4.0, [255, 200, 120, 60]);
-                        }
-                    }
-                }
-                Body::Beast(b) => {
-                    let list = match b {
-                        "crabWarrior" => &art.crab_big,
-                        "shell" => &art.shell,
-                        _ => &art.crab,
-                    };
-                    if !list.is_empty() {
-                        let fi = match e.a.anim {
-                            "walk" => 1 + (e.a.frame as usize) % (list.len() - 2).max(1),
-                            "atk" => list.len() - 1,
-                            _ => ((e.a.at * 2.0) as usize) % 2,
-                        };
-                        let s = list[fi.min(list.len() - 1)];
-                        f.shadow(e.a.x, e.a.y, s.w as f32 * 0.35, 6.0, 0.4);
-                        let rot = if e.state == ES::Dead { 3.14 } else { 0.0 };
-                        let y = if e.state == ES::Dead { e.a.y - s.h as f32 * 0.6 } else { e.a.y };
-                        f.sprite_z(&s, e.a.x, y, e.a.y, SprOpt { flip: e.a.fx < 0.0, flags: fl, tint, rot, ..Default::default() });
-                    }
-                }
+            let (Body::Sheet(sname) | Body::Beast(sname)) = d.body;
+            if let Some(sh) = art.chars.get(sname) {
+                draw_char(f, sh, &e.a, fl, tint, 0.4);
+            }
+            if e.state == ES::Lurk {
+                // Mimic schläft: schwaches Glimmen im Spalt
+                f.glow(e.a.x, e.a.y - 14.0, 4.0, [255, 200, 120, 60]);
             }
             if d.burn && e.state != ES::Dead {
                 f.light(LightDef { x: e.a.x, y: e.a.y, z: 40.0, r: 90.0, col: [1.0, 0.45, 0.2], flicker: 0.3 });
@@ -177,19 +126,22 @@ impl Game {
                 }
             };
             if b.mega {
-                let eli = ["fire", "ice", "wind", "earth"].iter().position(|e| *e == b.el).unwrap_or(0);
-                let fr = &art.mega[eli];
-                let s = fr[((b.a.at * 6.0) as usize) % fr.len()];
-                f.shadow(b.a.x, b.a.y, s.w as f32 * 0.3, 18.0, 0.45);
-                let flip = b.a.fx < 0.0;
-                let rot = if ph == "dead" { 0.5 } else { (b.a.at * 2.0).sin() * 0.03 };
-                f.sprite_z(&s, b.a.x, b.a.y - (b.a.at * 2.0).sin().abs() * 6.0, b.a.y, SprOpt { flip, flags: fl, rot, ..Default::default() });
+                // ein Bogen, das Element färbt Glut, Kristalle und Augen (und tönt den Leib)
+                let tint = match b.el {
+                    "ice" => [130, 200, 255, 255],
+                    "wind" => [215, 230, 255, 255],
+                    "earth" => [160, 235, 120, 255],
+                    _ => [255, 150, 80, 255],
+                };
+                if let Some(sh) = art.chars.get("moloch") {
+                    draw_char(f, sh, &boss_pose(&b.a, ph), fl, tint, 0.45);
+                }
             } else if b.human {
                 if let Some(sh) = art.chars.get(b.sheet) {
                     draw_char(f, sh, &b.a, fl, [255; 4], 0.5);
                 }
-            } else if let Some(s) = art.monsters.get(b.monster) {
-                draw_monster(f, s, b.monster, &b.a, fl, [255; 4], ph, b.st_t, 1.0);
+            } else if let Some(sh) = art.chars.get(b.monster) {
+                draw_char(f, sh, &boss_pose(&b.a, ph), fl, [255; 4], 0.45);
             }
             if !b.dead() {
                 let c = el_col(b.el);

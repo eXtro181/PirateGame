@@ -10,5 +10,7 @@ pub mod props;
 pub mod buildings;
 pub mod chars;
 pub mod creatures;
+pub mod rig;
+pub mod beasts;
 pub mod font;
 pub mod ui;
