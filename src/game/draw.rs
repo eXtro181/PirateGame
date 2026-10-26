@@ -134,17 +134,41 @@ impl Game {
                     }
                 }
             };
-            if b.human && b.sheet.starts_with("drowned") {
-                // der Ertrunkene: dein eigenes Aussehen, bleich und triefend; die andere Seite gespiegelt
-                let other = b.sheet == "drowned2";
+            if b.mega && !b.human {
+                self.draw_bone_kraken(art, f, b, fl);
+            } else if b.mega {
+                // Malakor: Sprungbogen, vorschnellender Tentakelbart
                 let mut a = b.a;
-                if other {
-                    a.fx = -a.fx;
+                let mut z = 0.0;
+                let info = b.atk_info();
+                if let Some((AK::Leap, 1, t, _, _, _)) = info {
+                    z = ((t / 0.55).min(1.0) * std::f32::consts::PI).sin() * 90.0;
+                    a.y -= z;
+                    a.anim = "atk";
+                    a.frame = 1.0;
                 }
-                draw_char(f, &art.player, &a, fl | flags::GHOST * other as u8, if other { [150, 175, 235, 255] } else { [175, 205, 215, 255] }, 0.5);
-                if rnd() < 0.3 {
-                    f.glow(b.a.x + rr(-8.0, 8.0), b.a.y - rr(4.0, 50.0), 2.0, [160, 210, 230, 160]);
+                if let Some(sh) = art.chars.get(b.sheet) {
+                    if z > 0.0 {
+                        f.shadow(b.a.x, b.a.y, 22.0, 7.0, 0.4);
+                    }
+                    draw_char(f, sh, &a, fl, [255; 4], if z > 0.0 { 0.0 } else { 0.5 });
                 }
+                if let Some((AK::Lash, ph, t, ang, _, _)) = info {
+                    if let Some(seg) = art.map.get("k:seg") {
+                        let reach = match ph {
+                            0 => 0.15,
+                            1 => (t / 0.18).min(1.0),
+                            _ => (1.0 - t / 0.5).max(0.0),
+                        } * 260.0;
+                        let (hx, hy) = (b.a.x, b.a.y);
+                        for k in 0..6 {
+                            let off = (k as f32 - 2.5) * 0.05;
+                            let (tx, ty) = (hx + (ang + off).cos() * reach, hy + (ang + off).sin() * reach * 0.85);
+                            super::ship::draw_tentacle(f, seg, (hx + (k as f32 - 2.5) * 3.0, hy - 2.0), (tx, ty, 40.0), 50.0, self.t * 6.0 + k as f32, 0.32, [150, 220, 190, 255]);
+                        }
+                    }
+                }
+                f.light(LightDef { x: b.a.x, y: b.a.y, z: 60.0, r: 140.0, col: [0.4, 1.2, 0.8], flicker: 0.15 });
             } else if b.human {
                 if let Some(sh) = art.chars.get(b.sheet) {
                     draw_char(f, sh, &b.a, fl, [255; 4], 0.5);
@@ -237,6 +261,17 @@ impl Game {
                     f.world_q(s.y, Frame::quad_rect(s.x - 5.0, y - 5.0, 10.0, 10.0, [26, 24, 28, 255], modes::SOLID, 0));
                     f.glow(s.x + 3.0, y - 4.0, 3.0, [255, 190, 90, 220]);
                 }
+                "bigball" => {
+                    // XXL-Kanonenkugel des Holländers
+                    f.shadow(s.x, s.y, 12.0, 4.0, 0.4);
+                    f.world_q(s.y, Frame::quad_rect(s.x - 9.0, y - 9.0, 18.0, 18.0, [20, 22, 24, 255], modes::SOLID, 0));
+                    f.world_q(s.y + 0.1, Frame::quad_rect(s.x - 6.0, y - 7.0, 5.0, 4.0, [90, 96, 100, 255], modes::SOLID, 0));
+                    f.glow(s.x - s.vx * 0.03, y - s.vy * 0.03, 10.0, [120, 120, 120, 90]);
+                }
+                "boneshard" => {
+                    f.world_q(s.y, Frame::quad_rect(s.x - 5.0, y - 2.0, 10.0, 4.0, [226, 216, 186, 255], modes::SOLID, 0));
+                    f.glow(s.x, y, 6.0, [150, 255, 200, 120]);
+                }
                 "chain" => {
                     // Kettenkugel: zwei Kugeln mit Kette, drehend
                     let a = s.t * 18.0;
@@ -275,6 +310,8 @@ impl Game {
         self.draw_sea_bosses(art, f);
         self.draw_crew(art, f);
         self.draw_end(art, f);
+        self.draw_drain(f);
+        self.draw_seabed(art, f);
         // im Laden: alles außerhalb der Wände ist Nacht
         if let Some(di) = self.world.interior_at(self.player.a.x, self.player.a.y).filter(|_| !self.sailing) {
             let (rx, ry, rw, rh) = self.world.doors[di].room;
@@ -368,4 +405,94 @@ impl Game {
             f.light(LightDef { x, y: y - 20.0, z: 60.0, r: 160.0, col: [0.45, 0.6, 0.65], flicker: 0.05 });
         }
     }
+
+    /// Malakors Gebein: Schädelmantel und acht Wirbelarme, je nach Angriff bewegt.
+    fn draw_bone_kraken(&self, art: &Art, f: &mut Frame, b: &Boss, fl: u8) {
+        let t = self.t;
+        let info = b.atk_info();
+        // Auftauchen nach der Verwandlung
+        let rise = if b.state == BS::Transform { ((b.st_t - 2.2) / 1.6).clamp(0.0, 1.0) } else { 1.0 };
+        if rise <= 0.0 {
+            return;
+        }
+        let mut z = 0.0;
+        if let Some((AK::Leap, ph, at, _, _, _)) = info {
+            z = match ph {
+                0 => -(at / 0.9).min(1.0) * 60.0,
+                1 => ((at / 0.8).min(1.0) * std::f32::consts::PI).sin() * 200.0,
+                _ => 0.0,
+            };
+        }
+        let (bx, by) = (b.a.x, b.a.y);
+        if let Some(seg) = art.map.get("mk:vert") {
+            for i in 0..8 {
+                let fi = i as f32;
+                let a = fi / 8.0 * std::f32::consts::TAU + 0.4;
+                let (sx, sy) = (bx + a.cos() * 110.0, by + a.sin() * 70.0);
+                let sway = (t * 1.3 + fi * 1.9).sin();
+                let ra = a + sway * 0.4;
+                let (mut tx, mut ty, mut tz) = (sx + ra.cos() * 110.0, sy + ra.sin() * 76.0, 70.0 + sway * 40.0);
+                let mut arch = 90.0;
+                match info {
+                    Some((AK::Sweep, ph, at, ang, _, _)) if i == 0 || i == 4 => {
+                        // Tentakelfeger: ein Arm fegt im Bogen über den Boden
+                        let k = match ph {
+                            0 => -1.0,
+                            1 => -1.0 + (at / 0.2).min(1.0) * 2.0,
+                            _ => 1.0,
+                        };
+                        let an = ang + k * 1.2 * if i == 0 { 1.0 } else { -1.0 };
+                        tx = bx + an.cos() * 330.0;
+                        ty = by + an.sin() * 230.0;
+                        tz = if ph == 1 { 14.0 } else { 120.0 };
+                        arch = 70.0;
+                    }
+                    Some((AK::Spikes, ph, _, ang, _, _)) if ph < 2 => {
+                        // Arme bohren sich in den Grund
+                        let d = 140.0 + fi * 18.0;
+                        tx = bx + ang.cos() * d + (fi - 3.5) * 12.0;
+                        ty = by + ang.sin() * d * 0.8;
+                        tz = 0.0;
+                        arch = 120.0;
+                    }
+                    Some((AK::Volley, _, _, _, _, _)) => {
+                        // gespreizt, Splitter fliegen
+                        tx = sx + a.cos() * 160.0;
+                        ty = sy + a.sin() * 110.0;
+                        tz = 180.0;
+                    }
+                    _ => {}
+                }
+                draw_tentacle_bones(f, seg, (sx, sy), (tx, ty, (tz + z) * rise), arch * rise, t * 1.5 + fi * 1.3);
+            }
+        }
+        let open = matches!(info, Some((AK::Volley | AK::Spikes, _, _, _, _, _))) || b.state == BS::Transform;
+        if let Some(m) = art.map.get(if open { "mk:bone1" } else { "mk:bone0" }).copied() {
+            let cut = 1.0 - rise;
+            f.shadow(bx, by + 4.0, 150.0 - z * 0.2, 40.0, 0.4);
+            f.sprite(&m, bx, by + 30.0 - z, SprOpt { cut_bottom: cut, flags: fl, ev: z.max(0.0), ..Default::default() });
+        }
+        f.light(LightDef { x: bx, y: by, z: 140.0 + z, r: 320.0, col: [0.4, 1.4, 0.9], flicker: 0.2 });
+    }
+
+    /// Meeresgrund: das Wrack des Holländers liegt schief im Schlick.
+    fn draw_seabed(&self, art: &Art, f: &mut Frame) {
+        if !self.world.drained || matches!(self.end.state, crate::game::endboss::EP::Drain) {
+            return;
+        }
+        let Some(s) = art.map.get("mk:ship").copied() else { return };
+        let (ax, ay, _, _) = self.end_arena();
+        let (x, y) = (ax + 80.0, ay - 560.0);
+        f.shadow(x, y + 10.0, 560.0, 120.0, 0.45);
+        f.sprite(&s, x, y + 60.0, SprOpt { cut_bottom: 0.08, rot: -0.08, tint: [150, 165, 155, 255], ..Default::default() });
+        for i in 0..4 {
+            let lx = x + (i as f32 - 1.5) * 220.0;
+            f.light(LightDef { x: lx, y, z: 60.0, r: 220.0, col: [0.3, 0.9, 0.6], flicker: 0.3 });
+        }
+    }
+}
+
+/// Knochenarm aus Wirbeln (wie ein Krakenarm, nur aus Knochen; Glieder werden zur Spitze kleiner).
+fn draw_tentacle_bones(f: &mut Frame, seg: &sw_art::atlas::Spr, b: (f32, f32), tip: (f32, f32, f32), arch: f32, ph: f32) {
+    super::ship::draw_tentacle(f, seg, b, tip, arch, ph, 1.0, [255, 255, 255, 255]);
 }

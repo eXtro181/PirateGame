@@ -119,26 +119,30 @@ impl DynSlot {
     }
 }
 
-/// Die Kehrseite (Endboss): Leib mit geschlossenem und offenem Maul, Herzglocke, zwei Rippen.
-pub fn build_kehrseite(art: &mut Art, frame: &mut Frame) {
-    if art.boss_loaded.as_deref() == Some("kehrseite") {
+/// Endkampf gegen Malakor (im Boss-Bereich): der Fliegende Holländer (ein Bild, Bug nach
+/// Nordost, gespiegelt für Nordwest), Kopf und Armglied des roten Kraken, Schädelmantel und
+/// Wirbel des Knochenkraken.
+pub fn build_malakor(art: &mut Art, frame: &mut Frame) {
+    if art.boss_loaded.as_deref() == Some("malakor") {
         return;
     }
     let t0 = bevy::platform::time::Instant::now();
     let slot = art.boss_slot;
     let mut a = slot.atlas();
-    let (_, h, foot) = sw_art::inversa::SIZE;
-    let mut v: Vec<(String, Spr)> = vec![];
-    for (i, open) in [false, true].iter().enumerate() {
-        let c = sw_art::inversa::frame(*open);
-        v.push((format!("kh:{i}"), a.add_trim(&format!("kh:{i}"), &c, c.w / 2, h - foot)));
-    }
-    let c = sw_art::inversa::heart_bell();
-    v.push(("kh:bell".into(), a.add_trim("kh:bell", &c, c.w / 2, c.h - 10)));
-    for i in 0..2 {
-        let c = sw_art::inversa::rib(i);
-        v.push((format!("kh:rib{i}"), a.add_trim(&format!("kh:rib{i}"), &c, c.w / 2, c.h - 10)));
-    }
+    let (_, h, foot) = sw_art::ships::ship_size("dutchman");
+    let ship = sw_art::ships::ship_frame("dutchman", 3, Default::default());
+    use sw_art::malakor as mk;
+    let red = mk::red_mantle();
+    let b0 = mk::bone_mantle(false);
+    let b1 = mk::bone_mantle(true);
+    let v: Vec<(String, Spr)> = vec![
+        ("mk:ship".into(), a.add_trim("mk:ship", &ship, ship.w / 2, h - foot)),
+        ("mk:red".into(), a.add_trim("mk:red", &red, red.w / 2, red.h - 10)),
+        ("mk:bone0".into(), a.add_trim("mk:bone0", &b0, b0.w / 2, b0.h - 20)),
+        ("mk:bone1".into(), a.add_trim("mk:bone1", &b1, b1.w / 2, b1.h - 20)),
+        ("mk:rseg".into(), a.add("mk:rseg", &mk::tentacle_seg(0x8A1E16, 0x3A0A0A, 0xE8A08A), 20, 20)),
+        ("mk:vert".into(), a.add("mk:vert", &mk::vertebra(), 22, 20)),
+    ];
     if !slot.upload(frame, &a) {
         return;
     }
@@ -149,8 +153,8 @@ pub fn build_kehrseite(art: &mut Art, frame: &mut Frame) {
         slot.fix(&mut s);
         art.map.insert(k, s);
     }
-    art.boss_loaded = Some("kehrseite".into());
-    info!("Kehrseite gezeichnet in {:.2}s", t0.elapsed().as_secs_f32());
+    art.boss_loaded = Some("malakor".into());
+    info!("Malakor gezeichnet in {:.2}s", t0.elapsed().as_secs_f32());
 }
 
 /// Titelbild: großes brennendes Schiff und ein Krakenarm-Glied (im Boss-Bereich).
@@ -669,6 +673,9 @@ pub fn build(frame: &mut Frame) -> Art {
         }
         for pa in list {
             add_prop(&mut a, &mut props, pa);
+        }
+        for i in 0..2 {
+            add_prop(&mut a, &mut props, sw_art::malakor::shark_skeleton(i));
         }
         let lid = gv::coffin_lid(0);
         a.add_trim("x:lid", &lid, 20, 56);

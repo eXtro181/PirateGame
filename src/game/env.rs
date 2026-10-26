@@ -297,6 +297,48 @@ pub fn env(zone: &str, sailing_open_sea: bool) -> Env {
             light_k: 1.3,
             ..base
         },
+        // Seeschlacht gegen den Holländer: Gewitternacht, grünes Geisterlicht
+        "hollaender" => Env {
+            rays: 0.5,
+            ambient: l(0x8A9AB0, 0.82),
+            sky: 0.55,
+            sun: l(0xB8D0E0, 0.7),
+            sun_dir: n3([0.35, -0.5, 0.7]),
+            shadow: 0.5,
+            fog: l(0x24363A, 1.0),
+            fog_k: 0.07,
+            lift: [0.01, 0.025, 0.03],
+            gain: [0.96, 1.02, 1.0],
+            contrast: 1.12,
+            sat: 0.8,
+            bloom: 0.75,
+            water_a: l(0x2E5A5E, 1.0),
+            water_b: l(0x0A1C22, 1.0),
+            water_c: l(0xB8E0D8, 1.0),
+            light_k: 1.3,
+            ..base
+        },
+        // Meeresgrund: trockengefallen, grünes Zwielicht, Nebel aus Gischt und Salz
+        "meeresgrund" => Env {
+            rays: 0.7,
+            ambient: l(0x8AA8A0, 0.86),
+            sky: 0.5,
+            sun: l(0xB8D8C8, 0.66),
+            sun_dir: n3([-0.3, -0.4, 0.75]),
+            shadow: 0.5,
+            fog: l(0x2A4440, 1.0),
+            fog_k: 0.12,
+            lift: [0.01, 0.03, 0.025],
+            gain: [0.94, 1.02, 1.0],
+            contrast: 1.1,
+            sat: 0.7,
+            bloom: 0.75,
+            water_a: l(0x2A5A54, 1.0),
+            water_b: l(0x0A1A18, 1.0),
+            water_c: l(0xA8D8C8, 1.0),
+            light_k: 1.4,
+            ..base
+        },
         // Phase 5: die Unterseite – fast weiß, ausgeblichen, still
         "unterseite" => Env {
             rays: 0.9,

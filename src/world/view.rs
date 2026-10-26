@@ -57,7 +57,8 @@ impl WorldView {
     /// Weltrand am Ende der Welt: das Meer stürzt im Süden und Osten über die Kante ins Nichts.
     fn draw_world_edge(&self, w: &World, frame: &mut Frame, t: f32) {
         let (x0, y0, x1, y1) = w.end_rect;
-        if x1 <= x0 {
+        // leergelaufen: kein Wasser stürzt mehr über den Rand
+        if x1 <= x0 || w.drained {
             return;
         }
         let (vx, vy, vw, vh) = frame.view();

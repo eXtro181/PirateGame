@@ -24,21 +24,22 @@ pub struct Upg {
     pub atk: u8,
 }
 
-/// Maßstab je Stil (27.10.: alle Schiffe noch einmal +40 %).
+/// Maßstab je Stil (27.10.: alle Schiffe noch einmal +40 %). Der Fliegende Holländer ist
+/// gut fünfmal so groß wie das eigene Schiff.
 fn ship_scale(style: &str) -> f32 {
-    if style == "player" {
-        2.1
-    } else {
-        3.25
+    match style {
+        "player" => 2.1,
+        "dutchman" => 6.9,
+        _ => 3.25,
     }
 }
 
 /// Bildgröße und Fußpunkt (Schiffsmitte auf der Wasserlinie) je Stil.
 pub fn ship_size(style: &str) -> (i32, i32, i32) {
-    if style == "player" {
-        (420, 420, 92)
-    } else {
-        (700, 700, 146)
+    match style {
+        "player" => (420, 420, 92),
+        "dutchman" => (1800, 1300, 300),
+        _ => (700, 700, 146),
     }
 }
 
@@ -61,7 +62,82 @@ pub fn ship_frame(style: &str, k: usize, u: Upg) -> Canvas {
     let h = k as f32 * TAU / 16.0;
     // Bug (+y im Modell) zeigt in Weltrichtung (sin h, −cos h) → Gieren = h + π
     let (w, hh, foot) = ship_size(style);
-    render_yaw(&r, h + PI, w, hh, foot)
+    let mut c = render_yaw(&r, h + PI, w, hh, foot);
+    if style == "dutchman" {
+        weather(&mut c, 13);
+    }
+    c
+}
+
+/// Jahrhunderte auf dem Grund: Schlieren und Moos am Rumpf, Seepocken-Sprenkel, nasser Glanz,
+/// Segel mit Löchern, Fäulnisflecken und dunklen Säumen.
+pub fn weather(c: &mut Canvas, seed: u32) {
+    use crate::noise::{h01, Noise};
+    let nz = Noise::new(seed);
+    let (w, h) = (c.w, c.h);
+    let alpha: Vec<u8> = c.col.iter().map(|p| p[3]).collect();
+    for y in 0..h {
+        for x in 0..w {
+            let i = c.idx(x, y);
+            if alpha[i] == 0 {
+                continue;
+            }
+            let p = c.col[i];
+            let ev = c.ev[i];
+            let lum = (p[0] as f32 * 0.3 + p[1] as f32 * 0.5 + p[2] as f32 * 0.2) / 255.0;
+            let n = nz.fbm(x as f32 * 0.03, y as f32 * 0.03, 3);
+            let fine = nz.fbm(x as f32 * 0.21, y as f32 * 0.21, 2);
+            let k = |v: u8, f: f32, add: f32| (v as f32 * f + add).clamp(0.0, 255.0) as u8;
+            if ev > 120.0 && lum > 0.18 && c.emi[i][0] == 0 {
+                // Segel: Löcher mit ausgefranstem Rand, Fäulnis
+                let hole = nz.fbm(x as f32 * 0.06 + 40.0, y as f32 * 0.06, 3);
+                if hole > 0.3 {
+                    c.clear(x, y);
+                    continue;
+                }
+                if hole > 0.24 {
+                    c.col[i] = [k(p[0], 0.45, 0.0), k(p[1], 0.5, 0.0), k(p[2], 0.45, 0.0), p[3]];
+                    continue;
+                }
+                let rot = (n * 0.5 + 0.5).powf(2.0);
+                c.col[i] = [k(p[0], 0.9 - rot * 0.3, 0.0), k(p[1], 0.95 - rot * 0.15, rot * 6.0), k(p[2], 0.9 - rot * 0.3, 0.0), p[3]];
+                continue;
+            }
+            if c.emi[i][0] > 0 || c.emi[i][1] > 0 {
+                continue; // Laternen bleiben hell
+            }
+            // Rumpf und Deck: senkrechte Schlieren, Moos, Seepocken
+            let streak = nz.fbm(x as f32 * 0.45, y as f32 * 0.012, 2);
+            let mut r = p[0] as f32;
+            let mut g = p[1] as f32;
+            let mut b = p[2] as f32;
+            let dark = 0.82 + streak * 0.22 + fine * 0.08;
+            r *= dark;
+            g *= dark;
+            b *= dark;
+            if n > 0.05 {
+                // Moos und Algenbelag
+                let m = ((n - 0.05) * 3.0).min(1.0) * 0.55;
+                r = r * (1.0 - m) + 38.0 * m;
+                g = g * (1.0 - m) + 72.0 * m;
+                b = b * (1.0 - m) + 44.0 * m;
+            }
+            if h01(x, y, 77) < 0.035 && ev < 90.0 {
+                // Seepocken: helle Punkte mit dunklem Kern
+                r = 168.0;
+                g = 164.0;
+                b = 150.0;
+                if h01(x + 1, y, 77) < 0.5 {
+                    c.spec(x, y, 120);
+                }
+            }
+            c.col[i] = [r.clamp(0.0, 255.0) as u8, g.clamp(0.0, 255.0) as u8, b.clamp(0.0, 255.0) as u8, p[3]];
+            // nasser Glanz unten am Rumpf
+            if ev < 40.0 && fine > 0.2 {
+                c.spec(x, y, 90);
+            }
+        }
+    }
 }
 
 /// Großes Einzelbild für das Titelbild (schräg von vorn, Maßstab frei).
@@ -212,6 +288,26 @@ fn design(s: &str, u: Upg) -> Design {
             trim: 0x8A6A3A,
             flag: 0x050506,
             lamp: 0xFF8A3A,
+        },
+        // Der Fliegende Holländer: Malakors Galeone, seit Jahrhunderten auf dem Grund
+        "dutchman" => Design {
+            l: 70.0,
+            b: 21.0,
+            d: 22.0,
+            castle: (17.0, 15.0),
+            fore: 10.0,
+            masts: vec![m(34.0, 104.0, 28.0, 3), m(4.0, 124.0, 32.0, 3), m(-30.0, 96.0, 24.0, 3)],
+            sail: Sail::Torn,
+            ports: 11,
+            hull: 0x16201C,
+            hull_pat: Pat::Planks(2.6),
+            wale: 0x2E4A3A,
+            deck: 0x28302A,
+            sailc: 0x34503E,
+            sail_pat: Pat::Spots(3.0),
+            trim: 0x8ACF9A,
+            flag: 0x0A100E,
+            lamp: 0x6AFFB8,
         },
         "ghost" => Design {
             l: 62.0,
@@ -756,6 +852,99 @@ fn boss_decor(r: &mut Rig, el: &str, d: &Design) {
             r.ell_dir(hd, v(0.0, 1.0, 0.3), v(5.0, 6.0, 5.4), bone);
             for sx in [-2.0f32, 2.0] {
                 r.dot(add(hd, v(sx, 5.4, 1.0)), 0xFF8A3A, 2.4, 2);
+            }
+        }
+        "dutchman" => {
+            // Algenvorhänge, Seepocken, Muscheln, Korallen, grüne Laternen, schwere Kanonen,
+            // Galion: der ertrunkene König mit Krone und Tentakelbart, aus dessen Maul das Feuer kommt
+            let kelp = r.mat(mat(0x2A4A30).soft().bias(-0.05));
+            let kelp2 = r.mat(mat(0x4A6A2E).soft());
+            let barn = r.mat(mat(0xA8A498).pat(Pat::Grain).spec(40));
+            let shell = r.mat(mat(0xD8B0A0).spec(120).bias(0.1));
+            let shell2 = r.mat(mat(0xE8DCC0).pat(Pat::Stripes(0.8)).spec(90));
+            let coral = r.mat(mat(0xB85A4A).spec(50));
+            let glowl = r.mat(mat(0x6AFFB8).glow(2.0).bias(0.45).soft());
+            let iron = r.mat(mat(0x1E2422).spec(160));
+            let bone = r.mat(mat(0x8A8670).spec(60));
+            let crown = r.mat(mat(0x8A9A5A).spec(220).bias(0.1));
+            let tent = r.mat(mat(0x2E4A3E).pat(Pat::Spots(1.6)).spec(110));
+            // Algen hängen in Strähnen von Reling und Wale bis ins Wasser
+            for i in 0..46 {
+                let y = -l * 0.82 + i as f32 * (l * 1.62 / 46.0);
+                for side in [-1.0f32, 1.0] {
+                    let z0 = dz + 2.0 - (i % 3) as f32 * 2.5;
+                    let hw = hull_half(d, y, z0.min(dz));
+                    if hw < 1.0 {
+                        continue;
+                    }
+                    let k0 = v(side * (hw + 0.3), y, z0);
+                    let len = 8.0 + ((i * 7 + if side > 0.0 { 3 } else { 0 }) % 9) as f32 * 1.6;
+                    let sway = ((i as f32) * 1.3).sin();
+                    r.curve(&[k0, add(k0, v(side * 1.2, sway * 0.8, -len * 0.4)), add(k0, v(side * 0.6, sway * 1.6 - 1.0, -len * 0.75)), add(k0, v(side * 1.0, sway * 2.4, -len))], 0.55, 0.15, if i % 4 == 0 { kelp2 } else { kelp });
+                }
+            }
+            // Seepocken und Muscheln in Nestern am Unterwasserschiff
+            for i in 0..90 {
+                let y = -l * 0.85 + ((i * 37) % 90) as f32 / 90.0 * l * 1.7;
+                let z = dz - 4.0 - ((i * 13) % 11) as f32 * 1.3;
+                let side = if i % 2 == 0 { -1.0 } else { 1.0 };
+                let hw = hull_half(d, y, z);
+                if hw < 1.5 {
+                    continue;
+                }
+                let p0 = v(side * (hw + 0.2), y, z);
+                match i % 5 {
+                    0 | 1 => r.ball(p0, 0.9 + (i % 3) as f32 * 0.3, barn),
+                    2 => r.ell(p0, v(0.6, 1.4, 1.2), shell),
+                    3 => r.ell(p0, v(0.5, 1.2, 1.5), shell2),
+                    _ => r.spike(p0, add(p0, v(side * 2.0, 0.5, 2.5)), 0.9, coral),
+                }
+            }
+            // grüne Laternen an der Reling
+            for i in 0..8 {
+                let y = -l * 0.55 + i as f32 * (l * 1.1 / 8.0);
+                for side in [-1.0f32, 1.0] {
+                    let hw = hull_half(d, y, dz);
+                    r.tube(&[v(side * hw, y, dz + 3.0), v(side * (hw + 1.6), y, dz + 6.0)], 0.4, 0.4, iron);
+                    r.ball(v(side * (hw + 1.8), y, dz + 5.2), 1.3, glowl);
+                }
+            }
+            // schwere Kanonen: dritte Reihe, lange Rohre
+            for side in [-1.0f32, 1.0] {
+                for i in 0..9 {
+                    let y = -l * 0.4 + i as f32 * (l * 0.85 / 9.0);
+                    let z = dz - 11.0;
+                    let hw = hull_half(d, y, z);
+                    r.tube(&[v(side * (hw - 0.5), y, z), v(side * (hw + 5.0), y, z + 0.3)], 1.6, 1.4, iron);
+                    r.ball(v(side * (hw + 5.0), y, z + 0.3), 1.2, iron);
+                }
+            }
+            // Galion: ertrunkener König, Krone, Tentakelbart, offenes Maul
+            let hd = v(0.0, l * 1.2, bow_z + 3.0);
+            r.ell_dir(hd, v(0.0, 1.0, 0.25), v(3.8, 4.6, 4.2), bone);
+            let maw = r.mat(mat(0x0A0606));
+            r.ell(add(hd, v(0.0, 3.0, -2.2)), v(2.4, 1.6, 1.0), maw);
+            for sx in [-2.4f32, 2.4] {
+                r.dot(add(hd, v(sx, 6.2, 1.2)), 0x6AFFB8, 2.6, 2);
+            }
+            for k in 0..7 {
+                let a = k as f32 / 6.0 * PI;
+                let base = add(hd, v(a.cos() * 5.6, a.sin() * 2.0, 5.0));
+                r.spike(base, add(base, v(a.cos() * 1.2, 0.0, 5.0 + (k % 2) as f32 * 2.5)), 1.1, crown);
+            }
+            for k in 0..6 {
+                let x = (k as f32 - 2.5) * 1.6;
+                let b0 = add(hd, v(x, 5.0, -5.0));
+                let w = (k as f32 * 1.7).sin();
+                r.curve(&[b0, add(b0, v(w * 1.5, 1.0, -4.0)), add(b0, v(-w * 1.5, 1.6, -8.0)), add(b0, v(w * 2.2, 0.8, -12.0))], 1.2, 0.3, tent);
+            }
+            // Ketten und Anker
+            let chain = r.mat(mat(0x2A2E30).pat(Pat::Rivets(1.2)).spec(140));
+            for side in [-1.0f32, 1.0] {
+                let y = l * 0.6;
+                let hw = hull_half(d, y, dz);
+                let a = v(side * hw, y, dz + 1.0);
+                r.curve(&[a, add(a, v(side * 3.0, 2.0, -6.0)), add(a, v(side * 3.4, 3.0, -16.0))], 0.8, 0.8, chain);
             }
         }
         "ghost" => {

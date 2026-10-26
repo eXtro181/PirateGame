@@ -223,7 +223,6 @@ pub enum Target {
     /// Endboss auf See (Geisterkapitän, Schiffsgestalt)
     EndShip,
     /// Tau der Herzglocke im Schlund der Kehrseite
-    Rope(usize),
     Player,
     Ship,
 }

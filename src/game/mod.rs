@@ -52,7 +52,6 @@ pub enum Use {
     Chest(usize),
     Gate(usize),
     Slot(usize),
-    Whirl,
     Board(usize),
     Call(usize),
     Stain,
@@ -72,7 +71,6 @@ pub struct Focus {
 }
 
 pub enum Timed {
-    Ending,
     Banner(String, String),
     Whirl,
 }
@@ -90,8 +88,6 @@ pub fn ng_label(n: i32) -> String {
 pub enum Cut {
     Travel { t: f32, fire: usize, moved: bool },
     Whirl { t: f32, moved: bool },
-    /// Krakenarme ziehen den Spieler vom Steg in den Strudel
-    Grab { t: f32, moved: bool },
     /// durch eine Ladentür gehen (abblenden, versetzen, aufblenden)
     Door { t: f32, door: usize, enter: bool, moved: bool },
     /// allererster Start: der Ertrunkene schiebt den Sargdeckel weg und steigt heraus
@@ -331,8 +327,12 @@ impl Game {
             g.apply_slot(si);
         }
         g.whirlpool_open = g.whirl_ready();
-        if g.save.megalodon {
-            g.world.raise_end_island();
+        if g.save.end_naval {
+            // der Holländer ist versenkt: das Meer am Ende der Welt ist leergelaufen
+            g.world.drain_end();
+            if g.save.megalodon {
+                g.world.show_end_fire();
+            }
             g.view.refresh(&g.world, frame);
         }
         g.reset_end();
@@ -412,12 +412,6 @@ impl Game {
             if self.end.on_sea() {
                 out.push(Target::EndShip);
             }
-        } else if self.end.state == EP::Maw {
-            for (i, r) in self.end.ropes.iter().enumerate() {
-                if r.hp > 0.0 {
-                    out.push(Target::Rope(i));
-                }
-            }
         }
         out
     }
@@ -437,19 +431,14 @@ impl Game {
                     (x, y, 70.0, 50.0)
                 }
             }),
+            // der Holländer (großer Rumpf) bzw. sein roter Kraken, solange der lebt
             Target::EndShip => match self.end.state {
-                EP::Mirror => {
-                    let (x, y, _) = self.end.lantern(self.end.lit, true);
-                    Some((x, y, 38.0, 6.0))
-                }
-                EP::Inverse => {
-                    let (x, y, z) = self.end.mouth_pos();
-                    Some((x, y, 80.0, z))
-                }
-                EP::Twin => Some((self.end.twin.x, self.end.twin.y, 46.0, 40.0)),
+                EP::Ship => match self.end.kraken.filter(|k| k.dying <= 0.0) {
+                    Some(k) => Some((k.x, k.y, 120.0, 120.0)),
+                    None => Some((self.end.x, self.end.y, 300.0, 120.0)),
+                },
                 _ => None,
             },
-            Target::Rope(i) => self.end.ropes.get(i).filter(|r| r.hp > 0.0).map(|r| (r.x, r.y, 26.0, 30.0)),
             Target::Player => Some((self.player.a.x, self.player.a.y, self.player.a.hurt_r, 28.0)),
             Target::Ship => Some((self.ship.hull.x, self.ship.hull.y, 56.0, 28.0)),
         }
@@ -463,7 +452,6 @@ impl Game {
             Target::Kraken => self.hurt_kraken(dmg),
             Target::SeaBoss(i) => self.hurt_sea_boss(i, dmg),
             Target::EndShip => self.hurt_end(dmg),
-            Target::Rope(i) => self.hurt_rope(i, dmg),
             Target::Player => {
                 self.hurt_player(dmg, Target::Player, o);
             }
@@ -547,8 +535,8 @@ impl Game {
         if let Some(i) = self.sea_boss {
             let d = self.sea_bosses[i].def();
             crate::art::build_sea_boss(art, frame, d.el, Some(d.beast));
-        } else if self.end.active() {
-            crate::art::build_kehrseite(art, frame);
+        } else if !matches!(self.end.state, EP::Dormant | EP::Done) || self.world.in_end(self.player.a.x, self.player.a.y) && !self.sailing {
+            crate::art::build_malakor(art, frame);
         }
         if self.world_dirty {
             self.world_dirty = false;
@@ -602,10 +590,9 @@ impl Game {
         }
         for t in fired {
             match t {
-                Timed::Ending => self.ending(),
                 Timed::Banner(a, b) => self.ui.banner(&a, &b, "big", 3.5),
                 Timed::Whirl => {
-                    self.ui.banner("DER STRUDEL ÖFFNET SICH", "Im See der Glutwacht", "boss", 4.0);
+                    self.ui.banner("DER STRUDEL ÖFFNET SICH", "Fahr mit dem Schiff in den Krakenstrudel der Glutwacht", "boss", 4.0);
                     self.sfx("rise");
                     self.shake(10.0);
                 }
@@ -843,50 +830,18 @@ impl Game {
                     self.cutscene = Some(Cut::Wake { t });
                 }
             }
-            Cut::Grab { t, moved } => {
-                let t = t + dt;
-                let (wx, wy) = self.world.whirlpool;
-                let (px0, py0) = self.world.pier_end;
-                if t < 1.5 {
-                    // die Arme greifen zu
-                    self.player.a.anim = "idle";
-                    if t > 1.0 {
-                        self.player.a.anim = "hurt";
-                        self.shake(2.0);
-                    }
-                    self.cutscene = Some(Cut::Grab { t, moved });
-                } else if t < 3.6 {
-                    // in den Strudel gezogen: erst geradeaus, zuletzt kreisend hinab
-                    let k = ((t - 1.5) / 2.1).clamp(0.0, 1.0);
-                    let e = k * k * (3.0 - 2.0 * k);
-                    let spin = (k - 0.6).max(0.0) * 9.0;
-                    let r = (1.0 - e) * (px0 - wx).hypot(py0 - wy);
-                    let a0 = (py0 - wy).atan2(px0 - wx) + spin;
-                    self.player.a.x = wx + a0.cos() * r;
-                    self.player.a.y = wy + a0.sin() * r * 0.8;
-                    self.player.a.anim = "hurt";
-                    self.player.hidden = k > 0.92;
-                    if rnd() < 0.6 {
-                        self.fx.burst("splash", self.player.a.x + rr(-14.0, 14.0), self.player.a.y, 2, BurstOpt { speed: Some(90.0), up: Some(150.0), ..Default::default() });
-                    }
-                    self.ui.fade = ((t - 2.9) * 1.4).clamp(0.0, 1.0);
-                    self.cutscene = Some(Cut::Grab { t, moved });
-                } else if !moved {
-                    self.ui.fade = 1.0;
-                    self.board(0);
-                    self.arrive_end();
-                    self.cutscene = Some(Cut::Grab { t, moved: true });
-                } else {
-                    self.ui.fade = (self.ui.fade - dt * 1.0).max(0.0);
-                    self.cutscene = if self.ui.fade <= 0.0 { None } else { Some(Cut::Grab { t, moved }) };
-                }
-            }
         }
     }
 
     // ---------------------------------------------------------------- Kamera, Zonen
     fn update_camera(&mut self, dt: f32, frame: &mut Frame) {
         let (mut tx, mut ty) = if self.sailing { (self.ship.hull.x, self.ship.hull.y - 20.0) } else { (self.player.a.x + self.player.a.fx * 32.0, self.player.a.y - 24.0 + self.player.a.fy * 20.0) };
+        if self.sailing && matches!(self.end.state, EP::Rise | EP::Ship | EP::Drain) {
+            // der Holländer ist riesig: Blick zwischen eigenes Schiff und seinen Rumpf
+            let (ex, ey) = (self.end.x, self.end.y - 260.0);
+            tx += (ex - tx) * 0.4;
+            ty += (ey - ty) * 0.45;
+        }
         if let Some(bi) = self.boss {
             let b = &self.bosses[bi];
             if !b.dead() && !b.hidden {
@@ -964,7 +919,7 @@ impl Game {
 
     fn update_boss_arena(&mut self) {
         let mi = self.bosses.len() - 1;
-        if self.bosses[mi].state == BS::Dormant && !self.save.megalodon && self.end.state == EP::Drowned && !self.sailing {
+        if self.bosses[mi].state == BS::Dormant && !self.save.megalodon && self.end.state == EP::Seabed && !self.sailing {
             if let Some(a) = self.world.arenas.get("ende") {
                 if ((self.player.a.x - a.x) / a.r).hypot((self.player.a.y - a.y) / a.ry) < 0.55 {
                     self.boss_activate(mi);
@@ -1004,10 +959,6 @@ impl Game {
             if !s.mounted.get(sl.el).copied().unwrap_or(false) {
                 out.push(f(sl.x, sl.y, 60.0, if s.figureheads.get(sl.el).copied().unwrap_or(false) { "Galionsfigur anbringen" } else { "Ein leerer Bug" }, Use::Slot(si), Some(sl.prop)));
             }
-        }
-        if self.whirlpool_open {
-            let (x, y) = self.world.pier_end;
-            out.push(f(x, y, 50.0, "In den Strudel springen", Use::Whirl, None));
         }
         for (i, d) in self.world.doors.iter().enumerate() {
             out.push(f(d.x, d.y, 40.0, &format!("Laden in {} betreten", d.name), Use::Enter(i), None));
@@ -1087,7 +1038,6 @@ impl Game {
                 Use::Chest(ci) => self.open_chest(ci, art),
                 Use::Gate(gi) => self.enter_gate(gi),
                 Use::Slot(si) => self.use_slot(si),
-                Use::Whirl => self.enter_whirlpool(),
                 Use::Board(di) => self.board(di),
                 Use::Call(di) => self.call_ship(di),
                 Use::Stain => self.take_stain(),
@@ -1709,19 +1659,6 @@ impl Game {
         self.sfx("fog");
         self.boss_activate(bi);
     }
-    fn ending(&mut self) {
-        let n = self.save.ng + 1;
-        self.ui.open_dialog(
-            "Die Laternenmagd",
-            vec![
-                "Du hast es getan. Die Kehrseite ist still, und das Wasser am Ende der Welt spiegelt nur noch den Himmel.".into(),
-                "Der Teil von dir, der unten blieb, ist wieder bei dir. Spürst du es? Du bist zum ersten Mal ganz.".into(),
-                "Doch die See vergisst nicht. Sie füllt sich wieder mit Königen und Ungeheuern, stärker als zuvor.".into(),
-                format!("Willst du eine neue Fahrt beginnen? Neues Spiel+{} – du behältst alles, was du bist. Die Welt beginnt von vorn.", if n > 1 { n.to_string() } else { String::new() }),
-            ],
-            vec![ch(&ng_label(n), Cmd::NewGamePlus), ch("Noch verweilen", Cmd::EndTalk)],
-        );
-    }
     /// Neue Fahrt (NG+): Charakter, Ausrüstung, Schiff und Crew bleiben, Könige, Seebosse und
     /// der Endkampf beginnen von vorn, Gegner werden stärker.
     fn new_game_plus(&mut self) {
@@ -1765,10 +1702,11 @@ impl Game {
         self.cam_f = (ex, ey);
     }
     pub fn debug_boss(&mut self, key: &str, phase2: bool) {
-        if key == "mega" && !self.world.end_risen {
-            self.world.raise_end_island();
+        if key == "mega" {
+            self.save.end_naval = true;
+            self.world.drain_end();
             self.world_dirty = true;
-            self.end.state = EP::Drowned;
+            self.end.state = EP::Seabed;
         }
         let bi = if key == "mega" { self.bosses.len() - 1 } else { KINGS.iter().position(|k| k.key == key).unwrap_or(0) };
         let zone = if key == "mega" { "ende" } else { KINGS[bi].zone };
@@ -1785,6 +1723,13 @@ impl Game {
                 if !b.mega {
                     b.set_body(false);
                     b.name = king(b.key).monster.into();
+                } else {
+                    // gleich als Knochenkraken
+                    b.set_body(false);
+                    b.name = MEGA_NAME2.into();
+                    b.el = "bone";
+                    b.max_hp = MEGA_HP2;
+                    b.hp = b.max_hp;
                 }
             }
         }
@@ -1876,23 +1821,19 @@ impl Game {
     }
     fn enter_whirlpool(&mut self) {
         self.lock = None;
-        if !self.sailing {
-            // vom Steg: acht Krakenarme packen zu und ziehen den Spieler hinab
-            let (x, y) = self.world.pier_end;
-            self.player.a.x = x;
-            self.player.a.y = y;
-            self.player.a.face(0.0, -1.0);
-            self.cutscene = Some(Cut::Grab { t: 0.0, moved: false });
-            self.sfx("roar");
-            self.ui.banner("Der Strudel", "Die Arme der Tiefe greifen nach dir", "boss", 3.0);
-            return;
-        }
         self.cutscene = Some(Cut::Whirl { t: 0.0, moved: false });
         self.sfx("rise");
         self.ui.banner("Der Strudel", "Die See nimmt dich mit", "boss", 3.0);
     }
     /// Ankunft auf dem Meer am Ende der Welt (nach dem Strudel).
     fn arrive_end(&mut self) {
+        if self.save.end_naval {
+            // das Meer ist schon leergelaufen: zu Fuß auf dem Meeresgrund
+            self.end_land();
+            self.ui.banner("DER MEERESGRUND", "Malakor wartet", "boss", 3.5);
+            self.persist(true);
+            return;
+        }
         let (ex, ey) = self.world.end_arrive;
         self.sailing = true;
         self.player.state = PS::Ship;
@@ -1990,7 +1931,7 @@ impl Game {
         items.push(head("Das Ende der Welt"));
         let whirl = if self.whirl_ready() { "offen" } else { "geschlossen" };
         items.push(entry("Der Strudel", whirl, "Öffnet sich, wenn vier Galionsfiguren thronen und vier Ungeheuer versenkt sind.", false, Cmd::None));
-        items.push(entry(crate::game::endboss::END_NAME, if s.megalodon { "besiegt" } else { "wartet" }, "Thalassa Inversa – fünf Phasen.", false, Cmd::None));
+        items.push(entry(crate::game::endboss::END_NAME, if s.megalodon { "besiegt" } else { "wartet" }, "Der Fliegende Holländer, sein roter Kraken, Malakor und sein Gebein.", false, Cmd::None));
         items.push(entry("Fahrt", &if s.ng > 0 { format!("Neues Spiel+{}", s.ng) } else { "Erste Fahrt".into() }, "", false, Cmd::None));
         self.ui.open_list("Fortschritt", items, Cmd::Close, true, true);
     }

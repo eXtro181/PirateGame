@@ -327,6 +327,8 @@ pub struct World {
     /// Requisiten auf der Insel (bis zum Aufstieg verborgen)
     pub end_props: Vec<usize>,
     pub end_risen: bool,
+    /// das Meer am Ende der Welt ist leergelaufen (Meeresgrund)
+    pub drained: bool,
     pub crew_spots: Vec<(f32, f32)>,
     pub grid: HashMap<i32, Vec<Collider>>,
     pub dyn_blockers: Vec<(f32, f32, f32, f32, bool)>,
@@ -390,6 +392,7 @@ impl World {
             end_island: vec![],
             end_props: vec![],
             end_risen: true,
+            drained: false,
             crew_spots: vec![],
             grid: HashMap::new(),
             dyn_blockers: vec![],
@@ -2514,6 +2517,92 @@ impl World {
         }
         self.end_risen = false;
         self.compute_shore();
+    }
+    /// Nach dem Sieg über den Holländer: das Meer am Ende der Welt ist über den Rand gelaufen.
+    /// Sand, Schlick und Pfützen, Haiskelette, Wracks, Korallen, Tang, Muscheln.
+    pub fn drain_end(&mut self) {
+        if self.drained {
+            return;
+        }
+        self.drained = true;
+        self.docks.retain(|d| d.zone != Zone::Ende);
+        let (x0, y0, x1, y1) = self.end_rect;
+        let edge = 6;
+        let arena = self.arenas.get("ende").cloned();
+        for y in y0 + 4..=y1 - edge {
+            for x in x0 + 4..=x1 - edge {
+                let i = idx(x, y);
+                if self.ground[i] != Mat::Water {
+                    continue;
+                }
+                let n = self.nz.fbm(x as f32 * 0.07 + 11.0, y as f32 * 0.07, 3);
+                let in_arena = arena.as_ref().map(|a| (((x * TS) as f32 - a.x) / (a.r + 160.0)).hypot(((y * TS) as f32 - a.y) / (a.ry + 120.0)) < 1.0).unwrap_or(false);
+                let _ = in_arena;
+                self.ground[i] = if n > 0.3 || n < -0.3 {
+                    // Seegrasflecken
+                    Mat::Moss
+                } else {
+                    Mat::Sand
+                };
+                self.biome[i] = Biome::Coast;
+                self.level[i] = 0;
+                self.path[i] = false;
+            }
+        }
+        // brennende Wracks verlöschen; an ihrer Stelle liegen Wracks im Schlick
+        for p in self.props.iter_mut() {
+            let (tx, ty) = ((p.x / TS as f32) as i32, (p.y / TS as f32) as i32);
+            if p.sea && tx >= x0 && ty >= y0 && p.kind.starts_with("burningWreck") {
+                p.hidden = true;
+            }
+        }
+        let mut rng = Rng::new(7331);
+        let mut placed = 0;
+        for _ in 0..600 {
+            if placed >= 70 {
+                break;
+            }
+            let (tx, ty) = (rng.int(x0 + 6, x1 - edge - 2), rng.int(y0 + 6, y1 - edge - 2));
+            let i = idx(tx, ty);
+            if self.ground[i] == Mat::Water || self.ground[i] == Mat::Abyss {
+                continue;
+            }
+            if let Some(a) = &arena {
+                if (((tx * TS) as f32 - a.x) / (a.r + 40.0)).hypot(((ty * TS) as f32 - a.y) / (a.ry + 40.0)) < 1.0 {
+                    continue;
+                }
+            }
+            let kind = match placed % 10 {
+                0 | 1 | 2 => format!("sharkSkel{}", rng.int(0, 1)),
+                3 => "wreck".to_string(),
+                4 => format!("coralSpire{}", rng.int(0, 1)),
+                5 => format!("kelpTall{}", rng.int(0, 1)),
+                6 => format!("seaRocks{}", rng.int(0, 1)),
+                7 => format!("sunkMast{}", rng.int(0, 1)),
+                8 => "skullpile".to_string(),
+                _ => "anchorDeco".to_string(),
+            };
+            let flip = rng.chance(0.5);
+            let (x, y) = tpos(tx, ty);
+            self.prop_x(&kind, x, y, |p| p.flip = flip);
+            placed += 1;
+        }
+        for _ in 0..500 {
+            let (tx, ty) = (rng.int(x0 + 5, x1 - edge - 1), rng.int(y0 + 5, y1 - edge - 1));
+            if self.ground[idx(tx, ty)] == Mat::Water {
+                continue;
+            }
+            let k = *rng.pick(&["shell", "shell", "pebbles", "bones", "skull", "tuftDark"]);
+            self.deco.push(Deco { k, x: (tx * TS) as f32 + rng.int(2, 30) as f32, y: (ty * TS) as f32 + rng.int(4, 30) as f32, flip: rng.chance(0.5) });
+        }
+        self.compute_field();
+        self.compute_shore();
+    }
+    /// Nach dem Sieg über Malakor: Säbelfeuer und Laternen am Grund erscheinen.
+    pub fn show_end_fire(&mut self) {
+        for &pi in &self.end_props {
+            self.props[pi].hidden = false;
+        }
     }
     /// Innenraum eines Ladens, in dem dieser Punkt liegt
     pub fn interior_at(&self, x: f32, y: f32) -> Option<usize> {

@@ -1,7 +1,8 @@
-//! Bosse: vier Geisterkönige (Phase 1 als König, Phase 2 als Monster) und der Endboss an Land:
-//! Kapitän Schwarzwasser als Geisterkapitän (dritte Phase des Endkampfs), der sich in den
-//! brennenden Skelettkapitän mit vier Säbeln verwandelt (vierte Phase).
-//! Angriffe sind datengetrieben: combo, dash, slam, cone, volley, rain, nova, gust, spikes, sweep.
+//! Bosse: vier Geisterkönige (Phase 1 als König, Phase 2 als Monster) und der Endboss auf dem
+//! Meeresgrund: Malakor, der Ertrunkene König (vier Schwerter, Tentakelbart, fünf Angriffe), der
+//! im Tod zum riesigen Skelettkraken wird (vier Angriffe).
+//! Angriffe sind datengetrieben: combo, dash, slam, cone, volley, rain, nova, gust, spikes, sweep,
+//! spin (Klingenwirbel), lash (Bartpeitsche), leap (Sprung mit Aufschlag).
 
 use super::actors::*;
 use super::data::*;
@@ -31,6 +32,12 @@ pub enum AK {
     Nova,
     Gust,
     Spikes,
+    /// Klingenwirbel: dreht sich mit allen Schwertern auf den Spieler zu
+    Spin,
+    /// Bartpeitsche: die Tentakel schnellen in einer Linie vor und ziehen heran
+    Lash,
+    /// Sprung (bzw. Abtauchen) und Aufschlag am Ziel
+    Leap,
 }
 
 #[derive(Clone, Copy, Default)]
@@ -92,8 +99,6 @@ pub struct Boss {
     pub monster: &'static str,
     pub sheet: &'static str,
     pub h: f32,
-    /// der Ertrunkene trinkt aus deinen Flaschen (verbleibende Schlucke)
-    pub drinks: u8,
 }
 
 fn part(el: &str) -> &'static str {
@@ -101,6 +106,8 @@ fn part(el: &str) -> &'static str {
         "fire" => "ember",
         "ice" => "ice",
         "wind" => "wind",
+        "sea" => "splash",
+        "bone" => "bone",
         _ => "earth",
     }
 }
@@ -121,21 +128,23 @@ fn table(mega: bool, phase: i32, el: &str) -> Vec<(AK, f32, AO)> {
     let s = S;
     if mega {
         return if phase == 1 {
-            // der Ertrunkene: kämpft wie du – Hiebfolgen, Rollangriff, Geisterblitze, Wasserregen
+            // Malakor: Vierklingen-Hiebfolge, Klingenwirbel, Bartpeitsche, Gezeitensprung,
+            // Geysire aus dem Meeresgrund
             vec![
-                (Combo, 4.0, AO { n: 3, reach: 40.0 * s, ..o() }),
-                (Dash, 2.5, AO { len: 170.0 * s, ..o() }),
-                (Volley, 2.0, AO { n: 3, spread: 0.5, ..o() }),
-                (Rain, 1.5, AO { n: 6, r: 18.0 * s, ..o() }),
+                (Combo, 4.0, AO { n: 4, reach: 46.0 * s, fast: true, ..o() }),
+                (Spin, 2.5, AO { len: 1.6, r: 46.0 * s, ..o() }),
+                (Lash, 2.5, AO { len: 130.0 * s, w: 14.0 * s, ..o() }),
+                (Leap, 2.0, AO { r: 54.0 * s, ..o() }),
+                (Rain, 2.0, AO { n: 8, r: 20.0 * s, ..o() }),
             ]
         } else {
-            // die andere Seite: schneller, gespiegelt, Flutwelle
+            // Knochenkraken: Arme brechen aus dem Grund, Tentakelfeger, Knochensplitter rundum,
+            // Abtauchen und Auftauchen unter dem Spieler
             vec![
-                (Combo, 4.0, AO { n: 4, reach: 44.0 * s, fast: true, ..o() }),
-                (Sweep, 2.5, AO { reach: 90.0 * s, ..o() }),
-                (Nova, 2.0, AO { r: 86.0 * s, slow: true, ..o() }),
-                (Rain, 2.0, AO { n: 9, r: 20.0 * s, ..o() }),
-                (Dash, 2.0, AO { len: 200.0 * s, ..o() }),
+                (Spikes, 3.0, AO { n: 10, ..o() }),
+                (Sweep, 2.5, AO { reach: 110.0 * s, ..o() }),
+                (Volley, 2.0, AO { n: 18, spread: std::f32::consts::PI, ..o() }),
+                (Leap, 2.5, AO { r: 80.0 * s, heavy: true, ..o() }),
             ]
         };
     }
@@ -159,7 +168,7 @@ fn table(mega: bool, phase: i32, el: &str) -> Vec<(AK, f32, AO)> {
 impl Boss {
     pub fn new(key: &'static str, ar: &crate::world::Arena) -> Self {
         let mega = key == "mega";
-        let (name, hp, el, sheet) = if mega { (MEGA_NAME.to_string(), MEGA_HP, "ice", "drowned") } else {
+        let (name, hp, el, sheet) = if mega { (MEGA_NAME.to_string(), MEGA_HP, "sea", "malakor") } else {
             let k = king(key);
             (k.name.to_string(), k.hp, k.key, k.sheet)
         };
@@ -187,7 +196,6 @@ impl Boss {
             monster: "",
             sheet,
             h: 100.0,
-            drinks: 2,
         };
         b.set_body(true);
         b
@@ -195,17 +203,17 @@ impl Boss {
     pub fn set_body(&mut self, human: bool) {
         self.human = human;
         if human {
-            self.a.r = if self.mega { 16.0 } else { 14.0 };
-            self.a.hurt_r = if self.mega { 30.0 } else { 24.0 };
-            self.body_y = if self.mega { 44.0 } else { 36.0 };
-            self.h = if self.mega { 130.0 } else { 110.0 };
+            self.a.r = if self.mega { 20.0 } else { 14.0 };
+            self.a.hurt_r = if self.mega { 34.0 } else { 24.0 };
+            self.body_y = if self.mega { 56.0 } else { 36.0 };
+            self.h = if self.mega { 150.0 } else { 110.0 };
         } else {
-            self.a.r = if self.mega { 36.0 } else { 28.0 };
-            self.a.hurt_r = if self.mega { 68.0 } else { 48.0 };
+            self.a.r = if self.mega { 60.0 } else { 28.0 };
+            self.a.hurt_r = if self.mega { 110.0 } else { 48.0 };
             if !self.mega {
                 self.monster = king(self.key).beast;
             }
-            self.h = if self.mega { 140.0 } else { 150.0 };
+            self.h = if self.mega { 300.0 } else { 150.0 };
             self.body_y = self.h * 0.4;
         }
     }
@@ -226,14 +234,18 @@ impl Boss {
         self.hidden = true;
         self.a.x = self.home.0;
         self.a.y = self.home.1;
-        self.el = if self.mega { "ice" } else { king(self.key).key };
+        self.el = if self.mega { "sea" } else { king(self.key).key };
         self.name = if self.mega { MEGA_NAME.into() } else { king(self.key).name.into() };
         if self.mega {
-            self.sheet = "drowned";
+            self.sheet = "malakor";
         }
-        self.drinks = 2;
         self.atk = None;
         self.set_body(true);
+    }
+    /// Für das Zeichnen: laufender Angriff (Art, Abschnitt 0 Ausholen/1 aktiv/2 Erholen, Zeit,
+    /// Winkel, Ziel)
+    pub fn atk_info(&self) -> Option<(AK, u8, f32, f32, f32, f32)> {
+        self.atk.as_ref().map(|a| (a.kind, match a.phase { AP::Windup => 0, AP::Active => 1, AP::Recover => 2 }, a.t, a.ang, a.tx, a.ty))
     }
     pub fn parryable(&self) -> bool {
         self.human && self.atk.as_ref().map(|a| a.kind == AK::Combo).unwrap_or(false)
@@ -258,7 +270,7 @@ impl Game {
         self.boss = Some(i);
         self.boss_ghost = self.bosses[i].hp;
         let n = self.bosses[i].name.clone();
-        self.ui.banner(&n, if self.bosses[i].mega { "" } else { "Geisterkönig" }, "boss", 3.0);
+        self.ui.banner(&n, if self.bosses[i].mega { "Herr des Fliegenden Holländers" } else { "Geisterkönig" }, "boss", 3.0);
     }
 
     fn boss_pick(&self, b: &Boss) -> (AK, AO) {
@@ -272,6 +284,8 @@ impl Game {
                 AK::Slam => d < 180.0,
                 AK::Cone => d < o.r,
                 AK::Nova => d < o.r + 40.0,
+                AK::Lash => d < o.len + 20.0,
+                AK::Spin => d < 260.0,
                 _ => true,
             })
             .collect();
@@ -314,20 +328,42 @@ impl Game {
                 }
                 return;
             }
+            BS::Transform if b.mega => {
+                // Malakor fällt um; aus seinem Leib bricht der Skelettkraken hervor
+                if b.human {
+                    b.a.anim = "dead";
+                    b.a.frame = 0.0;
+                    if rnd() < 0.5 {
+                        self.fx.rise("bone", b.a.x + rr(-30.0, 30.0), b.a.y, 2, 30.0, None);
+                    }
+                    if b.st_t > 2.2 {
+                        b.set_body(false);
+                        b.name = MEGA_NAME2.into();
+                        b.el = "bone";
+                        b.max_hp = MEGA_HP2 * ng_hp(&self.save);
+                        b.hp = b.max_hp;
+                        self.boss_ghost = b.hp;
+                        self.flash([0.6, 1.0, 0.8], 0.9);
+                        self.shake(22.0);
+                        self.sfx("roar");
+                        self.fx.burst("bone", b.a.x, b.a.y - 60.0, 80, BurstOpt { speed: Some(340.0), ..Default::default() });
+                        self.fx.burst("dust", b.a.x, b.a.y, 40, BurstOpt { speed: Some(220.0), ..Default::default() });
+                        self.fx.ring(b.a.x, b.a.y, 30.0, 320.0, 0.9, [0.6, 1.0, 0.8]);
+                        self.ui.banner(MEGA_NAME2, "Was von Malakor bleibt, erhebt sich", "boss", 3.4);
+                    }
+                } else if b.st_t > 4.0 {
+                    Self::boss_idle(b);
+                }
+                return;
+            }
             BS::Transform => {
                 b.a.anim = "cast";
                 b.a.frame = if b.st_t > 1.0 { 2.0 } else { 1.0 };
                 if rnd() < 0.6 {
                     self.fx.rise(part(b.el), b.a.x + rr(-40.0, 40.0), b.a.y, 2, 20.0, Some(kind_col(part(b.el))));
                 }
-                let morph = if b.mega { b.sheet != "drowned2" } else { b.human };
-                if b.st_t > 1.4 && morph {
-                    if b.mega {
-                        // die andere Seite: gespiegelt, kälter, schneller
-                        b.sheet = "drowned2";
-                        b.name = MEGA_NAME2.into();
-                        b.el = "wind";
-                    } else {
+                if b.st_t > 1.4 && b.human {
+                    {
                         b.set_body(false);
                         b.name = king(b.key).monster.into();
                     }
@@ -337,7 +373,7 @@ impl Game {
                     self.fx.burst(part(b.el), b.a.x, b.a.y - 40.0, 50, BurstOpt { speed: Some(280.0), col: Some(kind_col(part(b.el))), ..Default::default() });
                     self.fx.ring(b.a.x, b.a.y, 20.0, 240.0, 0.8, el_col(b.el));
                     let n = b.name.clone();
-                    self.ui.banner(&n, if b.mega { "Der Kampf läuft kopfüber weiter" } else { "Die zweite Gestalt" }, "boss", 2.6);
+                    self.ui.banner(&n, "Die zweite Gestalt", "boss", 2.6);
                 }
                 if b.st_t > 2.6 {
                     Self::boss_idle(b);
@@ -352,24 +388,10 @@ impl Game {
             return;
         }
         match b.state {
-            BS::Idle if b.mega && b.drinks > 0 && b.hp < b.max_hp * if b.phase == 1 { 0.62 } else { 0.3 } && b.st_t > 0.4 => {
-                // der Ertrunkene trinkt aus deinen Flaschen
-                b.drinks -= 1;
-                b.hp = (b.hp + b.max_hp * 0.18).min(b.max_hp);
-                b.a.anim = "drink";
-                b.a.frame = 0.0;
-                b.st_t = -0.6;
-                if self.player.flasks > 0 {
-                    self.player.flasks -= 1;
-                }
-                self.fx.rise("heal", b.a.x, b.a.y, 24, 20.0, None);
-                self.sfx("drink");
-                self.ui.toast("Er trinkt aus deiner Flasche.");
-            }
             BS::Idle => {
                 let d = b.a.dist(px, py);
-                let want = if b.human { 60.0 } else if b.mega { 140.0 } else { 100.0 };
-                let sp = if b.human { 92.0 } else if b.mega { 140.0 } else { 80.0 } * if b.phase == 2 { 1.15 } else { 1.0 };
+                let want = if b.human { 60.0 } else if b.mega { 170.0 } else { 100.0 };
+                let sp = if b.human { 92.0 } else if b.mega { 110.0 } else { 80.0 } * if b.phase == 2 { 1.15 } else { 1.0 };
                 if d > want {
                     self.boss_move(b, (px - b.a.x) / d * sp * dt, (py - b.a.y) / d * sp * dt);
                     b.a.anim = "walk";
@@ -459,6 +481,20 @@ impl Game {
                 a.windup = 0.7 * w;
                 self.fx.mark(MarkKind::Cone, b.a.x, b.a.y, 240.0, ang, 0.6, a.windup, Some([0.85, 0.92, 1.0, 0.3]));
             }
+            AK::Spin => {
+                a.windup = 0.55 * w;
+                self.fx.mark(MarkKind::Circle, b.a.x, b.a.y, o.r + 10.0, 0.0, 0.0, a.windup, col);
+            }
+            AK::Lash => {
+                a.windup = 0.6 * w;
+                self.fx.mark(MarkKind::Line, b.a.x, b.a.y, o.len, ang, o.w, a.windup, col);
+            }
+            AK::Leap => {
+                a.windup = if b.human { 0.55 } else { 0.9 } * w;
+                a.tx = px;
+                a.ty = py;
+                self.fx.mark(MarkKind::Circle, px, py, o.r, 0.0, 0.0, a.windup + 0.6, col);
+            }
             AK::Spikes => {
                 a.windup = 0.6 * w;
                 for i in 0..o.n {
@@ -484,7 +520,7 @@ impl Game {
             return;
         };
         a.t += dt;
-        let cast = matches!(a.kind, AK::Volley | AK::Rain | AK::Nova | AK::Gust | AK::Spikes | AK::Cone);
+        let cast = matches!(a.kind, AK::Volley | AK::Rain | AK::Nova | AK::Gust | AK::Spikes | AK::Cone | AK::Lash);
         let me = Target::Boss(idx);
         match a.phase {
             AP::Windup => {
@@ -527,6 +563,66 @@ impl Game {
                         }
                         if a.t > 0.42 {
                             Self::boss_recover(b, &mut a, 0.9);
+                        }
+                    }
+                    AK::Spin => {
+                        // dreht sich mit allen vier Klingen auf den Spieler zu
+                        b.a.anim = "atk";
+                        b.a.frame = ((a.t * 12.0) as i32 % 4) as f32;
+                        let an = a.t * 11.0;
+                        b.a.fx = an.cos();
+                        b.a.fy = an.sin();
+                        let (dx, dy) = (px - b.a.x, py - b.a.y);
+                        let d = dx.hypot(dy).max(1.0);
+                        self.boss_move(b, dx / d * 150.0 * dt, dy / d * 150.0 * dt * 0.85);
+                        a.tick -= dt;
+                        if a.tick <= 0.0 {
+                            a.tick = 0.12;
+                            let ec = el_col(b.el);
+                            self.fx.slash(b.a.x, b.a.y - 40.0, a.t * 9.0, a.o.r, [ec[0], ec[1], ec[2], 1.0], 2.0);
+                            self.sfx("swing");
+                            if b.a.dist(px, py) < a.o.r + 10.0 && a.hits < 4 {
+                                a.hits += 1;
+                                self.hurt_player(Self::boss_dmg(b, 0.45), me, HurtOpt { push: (dx / d * 18.0, dy / d * 18.0), ..Default::default() });
+                            }
+                        }
+                        if a.t > a.o.len {
+                            Self::boss_recover(b, &mut a, 0.9);
+                        }
+                    }
+                    AK::Lash => {
+                        // die Tentakel schnellen vor (gezeichnet aus dem Angriffszustand), dann zurück
+                        if a.t > 0.45 {
+                            Self::boss_recover(b, &mut a, 0.7);
+                        }
+                    }
+                    AK::Leap => {
+                        // im Bogen zum Ziel, dort Aufschlag mit Ring
+                        let dur = if b.human { 0.55 } else { 0.8 };
+                        let k = (a.t / dur).min(1.0);
+                        let (sx, sy) = (a.spots.first().map(|s| s.0).unwrap_or(b.a.x), a.spots.first().map(|s| s.1).unwrap_or(b.a.y));
+                        if a.spots.is_empty() {
+                            a.spots.push((b.a.x, b.a.y, 0.0, true));
+                        }
+                        b.a.x = sx + (a.tx - sx) * k;
+                        b.a.y = sy + (a.ty - sy) * k;
+                        b.a.anim = if b.human { "roll" } else { "idle" };
+                        b.a.frame = k * 4.0;
+                        if k >= 1.0 {
+                            let ec = el_col(b.el);
+                            self.slam_hit(idx, b, a.tx, a.ty, a.o.r, ec);
+                            if !b.human {
+                                // Knochenkraken: Splitterring beim Auftauchen
+                                for i in 0..10 {
+                                    let an = i as f32 / 10.0 * std::f32::consts::TAU;
+                                    let mut sh = Shot::new(Owner::Enemy, "boneshard", a.tx + an.cos() * 40.0, a.ty + an.sin() * 30.0, 30.0, an.cos() * 240.0, an.sin() * 190.0, Self::boss_dmg(b, 0.45));
+                                    sh.r = 9.0;
+                                    sh.life = 1.6;
+                                    self.shots.push(sh);
+                                }
+                            }
+                            a.spots.clear();
+                            Self::boss_recover(b, &mut a, if b.human { 0.8 } else { 1.2 });
                         }
                     }
                     AK::Cone => {
@@ -647,7 +743,7 @@ impl Game {
                 for i in 0..a.o.n {
                     let an = ang + if a.o.n > 1 { (i as f32 / (a.o.n - 1) as f32 - 0.5) * a.o.spread * 2.0 } else { 0.0 };
                     let sp = if b.el == "wind" { 300.0 } else { 220.0 };
-                    let kind = shot_kind(b.el);
+                    let kind = if b.el == "bone" { "boneshard" } else { shot_kind(b.el) };
                     let mut s = Shot::new(Owner::Enemy, kind, b.a.x + an.cos() * 28.0, b.a.y + an.sin() * 20.0, if b.human { 36.0 } else { 48.0 }, an.cos() * sp, an.sin() * sp * 0.8, Self::boss_dmg(b, 0.6));
                     s.r = 8.0;
                     s.life = 2.2;
@@ -697,6 +793,26 @@ impl Game {
                 self.sfx("roll");
             }
             AK::Cone => self.sfx("roar"),
+            AK::Lash => {
+                // Treffer auf der Linie: Schaden und heranziehen
+                let (dx, dy) = (px - b.a.x, py - b.a.y);
+                let along = dx * a.ang.cos() + dy * a.ang.sin();
+                let across = (-dx * a.ang.sin() + dy * a.ang.cos()).abs();
+                self.sfx("tide");
+                if along > 0.0 && along < a.o.len && across < a.o.w + 12.0 {
+                    self.hurt_player(Self::boss_dmg(b, 0.9), me, HurtOpt { unparryable: true, ..Default::default() });
+                    for _ in 0..8 {
+                        let mut pa = self.player.a;
+                        self.move_actor(&mut pa, -a.ang.cos() * 12.0, -a.ang.sin() * 12.0);
+                        self.player.a = pa;
+                    }
+                    self.ui.toast("Der Bart packt dich!");
+                }
+            }
+            AK::Leap => {
+                self.sfx("heavy");
+                self.fx.burst("dust", b.a.x, b.a.y, 14, BurstOpt { speed: Some(120.0), ..Default::default() });
+            }
             _ => {}
         }
     }
@@ -709,6 +825,16 @@ impl Game {
             self.flash([0.8, 0.9, 1.0], 0.12);
             self.lightning = 0.5;
             self.sfx("zap");
+        } else if b.el == "sea" {
+            // Geysir aus dem Meeresgrund
+            self.fx.burst("splash", x, y, 30, BurstOpt { speed: Some(90.0), up: Some(420.0), ..Default::default() });
+            self.fx.burst("splash", x, y, 12, BurstOpt { speed: Some(200.0), up: Some(120.0), ..Default::default() });
+            self.sfx("tide");
+        } else if b.el == "bone" {
+            // Knochenarm bricht aus dem Grund
+            self.fx.burst("bone", x, y, 16, BurstOpt { speed: Some(160.0), up: Some(220.0), ..Default::default() });
+            self.fx.burst("dust", x, y, 10, BurstOpt { speed: Some(120.0), ..Default::default() });
+            self.sfx("crush");
         } else if b.el == "fire" {
             self.fx.burst("ember", x, y, 18, BurstOpt { speed: Some(180.0), ..Default::default() });
             self.sfx("cannon");
@@ -752,20 +878,30 @@ impl Game {
         self.fx.num(x, y - h, dmg as i32, if st == BS::Stagger { Some([1.0, 0.75, 0.3, 1.0]) } else { None });
         self.fx.burst(part(el), x, y - by, 6, BurstOpt { speed: Some(120.0), col: Some(kind_col(part(el))), ..Default::default() });
         self.sfx("hit");
+        if self.bosses[i].mega && self.bosses[i].phase == 1 && self.bosses[i].hp <= 0.0 {
+            // Malakor fällt – und steht als Skelettkraken wieder auf
+            let b = &mut self.bosses[i];
+            b.hp = 0.0;
+            b.phase = 2;
+            b.state = BS::Transform;
+            b.st_t = 0.0;
+            b.atk = None;
+            self.ui.banner("MALAKOR FÄLLT", "", "big", 2.0);
+            self.sfx("death");
+            self.shake(12.0);
+            return;
+        }
         if self.bosses[i].hp <= 0.0 {
             self.boss_die(i);
             return;
         }
         let b = &mut self.bosses[i];
-        if b.phase == 1 && b.hp <= b.max_hp * 0.5 {
+        if !b.mega && b.phase == 1 && b.hp <= b.max_hp * 0.5 {
             b.phase = 2;
             b.state = BS::Transform;
             b.st_t = 0.0;
             b.atk = None;
-            if b.mega {
-                b.human = true;
-            }
-            let t = if b.mega { "Die Spiegelung kippt".to_string() } else { format!("{} verwandelt sich …", b.name.split(',').next().unwrap_or("")) };
+            let t = format!("{} verwandelt sich …", b.name.split(',').next().unwrap_or(""));
             self.sfx("roar");
             self.shake(8.0);
             self.ui.banner(&t, "", "boss", 1.6);
@@ -795,7 +931,7 @@ impl Game {
         self.sfx("death");
         let pearls = if mega { MEGA_PEARLS } else { king(key).pearls } * (1.0 + 0.25 * self.save.ng as f32);
         if mega {
-            self.ui.banner("DIE KEHRSEITE IST STILL", "Du hast dich selbst wiedergefunden.", "big", 5.0);
+            self.ui.banner("DER ERTRUNKENE KÖNIG IST BESIEGT", "Am Grund erscheint ein Säbelfeuer", "big", 5.0);
         } else {
             let n = king(key).name.split(',').next().unwrap_or("").to_string();
             self.ui.banner("SEELE ERBEUTET", &n, "big", 5.0);
@@ -805,12 +941,9 @@ impl Game {
             self.save.megalodon = true;
             self.save.end_naval = true;
             self.end.state = crate::game::endboss::EP::Done;
-            if !self.save.lit_fires.iter().any(|f| f == "ende") {
-                self.save.lit_fires.push("ende".into());
-            }
-            self.save.last_fire = "ende".into();
-            self.light_fires();
-            self.timers.push((6.0, Timed::Ending));
+            // erst jetzt erscheint am Grund das Säbelfeuer (noch zu entzünden)
+            self.world.show_end_fire();
+            self.timers.push((6.0, Timed::Banner("Die Laternenmagd".into(), "In der Glutwacht wartet eine neue Fahrt".into())));
         } else {
             self.save.kings.insert(key.into(), true);
             self.save.figureheads.insert(key.into(), true);

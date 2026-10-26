@@ -107,6 +107,19 @@ fn main() {
             }
             save_lit(&bg, &format!("{out}/props.png"), 1);
         }
+        "dutchman" => {
+            let t = std::time::Instant::now();
+            let c = sw_art::ships::ship_frame("dutchman", std::env::var("K").ok().and_then(|v| v.parse().ok()).unwrap_or(4), Default::default());
+            eprintln!("Holländer: {:?} {:?}", t.elapsed(), c.bounds());
+            let pl = sw_art::ships::ship_frame("player", 4, Default::default());
+            let mut bg = Canvas::new(2000, 1400);
+            let water = sw_art::color::ramp_n(sw_art::color::hex(0x1E3A4A), 6, 1.0);
+            for y in 0..bg.h { for x in 0..bg.w { let i = bg.idx(x, y); bg.col[i] = water[2]; } }
+            bg.place(&c, 900, 1200, c.w / 2, c.h - 300);
+            eprintln!("{:?}", c.bounds());
+            bg.place(&pl, 1800, 1300, pl.w / 2, pl.h - 92);
+            save_lit(&bg, &format!("{out}/dutchman.png"), 1);
+        }
         "shipsize" => {
             for st in ["player", "fire", "ice", "wind", "earth"] {
                 let mut a = sw_art::atlas::Atlas::new();
@@ -146,6 +159,31 @@ fn main() {
                 bg.place(f, 200 + k as i32 * 70, 400, f.w / 2, f.h - 2);
             }
             save_lit(&bg, &format!("{out}/grave.png"), 2);
+        }
+        "kraken" => {
+            use sw_art::malakor::*;
+            let mut bg = Canvas::new(1500, 420);
+            let water = sw_art::color::ramp_n(sw_art::color::hex(0x2E3A3A), 6, 1.0);
+            for y in 0..bg.h { for x in 0..bg.w { let i = bg.idx(x, y); bg.col[i] = water[2]; } }
+            let a = red_mantle(); bg.place(&a, 170, 360, 150, 330);
+            let b0 = bone_mantle(false); bg.place(&b0, 480, 360, 150, 330);
+            let b1 = bone_mantle(true); bg.place(&b1, 790, 360, 150, 330);
+            let v = vertebra(); bg.place(&v, 1000, 100, 22, 20);
+            let t = tentacle_seg(0x8A1E16, 0x3A0A0A, 0xE8A08A); bg.place(&t, 1060, 100, 20, 20);
+            for k in 0..2 { let s = shark_skeleton(k); bg.place(&s.c, 1080 + k * 160 + 75 - 75, 250 + k * 80, s.ax, s.ay); }
+            save_lit(&bg, &format!("{out}/kraken.png"), 1);
+        }
+        "malakor" => {
+            use sw_art::chars::*;
+            let (l, sc) = preset("malakor");
+            let mut bg = bake_chunk(&Flat(Biome::Wind, Mat::Sand), &mut mats, &en, 0, 0, 1280).crop(0, 0, 1100, 420);
+            let mut x = 70;
+            for (d, anim, f) in [("down", "idle", 0), ("down", "idle", 2), ("down", "walk", 1), ("down", "atk", 2), ("side", "idle", 0), ("side", "atk", 3), ("up", "idle", 0), ("down", "cast", 2)] {
+                let fr = frame(&l, d, anim, f, sc);
+                bg.place(&fr, x, 200, fr.w / 2, fr.h - 4);
+                x += 130;
+            }
+            save_lit(&bg, &format!("{out}/malakor.png"), 2);
         }
         "chars" => {
             use sw_art::chars::*;
@@ -300,27 +338,6 @@ fn main() {
             for y in 0..bg.h { for x in 0..bg.w { let i = bg.idx(x, y); bg.col[i] = water[2]; } }
             bg.place(&c, 400, 640, c.w / 2, c.h - 150);
             save_lit(&bg, &format!("{out}/title.png"), 1);
-        }
-        "inversa" => {
-            let t = std::time::Instant::now();
-            let a = sw_art::inversa::frame(false);
-            let b = sw_art::inversa::frame(true);
-            let bell = sw_art::inversa::heart_bell();
-            let rib = sw_art::inversa::rib(0);
-            eprintln!("Kehrseite: {:?}", t.elapsed());
-            let mut bg = Canvas::new(1900, 900);
-            let water = sw_art::color::ramp_n(sw_art::color::hex(0x1E3A4A), 6, 1.0);
-            for y in 0..bg.h { for x in 0..bg.w { let i = bg.idx(x, y); bg.col[i] = water[2]; } }
-            let (_, h, foot) = sw_art::inversa::SIZE;
-            bg.place(&a, 460, 660, a.w / 2, h - foot);
-            bg.place(&b, 1380, 660, b.w / 2, h - foot);
-            for (x, y, _) in sw_art::inversa::lantern_screen() {
-                let i = bg.idx((460.0 + x) as i32, (660.0 + y) as i32);
-                bg.col[i] = [255, 0, 255, 255];
-            }
-            bg.place(&bell, 200, 880, bell.w / 2, bell.h - 10);
-            bg.place(&rib, 1700, 880, rib.w / 2, rib.h - 10);
-            save_lit(&bg, &format!("{out}/inversa.png"), 1);
         }
         "heads" => {
             use sw_art::buildings::*;

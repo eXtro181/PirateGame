@@ -119,6 +119,8 @@ pub struct Look {
     pub four_arms: bool,
     /// lodernde Flammen auf Schädel, Schultern und Rippen (Farbe)
     pub burning: Option<u32>,
+    /// Bart aus kleinen Krakenarmen, die sich je Bild anders winden (Farbe)
+    pub tentacle_beard: Option<u32>,
 }
 impl Default for Look {
     fn default() -> Self {
@@ -161,6 +163,7 @@ impl Default for Look {
             bell: false,
             skulls: None,
             four_arms: false,
+            tentacle_beard: None,
             burning: None,
         }
     }
@@ -1101,6 +1104,35 @@ fn paint_human(cv: &mut Canvas, dir: &str, p: &Pose, l: &Look, s: f32) {
                 }
             }
         }
+        // Tentakelbart: sechs kleine Krakenarme, je Bild anders gewunden, mit Saugnäpfen
+        if let Some(tc) = l.tentacle_beard {
+            if !up {
+                let tp = r(tc);
+                let n = if side { 4 } else { 6 };
+                for k in 0..n {
+                    let fk = k as f32;
+                    let x0 = if side { hx + (1.0 + fk * 1.5) * s } else { hx + (fk - (n - 1) as f32 / 2.0) * 1.9 * s };
+                    let y0 = hy + hr * 0.55;
+                    let ph = p.seed as f32 * 1.3 + fk * 1.7;
+                    let len = (11.0 + (k % 3) as f32 * 3.5) * s;
+                    let mut pts = vec![];
+                    for j in 0..6 {
+                        let t = j as f32 / 5.0;
+                        let wig = (ph + t * 3.2).sin() * 2.6 * s * t;
+                        let spread = if side { t * 3.0 * s } else { (x0 - hx) * t * 0.5 };
+                        pts.push((x0 + wig + spread, y0 + len * t));
+                    }
+                    cx.c.tube(&pts, 2.7 * s, 0.7 * s, &tp, 0.6, 9.5);
+                    for j in 1..5 {
+                        let (sx, sy) = pts[j];
+                        cx.c.put((sx + 0.6 * s) as i32, sy as i32, tp[5], 9.6);
+                    }
+                    // gekringelte Spitze
+                    let (ex, ey) = pts[5];
+                    cx.c.put(ex as i32 + if (ph as i32) % 2 == 0 { 1 } else { -1 }, ey as i32 - 1, tp[2], 9.6);
+                }
+            }
+        }
         // Kopfbedeckung
         let hat = l.hat;
         if hat == 1 || hat == 4 {
@@ -1285,7 +1317,7 @@ fn paint_human(cv: &mut Canvas, dir: &str, p: &Pose, l: &Look, s: f32) {
     }
     if l.four_arms {
         // zweites Armpaar unter den Schultern, jede Hand ein Säbel; dazu ein Säbel in der Linken
-        let bone = r(0xD8CFB8);
+        let bone = if l.skeleton { r(0xD8CFB8) } else { r(l.skin) };
         let w = l.weapon.unwrap_or("cutlass");
         let swing = (p.w_ang - 1.3) * 0.8;
         for sx in [-1.0f32, 1.0] {
@@ -1571,6 +1603,11 @@ pub fn preset(name: &str) -> (Look, f32) {
             s = 1.75;
             Look { skeleton: true, coat: 0x2A1210, rags: true, hat: 1, hat_col: 0x1A0A0A, weapon: Some("cutlass"), eye_col: 0xFFB04A, aura: Some(0xFF6A2A), cast_col: 0xFF8A3A, skulls: Some(0xFF7A2A), four_arms: true, burning: Some(0xFF9A3A), ..d() }
         }
+        // Endboss zu Fuß: Malakor, der Ertrunkene König – vier Schwerter, Tentakelbart, Korallenkrone
+        "malakor" => {
+            s = 1.9;
+            Look { skin: 0x5E7C70, hair_col: 0x1E3A36, hair: 2, coat: 0x12302A, pants: 0x16241F, shirt: 0x2A3A30, crown: Some(0xC8A85A), body: 1, sash: Some(0x6A1E22), weapon: Some("cutlass"), four_arms: true, tentacle_beard: Some(0x2E5A4A), drowned: true, eye_col: 0x6AFFB8, aura: Some(0x2E8A6A), cast_col: 0x6AFFB8, ..d() }
+        }
         "kingEarth" => {
             s = 1.5;
             Look { skin: 0x5C7454, hair_col: 0x1F4A4C, hair: 2, beard: 3, body: 1, coat: 0x34473A, robe: true, crown: Some(0x9ACF6A), weapon: Some("anchor"), drowned: true, eye_col: 0x9ACF6A, aura: Some(0x5C7454), cast_col: 0x9ACF6A, horns: true, ..d() }
@@ -1580,7 +1617,7 @@ pub fn preset(name: &str) -> (Look, f32) {
     (l, s)
 }
 
-pub const PRESET_NAMES: [&str; 39] = [
+pub const PRESET_NAMES: [&str; 40] = [
     "abyssPirate", "voodoo", "orcCaptain", "stormHarpy", "bellConstruct", "gorgonQueen", "clockStorm",
-    "skeleton", "skelBrute", "skelGunner", "drowned", "drownedIce", "ashSkeleton", "stormSailor", "lanternMaid", "smith", "merchant", "shipmaster", "carver", "crewFire", "crewIce", "crewWind", "crewEarth", "villagerA", "villagerB", "villagerC", "villagerD", "villagerE", "villagerF", "villagerG", "villagerH", "smithIlka", "furWendla", "mapOrrin", "witchMabel", "kingFire", "kingIce", "kingWind", "kingEarth",
+    "skeleton", "skelBrute", "skelGunner", "drowned", "drownedIce", "ashSkeleton", "stormSailor", "lanternMaid", "smith", "merchant", "shipmaster", "carver", "crewFire", "crewIce", "crewWind", "crewEarth", "villagerA", "villagerB", "villagerC", "villagerD", "villagerE", "villagerF", "villagerG", "villagerH", "smithIlka", "furWendla", "mapOrrin", "witchMabel", "kingFire", "kingIce", "kingWind", "kingEarth", "malakor",
 ];

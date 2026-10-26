@@ -230,9 +230,10 @@ pub const KINGS: [King; 4] = [
 pub fn king(k: &str) -> &'static King {
     KINGS.iter().find(|x| x.key == k).unwrap_or(&KINGS[0])
 }
-pub const MEGA_NAME: &str = "Der Ertrunkene";
-pub const MEGA_NAME2: &str = "Der Ertrunkene, die andere Seite";
+pub const MEGA_NAME: &str = "Malakor, der Ertrunkene König";
+pub const MEGA_NAME2: &str = "Malakors Gebein, der Knochenkraken";
 pub const MEGA_HP: f32 = 2400.0;
+pub const MEGA_HP2: f32 = 2800.0;
 pub const MEGA_DMG: f32 = 32.0;
 pub const MEGA_PEARLS: f32 = 20000.0;
 pub fn el_col(el: &str) -> [f32; 3] {

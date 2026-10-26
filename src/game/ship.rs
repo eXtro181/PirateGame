@@ -212,15 +212,12 @@ impl Game {
         }
         let st = self.input.stick;
         if st.length() > 0.5 {
-            // die Hände der Kehrseite halten das Spiegelbild: Steuer verkehrt
-            let inv = if self.end.invert_t > 0.0 { -1.0 } else { 1.0 };
-            let want = (st.x * inv).atan2(-st.y);
+            let want = st.x.atan2(-st.y);
             h.h = turn_to(h.h, want, 1.6 * dt * (1.0 + self.save.ship_speed as f32 * 0.04));
             self.ship.sail = self.ship.sail.max(2);
         } else {
             let ax = self.input.axis();
-            let inv = if self.end.invert_t > 0.0 { -1.0 } else { 1.0 };
-            h.h = wrap(h.h + ax.x * inv * dt * (0.7 + h.v / 120.0) * (1.0 + self.save.ship_speed as f32 * 0.04));
+            h.h = wrap(h.h + ax.x * dt * (0.7 + h.v / 120.0) * (1.0 + self.save.ship_speed as f32 * 0.04));
         }
         let target = self.ship.sail as f32 * 60.0 * if self.shanty_t > 0.0 { 1.35 } else { 1.0 } * (1.0 + self.save.ship_speed as f32 * 0.06);
         h.v += (target - h.v) * (dt * 0.8).min(1.0);
@@ -609,18 +606,13 @@ impl Game {
         }
     }
 
-    /// Acht dunkelgrüne Krakenarme rund um den offenen Strudel. Sie wiegen sich im Wasser und
-    /// greifen zu, wenn der Spieler vom Steg springt (oder das Schiff hineinfährt).
+    /// Acht dunkelgrüne Krakenarme rund um den offenen Strudel; sie wiegen sich im Wasser, das
+    /// Schiff fährt zwischen ihnen hindurch hinein.
     fn draw_whirl_arms(&self, art: &Art, f: &mut Frame) {
         let Some(seg) = art.map.get("k:seg") else { return };
         let (wx, wy) = self.world.whirlpool;
         let t = self.t;
-        // Ziel und Fortschritt des Zugriffs
-        let (grab, gx, gy, gz) = match self.cutscene {
-            Some(Cut::Grab { t: ct, moved: false }) => (ct, self.player.a.x, self.player.a.y, 26.0),
-            Some(Cut::Whirl { t: ct, moved: false }) => (ct + 0.6, self.ship.hull.x, self.ship.hull.y, 40.0),
-            _ => (-1.0, 0.0, 0.0, 0.0),
-        };
+        let (grab, gx, gy, gz) = (-1.0f32, 0.0f32, 0.0f32, 0.0f32);
         for i in 0..8 {
             let fi = i as f32;
             let a = fi / 8.0 * TAU + 0.2;

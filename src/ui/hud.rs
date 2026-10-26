@@ -387,9 +387,6 @@ impl Game {
                 self.draw_ship_hud(f, art);
             } else {
                 self.draw_hud(f, art);
-                if matches!(self.end.state, crate::game::endboss::EP::Maw | crate::game::endboss::EP::Spit) {
-                    self.draw_sea_boss_bar(f, art);
-                }
             }
         }
         if self.zone_t > 0.0 && self.ui.banners.is_empty() {
@@ -607,8 +604,8 @@ impl Game {
         let bar = if let Some(si) = self.sea_boss {
             let b = &self.sea_bosses[si];
             Some((b.name(), b.hp, b.max_hp))
-        } else if self.end.active() && self.end.state != crate::game::endboss::EP::Drowned {
-            Some((crate::game::endboss::END_NAME, self.end.frac() * 1000.0, 1000.0))
+        } else if let Some(b) = self.end.bar() {
+            Some(b)
         } else {
             None
         };
