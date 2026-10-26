@@ -393,6 +393,23 @@ impl WorldView {
                 q.prm[1] = cut;
                 frame.world_q(p.y, q);
             }
+            // Gehängte am Galgen und Käfige am Gibbet schwingen im Wind
+            if kind.starts_with("gallows") || kind.starts_with("gibbet") {
+                let n = def.frames.len();
+                let sx = if p.flip { -1.0 } else { 1.0 };
+                let spots: &[(f32, f32)] = if kind.starts_with("gallows") { &[(-38.0, -117.0), (0.0, -118.0), (38.0, -117.0)] } else { &[(42.0, -137.0)] };
+                for (k, &(ox, oy)) in spots.iter().enumerate() {
+                    let ph = t * (0.9 + k as f32 * 0.13) + pi as f32 * 1.7 + k as f32 * 2.1;
+                    let a = ph.sin() * 0.8 + (ph * 2.3).sin() * 0.2;
+                    let fi = (((a * 0.5 + 0.5) * (n - 1) as f32).round() as usize).min(n - 1);
+                    let fs = def.frames[fi];
+                    let top = p.y + oy;
+                    let fy = top - 3.0 + fs.h as f32 - 2.0;
+                    let fx = p.x + ox * sx;
+                    frame.shadow(fx + a * 6.0, p.y + 2.0, 9.0, 3.0, 0.25);
+                    frame.sprite_z(&fs, fx, fy, p.y + 1.0, SprOpt { flip: p.flip, ev: lvl + (p.y - fy), ..Default::default() });
+                }
+            } else
             // Flammen-Animation (Feuer/Fackeln)
             if !def.frames.is_empty() && (kind != "saberfire" || p.lit) {
                 let fi = ((t * 10.0) as usize + pi) % def.frames.len();

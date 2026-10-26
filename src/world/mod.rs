@@ -50,7 +50,7 @@ impl Zone {
     }
 }
 pub static ZONE_DEFS: [ZoneDef; 7] = [
-    ZoneDef { key: "kueste", name: "Strand der Ertränkten", biome: Biome::Coast, music: "salz", cx: 240, cy: 260, rx: 46, ry: 26, seed: 1, king: None, sealed: false },
+    ZoneDef { key: "kueste", name: "Galgenstrand", biome: Biome::Coast, music: "salz", cx: 240, cy: 260, rx: 46, ry: 26, seed: 1, king: None, sealed: false },
     ZoneDef { key: "hain", name: "Glutwacht", biome: Biome::Hub, music: "hain", cx: 240, cy: 172, rx: 36, ry: 33, seed: 2, king: None, sealed: false },
     ZoneDef { key: "asche", name: "Aschebucht", biome: Biome::Fire, music: "glut", cx: 348, cy: 160, rx: 42, ry: 30, seed: 3, king: Some("fire"), sealed: false },
     ZoneDef { key: "frost", name: "Frostgrotte", biome: Biome::Frost, music: "frost", cx: 136, cy: 118, rx: 44, ry: 32, seed: 4, king: Some("ice"), sealed: false },
@@ -61,7 +61,7 @@ pub static ZONE_DEFS: [ZoneDef; 7] = [
 
 pub fn fire_name(id: &str) -> &'static str {
     match id {
-        "kueste" => "Strand der Ertränkten",
+        "kueste" => "Galgenstrand · Sarg des Ertrunkenen",
         "hain" => "Glutwacht · Säbelfeuer",
         "asche" => "Aschebucht · Landung",
         "asche2" => "Vor dem Glutthron",
@@ -105,10 +105,11 @@ struct Flora {
 }
 fn flora(b: Biome) -> Flora {
     match b {
+        // Piratenfriedhof: tote Bäume, krumme Sumpfbäume, dürres Gras, Knochen
         Biome::Coast => Flora {
-            grove: &[("palm", 3), ("tealPalm", 2), ("blossomTree0", 2), ("blueTree0", 1), ("greenTree0", 2), ("tealTree0", 1)],
-            bush: &["bushGreen", "bushTeal", "bushBlue", "bushPink", "fern", "banana"],
-            deco: &["flowersW", "flowersY", "tuft", "tuft", "shell", "pebbles", "tallgrass", "mushroomR"],
+            grove: &[("deadTree", 1)],
+            bush: &["bushSwamp", "reedClump", "bushSwamp"],
+            deco: &["tuftDark", "tuftDark", "bones", "skull", "pebbles", "shell", "tallgrass", "bones"],
         },
         Biome::Hub => Flora {
             grove: &[("deadTree", 4), ("emberTree0", 2)],
@@ -335,6 +336,8 @@ pub struct World {
     pub en: EdgeNoise,
     /// ebene Flächen (Siedlungen): Kachel-Mitte und Halbachsen
     pub flat_areas: Vec<(i32, i32, i32, i32)>,
+    /// Sarg, aus dem der Ertrunkene beim allerersten Start steigt
+    pub wake_coffin: (f32, f32),
     cur: Zone,
     nz: Noise,
     info: Box<dyn Fn(&str) -> Option<PropInfo> + Send + Sync>,
@@ -393,6 +396,7 @@ impl World {
             hb: vec![0.5; n],
             en: EdgeNoise::new(),
             flat_areas: vec![],
+            wake_coffin: (0.0, 0.0),
             cur: Zone::Kueste,
             nz: Noise::new(4242),
             info,
@@ -601,7 +605,7 @@ impl World {
                         Biome::Earth => Mat::Mud,
                         _ => Mat::Sand,
                     });
-                } else if matches!(b, Biome::Coast | Biome::Hub | Biome::Wind) && self.nz.fbm(tx as f32 * 0.12 + 40.0, ty as f32 * 0.12, 2) > 0.28 {
+                } else if matches!(b, Biome::Hub | Biome::Wind) && self.nz.fbm(tx as f32 * 0.12 + 40.0, ty as f32 * 0.12, 2) > 0.28 {
                     self.set(tx, ty, Mat::Meadow);
                 } else if b == Biome::Fire && self.nz.fbm(tx as f32 * 0.1 + 7.0, ty as f32 * 0.1, 2) > 0.15 {
                     self.set(tx, ty, Mat::Ash);
@@ -1040,6 +1044,14 @@ impl World {
                     if !inb(x, y) || self.zone[idx(x, y)] != zone {
                         continue;
                     }
+                    // nicht an Feuern, Figuren oder Anlegern
+                    let (px, py) = ((x * TS) as f32, (y * TS) as f32);
+                    if self.fires.iter().any(|f| (f.x - px).hypot(f.y - py) < 320.0)
+                        || self.npcs.iter().any(|n| (n.x - px).hypot(n.y - py) < 200.0)
+                        || self.docks.iter().any(|d| (d.px - px).hypot(d.py - py) < 260.0)
+                    {
+                        continue;
+                    }
                     let ok = (0..wf.w).all(|k| {
                         let (a, b) = (x + k, y);
                         if !inb(a, b + 1) || !inb(a, b - 6) {
@@ -1259,6 +1271,8 @@ impl World {
         self.prop_tn(extra, ix0 + 3, iy0 + 8);
     }
 
+    /// Startinsel: Piratenfriedhof. Galgenallee, Gräberfeld, Käfige an der Küste, ein Massengrab
+    /// beim Wrack und der Sarg, aus dem der Ertrunkene beim ersten Start steigt. Keine Siedlung.
     fn layout_coast(&mut self, rng: &mut Rng) {
         let d = self.cur.def();
         let (cx, cy) = (d.cx, d.cy);
@@ -1266,32 +1280,109 @@ impl World {
         self.plateau(cx - 36, cy - 22, 8, 6, 2);
         self.plateau(cx + 18, cy - 24, 22, 12, 1);
         self.plateau(cx + 26, cy - 24, 10, 6, 2);
-        self.plateau(cx - 6, cy + 8, 12, 7, 1);
-        self.plaza(cx - 10, cy + 4, 5, 3, Mat::Sand, Some(0));
+        self.plaza(cx - 10, cy + 4, 5, 3, Mat::Dirt, Some(0));
         self.fire("kueste", cx - 10, cy + 3);
         self.road(&[(cx - 10, cy + 4), (cx - 2, cy), (cx + 12, cy - 4), (cx + 26, cy - 2), (cx + 34, cy + 4)], Mat::Dirt, 1);
         self.road(&[(cx - 2, cy), (cx, cy - 12), (cx, cy - 22)], Mat::Dirt, 1);
         self.road(&[(cx + 26, cy - 2), (cx + 28, cy - 14), (cx + 30, cy - 18)], Mat::Dirt, 1);
         self.road(&[(cx - 10, cy + 4), (cx - 26, cy + 2), (cx - 32, cy - 6), (cx - 32, cy - 14)], Mat::Dirt, 1);
+        self.road(&[(cx - 4, cy + 2), (cx + 4, cy + 8), (cx + 22, cy + 9)], Mat::Dirt, 1);
         self.dock(Zone::Kueste, cx, cy - 22, 0, -1);
-        self.waterfall(cx - 34, cy - 12, 3);
-        self.pond(cx - 32, cy - 7, 4, 2, Some(Mat::Sand), 0.25);
-        self.prop_tf("wreck", cx - 26, cy + 14, true);
-        for i in 0..6 {
-            self.prop_t(if i % 2 == 0 { "grave0" } else { "grave1" }, cx + 8 + i * 2, cy + 8 + (i % 2));
+        // ebene Flächen: Gräberfeld, Massengrab, Galgenallee
+        self.flat_areas.push((cx + 13, cy + 9, 12, 6));
+        self.flat_areas.push((cx - 24, cy + 12, 8, 5));
+        self.flat_areas.push((cx + 12, cy - 3, 14, 4));
+        // der Sarg des Ertrunkenen neben dem Feuer
+        self.prop_t("coffinEmpty", cx - 13, cy + 5);
+        self.wake_coffin = tpos(cx - 13, cy + 5);
+        self.flat_areas.push((cx - 13, cy + 5, 3, 3));
+        let ok = |w: &World, tx: i32, ty: i32| inb(tx, ty) && !matches!(w.ground[idx(tx, ty)], Mat::Water | Mat::Abyss | Mat::Plank) && !w.path[idx(tx, ty)];
+        // Galgenallee entlang des Weges nach Nordosten und zum Anleger
+        let mut gk = 0;
+        for &(tx, ty, flip) in &[
+            (cx + 1, cy + 3, false), (cx + 6, cy - 6, true), (cx + 12, cy - 1, false), (cx + 17, cy - 8, true), (cx + 22, cy + 1, false),
+            (cx + 30, cy - 7, true), (cx + 3, cy - 11, false), (cx - 4, cy - 16, true), (cx + 36, cy, false), (cx - 6, cy - 6, false),
+        ] {
+            if ok(self, tx, ty) {
+                self.prop_tf(&format!("gallows{}", gk % 4), tx, ty, flip);
+                gk += 1;
+            }
         }
-        self.prop_t("skullpile", cx + 18, cy + 5);
+        // Käfige an Klippen und Strand
+        for (k, &(tx, ty)) in [(cx - 20, cy - 4), (cx + 40, cy - 10), (cx - 38, cy + 4), (cx + 14, cy + 18), (cx - 8, cy + 16), (cx + 32, cy + 12)].iter().enumerate() {
+            if ok(self, tx, ty) {
+                self.prop_tf(&format!("gibbet{}", k % 2), tx, ty, k % 2 == 1);
+            }
+        }
+        // Gräberfeld östlich des Feuers: Reihen aus Kreuzen, Steinen, Särgen und Toten
+        let mut n = 0;
+        for row in 0..4 {
+            for col in 0..8 {
+                let (tx, ty) = (cx + 4 + col * 3 + row % 2, cy + 4 + row * 3);
+                if !ok(self, tx, ty) {
+                    continue;
+                }
+                let pick = (row * 8 + col * 5 + rng.int(0, 6)) % 9;
+                let kind = match pick {
+                    0 | 1 => format!("grave{}", (col + row) % 2),
+                    2 | 3 => format!("buried{}", (col + row * 2) % 3),
+                    4 => format!("coffinBones{}", col % 2),
+                    5 => format!("coffin{}", row % 2),
+                    6 => format!("sitDead{}", col % 2),
+                    7 => format!("graveOpen{}", row % 2),
+                    _ => format!("coffinLid{}", col % 2),
+                };
+                let flip = rng.chance(0.5);
+                let (x, y) = tpos(tx, ty);
+                self.prop_x(&kind, x + rng.int(-5, 5) as f32, y + rng.int(-3, 3) as f32, |p| p.flip = flip);
+                n += 1;
+            }
+        }
+        let _ = n;
+        // Massengrab beim Wrack: halb begrabene Tote, offene Gräber, Schädelhaufen
+        self.prop_tf("wreck", cx - 26, cy + 14, true);
+        for k in 0..16 {
+            let a = k as f32 * 2.399;
+            let r = 2.0 + (k as f32).sqrt() * 1.6;
+            let (tx, ty) = (cx - 24 + (a.cos() * r * 1.4) as i32, cy + 11 + (a.sin() * r * 0.8) as i32);
+            if ok(self, tx, ty) {
+                let kind = if k % 5 == 4 { format!("graveOpen{}", k % 2) } else if k % 7 == 3 { "skullpile".to_string() } else { format!("buried{}", k % 3) };
+                self.prop_tf(&kind, tx, ty, k % 2 == 0);
+            }
+        }
+        // verstreute Tote und Gräber über die Insel
+        let mut placed = 0;
+        for _ in 0..200 {
+            if placed >= 26 {
+                break;
+            }
+            let (tx, ty) = (cx + rng.int(-40, 40), cy + rng.int(-20, 20));
+            if !ok(self, tx, ty) || self.zone[idx(tx, ty)] != Some(Zone::Kueste) || !self.free_t(tx, ty, 1) {
+                continue;
+            }
+            let kind = match rng.int(0, 6) {
+                0 => format!("buried{}", rng.int(0, 2)),
+                1 => format!("grave{}", rng.int(0, 1)),
+                2 => format!("coffinBones{}", rng.int(0, 1)),
+                3 => format!("sitDead{}", rng.int(0, 1)),
+                4 => "skullpile".to_string(),
+                5 => format!("buried{}", rng.int(0, 2)),
+                _ => format!("coffin{}", rng.int(0, 1)),
+            };
+            let flip = rng.chance(0.5);
+            let (x, y) = tpos(tx, ty);
+            self.prop_x(&kind, x, y, |p| p.flip = flip);
+            placed += 1;
+        }
         self.prop_t("torch", cx - 7, cy + 2);
         self.prop_t("torch", cx - 13, cy + 2);
-        self.prop_t("anchorDeco", cx - 18, cy + 9);
-        self.prop_tn("nets", cx - 6, cy + 14);
-        self.prop_t("barrels", cx + 2, cy + 12);
-        self.prop_t("crates", cx - 22, cy + 6);
-        self.prop_t("tent", cx - 18, cy - 2);
-        self.prop_t("logPile", cx - 14, cy - 3);
+        self.prop_t("torch", cx + 3, cy + 6);
+        self.prop_t("torch", cx + 25, cy + 7);
         self.prop_t("signpost", cx - 4, cy + 2);
-        for (x, y) in [(-30, 6), (24, 8), (38, -6), (-38, -2), (10, -14), (-14, -14)] {
-            self.grove(cx + x, cy + y, 5.0, rng, 5, None);
+        self.prop_t("anchorDeco", cx - 18, cy + 9);
+        self.prop_t("logPile", cx - 14, cy - 3);
+        for (x, y) in [(-30, 6), (24, 8), (38, -6), (-38, -2), (10, -14), (-14, -14), (30, 16), (-20, 18)] {
+            self.grove(cx + x, cy + y, 4.0, rng, 3, None);
         }
         self.spawn("skeleton", cx + 8, cy - 2, false);
         self.spawn("crab", cx - 18, cy + 10, false);
@@ -1308,7 +1399,6 @@ impl World {
         self.item("bullets", cx + 12, cy + 4);
         self.item("pearls", cx + 28, cy - 20);
         self.npc("herald", cx - 6, cy + 6, "carver", "Alter Galionsschnitzer", "herald", true, None);
-        self.settlement("kueste", 0, cx - 26, cy + 5, Mat::Cobble, "fisherJorn", ["villagerA", "villagerF", "villagerE", "villagerB"], &["nets", "anchorDeco", "barrels", "logPile"]);
     }
     /// Glutwacht nach dem Vorbild eines Feuerband-Schreins: kompakter Ring aus Mauern um einen
     /// See in der Mitte. Im See ein eigener Steg zum Strudel, am Inselrand der Anleger fürs Schiff.
@@ -1902,7 +1992,7 @@ impl World {
             .collect();
         for pi in 0..self.props.len() {
             let p = &self.props[pi];
-            if p.sea || p.hidden || p.interact.is_some() {
+            if p.sea || p.hidden || p.interact.is_some() || p.kind == "coffinEmpty" {
                 continue;
             }
             let (tx, ty) = ((p.x / TS as f32) as i32, (p.y / TS as f32) as i32);
@@ -2497,7 +2587,7 @@ impl World {
                     let flip = rng.chance(0.5);
                     let jx = rng.int(-6, 6) as f32;
                     self.prop_x(kind, x + jx, y, |p| p.flip = flip);
-                } else if rng.chance(0.014) && self.free_t(tx, ty, 0) {
+                } else if d.biome != Biome::Coast && rng.chance(0.014) && self.free_t(tx, ty, 0) {
                     let kind = *rng.pick(&["rock0", "rock1"]);
                     let flip = rng.chance(0.5);
                     self.prop_x(kind, x, y, |p| p.flip = flip);

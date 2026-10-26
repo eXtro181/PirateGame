@@ -14,6 +14,7 @@ pub mod rig;
 pub mod beasts;
 pub mod ships;
 pub mod inversa;
+pub mod grave;
 pub mod structures;
 pub mod font;
 pub mod ui;

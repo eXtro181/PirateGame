@@ -349,7 +349,7 @@ fn add_prop(a: &mut Atlas, props: &mut HashMap<String, PropDef>, pa: PropArt) {
         .enumerate()
         .map(|(i, f)| {
             let ay = f.h - 2;
-            a.add(&format!("p:{}:f{}", pa.name, i), f, f.w / 2, ay)
+            a.add_trim(&format!("p:{}:f{}", pa.name, i), f, f.w / 2, ay)
         })
         .collect();
     let big = if pa.boxc.0 > 0.0 && pa.c.h > 120 { Some((pa.c.w as f32, pa.c.h as f32 * 0.8)) } else { None };
@@ -458,8 +458,8 @@ fn beast_sheet(a: &mut Atlas, key: &str) -> CharSheet {
 /// Höhe des reservierten Streifens für den Spieler-Bogen (volle Seitenbreite).
 const PLAYER_STRIP: i32 = 208;
 /// Höhe des Bereichs für das eigene Schiff (9 Kurse) und für den aktiven Seeboss.
-const SHIP_STRIP: i32 = 1180;
-const BOSS_STRIP: i32 = 2040;
+const SHIP_STRIP: i32 = 260;
+const BOSS_STRIP: i32 = 1560;
 
 /// Spieler-Bilderbogen in einem reservierten Streifen der ersten Atlasseite
 /// (wird bei Änderungen des Aussehens neu gebaut und nur dieser Ausschnitt hochgeladen).
@@ -647,6 +647,31 @@ pub fn build(frame: &mut Frame) -> Art {
     }
     for el in ["fire", "ice", "wind", "earth"] {
         add_prop(&mut a, &mut props, bd::figurehead(el));
+    }
+    // Piratenfriedhof der Startinsel
+    {
+        use sw_art::grave as gv;
+        let mut list: Vec<PropArt> = vec![];
+        for i in 0..4 {
+            list.push(gv::gallows(i));
+        }
+        for i in 0..2 {
+            list.push(gv::gibbet(i));
+            list.push(gv::coffin(0, i));
+            list.push(gv::coffin(2, i));
+            list.push(gv::coffin(3, i));
+            list.push(gv::open_grave(i));
+            list.push(gv::sitting_dead(i));
+        }
+        list.push(gv::coffin(1, 0));
+        for i in 0..3 {
+            list.push(gv::buried(i));
+        }
+        for pa in list {
+            add_prop(&mut a, &mut props, pa);
+        }
+        let lid = gv::coffin_lid(0);
+        a.add_trim("x:lid", &lid, 20, 56);
     }
     // ---------------------------------------------------------------- Glutwacht und See (Rig)
     {

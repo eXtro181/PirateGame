@@ -388,6 +388,9 @@ pub struct Save {
     pub mounted: HashMap<String, bool>,
     #[serde(default)]
     pub megalodon: bool,
+    /// das Erwachen im Sarg ist gesehen
+    #[serde(default)]
+    pub woke: bool,
     /// Schiffsausbauten beim Schiffsmeister (0..=10)
     #[serde(default)]
     pub ship_speed: i32,
@@ -516,6 +519,7 @@ pub fn new_save(name: &str, look: LookIdx, origin: &str, gift: &str, now: f64) -
         figureheads: HashMap::new(),
         mounted: HashMap::new(),
         megalodon: false,
+        woke: false,
         ship_speed: 0,
         ship_def: 0,
         ship_atk: 0,

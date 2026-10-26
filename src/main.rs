@@ -186,6 +186,8 @@ fn setup(world: &mut bevy::ecs::world::World) {
                 s.last_fire = fire.clone();
                 s.lit_fires = vec![fire];
             }
+            // Testläufe ohne das Erwachen im Sarg (mit &intro zum Ansehen)
+            s.woke = !app.params.contains_key("intro");
             if app.params.contains_key("open") {
                 // alles erfüllt: Throne voll, Bossschiffe im See, Strudel offen
                 for k in ["fire", "ice", "wind", "earth"] {
@@ -209,6 +211,12 @@ fn setup(world: &mut bevy::ecs::world::World) {
                 s.pearls = 50000;
             }
             start_game(&mut app, None, s, &mut art, &mut f);
+            if let Some(t) = app.params.get("wake").and_then(|v| v.parse::<f32>().ok()) {
+                // Testlauf: das Erwachen ab Sekunde t ansehen
+                if let Scene::Play(g) = &mut app.scene {
+                    g.cutscene = Some(game::Cut::Wake { t });
+                }
+            }
             if let Some(k) = app.params.get("boss").cloned() {
                 if let Scene::Play(g) = &mut app.scene {
                     g.debug_boss(&k, app.params.contains_key("phase2"));

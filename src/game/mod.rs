@@ -94,7 +94,18 @@ pub enum Cut {
     Grab { t: f32, moved: bool },
     /// durch eine Ladentür gehen (abblenden, versetzen, aufblenden)
     Door { t: f32, door: usize, enter: bool, moved: bool },
+    /// allererster Start: der Ertrunkene schiebt den Sargdeckel weg und steigt heraus
+    Wake { t: f32 },
 }
+
+/// Zeitplan des Erwachens (s): Dunkel mit Klopfen, Aufblenden, Deckel ruckelt, rutscht weg,
+/// der Ertrunkene richtet sich auf, steigt heraus.
+pub const WAKE_FADE: f32 = 2.2;
+pub const WAKE_JOLT: f32 = 3.2;
+pub const WAKE_SLIDE: f32 = 4.6;
+pub const WAKE_RISE: f32 = 5.6;
+pub const WAKE_HOP: f32 = 7.0;
+pub const WAKE_END: f32 = 7.8;
 
 pub struct Options {
     pub dark: bool,
@@ -340,7 +351,15 @@ impl Game {
         g.light_fires();
         g.refresh_player(true, art, frame);
         g.hp_ghost = g.player.hp;
-        if g.save.play_time < 1.0 {
+        if !g.save.woke && lf == "kueste" && g.save.play_time < 1.0 {
+            // allererster Start: im Sarg erwachen
+            let (x, y) = g.world.wake_coffin;
+            g.player.a.x = x;
+            g.player.a.y = y + 20.0;
+            g.player.hidden = true;
+            g.ui.fade = 1.0;
+            g.cutscene = Some(Cut::Wake { t: 0.0 });
+        } else if g.save.play_time < 1.0 {
             let z = g.world.fires.iter().find(|f| f.id == lf).map(|f| f.zone).unwrap_or(Zone::Kueste);
             g.zone_key = z;
             g.timers.push((0.6, Timed::Banner(z.def().name.to_string(), "Die See hat dich zurückgegeben.".into())));
@@ -779,6 +798,49 @@ impl Game {
                 } else {
                     self.ui.fade = (self.ui.fade - dt * 3.0).max(0.0);
                     self.cutscene = if self.ui.fade <= 0.0 { None } else { Some(Cut::Door { t, door, enter, moved }) };
+                }
+            }
+            Cut::Wake { t } => {
+                let t0 = t;
+                let t = t + dt;
+                let (x, y) = self.world.wake_coffin;
+                let crossed = |m: f32| t0 < m && t >= m;
+                // Klopfen von innen, erst im Dunkeln, dann sichtbar am Deckel
+                for k in [0.5, 1.1, 1.5, 2.6, 3.4, 3.9, 4.3] {
+                    if crossed(k) {
+                        self.sfx("thud");
+                        self.shake(if k > 2.0 { 4.0 } else { 2.0 });
+                        if k > 2.0 {
+                            self.fx.burst("dust", x + rr(-10.0, 10.0), y - 30.0, 6, BurstOpt { speed: Some(40.0), up: Some(30.0), ..Default::default() });
+                        }
+                    }
+                }
+                if t < WAKE_FADE {
+                    self.ui.fade = 1.0;
+                } else {
+                    self.ui.fade = (1.0 - (t - WAKE_FADE) / 0.9).max(0.0);
+                }
+                if crossed(WAKE_SLIDE) {
+                    self.sfx("chain");
+                }
+                if crossed(WAKE_RISE) {
+                    self.sfx("crash");
+                    self.shake(6.0);
+                    self.fx.burst("dust", x + 30.0, y + 6.0, 18, BurstOpt { speed: Some(70.0), up: Some(40.0), ..Default::default() });
+                }
+                if crossed(WAKE_HOP + 0.7) {
+                    self.fx.burst("dust", x, y + 22.0, 10, BurstOpt { speed: Some(50.0), up: Some(30.0), ..Default::default() });
+                }
+                if t >= WAKE_END {
+                    self.cutscene = None;
+                    self.player.hidden = false;
+                    self.player.a.x = x;
+                    self.player.a.y = y + 22.0;
+                    self.save.woke = true;
+                    self.ui.banner(Zone::Kueste.def().name, "Die See hat dich zurückgegeben.", "big", 3.5);
+                    self.persist(true);
+                } else {
+                    self.cutscene = Some(Cut::Wake { t });
                 }
             }
             Cut::Grab { t, moved } => {

@@ -67,6 +67,7 @@ impl Game {
         let vis = |x: f32, y: f32, m: f32| x > vx - m && x < vx + vw + m && y > vy - m && y < vy + vh + m * 2.0;
 
         self.fx.draw_under(f);
+        self.draw_wake(art, f);
         // Spieler
         let p = &self.player;
         if !p.hidden {
@@ -308,6 +309,63 @@ impl Game {
         let lk = self.env_cur.light_k * 1.5;
         for l in f.lights.iter_mut() {
             l.col = [l.col[0] * lk, l.col[1] * lk, l.col[2] * lk];
+        }
+    }
+
+    /// Sarg des Erwachens: Deckel (auf dem Sarg, ruckelnd, rutschend, daneben liegend) und der
+    /// Ertrunkene, der sich aufrichtet und herausspringt.
+    fn draw_wake(&self, art: &Art, f: &mut Frame) {
+        let (x, y) = self.world.wake_coffin;
+        if x == 0.0 || self.zone_key != Zone::Kueste {
+            return;
+        }
+        let Some(lid) = art.map.get("x:lid") else { return };
+        let t = match self.cutscene {
+            Some(Cut::Wake { t }) => t,
+            _ => 99.0,
+        };
+        let rest = (x + 30.0, y + 8.0);
+        let on = (x, y - 5.0);
+        let (lx, ly, rot, z) = if t < WAKE_JOLT {
+            (on.0, on.1, 0.0, 10.0)
+        } else if t < WAKE_SLIDE {
+            // drei Stöße von innen
+            let k = ((t - WAKE_JOLT) * 3.0).fract();
+            let bump = if k < 0.25 { (k / 0.25 * std::f32::consts::PI).sin() * 3.0 } else { 0.0 };
+            (on.0 + bump * 0.4, on.1 - bump, bump * 0.02, 10.0 + bump)
+        } else if t < WAKE_RISE {
+            // zur Seite geschoben, kippt hinunter
+            let k = ((t - WAKE_SLIDE) / (WAKE_RISE - WAKE_SLIDE)).clamp(0.0, 1.0);
+            let e = k * k * (3.0 - 2.0 * k);
+            (on.0 + (rest.0 - on.0) * e, on.1 + (rest.1 - on.1) * e - (k * std::f32::consts::PI).sin() * 6.0, e * 0.35, 10.0 * (1.0 - e))
+        } else {
+            (rest.0, rest.1, 0.35, 0.0)
+        };
+        f.sprite_z(lid, lx, ly, y + 2.0, SprOpt { rot, ev: z, ..Default::default() });
+        if t >= WAKE_RISE && t < WAKE_END {
+            let sh = &art.player;
+            let (rim, cy) = (y - 10.0, y - 30.0);
+            if t < WAKE_HOP {
+                // richtet sich im Sarg auf
+                let k = ((t - WAKE_RISE) / (WAKE_HOP - WAKE_RISE)).clamp(0.0, 1.0);
+                let s = sh.get(0, anim_index("idle"), (t * 4.0) as usize);
+                let cut = 0.9 - k * 0.55;
+                let hv = s.h as f32 * (1.0 - cut);
+                let yd = rim + s.ay as f32 - hv;
+                f.sprite_z(&s, x, yd, y + 3.0, SprOpt { cut_bottom: cut, ev: 8.0, ..Default::default() });
+            } else {
+                // springt nach vorn heraus
+                let k = ((t - WAKE_HOP) / (WAKE_END - WAKE_HOP)).clamp(0.0, 1.0);
+                let s = sh.get(0, anim_index("walk"), (k * 6.0) as usize);
+                let (px, py) = (x, cy + (y + 22.0 - cy) * k);
+                let zz = (k * std::f32::consts::PI).sin() * 26.0 + (1.0 - k) * 10.0;
+                f.shadow(px, py, 10.0, 3.5, 0.3 * k);
+                f.sprite_z(&s, px, py - zz, py + 1.0, SprOpt { ev: zz, ..Default::default() });
+            }
+        }
+        if t < WAKE_END {
+            // fahles Licht über dem Sarg
+            f.light(LightDef { x, y: y - 20.0, z: 60.0, r: 160.0, col: [0.45, 0.6, 0.65], flicker: 0.05 });
         }
     }
 }

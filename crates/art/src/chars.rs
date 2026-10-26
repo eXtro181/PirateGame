@@ -1580,7 +1580,7 @@ pub fn preset(name: &str) -> (Look, f32) {
     (l, s)
 }
 
-pub const PRESET_NAMES: [&str; 42] = [
+pub const PRESET_NAMES: [&str; 39] = [
     "abyssPirate", "voodoo", "orcCaptain", "stormHarpy", "bellConstruct", "gorgonQueen", "clockStorm",
-    "skeleton", "skelBrute", "skelGunner", "drowned", "drownedIce", "ashSkeleton", "stormSailor", "lanternMaid", "smith", "merchant", "shipmaster", "carver", "crewFire", "crewIce", "crewWind", "crewEarth", "villagerA", "villagerB", "villagerC", "villagerD", "villagerE", "villagerF", "villagerG", "villagerH", "fisherJorn", "smithIlka", "furWendla", "mapOrrin", "witchMabel", "kingFire", "kingIce", "kingWind", "kingEarth", "ghostCaptain", "burningCaptain",
+    "skeleton", "skelBrute", "skelGunner", "drowned", "drownedIce", "ashSkeleton", "stormSailor", "lanternMaid", "smith", "merchant", "shipmaster", "carver", "crewFire", "crewIce", "crewWind", "crewEarth", "villagerA", "villagerB", "villagerC", "villagerD", "villagerE", "villagerF", "villagerG", "villagerH", "smithIlka", "furWendla", "mapOrrin", "witchMabel", "kingFire", "kingIce", "kingWind", "kingEarth",
 ];

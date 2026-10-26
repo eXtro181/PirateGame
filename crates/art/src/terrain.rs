@@ -148,15 +148,16 @@ pub struct BiomePal {
 
 pub fn biome_pal(b: Biome) -> BiomePal {
     match b {
+        // Galgenstrand: dürres, fahles Gras, schlammige Wege, grauer Sand, kalter Stein
         Biome::Coast => BiomePal {
-            grass: pal(&[0x163E2A, 0x22603A, 0x3A8A42, 0x5CAE4E, 0x86CC62, 0xB4E27E]),
-            flowers: pal(&[0xF6F2E4, 0xF4D45C, 0xEE94B4]),
-            path: pal(&[0x6A5034, 0x8A6C46, 0xAA8A5C, 0xC4A674, 0xD8C090, 0xEAD6AA]),
-            sand: pal(&[0x8A7656, 0xAE9870, 0xCCB78A, 0xDECBA0, 0xEEE0BA, 0xF8F0D4]),
-            stone: pal(&[0x3E4048, 0x5A5C64, 0x7E7E82, 0xA09C98, 0xC0BAAE, 0xDCD6C6]),
-            cliff: pal(&[0x262C34, 0x3A424C, 0x525C66, 0x6C7880, 0x8A969C, 0xAEB8BC]),
-            moss: pal(&[0x1A3A22, 0x285430, 0x3A7040, 0x528C4C]),
-            vine: hex(0x2E6E3A),
+            grass: pal(&[0x1C2016, 0x2A301E, 0x3A4228, 0x4C5432, 0x5E663C, 0x747A4A]),
+            flowers: pal(&[0x8A8676, 0x6A5A4A, 0x7A3434]),
+            path: pal(&[0x221C16, 0x30281E, 0x403528, 0x524434, 0x645442, 0x786852]),
+            sand: pal(&[0x3E3A34, 0x504B42, 0x635D52, 0x767064, 0x8A8476, 0x9E988A]),
+            stone: pal(&[0x26282C, 0x36383E, 0x4A4C52, 0x5E6066, 0x76787C, 0x8E9094]),
+            cliff: pal(&[0x16181C, 0x22252A, 0x30343A, 0x40454C, 0x525860, 0x686E76]),
+            moss: pal(&[0x161C12, 0x202A1A, 0x2C3822, 0x3A462A]),
+            vine: hex(0x26301E),
             crack_glow: None,
         },
         // Glutwacht: verbrannte Wiese, Asche, dunkler Basalt mit Glut in den Fugen

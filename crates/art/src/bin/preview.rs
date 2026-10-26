@@ -107,6 +107,46 @@ fn main() {
             }
             save_lit(&bg, &format!("{out}/props.png"), 1);
         }
+        "shipsize" => {
+            for st in ["player", "fire", "ice", "wind", "earth"] {
+                let mut a = sw_art::atlas::Atlas::new();
+                a.lim = 2040;
+                for k in 0..=8 {
+                    if st != "player" && k % 2 == 1 { continue; }
+                    let c = sw_art::ships::ship_frame(st, k, Default::default());
+                    let b = c.bounds().unwrap();
+                    eprintln!("{st} {k}: {}x{}", b.2 - b.0, b.3 - b.1);
+                    a.add_trim(&format!("{k}"), &c, c.w / 2, c.h - 10);
+                }
+                eprintln!("{st}: used {:.0} px", a.used() * 2048.0);
+            }
+        }
+        "grave" => {
+            use sw_art::grave::*;
+            use sw_art::props::PropArt;
+            let mut bg = bake_chunk(&Flat(Biome::Coast, Mat::Grass), &mut mats, &en, 0, 0, 1280).crop(0, 0, 900, 420);
+            let list: Vec<(PropArt, i32, i32)> = vec![
+                (gallows(0), 90, 170), (gallows(1), 250, 170), (gibbet(0), 360, 170), (gibbet(1), 440, 170),
+                (coffin(0, 0), 520, 120), (coffin(1, 0), 580, 120), (coffin(2, 1), 640, 120), (coffin(3, 2), 720, 120),
+                (buried(0), 520, 200), (buried(1), 590, 200), (buried(2), 660, 200), (open_grave(0), 750, 200),
+                (sitting_dead(0), 830, 120), (sitting_dead(1), 830, 200),
+            ];
+            for (pa, x, y) in &list {
+                bg.place(&pa.c, *x, *y, pa.ax, pa.ay);
+                for (k, f) in pa.frames.iter().enumerate().step_by(4) {
+                    let ox = if pa.name.starts_with("gallows") { [-38, 0, 38][k / 4 % 3] } else { 42 - pa.ax + 14 };
+                    let top = if pa.name.starts_with("gallows") { *y - 136 + 18 } else { *y - 150 + 12 };
+                    bg.place(f, *x + ox, top + f.h - 2, f.w / 2, f.h - 2);
+                    if !pa.name.starts_with("gallows") { break; }
+                }
+            }
+            let lid = coffin_lid(0);
+            bg.place(&lid, 100, 330, 20, 56);
+            for (k, f) in hanged_frames(2, 9).iter().enumerate() {
+                bg.place(f, 200 + k as i32 * 70, 400, f.w / 2, f.h - 2);
+            }
+            save_lit(&bg, &format!("{out}/grave.png"), 2);
+        }
         "chars" => {
             use sw_art::chars::*;
             let mut bg = bake_chunk(&Flat(Biome::Hub, Mat::Grass), &mut mats, &en, 0, 0, 1280).crop(0, 0, 640, 360);

@@ -73,8 +73,27 @@ pub fn env(zone: &str, sailing_open_sea: bool) -> Env {
         };
     }
     match zone {
-        // Strand der Ertränkten: neblige Morgendämmerung, kühles Licht
-        "kueste" => Env { ambient: l(0x8090B8, 0.52), sun: l(0xF0C8A0, 0.62), fog: l(0x6A7E8C, 1.0), fog_k: 0.1, ..base },
+        // Galgenstrand: Piratenfriedhof bei Mondlicht, dichter grüngrauer Nebel, entsättigt
+        "kueste" => Env {
+            ambient: l(0x7A88A8, 0.76),
+            sky: 0.45,
+            sun: l(0xB8C8E0, 0.66),
+            sun_dir: n3([0.4, -0.35, 0.7]),
+            shadow: 0.62,
+            fog: l(0x4E5C58, 1.0),
+            fog_k: 0.12,
+            lift: [0.02, 0.026, 0.03],
+            gain: [0.96, 1.0, 1.02],
+            contrast: 1.1,
+            sat: 0.7,
+            bloom: 0.6,
+            water_a: l(0x3A6E74, 1.0),
+            water_b: l(0x16384A, 1.0),
+            water_c: l(0xB8CCCC, 1.0),
+            rays: 0.35,
+            light_k: 1.2,
+            ..base
+        },
         // Glutwacht: Aschedämmerung wie am Feuerbandschrein, nur Glut und Laternen spenden Wärme
         "hain" => Env {
             rays: 0.7,
