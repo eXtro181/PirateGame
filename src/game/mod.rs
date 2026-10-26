@@ -690,7 +690,9 @@ impl Game {
         } else {
             self.zone_key.def().biome as u8
         };
-        self.fx.ambient(dt, frame.view(), biome, self.sailing);
+        if self.sailing || self.world.interior_at(self.player.a.x, self.player.a.y).is_none() {
+            self.fx.ambient(dt, frame.view(), biome, self.sailing);
+        }
         self.save_t -= dt;
         if self.save_dirty && self.save_t <= 0.0 {
             self.save_dirty = false;
