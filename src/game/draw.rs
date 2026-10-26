@@ -72,7 +72,15 @@ impl Game {
         if !p.hidden {
             let fl = if p.a.flash > 0.0 { flags::FLASH } else { 0 };
             let a = if p.iframes > 0.0 && p.state != PS::Roll && (self.t * 20.0) as i32 % 2 == 0 { 170 } else { 255 };
-            draw_char(f, &art.player, &p.a, fl, [255, 255, 255, a], 0.45);
+            if let Some((_, _, _, _, t)) = p.jump {
+                // Sprung: Schatten am Boden, Figur im Bogen darüber
+                let mut b = p.a;
+                b.y -= (t * std::f32::consts::PI).sin() * 22.0;
+                f.shadow(p.a.x, p.a.y, 10.0, 3.5, 0.35);
+                draw_char(f, &art.player, &b, fl, [255, 255, 255, a], 0.0);
+            } else {
+                draw_char(f, &art.player, &p.a, fl, [255, 255, 255, a], 0.45);
+            }
             f.light(LightDef { x: p.a.x, y: p.a.y + 4.0, z: 70.0, r: 180.0, col: [0.5, 0.4, 0.3], flicker: 0.0 });
         }
         // Gegner

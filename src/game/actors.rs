@@ -5,6 +5,7 @@ use super::data::*;
 use super::fx::*;
 use super::input::Act;
 use super::*;
+use crate::world::{idx, inb};
 
 pub const S: f32 = 2.0; // Maßstab gegenüber v0.5 (16 → 32 px)
 
@@ -110,6 +111,10 @@ pub struct Player {
     pub shot: bool,
     pub hidden: bool,
     pub look_key: String,
+    /// Sprung eine Ebene tiefer: (von x, von y, nach x, nach y, Fortschritt 0..1)
+    pub jump: Option<(f32, f32, f32, f32, f32)>,
+    /// wie lange schon gegen eine Kante gelaufen wird
+    pub edge_t: f32,
 }
 
 #[derive(Clone, Copy, PartialEq, Debug, Default)]
@@ -265,6 +270,8 @@ impl Player {
             shot: false,
             hidden: false,
             look_key: String::new(),
+            jump: None,
+            edge_t: 0.0,
         }
     }
     pub fn use_st(&mut self, n: f32) -> bool {
@@ -307,6 +314,65 @@ impl Game {
         a.y = y;
     }
 
+    /// Landepunkt für einen Sprung von (x, y) in Richtung (dx, dy): nur genau eine Ebene tiefer,
+    /// über eine Felswand der eigenen Ebene oder direkt über die Kante.
+    pub fn jump_target(&self, x: f32, y: f32, dx: f32, dy: f32) -> Option<(f32, f32)> {
+        let w = &self.world;
+        let l = dx.hypot(dy);
+        if l < 0.1 {
+            return None;
+        }
+        let (dx, dy) = (dx / l, dy / l);
+        let t = |x: f32, y: f32| ((x / TS as f32).floor() as i32, (y / TS as f32).floor() as i32);
+        let (sx, sy) = t(x, y);
+        if !inb(sx, sy) || w.stairs[idx(sx, sy)] {
+            return None;
+        }
+        let lv = w.level[idx(sx, sy)];
+        if lv == 0 {
+            return None;
+        }
+        let mut d = 6.0;
+        let mut left_own = false;
+        while d < 130.0 {
+            let (qx, qy) = (x + dx * d, y + dy * d);
+            let (tx, ty) = t(qx, qy);
+            if !inb(tx, ty) {
+                return None;
+            }
+            let i = idx(tx, ty);
+            let g = w.ground[i];
+            if matches!(g, Mat::Water | Mat::Abyss) {
+                return None;
+            }
+            let ql = w.level[i];
+            if w.cliff[i] {
+                // Felswand: nur die der eigenen Ebene darf übersprungen werden
+                if ql != lv {
+                    return None;
+                }
+                left_own = true;
+            } else if ql == lv {
+                if left_own {
+                    return None;
+                }
+                if d > 40.0 {
+                    return None; // ein Hindernis, keine Kante
+                }
+            } else if ql + 1 == lv {
+                let (lx, ly) = (qx + dx * 8.0, qy + dy * 8.0);
+                if !w.blocked(lx, ly, 8.0, false, Some(1 << ql)) {
+                    return Some((lx, ly));
+                }
+                return None;
+            } else {
+                return None;
+            }
+            d += 6.0;
+        }
+        None
+    }
+
     /// Liegt der Punkt in einem Bossraum (mit Rand bis zum Nebeltor)?
     pub fn in_arena(&self, x: f32, y: f32) -> bool {
         self.world.arenas.values().any(|a| ((x - a.x) / (a.r + 64.0)).powi(2) + ((y - a.y) / (a.ry + 64.0)).powi(2) < 1.0)
@@ -347,6 +413,23 @@ impl Game {
         if p.state == PS::Dead || p.state == PS::Ship {
             return;
         }
+        // Sprung eine Ebene tiefer läuft ohne Steuerung ab
+        if let Some((x0, y0, x1, y1, t)) = p.jump {
+            let t = (t + dt / 0.42).min(1.0);
+            p.a.x = x0 + (x1 - x0) * t;
+            p.a.y = y0 + (y1 - y0) * t;
+            p.a.anim = "walk";
+            p.a.frame = 2.0;
+            if t >= 1.0 {
+                p.jump = None;
+                self.fx.burst("dust", p.a.x, p.a.y, 10, BurstOpt { speed: Some(70.0), ..Default::default() });
+                self.sfx("roll");
+                self.shake(2.0);
+            } else {
+                p.jump = Some((x0, y0, x1, y1, t));
+            }
+            return;
+        }
         let ax = self.input.axis();
         let lock_t = self.lock.and_then(|t| self.target_pos(t).map(|q| (q.0, q.1)));
         let moving = ax.length() > 0.15;
@@ -356,6 +439,21 @@ impl Game {
                 if moving {
                     let mut a = p.a;
                     self.move_actor(&mut a, ax.x * sp * dt, ax.y * sp * dt);
+                    // gegen eine Kante gelaufen: nach kurzem Drücken eine Ebene tiefer springen
+                    let moved = (a.x - p.a.x).hypot(a.y - p.a.y);
+                    if moved < sp * dt * 0.25 {
+                        p.edge_t += dt;
+                        if p.edge_t > 0.15 {
+                            if let Some((tx, ty)) = self.jump_target(p.a.x, p.a.y, ax.x, ax.y) {
+                                p.jump = Some((p.a.x, p.a.y, tx, ty, 0.0));
+                                p.edge_t = 0.0;
+                                p.a.face(ax.x, ax.y);
+                                return;
+                            }
+                        }
+                    } else {
+                        p.edge_t = 0.0;
+                    }
                     p.a = a;
                     p.a.face(ax.x, ax.y);
                     p.a.anim = "walk";

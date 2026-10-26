@@ -247,7 +247,7 @@ impl Fx {
     pub fn ambient(&mut self, dt: f32, view: (f32, f32, f32, f32), biome: u8, sailing: bool) {
         let rate = match biome {
             1 => 22.0,
-            5 => 40.0,
+            5 => 22.0,
             3 => 45.0,
             2 => 70.0,
             4 => 16.0,
@@ -270,7 +270,7 @@ impl Fx {
                 }
                 5 => {
                     let e = rnd() < 0.35;
-                    self.p(P { x, y: y - 80.0, z: 60.0, vx: 20.0 + rnd() * 20.0, vy: 12.0, vz: -20.0, life: 4.0, col: if e { c::EMBER } else { [0.35, 0.32, 0.32, 1.0] }, glow: if e { 1.4 } else { 0.0 }, wobble: 12.0, ..Default::default() });
+                    self.p(P { x, y: y - 80.0, z: 60.0, vx: 20.0 + rnd() * 20.0, vy: 12.0, vz: -20.0, life: 4.0, col: if e { c::EMBER } else { [0.35, 0.32, 0.32, 1.0] }, glow: if e { 0.8 } else { 0.0 }, wobble: 12.0, ..Default::default() });
                 }
                 3 => self.p(P { x, y: y - 120.0, z: 120.0, vx: 12.0, vy: 8.0, vz: -32.0, life: 4.0, col: c::SNOW, wobble: 10.0, ..Default::default() }),
                 2 => self.p(P { x: x + 60.0, y: y - 160.0, z: 160.0, vx: -80.0, vy: 60.0, vz: -240.0, life: 0.8, col: c::RAIN, size: 2.0, rain: true, ..Default::default() }),

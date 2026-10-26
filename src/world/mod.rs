@@ -437,7 +437,12 @@ impl World {
                 Zone::Ende => self.layout_end(&mut rng),
             }
         }
+        for z in [Zone::Kueste, Zone::Asche, Zone::Frost, Zone::Raben, Zone::Mangroven] {
+            self.highlands(z);
+        }
         self.compute_faces();
+        self.auto_stairs();
+        self.settle_on_cliffs();
         self.compute_shore();
         for z in ZONES {
             self.cur = z;
@@ -1205,6 +1210,212 @@ impl World {
         self.road(&[(cx, wy1 + 1), (cx, cy + 30)], Mat::Cobble, 1);
         for (x, y, r, n) in [(-40, -6, 6.0, 5), (-36, 18, 5.0, 4), (0, -33, 6.0, 3)] {
             self.grove(cx + x, cy + y, r, rng, n, None);
+        }
+    }
+
+    /// Hochland: jedes Festlandgebiet bekommt Hügel und Felsstufen bis Ebene 4 (fünf Ebenen).
+    /// Rund um Feuer, Figuren, Truhen, Anleger, Arenen und Gegner bleibt der Boden, wie er ist;
+    /// Ebenen unterscheiden sich zu Nachbarn höchstens um eins (Treppen und Sprünge je eine Ebene).
+    fn highlands(&mut self, z: Zone) {
+        let d = z.def();
+        let (x0, y0, x1, y1) = (d.cx - d.rx - 8, d.cy - d.ry - 8, d.cx + d.rx + 8, d.cy + d.ry + 8);
+        let (w, h) = (x1 - x0 + 1, y1 - y0 + 1);
+        let id = |x: i32, y: i32| ((y - y0) * w + (x - x0)) as usize;
+        // geschützte Punkte (Kachel, Radius)
+        let mut keep: Vec<(i32, i32, i32)> = vec![];
+        let t = |x: f32, y: f32| ((x / TS as f32) as i32, (y / TS as f32) as i32);
+        for f in &self.fires {
+            let (a, b) = t(f.x, f.y);
+            keep.push((a, b, 4));
+        }
+        for n in &self.npcs {
+            let (a, b) = t(n.x, n.y);
+            keep.push((a, b, 3));
+        }
+        for it in &self.items {
+            let (a, b) = t(it.x, it.y);
+            keep.push((a, b, 2));
+        }
+        for &ci in &self.chests {
+            let (a, b) = t(self.props[ci].x, self.props[ci].y);
+            keep.push((a, b, 2));
+        }
+        for sp in &self.spawns {
+            let (a, b) = t(sp.x, sp.y);
+            keep.push((a, b, 2));
+        }
+        for dk in &self.docks {
+            let (a, b) = t(dk.px, dk.py);
+            keep.push((a, b, 6));
+        }
+        for g in &self.gates {
+            let (a, b) = t(g.x, g.y);
+            keep.push((a, b, 5));
+        }
+        for wk in &self.walkers {
+            for p in &wk.pts {
+                let (a, b) = t(p.0, p.1);
+                keep.push((a, b, 2));
+            }
+        }
+        let arenas: Vec<Arena> = self.arenas.values().cloned().collect();
+        let mut fixed = vec![false; (w * h) as usize];
+        let mut lv = vec![0u8; (w * h) as usize];
+        for y in y0..=y1 {
+            for x in x0..=x1 {
+                if !inb(x, y) {
+                    continue;
+                }
+                let i = idx(x, y);
+                let k = id(x, y);
+                lv[k] = self.level[i];
+                let g = self.ground[i];
+                if self.zone[i] != Some(z) || matches!(g, Mat::Water | Mat::Abyss | Mat::Plank) {
+                    fixed[k] = true;
+                    continue;
+                }
+                let (px, py) = ((x * TS) as f32, (y * TS) as f32);
+                if arenas.iter().any(|a| ((px - a.x) / (a.r + 160.0)).powi(2) + ((py - a.y) / (a.ry + 160.0)).powi(2) < 1.0) {
+                    fixed[k] = true;
+                    continue;
+                }
+                if keep.iter().any(|&(a, b, r)| (a - x).abs() <= r && (b - y).abs() <= r) {
+                    fixed[k] = true;
+                    continue;
+                }
+                // Höhe aus Rauschen, zur Inselmitte hin höher, zum Wasser hin flach
+                let dx = (x - d.cx) as f32 / d.rx as f32;
+                let dy = (y - d.cy) as f32 / d.ry as f32;
+                let core = (1.0 - (dx * dx + dy * dy).sqrt()).max(0.0);
+                let n = self.nz.fbm(x as f32 * 0.055 + d.seed as f32 * 3.1, y as f32 * 0.055 + 9.0, 3);
+                let hgt = n * 1.5 + core * 0.9 - 0.15;
+                let mut l = ((hgt * 5.0).floor().max(0.0) as i32).min(4) as u8;
+                // Wasserabstand begrenzt die Höhe (Strände bleiben flach)
+                let mut near = 9;
+                'w: for r in 1..9 {
+                    for (ox, oy) in [(r, 0), (-r, 0), (0, r), (0, -r), (r, r), (-r, r), (r, -r), (-r, -r)] {
+                        if matches!(self.g(x + ox, y + oy), Mat::Water | Mat::Abyss) {
+                            near = r;
+                            break 'w;
+                        }
+                    }
+                }
+                l = l.min(((near - 2) / 2).max(0) as u8);
+                lv[k] = lv[k].max(l);
+            }
+        }
+        // Glätten: höchstens eine Ebene Unterschied zu jedem Nachbarn (geschützte Kacheln bleiben)
+        for _ in 0..8 {
+            let mut changed = false;
+            for y in y0..=y1 {
+                for x in x0..=x1 {
+                    let k = id(x, y);
+                    if fixed[k] || !inb(x, y) {
+                        continue;
+                    }
+                    let mut mn = 255u8;
+                    for (ox, oy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+                        let (nx, ny) = (x + ox, y + oy);
+                        if nx < x0 || nx > x1 || ny < y0 || ny > y1 || !inb(nx, ny) {
+                            continue;
+                        }
+                        let i = idx(nx, ny);
+                        if matches!(self.ground[i], Mat::Water | Mat::Abyss) {
+                            continue;
+                        }
+                        mn = mn.min(lv[id(nx, ny)]);
+                    }
+                    if mn != 255 && lv[k] > mn + 1 {
+                        lv[k] = mn + 1;
+                        changed = true;
+                    }
+                }
+            }
+            if !changed {
+                break;
+            }
+        }
+        for y in y0..=y1 {
+            for x in x0..=x1 {
+                if inb(x, y) && !fixed[id(x, y)] {
+                    let i = idx(x, y);
+                    self.level[i] = lv[id(x, y)];
+                    // Höhen: Felsboden auf den oberen Stufen
+                    if self.level[i] >= 3 && !self.path[i] {
+                        self.ground[i] = match d.biome {
+                            Biome::Frost => Mat::Snow,
+                            Biome::Fire => Mat::Hex,
+                            Biome::Earth => Mat::Moss,
+                            _ => if self.level[i] >= 4 { Mat::Rock } else { self.ground[i] },
+                        };
+                    }
+                }
+            }
+        }
+    }
+
+    /// Treppen: in jedem Mauerfront-Abschnitt (Stufe genau eine Ebene) mindestens eine,
+    /// bei langen Fronten etwa alle zwölf Kacheln.
+    fn auto_stairs(&mut self) {
+        for y in 0..MH {
+            let mut x = 0;
+            while x < MW {
+                let i = idx(x, y);
+                // nur die oberste Reihe einer Front betrachten
+                if !self.cliff[i] || self.face[i] != 0 || self.stairs[i] || self.biome[i] == Biome::Hub {
+                    x += 1;
+                    continue;
+                }
+                let l = self.level[i];
+                let x_start = x;
+                while x < MW && self.cliff[idx(x, y)] && self.face[idx(x, y)] == 0 && self.level[idx(x, y)] == l {
+                    x += 1;
+                }
+                let len = x - x_start;
+                if len < 3 {
+                    continue;
+                }
+                let n = (len / 12).max(1);
+                for k in 0..n {
+                    let sx = x_start + (len * (2 * k + 1)) / (2 * n) - 1;
+                    // unten muss genau eine Ebene tiefer begehbarer Boden liegen
+                    let below = self.lv(sx, y + FH);
+                    if below + 1 != l || matches!(self.g(sx, y + FH), Mat::Water | Mat::Abyss) {
+                        continue;
+                    }
+                    for xx in sx..sx + 2 {
+                        for r in 0..FH {
+                            if inb(xx, y + r) && self.cliff[idx(xx, y + r)] {
+                                self.stairs[idx(xx, y + r)] = true;
+                                self.path[idx(xx, y + r)] = true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Requisiten, die nun auf einer Felswand stehen, verschwinden; Gegner rücken auf festen Boden.
+    fn settle_on_cliffs(&mut self) {
+        for p in self.props.iter_mut() {
+            if p.sea || p.hidden || p.interact.is_some() {
+                continue;
+            }
+            let (tx, ty) = ((p.x / TS as f32) as i32, (p.y / TS as f32) as i32);
+            if inb(tx, ty) && self.cliff[idx(tx, ty)] && !self.stairs[idx(tx, ty)] && self.biome[idx(tx, ty)] != Biome::Hub {
+                p.hidden = true;
+            }
+        }
+        for k in 0..self.spawns.len() {
+            let (x, y) = (self.spawns[k].x, self.spawns[k].y);
+            let (tx, mut ty) = ((x / TS as f32) as i32, (y / TS as f32) as i32);
+            let mut n = 0;
+            while inb(tx, ty) && self.cliff[idx(tx, ty)] && n < 4 {
+                ty += 1;
+                n += 1;
+            }
+            self.spawns[k].y = (ty * TS + TS * 3 / 4) as f32;
         }
     }
 
