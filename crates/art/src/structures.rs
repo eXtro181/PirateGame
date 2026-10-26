@@ -553,7 +553,51 @@ pub fn burning_wreck(seed: i32) -> PropArt {
         r.spike(v(x, y, z + 2.0), v(x + 0.5, y, z + 9.0 + (i % 3) as f32 * 3.0), 2.4, fire);
     }
     let c = render_oblique(&r, 1.1 + seed as f32 * 1.3, 190, 200, 56);
-    PropArt::new(&format!("burningWreck{seed}"), c, 95, 144).shadow(0.0, 0.0).circle(34.0).light(0.0, -30.0, 30.0, 220.0, [1.8, 0.7, 0.25], 0.4)
+    let mut pa = PropArt::new(&format!("burningWreck{seed}"), c, 95, 144).shadow(0.0, 0.0).circle(34.0).light(0.0, -30.0, 30.0, 220.0, [1.8, 0.7, 0.25], 0.4);
+    // hohe Flammen, im Spiel an mehreren Stellen des Rumpfs
+    for f in 0..6 {
+        pa.frames.push(wreck_flame(f));
+    }
+    pa
+}
+
+/// Flammenbild für brennende Wracks: drei züngelnde Zungen, unten breit und dunkelrot.
+fn wreck_flame(f: i32) -> crate::canvas::Canvas {
+    use crate::color::pick;
+    use crate::noise::h01;
+    let (w, h) = (36, 58);
+    let mut c = crate::canvas::Canvas::new(w, h);
+    let p = crate::props::p6(&[0x4A0C06, 0x8A1E0C, 0xC23C14, 0xE8681E, 0xF6A23C, 0xFFDC8A]);
+    let cx = w as f32 / 2.0;
+    let tongues = [(-8.0f32, 0.62f32, 0.0f32), (0.0, 1.0, 1.3), (8.0, 0.7, 2.6)];
+    for y in 0..h {
+        for x in 0..w {
+            let t = 1.0 - y as f32 / h as f32;
+            let mut best = 0.0f32;
+            for (ox, ht, ph) in tongues {
+                let tt = t / ht;
+                if tt > 1.0 {
+                    continue;
+                }
+                let wob = ((y as f32 * 0.32 + f as f32 * 1.05 + ph).sin() * 2.2 + (y as f32 * 0.8 - f as f32 * 1.9 + ph).sin() * 0.9) * tt;
+                let half = 9.0 * (1.0 - tt).powf(0.7) + 1.0;
+                let dx = (x as f32 + 0.5 - cx - ox * (1.0 - tt * 0.5) - wob).abs();
+                if dx < half {
+                    best = best.max((1.0 - dx / half) * (1.0 - tt * 0.6));
+                }
+            }
+            if best <= 0.0 {
+                continue;
+            }
+            // ausgefranste Spitzen
+            if t > 0.4 && h01(x / 2, (y + f * 5) / 3, 31) < (t - 0.4) * 0.9 {
+                continue;
+            }
+            let v = (best * 0.85 + (1.0 - t) * 0.2).clamp(0.0, 1.0);
+            c.lit(x, y, pick(&p, v), 0.35 + v * 0.6);
+        }
+    }
+    c
 }
 
 /// Korallenturm mit leuchtenden Spitzen.

@@ -325,17 +325,29 @@ impl WorldView {
             if !def.frames.is_empty() && (kind != "saberfire" || p.lit) {
                 let fi = ((t * 10.0) as usize + pi) % def.frames.len();
                 let fs = def.frames[fi];
-                let (fx, fy) = match kind {
-                    "saberfire" => (p.x + 2.0, p.y - 6.0),
-                    "torch" => (p.x, p.y - 36.0),
-                    _ => (p.x, p.y - 10.0),
-                };
-                frame.sprite_z(&fs, fx, fy, p.y + 1.0, SprOpt { flags: flags::GLOW, ev: lvl + (p.y - fy), ..Default::default() });
-                for k in 0..3 {
-                    let a = t * 1.7 + k as f32 * 2.1 + pi as f32;
-                    let rise = ((t * 0.6 + k as f32 * 0.33) % 1.0) * 30.0;
-                    let col = if kind == "saberfire" { [120, 255, 210, 160] } else { [255, 180, 90, 160] };
-                    frame.glow(fx + a.sin() * 5.0, fy - 20.0 - rise, 2.0, col);
+                if kind.starts_with("burningWreck") {
+                    // brennendes Wrack: Flammen an Bug, Mitte und Heck
+                    let sx = if p.flip { -1.0 } else { 1.0 };
+                    for (k, (ox, oy)) in [(-34.0f32, -30.0f32), (2.0, -52.0), (30.0, -26.0), (-8.0, -18.0)].iter().enumerate() {
+                        let fs = def.frames[(fi + k * 2) % def.frames.len()];
+                        let (fx, fy) = (p.x + ox * sx, p.y + oy);
+                        frame.sprite_z(&fs, fx, fy, p.y + 1.0, SprOpt { scale: if k == 1 { 1.3 } else { 1.0 }, tint: [255, 255, 255, 220], ev: lvl + (p.y - fy), ..Default::default() });
+                        let rise = ((t * 0.5 + k as f32 * 0.29) % 1.0) * 60.0;
+                        frame.glow(fx + (t * 1.3 + k as f32).sin() * 6.0, fy - 34.0 - rise, 2.0, [255, 170, 80, 170]);
+                    }
+                } else {
+                    let (fx, fy) = match kind {
+                        "saberfire" => (p.x + 2.0, p.y - 6.0),
+                        "torch" => (p.x, p.y - 36.0),
+                        _ => (p.x, p.y - 10.0),
+                    };
+                    frame.sprite_z(&fs, fx, fy, p.y + 1.0, SprOpt { flags: flags::GLOW, ev: lvl + (p.y - fy), ..Default::default() });
+                    for k in 0..3 {
+                        let a = t * 1.7 + k as f32 * 2.1 + pi as f32;
+                        let rise = ((t * 0.6 + k as f32 * 0.33) % 1.0) * 30.0;
+                        let col = if kind == "saberfire" { [120, 255, 210, 160] } else { [255, 180, 90, 160] };
+                        frame.glow(fx + a.sin() * 5.0, fy - 20.0 - rise, 2.0, col);
+                    }
                 }
             }
             if kind == "foggate" && p.open == false {
