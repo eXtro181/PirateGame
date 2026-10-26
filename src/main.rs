@@ -191,6 +191,9 @@ fn setup(world: &mut bevy::ecs::world::World) {
                     s.wrecks.insert(k.into(), true);
                 }
             }
+            if app.params.contains_key("crew") {
+                s.crew = ["fire", "ice", "wind", "earth"].iter().map(|x| x.to_string()).collect();
+            }
             if app.params.contains_key("wrecks") {
                 for k in ["fire", "ice", "wind", "earth"] {
                     s.sea_kings.insert(k.into(), true);

@@ -222,6 +222,26 @@ impl Game {
                     f.world_q(s.y, Frame::quad_rect(s.x - 4.0, y - 4.0, 8.0, 8.0, [24, 22, 26, 255], modes::SOLID, 0));
                     f.glow(s.x + 3.0, y - 5.0, 3.0, [255, 200, 90, 255]);
                 }
+                "mortar" => {
+                    // Mörserkugel im hohen Bogen: Schatten am Boden, Kugel in der Höhe
+                    f.shadow(s.x, s.y, 7.0, 2.5, 0.4);
+                    f.world_q(s.y, Frame::quad_rect(s.x - 5.0, y - 5.0, 10.0, 10.0, [26, 24, 28, 255], modes::SOLID, 0));
+                    f.glow(s.x + 3.0, y - 4.0, 3.0, [255, 190, 90, 220]);
+                }
+                "chain" => {
+                    // Kettenkugel: zwei Kugeln mit Kette, drehend
+                    let a = s.t * 18.0;
+                    let (dx, dy) = (a.cos() * 7.0, a.sin() * 4.0);
+                    for k in [-1.0f32, 1.0] {
+                        f.world_q(s.y, Frame::quad_rect(s.x + dx * k - 3.0, y + dy * k - 3.0, 6.0, 6.0, [34, 34, 40, 255], modes::SOLID, 0));
+                    }
+                    f.world_q(s.y, Frame::quad_rect(s.x - 1.0, y - 1.0, 2.0, 2.0, [120, 120, 130, 255], modes::SOLID, 0));
+                }
+                "flame" => {
+                    let k = (s.life / 0.75).clamp(0.0, 1.0);
+                    f.glow(s.x, y, 10.0 + (1.0 - k) * 14.0, [255, (120.0 + k * 100.0) as u8, 50, (200.0 * k + 40.0) as u8]);
+                    f.glow(s.x, y, 4.0, [255, 240, 180, (230.0 * k) as u8]);
+                }
                 "cannon" | "rock" => {
                     f.shadow(s.x, s.y, 5.0, 2.0, 0.35);
                     let c = if s.kind == "rock" { [90, 74, 56, 255] } else { [30, 30, 34, 255] };
@@ -244,6 +264,7 @@ impl Game {
         }
         self.draw_sea(art, f);
         self.draw_sea_bosses(art, f);
+        self.draw_crew(art, f);
         self.draw_critters(f);
         self.fx.draw(f);
         self.fx.lights(f);

@@ -214,6 +214,8 @@ pub enum Target {
     Shark(usize),
     Kraken,
     SeaBoss(usize),
+    /// Endboss auf See (Geisterkapitän, Schiffsgestalt)
+    EndShip,
     Player,
     Ship,
 }

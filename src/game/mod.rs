@@ -3,6 +3,7 @@
 pub mod actors;
 pub mod boss;
 pub mod critters;
+pub mod crew;
 pub mod data;
 pub mod dialog;
 pub mod draw;
@@ -22,6 +23,7 @@ use crate::ui::hud::Ui;
 use actors::*;
 use boss::*;
 use critters::Critter;
+use crew::CrewGuns;
 use data::*;
 use dialog::*;
 use env::Env;
@@ -114,6 +116,7 @@ pub struct Game {
     pub kraken: Kraken,
     pub sea_bosses: Vec<SeaBoss>,
     pub sea_boss: Option<usize>,
+    pub crew_guns: CrewGuns,
     /// Seegebiet unter dem Schiff (Element), für Licht und Teilchen
     pub sea_el: Option<&'static str>,
     pub critters: Vec<Critter>,
@@ -208,6 +211,7 @@ impl Game {
             kraken: Kraken::new(294.0 * TS as f32, 126.0 * TS as f32),
             sea_bosses: vec![],
             sea_boss: None,
+            crew_guns: CrewGuns::default(),
             sea_el: None,
             critters: vec![],
             cam_f: (0.0, 0.0),
@@ -368,6 +372,7 @@ impl Game {
                     (x, y, 70.0, 50.0)
                 }
             }),
+            Target::EndShip => None,
             Target::Player => Some((self.player.a.x, self.player.a.y, self.player.a.hurt_r, 28.0)),
             Target::Ship => Some((self.ship.hull.x, self.ship.hull.y, 40.0, 20.0)),
         }
@@ -380,6 +385,7 @@ impl Game {
             Target::Shark(i) => self.hurt_shark(i, dmg),
             Target::Kraken => self.hurt_kraken(dmg),
             Target::SeaBoss(i) => self.hurt_sea_boss(i, dmg),
+            Target::EndShip => {}
             Target::Player => {
                 self.hurt_player(dmg, Target::Player, o);
             }
@@ -586,6 +592,7 @@ impl Game {
             self.update_ship(dt, steer);
             self.update_sea(dt);
             self.update_sea_bosses(dt);
+            self.update_crew(dt);
             self.fx.update(dt);
             // in den Abgrund gestürzt?
             if !self.sailing && self.player.state != PS::Dead && self.player.state != PS::Roll {

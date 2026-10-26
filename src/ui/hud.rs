@@ -633,6 +633,18 @@ impl Game {
         }
         text::t(f, art, &format!("Backbord {}", if sh.cool[0] > 0.0 { "…" } else { "bereit" }), 8.0, 30.0, if sh.cool[0] > 0.0 { col::BONE_DIM } else { col::GOLD });
         text::t(f, art, &format!("Steuerbord {}", if sh.cool[1] > 0.0 { "…" } else { "bereit" }), 8.0, 41.0, if sh.cool[1] > 0.0 { col::BONE_DIM } else { col::GOLD });
+        // Crew-Geschütze und Kraken
+        let n = self.save.crew.len();
+        if n > 0 {
+            let names = ["Mörser", "Kettenkugeln", "Flammenwerfer"];
+            let list: Vec<&str> = names.iter().take(n.min(3)).copied().collect();
+            text::t(f, art, &format!("Crew: {}", list.join(" · ")), 8.0, 52.0, col::BONE_DIM);
+            if n >= 4 {
+                let kc = self.crew_guns.kraken_cool;
+                let (s, c) = if self.crew_guns.kraken.is_some() { ("Kraken kämpft".to_string(), col::SOUL) } else if kc > 0.0 { (format!("Kraken {} s", kc.ceil() as i32), col::BONE_DIM) } else { ("Kraken rufen (C)".to_string(), col::SOUL) };
+                text::t(f, art, &s, 8.0, 63.0, c);
+            }
+        }
         if self.shanty_t > 0.0 {
             text::tc(f, art, &format!("♪ {}", self.shanty_name), w / 2.0, 30.0, col::SOUL);
         }
