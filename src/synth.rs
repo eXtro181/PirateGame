@@ -149,6 +149,10 @@ pub enum Inst {
     Bell,
     CrewLead,
     CrewHum,
+    /// gestrichenes Cello (langsamer Einsatz, Vibrato)
+    Cello,
+    /// gezupfte Harfe (Karplus-Strong)
+    Harp,
 }
 #[derive(Clone, Copy)]
 pub struct Ev {
@@ -205,138 +209,174 @@ fn down(c: &str) -> String {
     first(c).replace('3', "2")
 }
 
+/// Harfen-Arpeggio über einen Akkord (Grundton, Quinte, Oktave, Terz darüber …) für `len` Schritte.
+fn arp(chord: &str, len: f32, step: f32, t0: f32, vel: f32) -> Vec<Ev> {
+    let notes: Vec<&str> = chord.split('+').collect();
+    let pat = [0usize, 1, 2, 1, 2, 3, 2, 1];
+    let mut out = vec![];
+    let mut t = 0.0;
+    let mut k = 0;
+    while t < len - 0.01 {
+        let n = notes[pat[k % pat.len()] % notes.len()];
+        out.push(Ev { t: t0 + t, dur: step * 2.0, inst: Inst::Harp, f: freq(n), vel: vel * if k % 4 == 0 { 1.0 } else { 0.75 } });
+        t += step;
+        k += 1;
+    }
+    out
+}
+
+/// Alle Stücke: melancholische, rein instrumentale Seemannsmusik in Moll – Cello, Geige,
+/// Blechflöte, Harfe, Akkordeon und Glocken, wenig Trommeln. Längen in Schritten, `unit` = Sekunden
+/// je Schritt.
 pub fn song(name: &str) -> Option<Song> {
     use Inst::*;
     let s = match name {
-        "salz" => {
-            let a = "G4:2 B4:1 D5:2 D5:1 | E5:2 D5:1 B4:2 G4:1 | A4:2 B4:1 C5:2 A4:1 | B4:3 G4:3 | G4:2 B4:1 D5:2 D5:1 | E5:2 G5:1 F#5:2 E5:1 | D5:2 B4:1 A4:2 F#4:1 | G4:6";
-            let b = "D5:2 E5:1 F#5:2 G5:1 | A5:2 G5:1 F#5:2 D5:1 | E5:2 D5:1 C5:2 B4:1 | A4:3 D5:3 | B4:2 D5:1 G5:2 F#5:1 | E5:2 C5:1 A4:2 F#4:1 | G4:2 A4:1 B4:2 A4:1 | G4:6";
-            let mut ev = sq(&format!("{a} | {b}"), Whistle, 0.55, 0.0);
-            let chords = ["G3+B3+D4", "C4+E4+G3", "A3+C4+E4", "G3+B3+D4", "G3+B3+D4", "C4+E4+G3", "D4+F#4+A3", "G3+B3+D4", "D4+F#4+A3", "D4+F#4+A3", "C4+E4+G3", "D4+F#4+A3", "G3+B3+D4", "A3+C4+E4", "D4+F#4+A3", "G3+B3+D4"];
-            let roots = ["G2", "C3", "A2", "G2", "G2", "C3", "D3", "G2", "D3", "D3", "C3", "D3", "G2", "A2", "D3", "G2"];
-            let fifths = ["D3", "G3", "E3", "D3", "D3", "G3", "A2", "D3", "A2", "A2", "G3", "A2", "D3", "E3", "A2", "D3"];
-            for (i, c) in chords.iter().enumerate() {
-                let t = i as f32 * 6.0;
-                ev.extend(sq(&format!("{c}:3 {c}:3"), Accordion, 0.16, t));
-                ev.extend(sq(&format!("{}:3 {}:3", roots[i], fifths[i]), Bass, 0.5, t));
-                ev.extend([drum(t, 70.0, 0.55), drum(t + 3.0, 60.0, 0.35), tick(t + 5.0, 0.12)]);
-            }
-            Song { name: "salz", unit: 60.0 / 76.0 / 3.0, len: 96.0, events: ev, gain: 0.5 }
-        }
-        "leine" => {
-            let call = "D5:2 D5:2 F#5:2 A5:2 | B5:2 A5:2 F#5:4 | R:8 | E5:2 F#5:2 E5:2 D5:2 | D5:2 D5:2 F#5:2 A5:2 | B5:2 D6:2 A5:4 | R:8 | R:8";
-            let crew = "R:16 | A4:2 A4:1 F#4:1 D4:4 | R:8 | R:16 | G4:2 F#4:2 E4:2 A4:2 | D4:8";
-            let mut ev = sq(call, Fiddle, 0.42, 0.0);
-            ev.extend(sq(crew, CrewLead, 0.9, 0.0));
-            let chords = ["D3+F#3+A3", "G3+B3+D4", "D3+F#3+A3", "A3+C#4+E4", "D3+F#3+A3", "G3+B3+D4", "A3+C#4+E4", "D3+F#3+A3"];
-            let roots = ["D2", "G2", "D2", "A2", "D2", "G2", "A2", "D2"];
-            for (i, c) in chords.iter().enumerate() {
-                let t = i as f32 * 8.0;
-                ev.extend(sq(&format!("{c}:8"), CrewHum, 0.5, t));
-                ev.extend(sq(&format!("{c}:2 R:2 {c}:2 R:2"), Accordion, 0.13, t));
-                ev.extend(sq(&format!("{}:4 {}:4", roots[i], roots[i]), Bass, 0.55, t));
-                for b in 0..4 {
-                    ev.push(if b % 2 == 1 { tick(t + b as f32 * 2.0, 0.2) } else { drum(t + b as f32 * 2.0, 65.0, 0.6) });
-                }
-            }
-            Song { name: "leine", unit: 60.0 / 104.0 / 2.0, len: 64.0, events: ev, gain: 0.5 }
-        }
-        "atem" => {
-            let mut ev = sq("D4:2 F4:2 A4:4 G4:1 F4:1 E4:2 D4:4 | A3:2 D4:2 F4:4 E4:2 C4:2 D4:4", AccordionSolo, 0.35, 0.0);
-            for (i, c) in ["D3+A3+F4", "A#2+F3+D4", "C3+G3+E4", "D3+A3+F4"].iter().enumerate() {
-                ev.extend(sq(&format!("{c}:8"), Pad, 0.12, i as f32 * 8.0));
-            }
-            Song { name: "atem", unit: 60.0 / 62.0 / 2.0, len: 32.0, events: ev, gain: 0.55 }
-        }
+        // Titel: Cello-Klage über Harfe und Flächen, d-Moll, sehr langsam
         "titel" => {
-            let mut ev = sq("D5:3 F5:3 A5:6 G5:2 F5:1 E5:3 D5:3 R:6 | A4:3 D5:3 F5:6 E5:3 C5:3 D5:6 R:6", Fiddle, 0.4, 0.0);
-            for (i, c) in ["D3+A3", "D3+A3", "A#2+F3", "C3+G3", "D3+A3", "D3+A3"].iter().enumerate() {
-                ev.extend(sq(&format!("{c}:12"), Pad, 0.14, i as f32 * 12.0));
+            let cello = "D3:6 F3:3 E3:3 | D3:6 A2:6 | A#2:6 C3:3 D3:3 | A2:12 | D3:6 F3:3 G3:3 | A3:6 G3:3 F3:3 | E3:6 C#3:6 | D3:12";
+            let fid = "R:48 | A4:6 C5:3 A#4:3 | A4:6 F4:6 | G4:6 E4:3 C#4:3 | D4:12";
+            let mut ev = sq(cello, Cello, 0.9, 0.0);
+            ev.extend(sq(fid, Fiddle, 0.3, 0.0));
+            let chords = ["D3+A3+D4+F4", "D3+A3+D4+F4", "A#2+F3+A#3+D4", "A2+E3+A3+C#4", "D3+A3+D4+F4", "F2+C3+F3+A3", "A2+E3+A3+C#4", "D3+A3+D4+F4"];
+            for (i, c) in chords.iter().enumerate() {
+                let t = i as f32 * 12.0;
+                ev.extend(arp(c, 12.0, 1.5, t, 0.5));
+                ev.extend(sq(&format!("{}:12", c), Pad, 0.1, t));
             }
-            Song { name: "titel", unit: 60.0 / 58.0 / 3.0, len: 72.0, events: ev, gain: 0.55 }
+            ev.push(Ev { t: 0.0, dur: 6.0, inst: Bell, f: freq("D5"), vel: 0.25 });
+            ev.push(Ev { t: 48.0, dur: 6.0, inst: Bell, f: freq("A4"), vel: 0.22 });
+            Song { name: "titel", unit: 60.0 / 54.0 / 3.0, len: 96.0, events: ev, gain: 0.55 }
         }
-        "hain" => {
-            let mel = "E5:2 G5:1 B5:3 | A5:2 G5:1 F#5:3 | E5:2 D5:1 E5:2 G5:1 | B4:6 | E5:2 G5:1 B5:3 | C6:2 B5:1 A5:3 | G5:2 F#5:1 D5:2 F#5:1 | E5:6";
-            let mut ev = sq(mel, Bell, 0.55, 0.0);
-            ev.extend(sq(&mel.replace("5:", "4:").replace("6:", "5:"), Whistle, 0.18, 0.0));
-            for (i, c) in ["E3+G3+B3", "D3+F#3+A3", "C3+E3+G3", "B2+D#3+F#3", "E3+G3+B3", "A2+C3+E3", "D3+F#3+A3", "E3+G3+B3"].iter().enumerate() {
+        // Strand der Ertränkten: Klagewalzer in a-Moll, Blechflöte und Akkordeon
+        "salz" => {
+            let a = "A4:2 C5:1 E5:3 | D5:2 C5:1 B4:3 | C5:2 B4:1 A4:2 G4:1 | A4:6 | E5:2 F5:1 E5:2 D5:1 | C5:2 B4:1 G4:3 | A4:2 B4:1 C5:2 B4:1 | A4:6";
+            let b = "C5:2 D5:1 E5:3 | G5:2 F5:1 E5:3 | D5:2 C5:1 B4:2 G4:1 | E4:6 | A4:2 C5:1 E5:2 A5:1 | G5:2 E5:1 D5:3 | C5:2 B4:1 G#4:2 B4:1 | A4:6";
+            let mut ev = sq(&format!("{a} | {b}"), Whistle, 0.45, 0.0);
+            let chords = ["A2+E3+A3+C4", "G2+D3+G3+B3", "F2+C3+F3+A3", "A2+E3+A3+C4", "A2+E3+A3+C4", "E2+B2+E3+G3", "D2+A2+D3+F3", "A2+E3+A3+C4", "C3+G3+C4+E4", "G2+D3+G3+B3", "D2+A2+D3+F3", "E2+B2+E3+G3", "A2+E3+A3+C4", "C3+G3+C4+E4", "E2+B2+E3+G#3", "A2+E3+A3+C4"];
+            for (i, c) in chords.iter().enumerate() {
                 let t = i as f32 * 6.0;
-                ev.extend(sq(&format!("{c}:6"), Pad, 0.16, t));
-                ev.push(Ev { t, dur: 3.0, inst: Bass, f: freq(&down(c)), vel: 0.35 });
+                let up: Vec<&str> = c.split('+').skip(1).collect();
+                let ch = up.join("+");
+                ev.extend(sq(&format!("R:2 {ch}:2 {ch}:2"), Accordion, 0.1, t));
+                ev.extend(sq(&format!("{}:6", first(c)), Cello, 0.55, t));
+                ev.push(drum(t, 52.0, 0.22));
             }
-            Song { name: "hain", unit: 60.0 / 66.0 / 2.0, len: 48.0, events: ev, gain: 0.55 }
+            Song { name: "salz", unit: 60.0 / 66.0 / 3.0, len: 96.0, events: ev, gain: 0.5 }
         }
+        // Auf See: langsames Seemannslied in d-Dorisch, Geige über Akkordeon und Cello
+        "leine" => {
+            let a = "D4:2 F4:1 A4:2 A4:1 | G4:2 F4:1 E4:3 | C4:2 E4:1 G4:2 G4:1 | F4:2 E4:1 D4:3 | D4:2 F4:1 A4:2 D5:1 | C5:2 A4:1 G4:3 | F4:2 E4:1 C4:2 E4:1 | D4:6";
+            let b = "A4:2 C5:1 D5:3 | C5:2 A4:1 G4:3 | A4:2 G4:1 F4:2 E4:1 | D4:6 | F4:2 G4:1 A4:3 | G4:2 E4:1 C4:3 | D4:2 E4:1 F4:2 E4:1 | D4:6";
+            let mut ev = sq(&format!("{a} | {b}"), Fiddle, 0.42, 0.0);
+            ev.extend(sq(&format!("R:48 | {}", b.replace("4:", "5:").replace("5:6", "5:6")), Whistle, 0.16, 0.0));
+            let chords = ["D3+F3+A3", "C3+E3+G3", "C3+E3+G3", "D3+F3+A3", "D3+F3+A3", "A2+C3+E3", "C3+E3+G3", "D3+F3+A3", "F3+A3+C4", "C3+E3+G3", "D3+F3+A3", "D3+F3+A3", "F3+A3+C4", "C3+E3+G3", "A2+C3+E3", "D3+F3+A3"];
+            for (i, c) in chords.iter().enumerate() {
+                let t = i as f32 * 6.0;
+                ev.extend(sq(&format!("{c}:3 {c}:3"), Accordion, 0.11, t));
+                ev.extend(sq(&format!("{}:6", down(c)), Cello, 0.5, t));
+                ev.extend([drum(t, 55.0, 0.3), tick(t + 3.0, 0.08)]);
+            }
+            Song { name: "leine", unit: 60.0 / 80.0 / 3.0, len: 96.0, events: ev, gain: 0.5 }
+        }
+        // Am Säbelfeuer: Cello allein, darunter leise Harfe
+        "atem" => {
+            let mut ev = sq("D3:2 F3:2 A3:4 G3:1 F3:1 E3:2 D3:4 | A2:2 D3:2 F3:4 E3:2 C3:2 D3:4", Cello, 0.75, 0.0);
+            for (i, c) in ["D3+A3+D4+F4", "A#2+F3+A#3+D4", "C3+G3+C4+E4", "D3+A3+D4+F4"].iter().enumerate() {
+                ev.extend(arp(c, 8.0, 1.0, i as f32 * 8.0, 0.35));
+                ev.extend(sq(&format!("{c}:8"), Pad, 0.08, i as f32 * 8.0));
+            }
+            Song { name: "atem", unit: 60.0 / 58.0 / 2.0, len: 32.0, events: ev, gain: 0.55 }
+        }
+        // Glutwacht: Glocken und Harfe wie in einem verlassenen Schrein, e-Moll
+        "hain" => {
+            let mel = "B4:3 G4:3 | A4:3 F#4:3 | G4:3 E4:3 | F#4:6 | B4:3 C5:3 | D5:3 B4:3 | A4:3 F#4:3 | E4:6";
+            let mut ev = sq(mel, Bell, 0.45, 0.0);
+            ev.extend(sq(&mel.replace("4:", "3:").replace("5:", "4:"), Cello, 0.45, 0.0));
+            for (i, c) in ["E3+B3+E4+G4", "D3+A3+D4+F#4", "C3+G3+C4+E4", "B2+F#3+B3+D4", "E3+B3+E4+G4", "G2+D3+G3+B3", "D3+A3+D4+F#4", "E3+B3+E4+G4"].iter().enumerate() {
+                let t = i as f32 * 6.0;
+                ev.extend(arp(c, 6.0, 0.75, t, 0.4));
+                ev.extend(sq(&format!("{c}:6"), Pad, 0.1, t));
+            }
+            Song { name: "hain", unit: 60.0 / 56.0 / 2.0, len: 48.0, events: ev, gain: 0.55 }
+        }
+        // Aschebucht / „Glutwind“: d-Moll, Geige, Cello-Pizzicato als Harfe, ferne Trommel
         "glut" => {
             let a = "D5:1 D5:1 F5:1 A5:2 F5:1 | G5:1 F5:1 E5:1 D5:3 | C5:1 C5:1 E5:1 G5:2 E5:1 | F5:1 E5:1 D5:1 C#5:3 | D5:1 F5:1 A5:1 D6:2 C6:1 | A#5:1 A5:1 G5:1 A5:3 | G5:1 F5:1 E5:1 F5:1 E5:1 C#5:1 | D5:6";
-            let mut ev = sq(a, Fiddle, 0.5, 0.0);
+            let mut ev = sq(&a.replace("5:", "4:").replace("6:", "5:"), Fiddle, 0.45, 0.0);
             for (i, c) in ["D3+F3+A3", "A#2+D3+F3", "C3+E3+G3", "A2+C#3+E3", "D3+F3+A3", "G2+A#2+D3", "A2+C#3+E3", "D3+F3+A3"].iter().enumerate() {
                 let t = i as f32 * 6.0;
-                ev.extend(sq(&format!("{c}:2 R:1 {c}:2 R:1"), Accordion, 0.16, t));
-                ev.extend(sq(&format!("{}:3 {}:3", down(c), nth(c, 2)), Bass, 0.6, t));
-                ev.extend([drum(t, 60.0, 0.8), tick(t + 2.0, 0.25), drum(t + 3.0, 55.0, 0.55), drum(t + 5.0, 50.0, 0.4)]);
+                ev.extend(arp(c, 6.0, 1.0, t, 0.35));
+                ev.extend(sq(&format!("{}:6", down(c)), Cello, 0.55, t));
+                ev.extend([drum(t, 50.0, 0.4), drum(t + 3.0, 46.0, 0.25)]);
             }
-            Song { name: "glut", unit: 60.0 / 92.0 / 3.0, len: 48.0, events: ev, gain: 0.5 }
+            Song { name: "glut", unit: 60.0 / 70.0 / 3.0, len: 48.0, events: ev, gain: 0.5 }
         }
+        // Frostgrotte / „Eisige Leine“: a-Moll, Flöte über Harfe und Flächen
         "frost" => {
             let mel = "A4:4 C5:2 E5:2 | D5:4 B4:4 | C5:2 B4:2 A4:2 G4:2 | A4:8 | E5:4 G5:2 E5:2 | F5:4 D5:4 | E5:2 D5:2 C5:2 B4:2 | A4:8";
-            let mut ev = sq(mel, Whistle, 0.45, 0.0);
-            let up: String = mel.split_whitespace().map(|t| if let Some((n, l)) = t.split_once(':') { let o = n.chars().last().and_then(|c| c.to_digit(10)).unwrap_or(4) + 1; format!("{}{}:{}", &n[..n.len() - 1], o, l) } else { t.to_string() }).collect::<Vec<_>>().join(" ");
-            ev.extend(sq(&up, Bell, 0.25, 0.0).into_iter().step_by(2));
-            for (i, c) in ["A2+E3+C4", "G2+D3+B3", "F2+C3+A3", "E2+B2+G#3", "A2+E3+C4", "D2+A2+F3", "E2+B2+G#3", "A2+E3+C4"].iter().enumerate() {
-                ev.extend(sq(&format!("{c}:8"), Pad, 0.18, i as f32 * 8.0));
+            let mut ev = sq(mel, Whistle, 0.4, 0.0);
+            for (i, c) in ["A2+E3+A3+C4", "G2+D3+G3+B3", "F2+C3+F3+A3", "E2+B2+E3+G#3", "A2+E3+A3+C4", "D2+A2+D3+F3", "E2+B2+E3+G#3", "A2+E3+A3+C4"].iter().enumerate() {
+                let t = i as f32 * 8.0;
+                ev.extend(arp(c, 8.0, 1.0, t, 0.3));
+                ev.extend(sq(&format!("{c}:8"), Pad, 0.12, t));
             }
-            Song { name: "frost", unit: 60.0 / 60.0 / 2.0, len: 64.0, events: ev, gain: 0.55 }
+            Song { name: "frost", unit: 60.0 / 52.0 / 2.0, len: 64.0, events: ev, gain: 0.55 }
         }
+        // Rabenwacht / „Rabensturm“: g-Moll, Geige ruft, das Cello antwortet
         "sturm" => {
             let call = "G4:1 G4:1 A#4:1 D5:1 G5:2 F5:2 | D#5:1 D5:1 C5:1 A#4:1 C5:4 | R:8 | A#4:1 A#4:1 D5:1 F5:1 A#5:2 A5:2 | G5:1 F5:1 D#5:1 D5:1 G4:4 | R:8";
-            let crew = "R:16 | D4:2 D4:1 C4:1 A#3:4 | R:16 | G3:2 A3:2 A#3:2 G3:2";
-            let mut ev = sq(call, Fiddle, 0.5, 0.0);
-            ev.extend(sq(crew, CrewLead, 0.85, 0.0));
+            let answer = "R:16 | D3:2 D3:1 C3:1 A#2:4 | R:16 | G2:2 A2:2 A#2:2 G2:2";
+            let mut ev = sq(call, Fiddle, 0.45, 0.0);
+            ev.extend(sq(answer, Cello, 0.85, 0.0));
             for (i, c) in ["G2+A#2+D3", "D#2+G2+A#2", "D2+F#2+A2", "G2+A#2+D3", "F2+A2+C3", "G2+A#2+D3"].iter().enumerate() {
                 let t = i as f32 * 8.0;
-                ev.extend(sq(&format!("{c}:2 R:2 {c}:2 R:2"), Accordion, 0.15, t));
-                ev.extend(sq(&format!("{}:4 {}:4", first(c), nth(c, 2)), Bass, 0.6, t));
-                for b in 0..4 {
-                    ev.push(if b % 2 == 1 { tick(t + b as f32 * 2.0, 0.25) } else { drum(t + b as f32 * 2.0, 62.0, 0.65) });
-                }
+                ev.extend(sq(&format!("{c}:2 R:2 {c}:2 R:2"), Accordion, 0.12, t));
+                ev.extend(sq(&format!("{}:8", first(c)), Cello, 0.4, t));
+                ev.extend([drum(t, 58.0, 0.45), tick(t + 2.0, 0.12), drum(t + 4.0, 55.0, 0.3), tick(t + 6.0, 0.12)]);
             }
-            Song { name: "sturm", unit: 60.0 / 112.0 / 2.0, len: 48.0, events: ev, gain: 0.5 }
+            Song { name: "sturm", unit: 60.0 / 90.0 / 2.0, len: 48.0, events: ev, gain: 0.5 }
         }
+        // Fluchmangroven / „Tiefer Grund“: c-Moll, Akkordeon und Cello in der Tiefe
         "tiefe" => {
             let mel = "C4:3 D#4:1 G4:4 | F4:2 D#4:2 D4:4 | C4:3 D#4:1 G4:2 G#4:2 | G4:8 | G#4:3 G4:1 F4:4 | D#4:2 D4:2 C4:4 | B3:2 C4:2 D4:2 D#4:2 | C4:8";
-            let mut ev = sq(mel, CrewHum, 0.9, 0.0);
-            ev.extend(sq(mel, AccordionSolo, 0.22, 0.0));
+            let mut ev = sq(mel, AccordionSolo, 0.28, 0.0);
+            ev.extend(sq(&mel.replace("4:", "3:").replace("3:3 ", "3:3 "), Cello, 0.55, 0.0));
             for (i, c) in ["C2+G2", "G#1+D#2", "C2+G2", "G1+D2", "G#1+D#2", "F1+C2", "G1+D2", "C2+G2"].iter().enumerate() {
                 let t = i as f32 * 8.0;
-                ev.extend(sq(&format!("{c}:8"), Pad, 0.2, t));
-                ev.extend([drum(t, 45.0, 0.5), drum(t + 5.0, 42.0, 0.3)]);
+                ev.extend(sq(&format!("{c}:8"), Pad, 0.18, t));
+                ev.extend([drum(t, 42.0, 0.4), drum(t + 5.0, 40.0, 0.25)]);
             }
-            Song { name: "tiefe", unit: 60.0 / 58.0 / 2.0, len: 64.0, events: ev, gain: 0.6 }
+            Song { name: "tiefe", unit: 60.0 / 50.0 / 2.0, len: 64.0, events: ev, gain: 0.6 }
         }
+        // Ende der Welt: Geigenklage und tiefe Flächen, d-Moll
         "ende" => {
-            let mut ev = sq("A5:6 G5:2 F5:4 E5:4 | D5:8 R:8 | A#5:6 A5:2 G5:4 F5:4 | E5:12 R:4", Fiddle, 0.38, 0.0);
+            let mut ev = sq("A5:6 G5:2 F5:4 E5:4 | D5:8 R:8 | A#5:6 A5:2 G5:4 F5:4 | E5:12 R:4", Fiddle, 0.36, 0.0);
+            ev.extend(sq("D3:16 | D3:8 C3:8 | A#2:16 | A2:16", Cello, 0.6, 0.0));
             for (i, c) in ["D2+A2+F3", "D2+A2+F3", "A#1+F2+D3", "A1+E2+C#3"].iter().enumerate() {
                 let t = i as f32 * 16.0;
-                ev.extend(sq(&format!("{c}:16"), Pad, 0.22, t));
+                ev.extend(sq(&format!("{c}:16"), Pad, 0.2, t));
                 for b in 0..4 {
-                    ev.push(drum(t + b as f32 * 4.0, 40.0, 0.5));
+                    ev.push(drum(t + b as f32 * 4.0, 38.0, 0.35));
                 }
             }
-            Song { name: "ende", unit: 60.0 / 70.0 / 2.0, len: 64.0, events: ev, gain: 0.55 }
+            ev.push(Ev { t: 0.0, dur: 8.0, inst: Bell, f: freq("D4"), vel: 0.3 });
+            Song { name: "ende", unit: 60.0 / 60.0 / 2.0, len: 64.0, events: ev, gain: 0.55 }
         }
+        // Bosse: drängend, aber düster – e-Phrygisch, Geige, Cello-Ostinato, Trommeln
         "boss" => {
             let mel = "E5:1 F5:1 E5:1 G5:1 E5:1 F5:1 E5:2 | D5:1 E5:1 D5:1 C5:1 B4:4 | E5:1 F5:1 E5:1 G5:1 A5:1 G5:1 F5:2 | E5:1 D5:1 C5:1 D5:1 E5:4";
-            let mut ev = sq(&format!("{mel} | {mel}"), Fiddle, 0.48, 0.0);
+            let mut ev = sq(&format!("{mel} | {mel}"), Fiddle, 0.46, 0.0);
             for (i, r) in ["E2", "C2", "E2", "D2", "E2", "C2", "F2", "E2"].iter().enumerate() {
                 let t = i as f32 * 8.0;
-                ev.extend(sq(&format!("{r}:1 {r}:1 R:1 {r}:1 {r}:1 R:1 {r}:2"), Bass, 0.7, t));
+                let r3 = r.replace('2', "3");
+                ev.extend(sq(&format!("{r}:1 {r}:1 R:1 {r}:1 {r}:1 R:1 {r}:2"), Bass, 0.6, t));
+                ev.extend(sq(&format!("{r3}:2 {r3}:2 {r3}:2 {r3}:2"), Cello, 0.45, t));
                 for b in 0..8 {
-                    let v = if b % 4 == 0 { 0.9 } else if b % 2 == 1 { 0.3 } else { 0.55 };
-                    ev.push(if b % 2 == 1 { tick(t + b as f32, v) } else { drum(t + b as f32, 58.0, v) });
+                    let v = if b % 4 == 0 { 0.85 } else if b % 2 == 1 { 0.25 } else { 0.5 };
+                    ev.push(if b % 2 == 1 { tick(t + b as f32, v) } else { drum(t + b as f32, 56.0, v) });
                 }
-                ev.extend(sq("E3+B3:4 F3+C4:4", Accordion, 0.12, t));
             }
-            Song { name: "boss", unit: 60.0 / 132.0 / 2.0, len: 64.0, events: ev, gain: 0.5 }
+            Song { name: "boss", unit: 60.0 / 118.0 / 2.0, len: 64.0, events: ev, gain: 0.5 }
         }
         _ => return None,
     };
@@ -351,6 +391,8 @@ pub fn render_event(buf: &mut [f32], e: &Ev, start: usize, dur: f32, rng: &mut R
     let v = e.vel;
     let tail = match e.inst {
         Bell => 1.5,
+        Harp => 1.6,
+        Cello => 0.25,
         Pad => 0.1,
         CrewLead | CrewHum => 0.2,
         _ => 0.05,
@@ -360,6 +402,7 @@ pub fn render_event(buf: &mut [f32], e: &Ev, start: usize, dur: f32, rng: &mut R
         Tick => 0.04,
         Bass => dur.min(0.6) + 0.02,
         Bell => (dur + 1.4).min(2.4),
+        Harp => (dur + 1.6).min(2.6),
         _ => dur + tail,
     };
     let n = (total * SR) as usize;
@@ -387,6 +430,42 @@ pub fn render_event(buf: &mut [f32], e: &Ev, start: usize, dur: f32, rng: &mut R
                 p += (f + vib) * dt;
                 let s = lp.run(osc(Wave::Saw, p));
                 add(buf, start + i, s * env(t, 0.07, 0.11 * v, dur * 0.97, 0.12));
+            }
+        }
+        Cello => {
+            let mut lp = Bq::new(Ft::Low, 1100.0, 0.9);
+            let mut body = Bq::new(Ft::Band, 260.0, 1.2);
+            let (mut p, mut q, mut pv) = (rng.u(), rng.u(), 0.0f32);
+            for i in 0..n {
+                let t = i as f32 * dt;
+                pv += 5.0 * dt;
+                let vib = (pv * std::f32::consts::TAU).sin() * f * 0.009 * ((t - 0.25) / 0.4).clamp(0.0, 1.0);
+                p += (f + vib) * dt;
+                q += (f * 1.003 + vib) * dt;
+                let bow = 1.0 + (t * 3.1).sin() * 0.08;
+                let raw = osc(Wave::Saw, p) * 0.7 + osc(Wave::Saw, q) * 0.3;
+                let s = lp.run(raw) + body.run(raw) * 0.5;
+                add(buf, start + i, s * bow * env(t, 0.18, 0.15 * v, dur + 0.2, 0.3));
+            }
+        }
+        Harp => {
+            // Karplus-Strong: Rauschstoß in einer Verzögerungsleitung, sanft gefiltert
+            let len = ((SR / f.max(30.0)) as usize).max(2);
+            let mut line: Vec<f32> = (0..len).map(|_| rng.f()).collect();
+            for k in 1..len {
+                line[k] = line[k] * 0.5 + line[k - 1] * 0.5;
+            }
+            let mut j = 0usize;
+            let damp = 0.996f32;
+            for i in 0..n {
+                let t = i as f32 * dt;
+                let a = line[j];
+                let b = line[(j + 1) % len];
+                let y = (a + b) * 0.5 * damp;
+                line[j] = y;
+                j = (j + 1) % len;
+                let g = 0.32 * v * if t < 0.003 { t / 0.003 } else { 1.0 } * (1.0 - (t / total).powi(3)).max(0.0);
+                add(buf, start + i, a * g);
             }
         }
         Accordion | AccordionSolo => {
@@ -524,7 +603,7 @@ impl SongRender {
             let g = self.song.gain;
             for s in self.music.iter_mut() {
                 let x = (*s * 1.6).clamp(-1.0, 1.0);
-                *s = ((x * 48.0).round() / 48.0 * 0.6 + x * 0.4) * g;
+                *s = ((x * 48.0).round() / 48.0 * 0.2 + x * 0.8) * g;
             }
             for s in self.crew.iter_mut() {
                 *s = (*s * 1.2).clamp(-1.0, 1.0);
