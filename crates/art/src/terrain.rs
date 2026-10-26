@@ -10,8 +10,13 @@ use crate::noise::*;
 use std::collections::HashMap;
 
 pub const T: i32 = 32; // Kachelgröße
-pub const FACE_ROWS: i32 = 2; // Klippenwand = 2 Kachelreihen
-pub const LEVEL_H: f32 = 64.0; // Höhe einer Ebene in px
+pub const FACE_ROWS: i32 = 3; // Klippenwand = 3 Kachelreihen
+pub const LEVEL_H: f32 = 96.0; // Höhe einer Ebene in px
+/// Höhe einer Klippenwand im Bild (px)
+pub const FACE_PX: i32 = FACE_ROWS * T;
+/// Breite der seitlichen Böschung und des Randes oben (px)
+pub const BANK_PX: i32 = 20;
+pub const RIM_PX: i32 = 12;
 const TEX: i32 = 256;
 
 #[repr(u8)]
@@ -774,6 +779,10 @@ pub trait TerrainMap {
     fn face(&self, tx: i32, ty: i32) -> Option<(i32, i32, u8, u8)>;
     fn stairs(&self, tx: i32, ty: i32) -> bool;
     fn biome(&self, tx: i32, ty: i32) -> Biome;
+    /// Ebene an einem Weltpixel (runde und schräge Kanten); ohne eigene Umsetzung die der Kachel
+    fn lpx(&self, px: i32, py: i32) -> u8 {
+        self.level(px.div_euclid(T), py.div_euclid(T))
+    }
 }
 
 /// Rauschtabelle für Materialgrenzen (schnell).
@@ -891,14 +900,50 @@ pub fn bake_chunk<M: TerrainMap>(m: &M, mats: &mut Materials, en: &EdgeNoise, x0
         }
     }
     let wdist = |x: i32, y: i32| -> f32 { wd[((y + pad) * gw + x + pad) as usize] as f32 * 0.5 };
+    // Ebenen je Pixel mit Rand: seitlich für Böschungen, oben für Ränder, unten für Wände
+    let (mx, mn, ms) = (BANK_PX + 4, RIM_PX + 16, FACE_PX + 2);
+    let lw = sz + mx * 2;
+    let lh = sz + mn + ms;
+    let mut lg = vec![0u8; (lw * lh) as usize];
+    for yy in 0..lh {
+        for xx in 0..lw {
+            lg[(yy * lw + xx) as usize] = m.lpx(x0 + xx - mx, y0 + yy - mn);
+        }
+    }
+    let lv = |x: i32, y: i32| -> u8 { lg[((y + mn).clamp(0, lh - 1) * lw + (x + mx).clamp(0, lw - 1)) as usize] };
+    // je Spalte: Abstand nach unten bis zu tieferem Boden (Wand der eigenen Ebene) und dessen Ebene
+    let mut down = vec![(i32::MAX, 0u8); (sz * sz) as usize];
+    for x in 0..sz {
+        let mut pos = [i32::MAX; 8];
+        for yy in (0..lh).rev() {
+            let y = yy - mn;
+            let l = lv(x, y);
+            if (0..sz).contains(&y) {
+                let mut best = (i32::MAX, 0u8);
+                for k in 0..(l as usize).min(8) {
+                    if pos[k] != i32::MAX && pos[k] - y < best.0 {
+                        best = (pos[k] - y, k as u8);
+                    }
+                }
+                down[(y * sz + x) as usize] = best;
+            }
+            pos[(l as usize).min(7)] = y;
+        }
+    }
     for y in 0..sz {
         for x in 0..sz {
             let px = x0 + x;
             let py = y0 + y;
             let tx = px.div_euclid(T);
             let ty = py.div_euclid(T);
-            if let Some(face) = m.face(tx, ty) {
-                face_pixel(m, mats, en, &mut c, x, y, px, py, face);
+            let l = lv(x, y);
+            let (dd, lb) = down[(y * sz + x) as usize];
+            if l > 0 && dd <= FACE_PX {
+                // Klippenwand: vom Rand der Ebene aus FACE_PX nach unten
+                let fy = (FACE_PX - dd).max(0);
+                let top_mat = mat_at(m, en, px, py - fy - 3);
+                let below = mat_at(m, en, px, py + dd);
+                face_pixel(m, mats, en, &mut c, x, y, px, py, fy, l, lb, top_mat, below);
                 continue;
             }
             let mt = g(x, y);
@@ -908,8 +953,35 @@ pub fn bake_chunk<M: TerrainMap>(m: &M, mats: &mut Materials, en: &EdgeNoise, x0
             }
             let b = m.biome(tx, ty);
             // Höhenkante nach Westen, Osten oder Norden: sichtbarer Hang statt unsichtbarer Wand
-            if mt != Mat::Water && slope_pixel(m, mats, en, &mut c, x, y, px, py, mt, b) {
-                continue;
+            if mt != Mat::Water && l > 0 {
+                let mut best: Option<(f32, (f32, f32))> = None;
+                for d in 1..=BANK_PX {
+                    if lv(x - d, y) < l {
+                        best = Some((d as f32, (-1.0, 0.0)));
+                        break;
+                    }
+                }
+                for d in 1..=BANK_PX {
+                    if lv(x + d, y) < l {
+                        if best.map(|b| (d as f32) < b.0).unwrap_or(true) {
+                            best = Some((d as f32, (1.0, 0.0)));
+                        }
+                        break;
+                    }
+                }
+                for d in 1..=RIM_PX {
+                    if lv(x, y - d) < l {
+                        if best.map(|b| (d as f32) * 1.4 < b.0).unwrap_or(true) {
+                            best = Some((d as f32 * 1.4, (0.0, -1.0)));
+                        }
+                        break;
+                    }
+                }
+                if let Some((d, dir)) = best {
+                    if slope_pixel(mats, en, &mut c, x, y, px, py, mt, b, d, dir, m.stairs(tx, ty)) {
+                        continue;
+                    }
+                }
             }
             let tex = mats.get(mt, b);
             let ti = tex.idx(px.rem_euclid(TEX), py.rem_euclid(TEX));
@@ -986,8 +1058,20 @@ pub fn bake_chunk<M: TerrainMap>(m: &M, mats: &mut Materials, en: &EdgeNoise, x0
                 c.ev[i] = 0.0;
                 continue;
             }
-            // Fuß der Klippe darüber: Umgebungsverdeckung
-            let ao = cliff_ao(m, px, py);
+            // Fuß der Klippe darüber und seitlicher Böschungen: Umgebungsverdeckung
+            let mut ao = 0.0f32;
+            for d in 1..14 {
+                if lv(x, y - d) > l {
+                    ao = (1.0 - d as f32 / 14.0).powf(1.5);
+                    break;
+                }
+            }
+            for d in 1..9 {
+                if lv(x - d, y) > l || lv(x + d, y) > l {
+                    ao = ao.max((1.0 - d as f32 / 9.0) * 0.8);
+                    break;
+                }
+            }
             if ao > 0.0 {
                 col = shade(col, 1.0 - ao * 0.45);
             }
@@ -1001,147 +1085,93 @@ pub fn bake_chunk<M: TerrainMap>(m: &M, mats: &mut Materials, en: &EdgeNoise, x0
     c
 }
 
-/// Hang an einer Ebenenkante (West/Ost/Nord): auf der höheren Kachel fällt ein Böschungsstreifen
-/// zur tieferen hin ab – Grasabbruch oben, Erde und Steine im Hang, dunkle Kante unten. Auf der
-/// tieferen Kachel liegt am Fuß ein Schattenstreifen. Gibt true zurück, wenn der Pixel gezeichnet ist.
+/// Hang an einer Ebenenkante (West/Ost/Nord): auf der höheren Ebene fällt ein Böschungsstreifen
+/// zur tieferen hin ab – Grasabbruch oben, Erde und Steine im Hang, dunkle Kante unten. `d` ist der
+/// Abstand zur tieferen Ebene, `dir` die Richtung dorthin. Auf Rampenkacheln (`ramp`) liegt ein
+/// begehbarer Weg mit Stufenkanten. Gibt true zurück, wenn der Pixel gezeichnet ist.
 #[allow(clippy::too_many_arguments)]
-fn slope_pixel<M: TerrainMap>(m: &M, mats: &mut Materials, en: &EdgeNoise, c: &mut Canvas, x: i32, y: i32, px: i32, py: i32, mt: Mat, b: Biome) -> bool {
-    let tx = px.div_euclid(T);
-    let ty = py.div_euclid(T);
-    let l = m.level(tx, ty);
-    let (lx, ly) = (px.rem_euclid(T), py.rem_euclid(T));
-    let lower = |dx: i32, dy: i32| -> bool {
-        let n = m.mat(tx + dx, ty + dy);
-        m.level(tx + dx, ty + dy) < l && !n.transparent() && m.face(tx + dx, ty + dy).is_none()
-    };
-    let higher = |dx: i32, dy: i32| -> bool { m.level(tx + dx, ty + dy) > l && m.face(tx + dx, ty + dy).is_none() };
+fn slope_pixel(mats: &mut Materials, en: &EdgeNoise, c: &mut Canvas, x: i32, y: i32, px: i32, py: i32, mt: Mat, b: Biome, d: f32, dir: (f32, f32), ramp: bool) -> bool {
     // Hangbreite schwankt leicht entlang der Kante
-    let band = |along: i32, seed: i32| -> f32 { 17.0 + en.at(along * 2, seed) * 5.0 + en.at(along * 7, seed + 5) * 1.5 };
-    let mut d = f32::MAX;
-    let mut dir = (0.0f32, 0.0f32);
-    if l > 0 {
-        if lower(-1, 0) {
-            let bw = band(py, 11);
-            if (lx as f32) < bw && (lx as f32) / bw < d {
-                d = lx as f32 / bw;
-                dir = (-1.0, 0.0);
-            }
-        }
-        if lower(1, 0) {
-            let bw = band(py, 23);
-            let dd = (T - 1 - lx) as f32;
-            if dd < bw && dd / bw < d {
-                d = dd / bw;
-                dir = (1.0, 0.0);
-            }
-        }
-        if lower(0, -1) {
-            let bw = band(px, 37) * 0.7;
-            if (ly as f32) < bw && (ly as f32) / bw < d {
-                d = ly as f32 / bw;
-                dir = (0.0, -1.0);
-            }
-        }
+    let along = if dir.0 != 0.0 { py } else { px };
+    let mut band = 17.0 + en.at(along * 2, 11) * 5.0 + en.at(along * 7, 16) * 1.5;
+    if dir.1 != 0.0 {
+        band *= 0.7;
     }
-    if d < 1.0 {
-        let bp = biome_pal(b);
-        let grassy = matches!(mt, Mat::Grass | Mat::Meadow | Mat::Moss | Mat::Snow);
-        let tex = mats.get(mt, b);
-        let ti = tex.idx(px.rem_euclid(TEX), py.rem_euclid(TEX));
-        // oben: Gras-/Bodenlippe mit heller Kante
-        if d > 0.78 {
-            let col = if d < 0.84 { outline_of(tex.col[ti]) } else { shade(tex.col[ti], 0.92) };
-            c.put(x, y, col, 2.0 + (d - 0.78) * 4.0);
-            let i = c.idx(x, y);
-            c.up[i] = 40;
-            c.ev[i] = 0.0;
-            return true;
+    let d = d / band;
+    if d >= 1.0 {
+        return false;
+    }
+    let bp = biome_pal(b);
+    let grassy = matches!(mt, Mat::Grass | Mat::Meadow | Mat::Moss | Mat::Snow);
+    let tex = mats.get(mt, b);
+    let ti = tex.idx(px.rem_euclid(TEX), py.rem_euclid(TEX));
+    if ramp {
+        // Rampe: festgetretener Weg mit Holzstufen quer zum Hang
+        let pth = &bp.path;
+        let step = if dir.0 != 0.0 { px.rem_euclid(9) } else { py.rem_euclid(9) };
+        let n = en.at(px * 5, py * 5) * 0.5 + 0.5;
+        let mut col = pickf(&pth[1..5], 0.45 + n * 0.2 + (1.0 - d) * -0.1);
+        let mut rel = 0.0;
+        if step == 0 {
+            col = shade(hex(0x5A4028), 0.9);
+            rel = 1.5;
+        } else if step == 1 {
+            col = shade(col, 0.75);
         }
-        // Hangfläche: Erde/Fels mit Steinen, zur Kante hin dunkler
-        let st = &bp.cliff;
-        let n = en.at(px * 7, py * 7) * 0.5 + 0.5;
-        let stone = hash(px / 3, py / 3, 91) % 23 == 0;
-        let mut v = 0.32 + d * 0.38 + n * 0.12;
-        // Licht von links oben: Westhänge dunkler, Osthänge heller
-        v += match dir {
-            (x, _) if x < 0.0 => -0.08,
-            (x, _) if x > 0.0 => 0.06,
-            _ => 0.1,
-        };
-        let mut col = pickf(st, v.clamp(0.0, 1.0));
-        if grassy {
-            // Grasböschung: Oberfläche im Schatten der Neigung, Fels nur in einzelnen Ausbissen,
-            // unten ein Streifen Erde
-            let lit = 0.62 + d * 0.3 + match dir {
-                (x, _) if x < 0.0 => -0.07,
-                (x, _) if x > 0.0 => 0.07,
-                _ => 0.08,
-            };
-            let g = shade(tex.col[ti], lit);
-            col = if n > 0.74 { col } else if d < 0.16 { mix(g, bp.path[1], 0.6 - d * 2.0) } else { g };
-        }
-        if stone {
-            col = pickf(&bp.stone, 0.6 + n * 0.2);
-        }
-        if d < 0.12 {
-            col = shade(col, 0.6);
-        }
-        // Relief: Höhe fällt zur tieferen Seite (daraus entstehen die Normalen)
-        c.put(x, y, col, -6.0 + d * 6.0 + if stone { 1.5 } else { 0.0 });
+        c.put(x, y, col, rel - (1.0 - d) * 2.0);
         let i = c.idx(x, y);
-        c.up[i] = (90.0 + (1.0 - d) * 110.0) as u8;
-        c.ev[i] = 0.0;
-        if grassy && d > 0.6 {
-            let _ = mt;
-        }
-        return true;
-    }
-    // Fuß eines Hangs auf der tieferen Kachel: weicher Schattenstreifen
-    let mut sh = 0.0f32;
-    if higher(-1, 0) {
-        sh = sh.max(1.0 - lx as f32 / 9.0);
-    }
-    if higher(1, 0) {
-        sh = sh.max(1.0 - (T - 1 - lx) as f32 / 9.0);
-    }
-    if higher(0, -1) && m.face(tx, ty - 1).is_none() {
-        sh = sh.max(1.0 - ly as f32 / 7.0);
-    }
-    if sh > 0.0 {
-        let tex = mats.get(mt, b);
-        let ti = tex.idx(px.rem_euclid(TEX), py.rem_euclid(TEX));
-        let col = shade(tex.col[ti], 1.0 - sh * 0.4);
-        c.put(x, y, col, tex.rel[ti] - sh);
-        let i = c.idx(x, y);
-        c.up[i] = 0;
+        c.up[i] = 30;
         c.ev[i] = 0.0;
         return true;
     }
-    false
+    // oben: Gras-/Bodenlippe mit heller Kante
+    if d > 0.78 {
+        let col = if d < 0.84 { outline_of(tex.col[ti]) } else { shade(tex.col[ti], 0.92) };
+        c.put(x, y, col, 2.0 + (d - 0.78) * 4.0);
+        let i = c.idx(x, y);
+        c.up[i] = 40;
+        c.ev[i] = 0.0;
+        return true;
+    }
+    // Hangfläche: Erde/Fels mit Steinen, zur Kante hin dunkler
+    let st = &bp.cliff;
+    let n = en.at(px * 7, py * 7) * 0.5 + 0.5;
+    let stone = hash(px / 3, py / 3, 91) % 23 == 0;
+    let mut v = 0.32 + d * 0.38 + n * 0.12;
+    // Licht von links oben: Westhänge dunkler, Osthänge heller
+    v += if dir.0 < 0.0 { -0.08 } else if dir.0 > 0.0 { 0.06 } else { 0.1 };
+    let mut col = pickf(st, v.clamp(0.0, 1.0));
+    if grassy {
+        // Grasböschung: Oberfläche im Schatten der Neigung, Fels nur in einzelnen Ausbissen,
+        // unten ein Streifen Erde
+        let lit = 0.62 + d * 0.3 + if dir.0 < 0.0 { -0.07 } else if dir.0 > 0.0 { 0.07 } else { 0.08 };
+        let g = shade(tex.col[ti], lit);
+        col = if n > 0.74 { col } else if d < 0.16 { mix(g, bp.path[1], 0.6 - d * 2.0) } else { g };
+    }
+    if stone {
+        col = pickf(&bp.stone, 0.6 + n * 0.2);
+    }
+    if d < 0.12 {
+        col = shade(col, 0.6);
+    }
+    // Relief: Höhe fällt zur tieferen Seite (daraus entstehen die Normalen)
+    c.put(x, y, col, -6.0 + d * 6.0 + if stone { 1.5 } else { 0.0 });
+    let i = c.idx(x, y);
+    c.up[i] = (90.0 + (1.0 - d) * 110.0) as u8;
+    c.ev[i] = 0.0;
+    true
 }
 
-/// Schatten unter einer Wand (die Kacheln direkt unterhalb einer Klippe).
-fn cliff_ao<M: TerrainMap>(m: &M, px: i32, py: i32) -> f32 {
-    let tx = px.div_euclid(T);
-    let ty = py.div_euclid(T);
-    let fy = py.rem_euclid(T);
-    if fy < 14 && m.face(tx, ty - 1).is_some() {
-        return (1.0 - fy as f32 / 14.0).powf(1.5);
-    }
-    0.0
-}
 
 /// Ein Pixel einer Klippenwand: Säulenbasalt mit hellen Köpfen, Absätzen, Fugen, Moos
 /// und überhängender Graslippe.
 #[allow(clippy::too_many_arguments)]
-fn face_pixel<M: TerrainMap>(m: &M, mats: &mut Materials, en: &EdgeNoise, c: &mut Canvas, x: i32, y: i32, px: i32, py: i32, face: (i32, i32, u8, u8)) {
-    let (row, rows, lt, lb) = face;
+fn face_pixel<M: TerrainMap>(m: &M, mats: &mut Materials, en: &EdgeNoise, c: &mut Canvas, x: i32, y: i32, px: i32, py: i32, fy: i32, lt: u8, lb: u8, top_mat: Mat, below: Mat) {
     let tx = px.div_euclid(T);
     let ty = py.div_euclid(T);
     let b = m.biome(tx, ty);
     let bp = biome_pal(b);
-    let hgt = rows * T;
-    let fy = row * T + py.rem_euclid(T); // 0..hgt
+    let hgt = FACE_PX;
     let top_ev = (lt as f32 - lb as f32).max(1.0) * LEVEL_H;
     let bot_ev = 0.0;
     let ev_at = |f: i32| top_ev + (bot_ev - top_ev) * (f as f32 / hgt as f32);
@@ -1149,7 +1179,6 @@ fn face_pixel<M: TerrainMap>(m: &M, mats: &mut Materials, en: &EdgeNoise, c: &mu
         stairs_pixel(c, x, y, px, fy, hgt, &bp, ev_at(fy));
         return;
     }
-    let top_mat = m.mat(tx, ty - row - 1);
     let top_mat = if top_mat.transparent() { Mat::Rock } else { top_mat };
     let has_lip = matches!(top_mat, Mat::Grass | Mat::Meadow | Mat::Moss | Mat::Snow);
     // Säulen über 1D-Zellen mit Breiten 13..21
@@ -1195,7 +1224,7 @@ fn face_pixel<M: TerrainMap>(m: &M, mats: &mut Materials, en: &EdgeNoise, c: &mu
         }
     }
     if b == Biome::Hub {
-        masonry_pixel(c, x, y, px, fy, hgt, &bp, ev_at(fy), m.mat(tx, ty + (rows - row)) == Mat::Water);
+        masonry_pixel(c, x, y, px, fy, hgt, &bp, ev_at(fy), below == Mat::Water);
         return;
     }
     if fy < cap_here {
@@ -1264,7 +1293,6 @@ fn face_pixel<M: TerrainMap>(m: &M, mats: &mut Materials, en: &EdgeNoise, c: &mu
     }
     v += (bayer(px, py) - 0.5) * 0.08;
     let mut col = pickf(cl, v.clamp(0.0, 1.0));
-    let below = m.mat(tx, ty + (rows - row));
     let to_bottom = hgt - fy;
     if to_bottom < 8 {
         col = shade(col, 0.7 + to_bottom as f32 * 0.035);

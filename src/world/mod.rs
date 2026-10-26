@@ -8,7 +8,8 @@ pub mod view;
 
 use std::collections::HashMap;
 use sw_art::noise::{Noise, Rng};
-use sw_art::terrain::{Biome, Mat, TerrainMap, FACE_ROWS};
+use crate::game::data::shop_def;
+use sw_art::terrain::{Biome, EdgeNoise, Mat, TerrainMap, BANK_PX, FACE_PX, FACE_ROWS, RIM_PX};
 
 pub const TS: i32 = 32;
 pub const MW: i32 = 560;
@@ -194,6 +195,17 @@ pub struct ItemDef {
     pub x: f32,
     pub y: f32,
 }
+/// Tür eines Ladens: außen (x, y), Ankunft draußen/drinnen, Ausgang drinnen, Innenraum (px).
+#[derive(Clone, Debug)]
+pub struct Door {
+    pub x: f32,
+    pub y: f32,
+    pub out: (f32, f32),
+    pub inn: (f32, f32),
+    pub exit: (f32, f32),
+    pub name: &'static str,
+    pub room: (f32, f32, f32, f32),
+}
 #[derive(Clone, Debug)]
 pub struct Dock {
     pub zone: Zone,
@@ -294,6 +306,10 @@ pub struct World {
     /// Ende des Stegs im See der Glutwacht (dort zieht der Strudel hinab)
     pub pier_end: (f32, f32),
     pub walkers: Vec<WalkerDef>,
+    /// Läden mit Innenraum
+    pub doors: Vec<Door>,
+    /// Siedlungen (Mitte und Halbachsen in px): keine Gegner
+    pub settlements: Vec<(f32, f32, f32, f32)>,
     pub waterfalls: Vec<Waterfall>,
     pub ghost_routes: Vec<Vec<(f32, f32)>>,
     pub whirlpool: (f32, f32),
@@ -308,6 +324,12 @@ pub struct World {
     pub crew_spots: Vec<(f32, f32)>,
     pub grid: HashMap<i32, Vec<Collider>>,
     pub dyn_blockers: Vec<(f32, f32, f32, f32, bool)>,
+    /// geglättetes Höhenfeld je Kachel (Ebene + 0,5, weichgezeichnet) für runde und schräge Kanten
+    pub hb: Vec<f32>,
+    /// Rauschen für die Kantenführung
+    pub en: EdgeNoise,
+    /// ebene Flächen (Siedlungen): Kachel-Mitte und Halbachsen
+    pub flat_areas: Vec<(i32, i32, i32, i32)>,
     cur: Zone,
     nz: Noise,
     info: Box<dyn Fn(&str) -> Option<PropInfo> + Send + Sync>,
@@ -350,6 +372,8 @@ impl World {
             hub_wrecks: vec![],
             pier_end: (0.0, 0.0),
             walkers: vec![],
+            doors: vec![],
+            settlements: vec![],
             waterfalls: vec![],
             ghost_routes: vec![],
             whirlpool: (0.0, 0.0),
@@ -361,6 +385,9 @@ impl World {
             crew_spots: vec![],
             grid: HashMap::new(),
             dyn_blockers: vec![],
+            hb: vec![0.5; n],
+            en: EdgeNoise::new(),
+            flat_areas: vec![],
             cur: Zone::Kueste,
             nz: Noise::new(4242),
             info,
@@ -411,7 +438,59 @@ impl World {
         }
     }
     pub fn level_at(&self, x: f32, y: f32) -> u8 {
-        self.lv((x / TS as f32).floor() as i32, (y / TS as f32).floor() as i32)
+        self.lpx(x.floor() as i32, y.floor() as i32)
+    }
+    /// Geglättetes Höhenfeld aus den Kachelebenen (3×3 weichgezeichnet).
+    fn compute_field(&mut self) {
+        let mut hb = vec![0.5f32; (MW * MH) as usize];
+        for y in 0..MH {
+            for x in 0..MW {
+                let mut s = 0.0;
+                let mut wsum = 0.0;
+                for (ox, oy, w) in [(0, 0, 4.0f32), (1, 0, 2.0), (-1, 0, 2.0), (0, 1, 2.0), (0, -1, 2.0), (1, 1, 1.0), (-1, 1, 1.0), (1, -1, 1.0), (-1, -1, 1.0)] {
+                    let (nx, ny) = ((x + ox).clamp(0, MW - 1), (y + oy).clamp(0, MH - 1));
+                    s += (self.level[idx(nx, ny)] as f32 + 0.5) * w;
+                    wsum += w;
+                }
+                hb[idx(x, y)] = s / wsum;
+            }
+        }
+        self.hb = hb;
+    }
+    /// Pixel gehört zum begehbaren Oberteil seiner Ebene (keine Wand, Böschung oder Kante)?
+    /// Liefert die Ebene und ob der Pixel begehbar ist.
+    pub fn px_walk(&self, px: i32, py: i32) -> (u8, bool) {
+        let l = self.lpx(px, py);
+        if l == 0 {
+            return (0, true);
+        }
+        let (tx, ty) = (px.div_euclid(TS), py.div_euclid(TS));
+        if inb(tx, ty) && self.stairs[idx(tx, ty)] {
+            return (l, true);
+        }
+        // Wand nach Süden
+        let mut d = 3;
+        while d <= FACE_PX {
+            if self.lpx(px, py + d) < l {
+                return (l, false);
+            }
+            d += 6;
+        }
+        if self.lpx(px, py + FACE_PX) < l {
+            return (l, false);
+        }
+        // Böschung seitlich, Kante oben
+        for d in [3, 8, 13, BANK_PX - 2] {
+            if self.lpx(px - d, py) < l || self.lpx(px + d, py) < l {
+                return (l, false);
+            }
+        }
+        for d in [3, 7, RIM_PX - 2] {
+            if self.lpx(px, py - d) < l {
+                return (l, false);
+            }
+        }
+        (l, true)
     }
     pub fn is_land(&self, tx: i32, ty: i32) -> bool {
         self.g(tx, ty) != Mat::Water
@@ -442,6 +521,7 @@ impl World {
         }
         self.compute_faces();
         self.auto_stairs();
+        self.compute_field();
         self.settle_on_cliffs();
         self.compute_shore();
         for z in ZONES {
@@ -955,6 +1035,136 @@ impl World {
     }
 
     // ------------------------------------------------------------ Gebiete
+    /// Siedlung: gepflasterter Platz, Häuser im Bogen, ein Laden mit begehbarem Innenraum und
+    /// eigenem Händler, Brunnen, Marktstände, Laternen, Dorfbewohner. Gegner werden hinausverlegt
+    /// und meiden den Ort. `k` = Nummer des Innenraums.
+    #[allow(clippy::too_many_arguments)]
+    fn settlement(&mut self, key: &'static str, k: usize, cx: i32, cy: i32, ground: Mat, merchant: &'static str, folk: [&'static str; 4], decor: &[&'static str]) {
+        let (rx, ry) = (13, 8);
+        self.flat_areas.push((cx, cy, rx + 3, ry + 3));
+        let (wx, wy) = tpos(cx, cy);
+        self.settlements.push((wx, wy, (rx as f32 + 2.0) * TS as f32, (ry as f32 + 2.0) * TS as f32));
+        // Gewächs und Geröll vom Platz räumen
+        for p in self.props.iter_mut() {
+            if p.sea || p.interact.is_some() {
+                continue;
+            }
+            let e = ((p.x - wx) / ((rx + 1) * TS) as f32).powi(2) + ((p.y - wy) / ((ry + 1) * TS) as f32).powi(2);
+            if e <= 1.0 {
+                p.hidden = true;
+            }
+        }
+        self.clear_spawns(wx, wy, rx, ry);
+        self.plaza(cx, cy, rx, ry, ground, Some(0));
+        self.road(&[(cx - rx, cy + 1), (cx + rx, cy + 1)], Mat::Dirt, 1);
+        self.road(&[(cx, cy - 4), (cx, cy + ry)], Mat::Dirt, 1);
+        // Häuser: Nordreihe mit dem Laden, zwei Häuser im Süden
+        self.prop_tf("townhouse0", cx - 12, cy - 5, false);
+        self.prop_tf("townhouse1", cx - 5, cy - 6, true);
+        let (sx, sy) = (cx + 3, cy - 6);
+        self.prop_t("tavern", sx, sy);
+        self.prop_tf("townhouse2", cx + 12, cy - 5, true);
+        self.prop_tf("townhouse1", cx - 9, cy + 8, false);
+        self.prop_tf("townhouse0", cx + 9, cy + 8, true);
+        // Dorfplatz
+        self.prop_t("well", cx, cy + 2);
+        self.prop_t("stall0", cx - 6, cy + 1);
+        self.prop_t("stall1", cx + 6, cy + 1);
+        for (x, y) in [(-9, -1), (9, -1), (-4, 5), (4, 5)] {
+            self.prop_t("lamppost", cx + x, cy + y);
+        }
+        self.prop_t("barrels", cx + 8, cy - 4);
+        self.prop_t("crates", cx - 1, cy - 4);
+        self.prop_t("bench", cx - 11, cy + 2);
+        self.prop_t("table", cx + 11, cy + 2);
+        self.prop_t("laundry", cx - 9, cy - 3);
+        self.prop_tn("flowerPot", cx - 6, cy - 3);
+        self.prop_tn("flowerPot", cx + 10, cy - 3);
+        for (i, d) in decor.iter().enumerate() {
+            let (x, y) = [(-13, 4), (13, 5), (-2, 6), (2, -3)][i % 4];
+            self.prop_t(d, cx + x, cy + y);
+        }
+        // Dorfleben: zwei gehen umher, zwei sitzen und plaudern
+        self.walker(folk[0], &[(cx - 9, cy + 1), (cx + 9, cy + 1), (cx + 9, cy + 4), (cx - 9, cy + 4)]);
+        self.walker(folk[1], &[(cx - 2, cy - 3), (cx - 2, cy + 6), (cx + 7, cy + 6), (cx + 7, cy - 3)]);
+        let tdlg: &'static str = Box::leak(format!("town_{key}").into_boxed_str());
+        self.npc(Box::leak(format!("{key}Folk1").into_boxed_str()), cx - 11, cy + 3, folk[2], "Dorfbewohnerin", tdlg, true, None);
+        self.npc(Box::leak(format!("{key}Folk2").into_boxed_str()), cx + 11, cy + 3, folk[3], "Dorfbewohner", tdlg, true, None);
+        // Laden: Tür vor der Taverne, Innenraum weit draußen im Nordosten
+        let (dx, dy) = tpos(sx, sy);
+        let (door_x, door_y) = (dx, dy + 14.0);
+        let (ix0, iy0) = (476 + k as i32 * 16, 6);
+        self.interior(key, k, ix0, iy0, merchant);
+        let (ex, ey) = tpos(ix0 + 6, iy0 + 9);
+        let d = shop_def(key);
+        self.doors.push(Door { x: door_x, y: door_y, out: (door_x, door_y + 26.0), inn: (ex, ey - 40.0), exit: (ex, ey - 6.0), name: d.town, room: ((ix0 * TS) as f32, (iy0 * TS) as f32, (13 * TS) as f32, (10 * TS) as f32) });
+    }
+    /// Gegner aus einem Ort an den Rand verlegen.
+    fn clear_spawns(&mut self, wx: f32, wy: f32, rx: i32, ry: i32) {
+        let (ox, oy) = ((rx + 6) * TS, (ry + 6) * TS);
+        for sp in self.spawns.iter_mut() {
+            let e = ((sp.x - wx) / ((rx + 3) * TS) as f32).powi(2) + ((sp.y - wy) / ((ry + 3) * TS) as f32).powi(2);
+            if e <= 1.0 {
+                let (dx, dy) = (sp.x - wx, sp.y - wy);
+                let l = dx.hypot(dy).max(1.0);
+                sp.x = wx + dx / l * ox as f32;
+                sp.y = wy + dy / l * oy as f32;
+            }
+        }
+    }
+    /// Laden in einer schon bestehenden Stadt (Rabenwacht): ein Haus wird zum Laden.
+    fn town_shop(&mut self, key: &'static str, k: usize, hx: i32, hy: i32, merchant: &'static str) {
+        let (dx, dy) = tpos(hx, hy);
+        let (door_x, door_y) = (dx, dy + 14.0);
+        let (ix0, iy0) = (476 + k as i32 * 16, 6);
+        self.interior(key, k, ix0, iy0, merchant);
+        let (ex, ey) = tpos(ix0 + 6, iy0 + 9);
+        let d = shop_def(key);
+        self.doors.push(Door { x: door_x, y: door_y, out: (door_x, door_y + 26.0), inn: (ex, ey - 40.0), exit: (ex, ey - 6.0), name: d.town, room: ((ix0 * TS) as f32, (iy0 * TS) as f32, (13 * TS) as f32, (10 * TS) as f32) });
+    }
+    /// Innenraum eines Ladens: Dielen, Steinwand hinten, Theke mit Händler, Regale, Fässer, Kerzen.
+    fn interior(&mut self, key: &'static str, _k: usize, ix0: i32, iy0: i32, merchant: &'static str) {
+        let z = self.cur;
+        for y in iy0 - 2..iy0 + 12 {
+            for x in ix0 - 2..ix0 + 15 {
+                if !inb(x, y) {
+                    continue;
+                }
+                let i = idx(x, y);
+                let inside = x >= ix0 && x < ix0 + 13 && y >= iy0 && y < iy0 + 10;
+                self.ground[i] = if inside { Mat::Plank } else { Mat::Water };
+                self.biome[i] = Biome::Hub;
+                self.zone[i] = Some(z);
+                self.level[i] = if inside && y < iy0 + 3 { 1 } else { 0 };
+                self.path[i] = inside;
+            }
+        }
+        let d = shop_def(key);
+        // Theke mit Händler dahinter
+        for x in ix0 + 5..=ix0 + 7 {
+            self.prop_t("table", x, iy0 + 5);
+        }
+        self.prop_tn("candles0", ix0 + 5, iy0 + 5);
+        self.prop_tn("candles1", ix0 + 7, iy0 + 5);
+        self.npc(Box::leak(format!("shop_{key}").into_boxed_str()), ix0 + 6, iy0 + 4, merchant, d.name, Box::leak(format!("shop_{key}").into_boxed_str()), false, None);
+        // Regale und Waren an der Rückwand, Fässer und Kisten in den Ecken
+        self.prop_t("stall0", ix0 + 2, iy0 + 4);
+        self.prop_t("stall1", ix0 + 10, iy0 + 4);
+        self.prop_t("barrels", ix0 + 1, iy0 + 8);
+        self.prop_t("crates", ix0 + 11, iy0 + 8);
+        self.prop_t("crates", ix0 + 11, iy0 + 6);
+        self.prop_t("torch", ix0 + 1, iy0 + 5);
+        self.prop_t("torch", ix0 + 11, iy0 + 5);
+        let extra = match key {
+            "kueste" => "nets",
+            "asche" => "anchorDeco",
+            "frost" => "logPile",
+            "raben" => "cannon",
+            _ => "flowerPot",
+        };
+        self.prop_tn(extra, ix0 + 3, iy0 + 8);
+    }
+
     fn layout_coast(&mut self, rng: &mut Rng) {
         let d = self.cur.def();
         let (cx, cy) = (d.cx, d.cy);
@@ -1004,6 +1214,7 @@ impl World {
         self.item("bullets", cx + 12, cy + 4);
         self.item("pearls", cx + 28, cy - 20);
         self.npc("herald", cx - 6, cy + 6, "carver", "Alter Galionsschnitzer", "herald", true, None);
+        self.settlement("kueste", 0, cx - 26, cy + 5, Mat::Cobble, "fisherJorn", ["villagerA", "villagerF", "villagerE", "villagerB"], &["nets", "anchorDeco", "barrels", "logPile"]);
     }
     /// Glutwacht nach dem Vorbild eines Feuerband-Schreins: kompakter Ring aus Mauern um einen
     /// See in der Mitte. Im See ein eigener Steg zum Strudel, am Inselrand der Anleger fürs Schiff.
@@ -1030,13 +1241,13 @@ impl World {
         }
         // ---- Ebenen: Feuerterrasse (1), Schrein (2), Wachplattformen (3)
         self.terrace(wx0 + 1, wy0 + 1, wx1 - 1, cy - 12, 1);
-        self.terrace(cx - 13, wy0 + 1, cx + 13, cy - 21, 2);
+        self.terrace(cx - 13, wy0 + 1, cx + 13, cy - 20, 2);
         self.terrace(wx0 + 1, wy0 + 1, wx0 + 6, wy0 + 6, 3);
         self.terrace(wx1 - 6, wy0 + 1, wx1 - 1, wy0 + 6, 3);
         for x in [wx0 + 2, wx1 - 4] {
             self.stair(x, 3, cy - 12);
         }
-        self.stair(cx - 1, 3, cy - 21);
+        self.stair(cx - 1, 3, cy - 20);
         self.stair(wx0 + 3, 2, wy0 + 6);
         self.stair(wx1 - 4, 2, wy0 + 6);
         for y in wy0 + 1..=cy - 12 {
@@ -1103,7 +1314,7 @@ impl World {
             });
             self.slots.push(Slot { el, prop: pi, x: sx, y: sy });
         }
-        for (i, (tx, ty)) in [(fx - 3, fy + 3), (fx + 3, fy + 3), (fx - 7, fy + 3), (fx + 7, fy + 3)].iter().enumerate() {
+        for (i, (tx, ty)) in [(fx - 3, fy + 2), (fx + 3, fy + 2), (fx - 7, fy + 2), (fx + 7, fy + 2)].iter().enumerate() {
             self.prop_t(&format!("swordGrave{}", i % 3), *tx, *ty);
         }
         for (i, (tx, ty)) in [(fx - 11, fy - 1), (fx - 2, fy - 2), (fx + 2, fy - 2), (fx + 11, fy - 1)].iter().enumerate() {
@@ -1113,18 +1324,18 @@ impl World {
             self.prop_t("brazier", tx, ty);
         }
         // Säulenreihe an der Terrassenkante über dem See
-        for dx in [-13, -7, 7, 13] {
-            self.prop_t("stoneColumn", cx + dx, cy - 14);
+        for dx in [-15, -11, 11, 15] {
+            self.prop_t("stoneColumn", cx + dx, cy - 15);
         }
         self.npc("maid", fx - 2, fy + 1, "lanternMaid", "Die Laternenmagd", "maid", false, None);
         let (sx, sy) = (wx0 + 6, cy - 16);
-        self.plaza(sx, sy, 3, 2, Mat::Dirt, Some(1));
+        self.plaza(sx, sy, 3, 1, Mat::Dirt, Some(1));
         self.prop_t("forge", sx - 1, sy - 2);
         self.prop_t("anchorDeco", sx + 3, sy + 1);
         self.prop_t("barrels", sx - 4, sy + 1);
         self.npc("smith", sx, sy, "smith", "Schmied Harrow", "smith", false, None);
         let (mx, my) = (wx1 - 6, cy - 16);
-        self.plaza(mx, my, 3, 2, Mat::Dirt, Some(1));
+        self.plaza(mx, my, 3, 1, Mat::Dirt, Some(1));
         self.prop_t("stall0", mx, my - 2);
         self.prop_t("crates", mx - 4, my + 1);
         self.prop_t("barrels", mx + 4, my + 1);
@@ -1133,10 +1344,10 @@ impl World {
         let (kx, ky) = (px(cx) + 16.0, py(cy - 24) + 24.0);
         self.prop("fortKeep", kx, ky);
         for dx in [-10, 10] {
-            self.prop_t("hoodedStatue", cx + dx, cy - 23);
+            self.prop_t("hoodedStatue", cx + dx, cy - 24);
         }
         for dx in [-6, 6] {
-            self.prop_t("bannerPole", cx + dx, cy - 22);
+            self.prop_t("bannerPole", cx + dx, cy - 23);
         }
         // Wachplattformen (Ebene 3) mit Kanonen und Feuerbecken
         for (bx, flip) in [(wx0 + 4, false), (wx1 - 4, true)] {
@@ -1207,54 +1418,108 @@ impl World {
         }
     }
 
-    /// Hochland: jedes Festlandgebiet bekommt Hügel und Felsstufen bis Ebene 4 (fünf Ebenen).
-    /// Rund um Feuer, Figuren, Truhen, Anleger, Arenen und Gegner bleibt der Boden, wie er ist;
-    /// Ebenen unterscheiden sich zu Nachbarn höchstens um eins (Treppen und Sprünge je eine Ebene).
+    /// Hochland: jedes Festlandgebiet bekommt Hügel und Felsstufen bis Ebene 4 (fünf Ebenen) – dort,
+    /// wo es Sinn ergibt: zur Inselmitte und zu ein, zwei Bergkuppen hin höher, an Stränden flach.
+    /// Die Formen sind groß und rund (Öffnen und Schließen je Ebene), Siedlungen, Feuer, Figuren,
+    /// Arenen und Tore liegen auf ebenen Flächen in ihrer Umgebungshöhe, Anleger auf Meereshöhe.
+    /// Nachbarn unterscheiden sich höchstens um eine Ebene.
     fn highlands(&mut self, z: Zone) {
         let d = z.def();
         let (x0, y0, x1, y1) = (d.cx - d.rx - 8, d.cy - d.ry - 8, d.cx + d.rx + 8, d.cy + d.ry + 8);
         let (w, h) = (x1 - x0 + 1, y1 - y0 + 1);
+        let n = (w * h) as usize;
         let id = |x: i32, y: i32| ((y - y0) * w + (x - x0)) as usize;
-        // geschützte Punkte (Kachel, Radius)
-        let mut keep: Vec<(i32, i32, i32, bool)> = vec![];
+        let inside = |x: i32, y: i32| x >= x0 && x <= x1 && y >= y0 && y <= y1 && inb(x, y);
+        // ebene Bereiche: Mitte, Halbachsen, auf Meereshöhe?
+        let mut flat: Vec<(i32, i32, i32, i32, bool)> = vec![];
         let t = |x: f32, y: f32| ((x / TS as f32) as i32, (y / TS as f32) as i32);
         for f in &self.fires {
             let (a, b) = t(f.x, f.y);
-            keep.push((a, b, 4, true));
+            flat.push((a, b, 8, 6, false));
         }
-        for n in &self.npcs {
-            let (a, b) = t(n.x, n.y);
-            keep.push((a, b, 3, true));
+        for p in &self.npcs {
+            let (a, b) = t(p.x, p.y);
+            flat.push((a, b, 3, 3, false));
         }
         for it in &self.items {
             let (a, b) = t(it.x, it.y);
-            keep.push((a, b, 2, false));
+            flat.push((a, b, 2, 2, false));
         }
         for &ci in &self.chests {
             let (a, b) = t(self.props[ci].x, self.props[ci].y);
-            keep.push((a, b, 2, false));
+            flat.push((a, b, 2, 2, false));
         }
         for sp in &self.spawns {
             let (a, b) = t(sp.x, sp.y);
-            keep.push((a, b, 2, false));
+            flat.push((a, b, 2, 2, false));
         }
         for dk in &self.docks {
             let (a, b) = t(dk.px, dk.py);
-            keep.push((a, b, 6, true));
+            flat.push((a, b, 7, 6, true));
         }
         for g in &self.gates {
             let (a, b) = t(g.x, g.y);
-            keep.push((a, b, 5, true));
+            flat.push((a, b, 5, 5, false));
         }
         for wk in &self.walkers {
             for p in &wk.pts {
                 let (a, b) = t(p.0, p.1);
-                keep.push((a, b, 2, false));
+                flat.push((a, b, 2, 2, false));
             }
         }
-        let arenas: Vec<Arena> = self.arenas.values().cloned().collect();
-        let mut fixed = vec![false; (w * h) as usize];
-        let mut lv = vec![0u8; (w * h) as usize];
+        for a in self.arenas.values() {
+            let (cx, cy) = t(a.x, a.y);
+            flat.push((cx, cy, (a.r / TS as f32) as i32 + 5, (a.ry / TS as f32) as i32 + 5, false));
+        }
+        for &(cx, cy, rx, ry) in &self.flat_areas {
+            flat.push((cx, cy, rx, ry, false));
+        }
+        flat.retain(|f| inside(f.0, f.1) && self.zone[idx(f.0, f.1)] == Some(z));
+        // Abstand zum Wasser (Kacheln, Breitensuche)
+        let mut wd = vec![99i32; n];
+        let mut q = std::collections::VecDeque::new();
+        for y in y0..=y1 {
+            for x in x0..=x1 {
+                if !inb(x, y) || matches!(self.ground[idx(x, y)], Mat::Water | Mat::Abyss) {
+                    if inside(x, y) || !inb(x, y) {
+                        if inb(x, y) {
+                            wd[id(x, y)] = 0;
+                        }
+                        q.push_back((x, y));
+                    }
+                }
+            }
+        }
+        while let Some((x, y)) = q.pop_front() {
+            let dv = if inside(x, y) { wd[id(x, y)] } else { 0 };
+            for (ox, oy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+                let (nx, ny) = (x + ox, y + oy);
+                if inside(nx, ny) && wd[id(nx, ny)] > dv + 1 {
+                    wd[id(nx, ny)] = dv + 1;
+                    q.push_back((nx, ny));
+                }
+            }
+        }
+        // ein, zwei Bergkuppen fernab von Küste und ebenen Bereichen
+        let mut rng = Rng::new(d.seed as u64 * 131 + 17);
+        let mut peaks: Vec<(f32, f32, f32)> = vec![];
+        for _ in 0..80 {
+            if peaks.len() >= 2 {
+                break;
+            }
+            let (px, py) = (rng.int(x0 + 8, x1 - 8), rng.int(y0 + 8, y1 - 8));
+            if !inside(px, py) || wd[id(px, py)] < 12 || self.zone[idx(px, py)] != Some(z) {
+                continue;
+            }
+            if flat.iter().any(|f| (f.0 - px).abs() < f.2 + 6 && (f.1 - py).abs() < f.3 + 6) || peaks.iter().any(|p| (p.0 - px as f32).hypot(p.1 - py as f32) < 18.0) {
+                continue;
+            }
+            peaks.push((px as f32, py as f32, rng.range(7.0, 11.0)));
+        }
+        // Höhenfeld
+        let mut lv = vec![0u8; n];
+        let mut fixed = vec![false; n];
+        let mut own = vec![false; n];
         for y in y0..=y1 {
             for x in x0..=x1 {
                 if !inb(x, y) {
@@ -1263,156 +1528,116 @@ impl World {
                 let i = idx(x, y);
                 let k = id(x, y);
                 lv[k] = self.level[i];
-                let g = self.ground[i];
-                if self.zone[i] != Some(z) || matches!(g, Mat::Water | Mat::Abyss | Mat::Plank) {
+                if self.zone[i] != Some(z) || matches!(self.ground[i], Mat::Water | Mat::Abyss | Mat::Plank) {
                     fixed[k] = true;
                     continue;
                 }
-                let (px, py) = ((x * TS) as f32, (y * TS) as f32);
-                if arenas.iter().any(|a| ((px - a.x) / (a.r + 160.0)).powi(2) + ((py - a.y) / (a.ry + 160.0)).powi(2) < 1.0) {
-                    fixed[k] = true;
-                    continue;
-                }
-                // Feuer, Figuren, Anleger und Tore bleiben auf ihrer Ebene (runde Bereiche)
-                if keep.iter().any(|&(a, b, r, hard)| hard && (a - x).pow(2) + (b - y).pow(2) <= r * r + r) {
-                    fixed[k] = true;
-                    continue;
-                }
-                // Höhe aus Rauschen, zur Inselmitte hin höher, zum Wasser hin flach
+                own[k] = true;
                 let dx = (x - d.cx) as f32 / d.rx as f32;
                 let dy = (y - d.cy) as f32 / d.ry as f32;
                 let core = (1.0 - (dx * dx + dy * dy).sqrt()).max(0.0);
-                let n = self.nz.fbm(x as f32 * 0.038 + d.seed as f32 * 3.1, y as f32 * 0.038 + 9.0, 3);
-                let hgt = n * 1.5 + core * 0.9 - 0.15;
-                let mut l = ((hgt * 5.0).floor().max(0.0) as i32).min(4) as u8;
-                // Wasserabstand begrenzt die Höhe (Strände bleiben flach)
-                let mut near = 9;
-                'w: for r in 1..9 {
-                    for (ox, oy) in [(r, 0), (-r, 0), (0, r), (0, -r), (r, r), (-r, r), (r, -r), (-r, -r)] {
-                        if matches!(self.g(x + ox, y + oy), Mat::Water | Mat::Abyss) {
-                            near = r;
-                            break 'w;
-                        }
-                    }
+                let nz = self.nz.fbm(x as f32 * 0.03 + d.seed as f32 * 3.1, y as f32 * 0.03 + 9.0, 3);
+                // der Startstrand bleibt sanft, die anderen Inseln steigen kräftiger an
+                let zk = if z == Zone::Kueste { 0.6 } else { 1.0 };
+                let mut hgt = (core * 2.4 + nz * 1.9 - 0.2) * zk;
+                for &(px, py, r) in &peaks {
+                    let dd = (x as f32 - px).powi(2) + (y as f32 - py).powi(2);
+                    hgt += 2.3 * (-dd / (2.0 * r * r)).exp();
                 }
-                l = l.min(((near - 2) / 2).max(0) as u8);
-                lv[k] = lv[k].max(l);
+                // Strände bleiben flach, landeinwärts steigt es an
+                hgt = hgt.min((wd[k] as f32 - 4.0) * 0.35);
+                lv[k] = (hgt.floor().max(0.0) as u8).min(4);
             }
         }
-        // Formen glätten: einzelne Zacken abtragen, Löcher füllen (weichere, lesbare Plateaus)
-        for _ in 0..3 {
-            let prev = lv.clone();
-            for y in y0 + 1..y1 {
-                for x in x0 + 1..x1 {
-                    let k = id(x, y);
-                    if fixed[k] || !inb(x, y) {
+        // Formen glätten: je Ebene erst Löcher schließen, dann Zacken abtragen (Radius 2)
+        let disk: Vec<(i32, i32)> = (-2..=2).flat_map(|a| (-2..=2).map(move |b| (a, b))).filter(|(a, b)| a * a + b * b <= 5).collect();
+        for lvl in 1..=4u8 {
+            let mut m: Vec<bool> = lv.iter().map(|v| *v >= lvl).collect();
+            let morph = |m: &Vec<bool>, dilate: bool| -> Vec<bool> {
+                let mut o = m.clone();
+                for y in y0..=y1 {
+                    for x in x0..=x1 {
+                        let k = id(x, y);
+                        if !own[k] {
+                            continue;
+                        }
+                        let mut v = !dilate;
+                        for &(a, b) in &disk {
+                            let (nx, ny) = (x + a, y + b);
+                            let nv = if inside(nx, ny) && own[id(nx, ny)] { m[id(nx, ny)] } else { false };
+                            if dilate && nv {
+                                v = true;
+                                break;
+                            }
+                            if !dilate && !nv {
+                                v = false;
+                                break;
+                            }
+                        }
+                        o[k] = v;
+                    }
+                }
+                o
+            };
+            m = morph(&morph(&m, true), false);
+            m = morph(&morph(&m, false), true);
+            for k in 0..n {
+                if own[k] {
+                    let below = if lvl == 1 { true } else { lv[k] >= lvl - 1 || m[k] };
+                    if m[k] && below {
+                        lv[k] = lv[k].max(lvl);
+                    } else if lv[k] >= lvl {
+                        lv[k] = lvl - 1;
+                    }
+                }
+            }
+        }
+        // ebene Bereiche auf die Höhe ihrer Mitte (Anleger auf Meereshöhe)
+        for &(cx, cy, rx, ry, sea) in &flat {
+            let c = if sea { 0 } else { lv[id(cx, cy)] };
+            for y in cy - ry..=cy + ry {
+                for x in cx - rx..=cx + rx {
+                    if !inside(x, y) {
                         continue;
                     }
-                    let own = prev[k];
-                    let (mut ge, mut gt) = (0, 0);
-                    for (ox, oy) in [(1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (-1, 1), (1, -1), (-1, -1)] {
-                        let q = prev[id(x + ox, y + oy)];
-                        if q >= own {
-                            ge += 1;
-                        }
-                        if q > own {
-                            gt += 1;
-                        }
-                    }
-                    if own > 0 && ge < 4 {
-                        lv[k] = own - 1;
-                    } else if gt >= 6 {
-                        lv[k] = own + 1;
+                    let e = ((x - cx) as f32 / rx.max(1) as f32).powi(2) + ((y - cy) as f32 / ry.max(1) as f32).powi(2);
+                    let k = id(x, y);
+                    if e <= 1.0 && own[k] {
+                        lv[k] = c;
+                        fixed[k] = true;
                     }
                 }
             }
         }
-        // Gegner, Truhen, Gegenstände und Wege der Wanderer: kleine ebene Flächen auf der Höhe
-        // ihrer Umgebung (statt Gruben auf Ebene 0, die das Hochland zerstückeln)
-        let soft: Vec<(i32, i32, i32)> = keep.iter().filter(|k| !k.3).map(|k| (k.0, k.1, k.2)).collect();
-        let circle = |a: i32, b: i32, r: i32| {
-            let mut v = vec![];
-            for yy in b - r..=b + r {
-                for xx in a - r..=a + r {
-                    if (xx - a).pow(2) + (yy - b).pow(2) <= r * r + r && xx >= x0 && xx <= x1 && yy >= y0 && yy <= y1 && inb(xx, yy) {
-                        v.push(id(xx, yy));
-                    }
-                }
-            }
-            v
-        };
-        for &(a, b, r) in &soft {
-            if a < x0 || a > x1 || b < y0 || b > y1 {
-                continue;
-            }
-            let c = lv[id(a, b)];
-            for k in circle(a, b, r) {
-                if !fixed[k] {
-                    lv[k] = c;
-                }
-            }
-        }
-        for round in 0..4 {
-            self.relax_levels(&mut lv, &fixed, x0, y0, x1, y1);
-            if round == 3 {
-                break;
-            }
-            for &(a, b, r) in &soft {
-                let cs = circle(a, b, r);
-                let m = cs.iter().filter(|k| !fixed[**k]).map(|k| lv[*k]).min();
-                if let Some(m) = m {
-                    for k in cs {
-                        if !fixed[k] {
-                            lv[k] = m;
-                        }
-                    }
-                }
-            }
-        }
-        for y in y0..=y1 {
-            for x in x0..=x1 {
-                if inb(x, y) && !fixed[id(x, y)] {
-                    let i = idx(x, y);
-                    self.level[i] = lv[id(x, y)];
-                    // Höhen: Felsboden auf den oberen Stufen
-                    if self.level[i] >= 3 && !self.path[i] {
-                        self.ground[i] = match d.biome {
-                            Biome::Frost => Mat::Snow,
-                            Biome::Fire => Mat::Hex,
-                            Biome::Earth => Mat::Moss,
-                            _ => if self.level[i] >= 4 { Mat::Rock } else { self.ground[i] },
-                        };
-                    }
-                }
-            }
-        }
-    }
-
-    /// Höchstens eine Ebene Unterschied zu jedem Nachbarn (geschützte Kacheln bleiben).
-    fn relax_levels(&self, lv: &mut [u8], fixed: &[bool], x0: i32, y0: i32, x1: i32, y1: i32) {
-        let w = x1 - x0 + 1;
-        let id = |x: i32, y: i32| ((y - y0) * w + (x - x0)) as usize;
-        for _ in 0..8 {
+        // höchstens eine Ebene Unterschied: senken, wo es zu steil abfällt; an festen Flächen anheben
+        for _ in 0..12 {
             let mut changed = false;
             for y in y0..=y1 {
                 for x in x0..=x1 {
                     let k = id(x, y);
-                    if fixed[k] || !inb(x, y) {
+                    if fixed[k] || !own[k] {
                         continue;
                     }
-                    let mut mn = 255u8;
+                    let (mut mn, mut mx_fixed) = (255u8, 0u8);
                     for (ox, oy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
                         let (nx, ny) = (x + ox, y + oy);
-                        if nx < x0 || nx > x1 || ny < y0 || ny > y1 || !inb(nx, ny) {
+                        if !inside(nx, ny) {
                             continue;
                         }
-                        let i = idx(nx, ny);
-                        if matches!(self.ground[i], Mat::Water | Mat::Abyss) {
+                        let nk = id(nx, ny);
+                        if matches!(self.ground[idx(nx, ny)], Mat::Water | Mat::Abyss) {
+                            mn = mn.min(0);
                             continue;
                         }
-                        mn = mn.min(lv[id(nx, ny)]);
+                        mn = mn.min(lv[nk]);
+                        if fixed[nk] && own[nk] {
+                            mx_fixed = mx_fixed.max(lv[nk]);
+                        }
                     }
-                    if mn != 255 && lv[k] > mn + 1 {
+                    if mx_fixed > lv[k] + 1 {
+                        lv[k] = mx_fixed - 1;
+                        changed = true;
+                    } else if mn != 255 && lv[k] > mn + 1 {
                         lv[k] = mn + 1;
                         changed = true;
                     }
@@ -1422,38 +1647,68 @@ impl World {
                 break;
             }
         }
+        for y in y0..=y1 {
+            for x in x0..=x1 {
+                let k = id(x, y);
+                if !own[k] {
+                    continue;
+                }
+                let i = idx(x, y);
+                self.level[i] = lv[k];
+                // Höhen: Felsboden auf den oberen Stufen
+                if self.level[i] >= 3 && !self.path[i] {
+                    self.ground[i] = match d.biome {
+                        Biome::Frost => Mat::Snow,
+                        Biome::Fire => Mat::Hex,
+                        Biome::Earth => Mat::Moss,
+                        _ => {
+                            if self.level[i] >= 4 {
+                                Mat::Rock
+                            } else {
+                                self.ground[i]
+                            }
+                        }
+                    };
+                }
+            }
+        }
     }
 
-    /// Treppen: in jedem Mauerfront-Abschnitt (Stufe genau eine Ebene) mindestens eine,
-    /// bei langen Fronten etwa alle zwölf Kacheln.
+    /// Treppen an Wandfronten und Rampen an Seitenhängen: an wechselnden Stellen, 2–4 Kacheln breit,
+    /// etwa alle 12–16 Kacheln; Wege, die eine Kante kreuzen, bekommen immer eine.
     fn auto_stairs(&mut self) {
+        let mut rng = Rng::new(4711);
         for y in 0..MH {
             let mut x = 0;
             while x < MW {
                 let i = idx(x, y);
                 // nur die oberste Reihe einer Front betrachten
-                if !self.cliff[i] || self.face[i] != 0 || self.stairs[i] || self.biome[i] == Biome::Hub {
+                if !self.cliff[i] || self.face[i] != 0 || self.biome[i] == Biome::Hub {
                     x += 1;
                     continue;
                 }
                 let l = self.level[i];
                 let x_start = x;
+                let mut has = false;
                 while x < MW && self.cliff[idx(x, y)] && self.face[idx(x, y)] == 0 && self.level[idx(x, y)] == l {
+                    has |= self.stairs[idx(x, y)];
                     x += 1;
                 }
                 let len = x - x_start;
                 if len < 3 {
                     continue;
                 }
-                let n = (len / 12).max(1);
+                let n = (len / 14).max(if has { 0 } else { 1 }) + if len > 24 && rng.chance(0.5) { 1 } else { 0 };
                 for k in 0..n {
-                    let sx = x_start + (len * (2 * k + 1)) / (2 * n) - 1;
+                    let wdt = rng.int(2, 4).min(len);
+                    let seg = len / n.max(1);
+                    let sx = x_start + seg * k + rng.int(0, (seg - wdt).max(0));
                     // unten muss genau eine Ebene tiefer begehbarer Boden liegen
                     let below = self.lv(sx, y + FH);
                     if below + 1 != l || matches!(self.g(sx, y + FH), Mat::Water | Mat::Abyss) {
                         continue;
                     }
-                    for xx in sx..sx + 2 {
+                    for xx in sx..sx + wdt {
                         for r in 0..FH {
                             if inb(xx, y + r) && self.cliff[idx(xx, y + r)] {
                                 self.stairs[idx(xx, y + r)] = true;
@@ -1464,28 +1719,123 @@ impl World {
                 }
             }
         }
+        // Rampen an Seitenhängen (Ebene wechselt zwischen x und x+1)
+        for x in 1..MW - 2 {
+            let mut y = 0;
+            while y < MH {
+                let (i, j) = (idx(x, y), idx(x + 1, y));
+                let ok = |w: &World, i: usize, j: usize| {
+                    w.level[i] != w.level[j]
+                        && (w.level[i] as i32 - w.level[j] as i32).abs() == 1
+                        && !w.cliff[i]
+                        && !w.cliff[j]
+                        && !matches!(w.ground[i], Mat::Water | Mat::Abyss)
+                        && !matches!(w.ground[j], Mat::Water | Mat::Abyss)
+                        && w.biome[i] != Biome::Hub
+                };
+                if !ok(self, i, j) {
+                    y += 1;
+                    continue;
+                }
+                let (a, b) = (self.level[i], self.level[j]);
+                let y_start = y;
+                let mut crossings = vec![];
+                while y < MH && ok(self, idx(x, y), idx(x + 1, y)) && self.level[idx(x, y)] == a && self.level[idx(x + 1, y)] == b {
+                    if self.path[idx(x, y)] || self.path[idx(x + 1, y)] {
+                        crossings.push(y);
+                    }
+                    y += 1;
+                }
+                let len = y - y_start;
+                let mut spots = crossings;
+                if len >= 4 && spots.is_empty() {
+                    let n = (len / 14).max(1);
+                    for k in 0..n {
+                        let seg = len / n;
+                        spots.push(y_start + seg * k + rng.int(0, (seg - 2).max(0)));
+                    }
+                }
+                for sy in spots {
+                    for yy in sy..(sy + 2).min(y) {
+                        for xx in [x, x + 1] {
+                            self.stairs[idx(xx, yy)] = true;
+                            self.path[idx(xx, yy)] = true;
+                        }
+                    }
+                }
+            }
+        }
+        self.extend_stairs();
+    }
+    /// Treppenkacheln eine Reihe über und unter die Wand verlängern: die pixelgenauen Kanten
+    /// liegen bis zu einer halben Kachel neben dem Kachelraster.
+    fn extend_stairs(&mut self) {
+        let mut add = vec![];
+        for x in 0..MW {
+            for y in 1..MH - 1 {
+                let i = idx(x, y);
+                if !self.stairs[i] || !self.cliff[i] {
+                    continue;
+                }
+                for oy in [-1, 1] {
+                    let j = idx(x, y + oy);
+                    if !self.stairs[j] && !matches!(self.ground[j], Mat::Water | Mat::Abyss) {
+                        add.push(j);
+                    }
+                }
+            }
+        }
+        for j in add {
+            self.stairs[j] = true;
+        }
     }
 
     /// Requisiten, die nun auf einer Felswand stehen, verschwinden; Gegner rücken auf festen Boden.
     fn settle_on_cliffs(&mut self) {
-        for p in self.props.iter_mut() {
+        for pi in 0..self.props.len() {
+            let p = &self.props[pi];
             if p.sea || p.hidden || p.interact.is_some() {
                 continue;
             }
             let (tx, ty) = ((p.x / TS as f32) as i32, (p.y / TS as f32) as i32);
-            if inb(tx, ty) && self.cliff[idx(tx, ty)] && !self.stairs[idx(tx, ty)] && self.biome[idx(tx, ty)] != Biome::Hub {
-                p.hidden = true;
+            if inb(tx, ty) && self.biome[idx(tx, ty)] != Biome::Hub && !self.stairs[idx(tx, ty)] {
+                // steht der Fuß auf einer Wand oder Böschung? (Welt-Kollision ist hier noch nicht gebaut)
+                let (px, py) = (p.x as i32, p.y as i32);
+                let l = self.lpx(px, py);
+                let mut bad = false;
+                for d in (2..FACE_PX).step_by(8) {
+                    if self.lpx(px, py + d) < l {
+                        bad = true;
+                    }
+                }
+                for d in [4, 10, 16] {
+                    if self.lpx(px - d, py) < l || self.lpx(px + d, py) < l {
+                        bad = true;
+                    }
+                }
+                if bad {
+                    self.props[pi].hidden = true;
+                }
             }
         }
         for k in 0..self.spawns.len() {
+            // Gegner von Wänden auf festen Boden rücken (erst nach Süden, dann rundum suchen)
             let (x, y) = (self.spawns[k].x, self.spawns[k].y);
-            let (tx, mut ty) = ((x / TS as f32) as i32, (y / TS as f32) as i32);
-            let mut n = 0;
-            while inb(tx, ty) && self.cliff[idx(tx, ty)] && n < 4 {
-                ty += 1;
-                n += 1;
+            if self.px_walk(x as i32, y as i32).1 {
+                continue;
             }
-            self.spawns[k].y = (ty * TS + TS * 3 / 4) as f32;
+            'f: for r in 1..12 {
+                for a in 0..12 {
+                    let ang = a as f32 / 12.0 * std::f32::consts::TAU + std::f32::consts::FRAC_PI_2;
+                    let (nx, ny) = (x + ang.cos() * r as f32 * 12.0, y + ang.sin() * r as f32 * 12.0);
+                    let (tx, ty) = ((nx / TS as f32) as i32, (ny / TS as f32) as i32);
+                    if inb(tx, ty) && !matches!(self.ground[idx(tx, ty)], Mat::Water | Mat::Abyss) && self.px_walk(nx as i32, ny as i32).1 {
+                        self.spawns[k].x = nx;
+                        self.spawns[k].y = ny;
+                        break 'f;
+                    }
+                }
+            }
         }
     }
 
@@ -1663,6 +2013,7 @@ impl World {
         self.item("pearls", cx - 12, cy - 4);
         self.item("fireball", cx - 4, cy - 12);
         self.npc("crewFire", cx - 24, cy + 2, "crewFire", "Kanonierin Asra", "crewFire", true, Some("fire"));
+        self.settlement("asche", 1, cx + 14, cy + 17, Mat::Cobble, "smithIlka", ["villagerD", "villagerC", "villagerG", "villagerH"], &["anchorDeco", "barrels", "crates", "logPile"]);
     }
     fn layout_ice(&mut self, rng: &mut Rng) {
         let d = self.cur.def();
@@ -1696,6 +2047,7 @@ impl World {
         self.item("pearls", cx + 4, cy + 6);
         self.item("bolt", cx - 20, cy + 10);
         self.npc("crewIce", cx + 6, cy + 16, "crewIce", "Navigatorin Lene", "crewIce", true, Some("ice"));
+        self.settlement("frost", 2, cx - 20, cy + 14, Mat::Cobble, "furWendla", ["villagerB", "villagerE", "villagerA", "villagerF"], &["logPile", "crates", "barrels", "logPile"]);
     }
     fn layout_wind(&mut self, rng: &mut Rng) {
         let d = self.cur.def();
@@ -1753,6 +2105,13 @@ impl World {
         self.walker("villagerB", &[(cx - 2, cy + 16), (cx - 2, cy - 8), (cx + 14, cy - 10)]);
         self.walker("villagerC", &[(cx + 4, cy + 4), (cx + 14, cy + 4), (cx + 10, cy - 1)]);
         self.walker("villagerD", &[(cx - 20, cy + 12), (cx + 14, cy + 12)]);
+        // Rabenwacht ist schon eine Stadt: Gegner hinaus, ein Haus wird zum Laden
+        let (wx, wy) = tpos(cx - 2, cy + 3);
+        self.settlements.push((wx, wy, 30.0 * TS as f32, 22.0 * TS as f32));
+        self.clear_spawns(wx, wy, 28, 20);
+        self.town_shop("raben", 3, cx - 10, cy + 9, "mapOrrin");
+        self.npc("rabenFolk1", cx - 6, cy + 5, "villagerG", "Fischweib", "town_raben", true, None);
+        self.npc("rabenFolk2", cx + 12, cy + 5, "villagerH", "Alter Lotse", "town_raben", true, None);
     }
     fn layout_earth(&mut self, rng: &mut Rng) {
         let d = self.cur.def();
@@ -1798,6 +2157,7 @@ impl World {
         self.item("pearls", cx + 14, cy + 14);
         self.item("soulflower", cx - 16, cy + 10);
         self.npc("crewEarth", cx - 20, cy + 4, "crewEarth", "Zimmermann Ode", "crewEarth", true, Some("earth"));
+        self.settlement("mangroven", 4, cx - 27, cy + 14, Mat::Plank, "witchMabel", ["villagerC", "villagerD", "villagerH", "villagerG"], &["nets", "barrels", "flowerPot", "crates"]);
     }
     /// Ende der Welt: ein abgeschlossenes Meer in der Südost-Ecke der Karte. Im Süden und Osten
     /// stürzt das Wasser über den Weltrand ins Nichts; im Westen und Norden trennt ein Riff aus
@@ -1921,6 +2281,13 @@ impl World {
         self.end_risen = false;
         self.compute_shore();
     }
+    /// Innenraum eines Ladens, in dem dieser Punkt liegt
+    pub fn interior_at(&self, x: f32, y: f32) -> Option<usize> {
+        self.doors.iter().position(|d| x >= d.room.0 - 64.0 && y >= d.room.1 - 64.0 && x <= d.room.0 + d.room.2 + 64.0 && y <= d.room.1 + d.room.3 + 64.0)
+    }
+    pub fn in_settlement(&self, x: f32, y: f32) -> bool {
+        self.settlements.iter().any(|s| ((x - s.0) / s.2).powi(2) + ((y - s.1) / s.3).powi(2) < 1.0)
+    }
     pub fn in_end(&self, x: f32, y: f32) -> bool {
         let (x0, y0, x1, y1) = self.end_rect;
         let (tx, ty) = ((x / TS as f32) as i32, (y / TS as f32) as i32);
@@ -1997,38 +2364,45 @@ impl World {
 
     // ------------------------------------------------------------ Kollision mit Höhenebenen
     pub fn level_mask(&self, x: f32, y: f32) -> u8 {
-        let tx = (x / TS as f32).floor() as i32;
-        let ty = (y / TS as f32).floor() as i32;
+        let (px, py) = (x.floor() as i32, y.floor() as i32);
+        let (tx, ty) = (px.div_euclid(TS), py.div_euclid(TS));
         if !inb(tx, ty) {
             return 1;
         }
-        let i = idx(tx, ty);
-        let l = self.level[i];
-        if self.stairs[i] && l > 0 {
+        let l = self.lpx(px, py);
+        if self.stairs[idx(tx, ty)] && l > 0 {
             return (1 << l) | (1 << (l - 1));
         }
         1 << l
     }
-    pub fn tile_blocks(&self, tx: i32, ty: i32, sailing: bool, mask: u8) -> bool {
+    /// Kachel versperrt (nur Wasser, Abgrund, Kartenrand bzw. auf See Land)
+    pub fn tile_blocks(&self, tx: i32, ty: i32, sailing: bool, _mask: u8) -> bool {
         if !inb(tx, ty) {
             return true;
         }
         let i = idx(tx, ty);
         let g = self.ground[i];
         if sailing {
+            // die Ladenräume liegen weit draußen im Nordosten: dorthin fährt kein Schiff
+            if tx >= 460 && ty <= 30 {
+                return true;
+            }
             return g != Mat::Water || self.shore[i] < 2.0;
         }
-        if g == Mat::Water || g == Mat::Abyss {
+        g == Mat::Water || g == Mat::Abyss
+    }
+    /// Pixel versperrt für jemanden mit Ebenenmaske `mask` (Wände, Böschungen, andere Ebene)
+    fn px_blocks(&self, px: i32, py: i32, mask: u8) -> bool {
+        let (tx, ty) = (px.div_euclid(TS), py.div_euclid(TS));
+        if !inb(tx, ty) {
             return true;
         }
-        let l = self.level[i];
-        if self.stairs[i] && l > 0 {
-            return mask & ((1 << l) | (1 << (l - 1))) == 0;
-        }
-        if self.cliff[i] {
+        let (l, walk) = self.px_walk(px, py);
+        if !walk {
             return true;
         }
-        mask & (1 << l) == 0
+        let ok = if self.stairs[idx(tx, ty)] && l > 0 { (1 << l) | (1 << (l - 1)) } else { 1 << l };
+        mask & ok == 0
     }
     pub fn blocked(&self, x: f32, y: f32, r: f32, sailing: bool, mask: Option<u8>) -> bool {
         let mask = mask.unwrap_or(if sailing { 1 } else { self.level_mask(x, y) });
@@ -2041,6 +2415,19 @@ impl World {
                 let nx = x.clamp(tx as f32 * t, tx as f32 * t + t);
                 let ny = y.clamp(ty as f32 * t, ty as f32 * t + t);
                 if (nx - x).powi(2) + (ny - y).powi(2) < r * r {
+                    return true;
+                }
+            }
+        }
+        // Höhenebenen pixelgenau: Mitte und acht Punkte auf dem Rand
+        if !sailing {
+            let rr = r.max(2.0);
+            if self.px_blocks(x as i32, y as i32, mask) {
+                return true;
+            }
+            for k in 0..8 {
+                let a = k as f32 * std::f32::consts::FRAC_PI_4;
+                if self.px_blocks((x + a.cos() * rr) as i32, (y + a.sin() * rr * 0.8) as i32, mask) {
                     return true;
                 }
             }
@@ -2119,9 +2506,8 @@ impl World {
         let n = (((x1 - x0).powi(2) + (y1 - y0).powi(2)).sqrt() / 16.0).ceil() as i32;
         for i in 1..n {
             let t = i as f32 / n as f32;
-            let tx = ((x0 + (x1 - x0) * t) / TS as f32).floor() as i32;
-            let ty = ((y0 + (y1 - y0) * t) / TS as f32).floor() as i32;
-            if inb(tx, ty) && self.cliff[idx(tx, ty)] && !self.stairs[idx(tx, ty)] {
+            let (px, py) = ((x0 + (x1 - x0) * t) as i32, (y0 + (y1 - y0) * t) as i32);
+            if !self.px_walk(px, py).1 {
                 return false;
             }
         }
@@ -2159,6 +2545,27 @@ impl TerrainMap for World {
     }
     fn stairs(&self, tx: i32, ty: i32) -> bool {
         inb(tx, ty) && self.stairs[idx(tx, ty)]
+    }
+    fn lpx(&self, px: i32, py: i32) -> u8 {
+        let (tx, ty) = (px.div_euclid(TS), py.div_euclid(TS));
+        if !inb(tx, ty) {
+            return 0;
+        }
+        let i = idx(tx, ty);
+        // Festung: klare, gerade Mauerfronten
+        if self.biome[i] == Biome::Hub || self.hb.is_empty() {
+            return self.level[i];
+        }
+        let fx = px as f32 / TS as f32 - 0.5;
+        let fy = py as f32 / TS as f32 - 0.5;
+        let (i0, j0) = (fx.floor() as i32, fy.floor() as i32);
+        let (u, v) = (fx - i0 as f32, fy - j0 as f32);
+        let h = |x: i32, y: i32| self.hb[idx(x.clamp(0, MW - 1), y.clamp(0, MH - 1))];
+        let a = h(i0, j0) + (h(i0 + 1, j0) - h(i0, j0)) * u;
+        let b = h(i0, j0 + 1) + (h(i0 + 1, j0 + 1) - h(i0, j0 + 1)) * u;
+        let wob = self.en.at(px / 3, py / 3) * 0.32 + self.en.at(px + 77, py * 2 + 13) * 0.08;
+        let v = a + (b - a) * v + wob;
+        (v.floor().max(0.0) as u8).min(self.level[i] + 1)
     }
     fn biome(&self, tx: i32, ty: i32) -> Biome {
         let (tx, ty) = (tx.clamp(0, MW - 1), ty.clamp(0, MH - 1));

@@ -41,7 +41,7 @@ pub enum Role {
 }
 /// Rolle einer Vorgabe (für `wants_anim`).
 pub fn preset_role(name: &str) -> Role {
-    if name.starts_with("villager") || matches!(name, "lanternMaid" | "smith" | "merchant" | "shipmaster" | "carver") {
+    if name.starts_with("villager") || matches!(name, "lanternMaid" | "smith" | "merchant" | "shipmaster" | "carver" | "fisherJorn" | "smithIlka" | "furWendla" | "mapOrrin" | "witchMabel") {
         Role::Npc
     } else if name.starts_with("crew") {
         Role::Crew
@@ -1540,6 +1540,16 @@ pub fn preset(name: &str) -> (Look, f32) {
         "villagerB" => Look { skin: 0xC49674, hair_col: 0xA8A8A0, hair: 1, beard: 2, coat: 0x6A5A3A, hat: 0, weapon: None, ..d() },
         "villagerC" => Look { skin: 0x9A6A4C, hair_col: 0x26201E, hair: 2, coat: 0x8A3A4A, robe: true, hat: 0, weapon: None, ..d() },
         "villagerD" => Look { skin: 0xE0B896, hair_col: 0x5A3A22, hair: 4, beard: 1, coat: 0x3E6A5A, hat: 1, hat_col: 0x4A3A2A, weapon: None, ..d() },
+        "villagerE" => Look { skin: 0xD8A888, hair_col: 0xD0CCC4, hair: 2, coat: 0x5A4A6A, robe: true, hat: 3, apron: true, weapon: None, ..d() },
+        "villagerF" => Look { skin: 0xB07A58, hair_col: 0x3A2A1E, hair: 1, beard: 3, coat: 0x8A7A4A, hat: 2, band_col: 0x2A4A6A, apron: true, weapon: None, ..d() },
+        "villagerG" => Look { skin: 0xE8C0A0, hair_col: 0xB8642A, hair: 3, coat: 0x6A3A2A, robe: true, hat: 0, sash: Some(0xC8A048), weapon: None, ..d() },
+        "villagerH" => Look { skin: 0x8A5A40, hair_col: 0xA8A8A0, hair: 0, beard: 2, coat: 0x2E3E4E, hat: 1, hat_col: 0x2A2A30, weapon: None, patch: true, ..d() },
+        // Händler der Siedlungen
+        "fisherJorn" => Look { skin: 0xC08A64, hair_col: 0x8A8478, hair: 1, beard: 3, body: 1, coat: 0x3E5A6A, hat: 2, band_col: 0xD8C8A0, apron: true, sash: Some(0x8A6A3A), weapon: None, ..d() },
+        "smithIlka" => Look { skin: 0x9A6A4C, hair_col: 0xC2502E, hair: 3, coat: 0x4A2A22, apron: true, body: 1, sash: Some(0xF0742A), weapon: Some("hammer"), ..d() },
+        "furWendla" => Look { skin: 0xF0D0B8, hair_col: 0xE8E4E0, hair: 2, coat: 0xC8C0B0, robe: true, hat: 3, sash: Some(0x6A8AA8), hold_lantern: Some(0x9AE8FF), weapon: None, ..d() },
+        "mapOrrin" => Look { skin: 0xB8865E, hair_col: 0x26201E, hair: 4, beard: 1, coat: 0x23324A, hat: 1, hat_col: 0x1E1E26, sash: Some(0xC8A048), patch: true, weapon: None, ..d() },
+        "witchMabel" => Look { skin: 0x7A9A6A, hair_col: 0x1F4A4C, hair: 2, coat: 0x34473A, robe: true, hat: 4, hat_col: 0x1A2A1E, skulls: Some(0x9AFF6A), hold_lantern: Some(0x9AFF6A), weapon: None, ..d() },
         "kingFire" => {
             s = 1.5;
             Look { skin: 0x4A2A28, hair_col: 0xC2502E, hair: 4, beard: 3, coat: 0x5A1A1E, hat: 4, hat_col: 0x2A1A1A, crown: Some(0xF0742A), body: 1, weapon: Some("greatsword"), drowned: true, eye_col: 0xF0742A, aura: Some(0xC2502E), cast_col: 0xF0742A, ..d() }
@@ -1570,7 +1580,7 @@ pub fn preset(name: &str) -> (Look, f32) {
     (l, s)
 }
 
-pub const PRESET_NAMES: [&str; 33] = [
+pub const PRESET_NAMES: [&str; 42] = [
     "abyssPirate", "voodoo", "orcCaptain", "stormHarpy", "bellConstruct", "gorgonQueen", "clockStorm",
-    "skeleton", "skelBrute", "skelGunner", "drowned", "drownedIce", "ashSkeleton", "stormSailor", "lanternMaid", "smith", "merchant", "shipmaster", "carver", "crewFire", "crewIce", "crewWind", "crewEarth", "villagerA", "villagerB", "villagerC", "villagerD", "kingFire", "kingIce", "kingWind", "kingEarth", "ghostCaptain", "burningCaptain",
+    "skeleton", "skelBrute", "skelGunner", "drowned", "drownedIce", "ashSkeleton", "stormSailor", "lanternMaid", "smith", "merchant", "shipmaster", "carver", "crewFire", "crewIce", "crewWind", "crewEarth", "villagerA", "villagerB", "villagerC", "villagerD", "villagerE", "villagerF", "villagerG", "villagerH", "fisherJorn", "smithIlka", "furWendla", "mapOrrin", "witchMabel", "kingFire", "kingIce", "kingWind", "kingEarth", "ghostCaptain", "burningCaptain",
 ];

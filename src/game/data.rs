@@ -113,7 +113,7 @@ pub struct Item {
     pub icon: &'static str,
     pub desc: &'static str,
 }
-pub const ITEMS: [Item; 15] = [
+pub const ITEMS: [Item; 25] = [
     Item { key: "pearls", name: "Perlenbeutel", rarity: Rarity::Common, icon: "pearl", desc: "Ein nasser Beutel voller Perlen." },
     Item { key: "rum", name: "Rumflasche", rarity: Rarity::Rare, icon: "rum", desc: "Eine Rumflasche mehr an jedem Feuer." },
     Item { key: "phial", name: "Seelenphiole", rarity: Rarity::Uncommon, icon: "phial", desc: "Füllt den Geist. Eine Phiole mehr an jedem Feuer." },
@@ -129,6 +129,17 @@ pub const ITEMS: [Item; 15] = [
     Item { key: "figurehead_ice", name: "Galionsfigur des Frostes", rarity: Rarity::Unique, icon: "figurehead", desc: "Die Seele der Frostkönigin." },
     Item { key: "figurehead_wind", name: "Galionsfigur des Sturms", rarity: Rarity::Unique, icon: "figurehead", desc: "Die Seele des Sturmkönigs." },
     Item { key: "figurehead_earth", name: "Galionsfigur der Tiefe", rarity: Rarity::Unique, icon: "figurehead", desc: "Die Seele des Königs der Tiefe." },
+    // Inselwaren: nur bei den Händlern der Siedlungen zu haben
+    Item { key: "shellHorn", name: "Muschelhorn", rarity: Rarity::Rare, icon: "shanty", desc: "Salzwiese. Wer hineinbläst, atmet tiefer: +20 Ausdauer." },
+    Item { key: "driftCharm", name: "Treibholz-Amulett", rarity: Rarity::Uncommon, icon: "key", desc: "Salzwiese. Die See spült dir mehr zu: +15 % Perlen von Gegnern." },
+    Item { key: "emberHeart", name: "Ascheherz", rarity: Rarity::Rare, icon: "shard", desc: "Glutgrund. Ein Klumpen Glut im Griff: +10 % Waffenschaden." },
+    Item { key: "glowRum", name: "Glutrum", rarity: Rarity::Rare, icon: "rum", desc: "Glutgrund. Eine Rumflasche mehr an jedem Feuer." },
+    Item { key: "frostMantle", name: "Frostmantel", rarity: Rarity::Rare, icon: "coat", desc: "Reifstein. Pelz aus dem Eismeer: +30 Leben." },
+    Item { key: "iceGlass", name: "Eisglas", rarity: Rarity::Rare, icon: "bolt", desc: "Reifstein. Klarer Geist: +15 Geist, +10 % Zauberkraft." },
+    Item { key: "stormCompass", name: "Sturmkompass", rarity: Rarity::Unique, icon: "key", desc: "Rabenwacht. Zeigt immer in den Wind: Schiff eine Stufe schneller." },
+    Item { key: "ravenFeather", name: "Rabenfeder", rarity: Rarity::Uncommon, icon: "coat", desc: "Rabenwacht. Leicht wie der Wind: Ausdauer erholt sich 20 % schneller." },
+    Item { key: "bogTonic", name: "Moortinktur", rarity: Rarity::Rare, icon: "phial", desc: "Moorhain. Gerbt die Haut: 8 % weniger Schaden." },
+    Item { key: "voodooDoll", name: "Voodoopuppe", rarity: Rarity::Rare, icon: "fetish", desc: "Moorhain. Flüstert Zauber: +10 Geist, +10 % Zauberkraft." },
 ];
 pub fn item(k: &str) -> &'static Item {
     ITEMS.iter().find(|i| i.key == k).unwrap_or(&ITEMS[0])
@@ -426,18 +437,19 @@ pub fn derived(s: &Save) -> Derived {
     let w = weapon(&s.weapon);
     let sc = s.stats.get(w.scale) as f32;
     let lvl = s.weapon_level as f32;
+    let has = |k: &str| s.items.contains_key(k);
     Derived {
-        max_hp: (60.0 + s.stats.vit as f32 * 9.0).round(),
-        max_st: (55.0 + s.stats.end as f32 * 7.0).round(),
-        max_mp: (40.0 + s.stats.fai as f32 * 6.0 + if s.items.contains_key("bolt") { 20.0 } else { 0.0 }).round(),
-        spell_dmg: (18.0 + s.stats.fai as f32 * 4.5).round(),
-        dmg: (w.dmg * (0.7 + sc * 0.06) * (1.0 + lvl * 0.12)).round(),
+        max_hp: (60.0 + s.stats.vit as f32 * 9.0 + if has("frostMantle") { 30.0 } else { 0.0 }).round(),
+        max_st: (55.0 + s.stats.end as f32 * 7.0 + if has("shellHorn") { 20.0 } else { 0.0 }).round(),
+        max_mp: (40.0 + s.stats.fai as f32 * 6.0 + if has("bolt") { 20.0 } else { 0.0 } + if has("iceGlass") { 15.0 } else { 0.0 } + if has("voodooDoll") { 10.0 } else { 0.0 }).round(),
+        spell_dmg: ((18.0 + s.stats.fai as f32 * 4.5) * if has("iceGlass") { 1.1 } else { 1.0 } * if has("voodooDoll") { 1.1 } else { 1.0 }).round(),
+        dmg: (w.dmg * (0.7 + sc * 0.06) * (1.0 + lvl * 0.12) * if has("emberHeart") { 1.1 } else { 1.0 }).round(),
         off_dmg: match offhand(&s.off) {
             Some(o) => (o.dmg * (0.75 + if s.off == "tide" { s.stats.fai } else { s.stats.dex } as f32 * 0.05)).round(),
             None => 0.0,
         },
-        armor: if s.items.contains_key("ring") { 0.88 } else { 1.0 },
-        st_regen: if s.items.contains_key("coat") { 1.3 } else { 1.0 },
+        armor: if s.items.contains_key("ring") { 0.88 } else { 1.0 } * if s.items.contains_key("bogTonic") { 0.92 } else { 1.0 },
+        st_regen: if s.items.contains_key("coat") { 1.3 } else { 1.0 } * if s.items.contains_key("ravenFeather") { 1.2 } else { 1.0 },
     }
 }
 /// Neues Spiel+: Lebenspunkte der Gegner je Fahrt
@@ -447,6 +459,23 @@ pub fn ng_hp(s: &Save) -> f32 {
 /// Neues Spiel+: Schaden der Gegner je Fahrt
 pub fn ng_dmg(s: &Save) -> f32 {
     1.0 + 0.3 * s.ng.max(0) as f32
+}
+/// Händler der Siedlungen: Schlüssel, Siedlung, Händler, Waren (Gegenstand, Preis, einmalig)
+pub struct ShopDef {
+    pub key: &'static str,
+    pub town: &'static str,
+    pub name: &'static str,
+    pub goods: &'static [(&'static str, i64, bool)],
+}
+pub const SHOPS: [ShopDef; 5] = [
+    ShopDef { key: "kueste", town: "Salzwiese", name: "Fischer Jorn", goods: &[("shellHorn", 2500, true), ("driftCharm", 3200, true), ("bullets", 150, false), ("bombs", 300, false)] },
+    ShopDef { key: "asche", town: "Glutgrund", name: "Schmiedin Ilka", goods: &[("emberHeart", 5000, true), ("glowRum", 7000, true), ("fireball", 6000, true), ("bombs", 260, false)] },
+    ShopDef { key: "frost", town: "Reifstein", name: "Pelzhändlerin Wendla", goods: &[("frostMantle", 4500, true), ("iceGlass", 4000, true), ("phial", 2500, false)] },
+    ShopDef { key: "raben", town: "Rabenwacht", name: "Kartenhändler Orrin", goods: &[("stormCompass", 6000, true), ("ravenFeather", 3500, true), ("bullets", 130, false)] },
+    ShopDef { key: "mangroven", town: "Moorhain", name: "Kräuterhexe Mabel", goods: &[("bogTonic", 4000, true), ("voodooDoll", 5000, true), ("phial", 2800, false), ("bombs", 300, false)] },
+];
+pub fn shop_def(k: &str) -> &'static ShopDef {
+    SHOPS.iter().find(|s| s.key == k).unwrap_or(&SHOPS[0])
 }
 pub fn level_cost(level: i32) -> i64 {
     (120.0 * 1.1f64.powi(level)).round() as i64

@@ -274,6 +274,19 @@ impl Game {
         self.draw_sea_bosses(art, f);
         self.draw_crew(art, f);
         self.draw_end(art, f);
+        // im Laden: alles außerhalb der Wände ist Nacht
+        if let Some(di) = self.world.interior_at(self.player.a.x, self.player.a.y).filter(|_| !self.sailing) {
+            let (rx, ry, rw, rh) = self.world.doors[di].room;
+            let (vx, vy, vw, vh) = f.view();
+            let k = [8, 6, 6, 255];
+            let m = 400.0;
+            let (x0, y0, x1, y1) = (vx - m, vy - m, vx + vw + m, vy + vh + m);
+            for (x, y, w, h) in [(x0, y0, x1 - x0, ry - y0), (x0, ry + rh, x1 - x0, y1 - ry - rh), (x0, ry, rx - x0, rh), (rx + rw, ry, x1 - rx - rw, rh)] {
+                if w > 0.0 && h > 0.0 {
+                    f.over(crate::gfx::Frame::quad_rect(x, y, w, h, k, crate::gfx::modes::SOLID, 0), false);
+                }
+            }
+        }
         self.draw_critters(f);
         self.fx.draw(f);
         self.fx.lights(f);

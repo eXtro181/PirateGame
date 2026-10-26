@@ -56,6 +56,9 @@ pub enum Use {
     Board(usize),
     Call(usize),
     Stain,
+    /// Laden betreten / verlassen
+    Enter(usize),
+    Leave(usize),
 }
 
 #[derive(Clone)]
@@ -89,6 +92,8 @@ pub enum Cut {
     Whirl { t: f32, moved: bool },
     /// Krakenarme ziehen den Spieler vom Steg in den Strudel
     Grab { t: f32, moved: bool },
+    /// durch eine Ladentür gehen (abblenden, versetzen, aufblenden)
+    Door { t: f32, door: usize, enter: bool, moved: bool },
 }
 
 pub struct Options {
@@ -171,6 +176,8 @@ pub struct Game {
     pub song_req: Option<(&'static str, f32)>,
     pub persist_req: bool,
     pub to_title: bool,
+    /// geöffneter Siedlungsladen (None = Sabeth in der Glutwacht)
+    pub shop_id: Option<&'static str>,
     /// Neues Spiel+: Spiel mit dem Spielstand neu aufbauen
     pub restart: bool,
     pub open_options: bool,
@@ -268,6 +275,7 @@ impl Game {
             song_req: None,
             persist_req: false,
             to_title: false,
+            shop_id: None,
             restart: false,
             open_options: false,
             opt,
@@ -745,6 +753,26 @@ impl Game {
                     self.cutscene = if self.ui.fade <= 0.0 { None } else { Some(Cut::Whirl { t, moved }) };
                 }
             }
+            Cut::Door { t, door, enter, moved } => {
+                let t = t + dt;
+                if t < 0.35 {
+                    self.ui.fade = t / 0.35;
+                    self.cutscene = Some(Cut::Door { t, door, enter, moved });
+                } else if !moved {
+                    let d = self.world.doors[door].clone();
+                    let (x, y) = if enter { d.inn } else { d.out };
+                    self.player.a.x = x;
+                    self.player.a.y = y;
+                    self.player.a.face(0.0, if enter { -1.0 } else { 1.0 });
+                    self.cam_f = (x, y);
+                    self.lock = None;
+                    self.sfx("board");
+                    self.cutscene = Some(Cut::Door { t, door, enter, moved: true });
+                } else {
+                    self.ui.fade = (self.ui.fade - dt * 3.0).max(0.0);
+                    self.cutscene = if self.ui.fade <= 0.0 { None } else { Some(Cut::Door { t, door, enter, moved }) };
+                }
+            }
             Cut::Grab { t, moved } => {
                 let t = t + dt;
                 let (wx, wy) = self.world.whirlpool;
@@ -823,7 +851,8 @@ impl Game {
             }
         }
         self.zone_t = (self.zone_t - dt).max(0.0);
-        let mut target = if z == Zone::Ende { env::env(self.end.env_key(), false) } else { env::env(z.def().key, self.sailing && !on_island) };
+        let inside = !self.sailing && self.world.interior_at(x, y).is_some();
+        let mut target = if inside { env::env("innen", false) } else if z == Zone::Ende { env::env(self.end.env_key(), false) } else { env::env(z.def().key, self.sailing && !on_island) };
         // elementare Seegebiete: Stimmung zum Rand hin weich einblenden
         let mut sea = (0.0f32, "");
         if self.sailing && !on_island {
@@ -910,6 +939,10 @@ impl Game {
             let (x, y) = self.world.pier_end;
             out.push(f(x, y, 50.0, "In den Strudel springen", Use::Whirl, None));
         }
+        for (i, d) in self.world.doors.iter().enumerate() {
+            out.push(f(d.x, d.y, 40.0, &format!("Laden in {} betreten", d.name), Use::Enter(i), None));
+            out.push(f(d.exit.0, d.exit.1, 40.0, "Hinausgehen", Use::Leave(i), None));
+        }
         for (di, d) in self.world.docks.iter().enumerate() {
             let here = (self.ship.hull.x - d.x).hypot(self.ship.hull.y - d.y) < 48.0;
             out.push(f(d.px, d.py, 60.0, if here { "An Bord gehen" } else { "Schiff rufen" }, if here { Use::Board(di) } else { Use::Call(di) }, None));
@@ -988,6 +1021,8 @@ impl Game {
                 Use::Board(di) => self.board(di),
                 Use::Call(di) => self.call_ship(di),
                 Use::Stain => self.take_stain(),
+                Use::Enter(i) => self.cutscene = Some(Cut::Door { t: 0.0, door: i, enter: true, moved: false }),
+                Use::Leave(i) => self.cutscene = Some(Cut::Door { t: 0.0, door: i, enter: false, moved: false }),
             }
         }
     }
@@ -1157,7 +1192,11 @@ impl Game {
             Cmd::UpgradeWeapon => self.upgrade_weapon(),
             Cmd::WeaponShop => self.weapon_shop(),
             Cmd::BuyWeapon(i) => self.buy_weapon(i),
-            Cmd::Shop => self.shop(),
+            Cmd::Shop => {
+                self.shop_id = None;
+                self.shop();
+            }
+            Cmd::ShopAt(id) => self.shop_at(id),
             Cmd::Buy(w, p) => self.buy(w, p),
             Cmd::RestMenu(i) => self.rest_menu(i),
             Cmd::TravelMenu(i) => self.travel_menu(i),
@@ -1366,11 +1405,44 @@ impl Game {
                 self.save.phials_max += 1;
                 self.player.phials += 1;
             }
-            _ => {}
+            _ => {
+                let k: &'static str = ITEMS.iter().find(|i| i.key == what).map(|i| i.key).unwrap_or("pearls");
+                self.give_item(k);
+            }
         }
         self.sfx("pearls");
-        self.shop();
+        match self.shop_id {
+            Some(id) => self.shop_at(id),
+            None => self.shop(),
+        }
         self.persist(true);
+    }
+    /// Laden eines Siedlungshändlers: Inselwaren, die es nirgends sonst gibt.
+    fn shop_at(&mut self, id: &'static str) {
+        self.shop_id = Some(id);
+        let d = shop_def(id);
+        let s = &self.save;
+        let owned = |k: &str| s.items.contains_key(k) || (k == "fireball" && s.spells.iter().any(|x| x == "fireball"));
+        let items = d
+            .goods
+            .iter()
+            .map(|&(k, p, once)| {
+                let it = item(k);
+                let label = match k {
+                    "bullets" => "Bleikugeln ×6".to_string(),
+                    "bombs" => "Pulverbomben ×3".to_string(),
+                    _ => it.name.to_string(),
+                };
+                let sold = once && owned(k) || (k == "phial" && s.phials_max >= 4);
+                entry(&label, &if sold { "ausverkauft".to_string() } else { p.to_string() }, it.desc, sold || s.pearls < p, Cmd::Buy(k, p))
+            })
+            .collect();
+        let t = format!("{} · {} · {} Perlen", d.name, d.town, s.pearls);
+        let sel = self.ui.list.as_ref().map(|l| l.sel);
+        self.ui.open_list(&t, items, Cmd::EndTalk, true, true);
+        if let (Some(s), Some(l)) = (sel, self.ui.list.as_mut()) {
+            l.sel = s.min(l.items.len() - 1);
+        }
     }
 
     // ---------------------------------------------------------------- Gegenstände, Truhen, Buge
@@ -1402,6 +1474,15 @@ impl Game {
             "bullets" => s.bullets += 6,
             "bombs" => s.bombs += 3,
             "soulflower" | "shard" => s.shards += 1,
+            "glowRum" => {
+                s.flasks_max += 1;
+                s.items.insert(id.into(), true);
+                self.player.flasks += 1;
+            }
+            "stormCompass" => {
+                s.ship_speed = (s.ship_speed + 1).min(10);
+                s.items.insert(id.into(), true);
+            }
             "fireball" => {
                 if !s.spells.iter().any(|x| x == "fireball") {
                     s.spells.push("fireball".into());

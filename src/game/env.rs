@@ -183,6 +183,22 @@ pub fn env(zone: &str, sailing_open_sea: bool) -> Env {
             abyss: 1.4,
             ..base
         },
+        // Ladenräume: warmes Kerzen- und Fackellicht, kein Nebel
+        "innen" => Env {
+            rays: 0.0,
+            ambient: l(0x8A6A50, 0.42),
+            sky: 0.2,
+            sun: l(0x6A4A30, 0.1),
+            shadow: 0.2,
+            fog: l(0x1A1210, 1.0),
+            fog_k: 0.0,
+            lift: [0.02, 0.01, 0.0],
+            gain: [1.05, 0.98, 0.9],
+            bloom: 0.7,
+            vignette: 1.2,
+            light_k: 1.6,
+            ..base
+        },
         // Kehrseite, Phase 1: spiegelglatte Stille, kaltes Mondsilber
         "stille" => Env {
             rays: 0.3,

@@ -39,6 +39,8 @@ pub enum Cmd {
     /// Debug-Menü und seine Einträge (Art, Element)
     Debug,
     DebugGive(&'static str, &'static str),
+    /// Laden eines Siedlungshändlers
+    ShopAt(&'static str),
 }
 
 #[derive(Clone)]
@@ -184,6 +186,28 @@ pub fn dialog_for(g: &mut Game, ni: usize) -> Script {
                     _ => &["Die Wurzeln hier unten flüstern, wenn man still ist.", "Ich habe Rümpfe aus Treibholz gebaut. Deiner sieht aus, als bräuchte er mich."],
                 };
                 return Script { pages: pages(lines), choices: vec![ch("Komm an Bord", Cmd::Recruit(c.el)), ch("Später", Cmd::EndTalk)] };
+            }
+            if let Some(key) = def.dialog.strip_prefix("shop_") {
+                let d = shop_def(key);
+                let k: &'static str = SHOPS.iter().find(|x| x.key == key).map(|x| x.key).unwrap_or("kueste");
+                let greet: &[&str] = match key {
+                    "kueste" => &["Fang ist mager, seit die Toten am Strand liegen. Aber was ich hab, ist gut.", "Muschelhörner, Treibholz-Glücksbringer. Nirgends sonst auf der See."],
+                    "asche" => &["Glutgrund schmiedet seit hundert Jahren mit der Hitze des Glutkönigs.", "Ascheherzen, Glutrum, das Folio. Kaufen oder gehen, der Ofen wartet nicht."],
+                    "frost" => &["Komm rein, bevor dir die Finger abfallen.", "Pelze aus dem Eismeer und Eisglas aus der Grotte. Wärmt Leib und Geist."],
+                    "raben" => &["Karten, Kompasse, Federn. Alles, was einen Seemann heimbringt.", "Der Sturmkompass zeigt immer in den Wind. Den gibt es nur bei mir."],
+                    _ => &["Hihi. Ein Lebender im Moor. Oder fast lebendig.", "Tinkturen, Puppen, Phiolen. Die Wurzeln flüstern mir die Rezepte."],
+                };
+                return Script { pages: if first { pages(greet) } else { vec![format!("Willkommen zurück in {}.", d.town)] }, choices: vec![ch("Waren ansehen", Cmd::ShopAt(k)), bye] };
+            }
+            if let Some(key) = def.dialog.strip_prefix("town_") {
+                let lines: &[&str] = match key {
+                    "kueste" => &["Salzwiese gab es schon, bevor die Toten an Land kamen. Wir bleiben.", "Jorn im Laden hat ein Muschelhorn. Damit hält man länger durch.", "Nachts singen die Ertrunkenen am Strand. Wir schließen die Läden.", "Wenn die Möwen schweigen, ist die See hungrig."],
+                    "asche" => &["Die Asche fällt jeden Morgen. Wir fegen sie, sie fällt wieder.", "Ilka schmiedet mit Glut aus dem Thronsaal. Frag nicht, wie sie rankommt.", "Hinter der Schlucht brennt der Thron des Admirals.", "Unsere Kinder husten. Aber sie lachen noch."],
+                    "frost" => &["In Reifstein friert sogar der Schnaps.", "Wendla hat Pelze aus dem Eismeer. Sie taucht selbst dafür.", "Die Königin unter dem Eis singt manchmal. Dann knacken die Häuser.", "Ein warmes Feuer und eine Geschichte, mehr brauchen wir nicht."],
+                    "raben" => &["Rabenwacht war der größte Hafen der Freibeuter.", "Orrin verkauft Karten von Orten, die es nicht mehr gibt.", "Der Sturmkönig hat die Glocken der Stadt gestohlen.", "Wenn die Raben auffliegen, kommt Sturm."],
+                    _ => &["Moorhain steht auf Pfählen, sonst schluckt uns der Schlamm.", "Mabel weiß, welche Wurzel heilt und welche tötet.", "Die Mangroven bewegen sich nachts. Ich schwöre es.", "Korallenhand hat die Wurzeln zu einer Kathedrale verflochten."],
+                };
+                return Script { pages: vec![lines[(def.x as usize / 13 + *n as usize) % lines.len()].into()], choices: vec![bye] };
             }
             if def.dialog == "villager" {
                 let lines = ["Die Glutwacht war früher voller Lieder.", "Hast du die Throne am Feuer gesehen? Jeder wartet auf ein Gesicht.", "Mein Mann fuhr mit der Sturmflotte. Er kam nie zurück.", "Pass auf dich auf, Ertränkter."];

@@ -5,6 +5,7 @@ use super::data::*;
 use super::fx::*;
 use super::input::Act;
 use super::*;
+use sw_art::terrain::TerrainMap;
 use crate::world::{idx, inb};
 
 pub const S: f32 = 2.0; // Maßstab gegenüber v0.5 (16 → 32 px)
@@ -330,26 +331,24 @@ impl Game {
         if !inb(sx, sy) || w.stairs[idx(sx, sy)] {
             return None;
         }
-        let lv = w.level[idx(sx, sy)];
+        let lv = w.lpx(x as i32, y as i32);
         if lv == 0 {
             return None;
         }
         let mut d = 6.0;
         let mut left_own = false;
-        while d < 130.0 {
+        while d < 170.0 {
             let (qx, qy) = (x + dx * d, y + dy * d);
             let (tx, ty) = t(qx, qy);
             if !inb(tx, ty) {
                 return None;
             }
-            let i = idx(tx, ty);
-            let g = w.ground[i];
-            if matches!(g, Mat::Water | Mat::Abyss) {
+            if matches!(w.ground[idx(tx, ty)], Mat::Water | Mat::Abyss) {
                 return None;
             }
-            let ql = w.level[i];
-            if w.cliff[i] {
-                // Felswand: nur die der eigenen Ebene darf übersprungen werden
+            let (ql, walk) = w.px_walk(qx as i32, qy as i32);
+            if !walk {
+                // Wand oder Böschung: nur die der eigenen Ebene darf übersprungen werden
                 if ql != lv {
                     return None;
                 }
@@ -384,6 +383,10 @@ impl Game {
         let mut b = *a;
         self.move_actor(&mut b, dx, dy);
         if self.in_arena(b.x, b.y) && !self.in_arena(a.x, a.y) {
+            return;
+        }
+        // Gegner betreten keine Siedlung
+        if self.world.in_settlement(b.x, b.y) && !self.world.in_settlement(a.x, a.y) {
             return;
         }
         *a = b;
@@ -1200,7 +1203,8 @@ impl Game {
         };
         self.sfx(if skel { "bones" } else { "crush" });
         let k = if self.save.origin == "schmuggler" { 1.2 } else { 1.0 } * if self.save.gift == "coin" { 1.15 } else { 1.0 };
-        self.gain_pearls((pearls * k).round() as i64, Some((x, y)));
+        let charm = if self.save.items.contains_key("driftCharm") { 1.15 } else { 1.0 };
+        self.gain_pearls((pearls * k * charm * (1.0 + 0.25 * self.save.ng as f32)).round() as i64, Some((x, y)));
         if self.lock == Some(Target::Enemy(i)) {
             self.lock = None;
         }
