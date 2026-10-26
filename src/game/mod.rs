@@ -597,6 +597,9 @@ impl Game {
                 self.ui.map_open = true;
                 self.sfx("click");
             }
+            if self.input.pressed(Act::Status) {
+                self.progress_view();
+            }
             if self.input.pressed(Act::Legend) {
                 self.ui.legend_open = true;
             }
@@ -1181,6 +1184,9 @@ impl Game {
             Cmd::Close => self.ui.list = None,
             Cmd::Pause => self.pause_menu(),
             Cmd::Stats => self.stats_view(),
+            Cmd::Progress => self.progress_view(),
+            Cmd::Debug => self.debug_menu(),
+            Cmd::DebugGive(kind, el) => self.debug_give(kind, el),
             Cmd::ShipMenu => {
                 let items = ship_entries(&self.save);
                 self.ui.open_list("Schiffsmeister", items, Cmd::EndTalk, true, false);
@@ -1705,9 +1711,11 @@ impl Game {
                 entry("Weiter", "", "", false, Cmd::Close),
                 entry("Seekarte", "", "", false, Cmd::Map),
                 entry("Steuerung", "", "", false, Cmd::Legend),
+                entry("Fortschritt", "I", "", false, Cmd::Progress),
                 entry("Werte", "", "", false, Cmd::Stats),
                 entry("Optionen", "", "", false, Cmd::Options),
                 entry("Cheat: +1 Mio Perlen", "", "Füllt den Perlenbeutel um eine Million auf.", false, Cmd::Cheat),
+                entry("Debug-Menü", "", "Boss-Trophäen und Crew herbeizaubern (ohne Endboss).", false, Cmd::Debug),
                 entry("Speichern und zum Titel", "", "", false, Cmd::ToTitle),
             ],
             Cmd::Close,
@@ -1737,6 +1745,119 @@ impl Game {
         let items = rows.into_iter().map(|(a, b)| entry(a, &b, "", false, Cmd::None)).collect();
         let n = s.name.clone();
         self.ui.open_list(&n, items, Cmd::Pause, false, true);
+    }
+    /// Fortschritt: Geisterkönige, Seeungeheuer, Crew, Endkampf und Fahrt auf einen Blick.
+    fn progress_view(&mut self) {
+        self.sfx("click");
+        let s = &self.save;
+        let yes = |m: &std::collections::HashMap<String, bool>, k: &str| m.get(k).copied().unwrap_or(false);
+        let mut items = vec![];
+        let head = |t: &str| entry(&format!("— {t} —"), "", "", true, Cmd::None);
+        let n_k = KINGS.iter().filter(|k| yes(&s.kings, k.key)).count();
+        items.push(head(&format!("Geisterkönige {n_k}/4")));
+        for k in KINGS.iter() {
+            let name = k.name.split(',').next().unwrap_or(k.name);
+            let st = if yes(&s.mounted, k.key) {
+                "besiegt · Galionsfigur auf dem Thron"
+            } else if yes(&s.figureheads, k.key) {
+                "besiegt · Galionsfigur im Gepäck"
+            } else {
+                "lebt noch"
+            };
+            let zn = crate::world::ZONES.iter().map(|z| z.def()).find(|d| d.key == k.zone).map(|d| d.name).unwrap_or("");
+            let desc = format!("{zn} · {}", k.monster);
+            items.push(entry(name, st, &desc, false, Cmd::None));
+        }
+        let n_s = SEA_KINGS.iter().filter(|k| yes(&s.sea_kings, k.el)).count();
+        items.push(head(&format!("Seeungeheuer {n_s}/4")));
+        for k in SEA_KINGS.iter() {
+            let name = k.monster.split(',').next().unwrap_or(k.monster);
+            let st = if yes(&s.sea_kings, k.el) { "versenkt · brennt im See" } else { "schläft noch" };
+            items.push(entry(name, st, &format!("Zweite Gestalt: {}", k.ship), false, Cmd::None));
+        }
+        items.push(head(&format!("Crew {}/4", s.crew.len())));
+        for c in CREW.iter() {
+            let on = s.crew.iter().any(|x| x == c.el);
+            items.push(entry(c.name, if on { "an Bord" } else { "noch nicht gefunden" }, &format!("Shanty: {}", c.song_name), false, Cmd::None));
+        }
+        items.push(head("Das Ende der Welt"));
+        let whirl = if self.whirl_ready() { "offen" } else { "geschlossen" };
+        items.push(entry("Der Strudel", whirl, "Öffnet sich, wenn vier Galionsfiguren thronen und vier Ungeheuer versenkt sind.", false, Cmd::None));
+        items.push(entry(crate::game::endboss::END_NAME, if s.megalodon { "besiegt" } else { "wartet" }, "Thalassa Inversa – fünf Phasen.", false, Cmd::None));
+        items.push(entry("Fahrt", &if s.ng > 0 { format!("Neues Spiel+{}", s.ng) } else { "Erste Fahrt".into() }, "", false, Cmd::None));
+        self.ui.open_list("Fortschritt", items, Cmd::Close, true, true);
+    }
+    /// Debug-Menü: Trophäen der Bosse (ohne Endboss) und Crew herbeizaubern.
+    fn debug_menu(&mut self) {
+        let s = &self.save;
+        let yes = |m: &std::collections::HashMap<String, bool>, k: &str| m.get(k).copied().unwrap_or(false);
+        let mut items = vec![entry("Alle Trophäen", "", "Alle vier Galionsfiguren und alle vier Ungeheuer-Schiffe.", false, Cmd::DebugGive("all", ""))];
+        for k in KINGS.iter() {
+            let it = item(k.figurehead);
+            items.push(entry(&format!("Trophäe: {}", it.name), if yes(&s.figureheads, k.key) { "vorhanden" } else { "" }, "Der König gilt als besiegt, die Galionsfigur liegt im Gepäck.", yes(&s.figureheads, k.key), Cmd::DebugGive("king", k.key)));
+        }
+        for k in SEA_KINGS.iter() {
+            items.push(entry(&format!("Trophäe: {}", k.wreck), if yes(&s.sea_kings, k.el) { "vorhanden" } else { "" }, "Das Ungeheuer gilt als versenkt, sein Schiff brennt im See der Glutwacht.", yes(&s.sea_kings, k.el), Cmd::DebugGive("sea", k.el)));
+        }
+        items.push(entry("Ganze Crew an Bord", &format!("{}/4", s.crew.len()), "Alle vier Crewmitglieder heuern an.", s.crew.len() >= 4, Cmd::DebugGive("crew", "")));
+        self.ui.open_list("Debug-Menü", items, Cmd::Pause, true, true);
+    }
+    fn debug_give(&mut self, kind: &str, el: &'static str) {
+        match kind {
+            "all" => {
+                for k in ["fire", "ice", "wind", "earth"] {
+                    self.debug_give("king", k);
+                    self.debug_give("sea", k);
+                }
+                return;
+            }
+            "king" => {
+                if self.save.figureheads.get(el).copied().unwrap_or(false) {
+                    return;
+                }
+                self.save.kings.insert(el.into(), true);
+                self.save.figureheads.insert(el.into(), true);
+                if let Some(bi) = KINGS.iter().position(|k| k.key == el) {
+                    let b = &mut self.bosses[bi];
+                    b.state = BS::Dead;
+                    b.hidden = true;
+                    b.hp = 0.0;
+                }
+                if let Some(gi) = self.world.gates.iter().position(|g| king_for_zone(g.key) == el) {
+                    let pi = self.world.gates[gi].prop;
+                    self.world.props[pi].hidden = true;
+                    if let Some(bk) = self.world.dyn_blockers.get_mut(gi) {
+                        bk.4 = false;
+                    }
+                }
+                self.ui.toast(&format!("Trophäe: {}", item(king(el).figurehead).name));
+            }
+            "sea" => {
+                if self.save.sea_kings.get(el).copied().unwrap_or(false) {
+                    return;
+                }
+                self.save.sea_kings.insert(el.into(), true);
+                if let Some(i) = SEA_KINGS.iter().position(|k| k.el == el) {
+                    self.sea_bosses[i].state = SS::Dead;
+                    if self.sea_boss == Some(i) {
+                        self.sea_boss = None;
+                    }
+                }
+                self.ui.toast(&format!("Trophäe: {}", sea_king(el).wreck));
+            }
+            "crew" => {
+                for c in ["fire", "ice", "wind", "earth"] {
+                    if !self.save.crew.iter().any(|x| x == c) {
+                        self.save.crew.push(c.into());
+                    }
+                }
+                self.ui.toast("Die ganze Crew ist an Bord.");
+            }
+            _ => {}
+        }
+        self.check_whirl();
+        self.persist(true);
+        self.debug_menu();
     }
     pub fn persist(&mut self, force: bool) {
         if !force && self.save_t > 0.0 {

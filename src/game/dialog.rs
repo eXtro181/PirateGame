@@ -34,6 +34,11 @@ pub enum Cmd {
     ShipUp(usize),
     /// Neues Spiel+ beginnen
     NewGamePlus,
+    /// Fortschrittsübersicht
+    Progress,
+    /// Debug-Menü und seine Einträge (Art, Element)
+    Debug,
+    DebugGive(&'static str, &'static str),
 }
 
 #[derive(Clone)]

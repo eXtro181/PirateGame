@@ -28,6 +28,8 @@ pub enum Act {
     Names,
     Belt1,
     Belt2,
+    /// Fortschritt (Bosse, Crew)
+    Status,
 }
 
 fn keys(a: Act) -> &'static [K] {
@@ -49,6 +51,7 @@ fn keys(a: Act) -> &'static [K] {
         Menu => &[K::Escape],
         Map => &[K::KeyM],
         Legend => &[K::KeyH],
+        Status => &[K::KeyI],
         Spell => &[K::KeyC],
         Swap => &[K::KeyX],
         Confirm => &[K::Enter, K::NumpadEnter],
@@ -109,6 +112,7 @@ impl Input {
             Act::Names,
             Act::Belt1,
             Act::Belt2,
+            Act::Status,
         ];
         let shift = kb.pressed(K::ShiftLeft) || kb.pressed(K::ShiftRight);
         for a in all {
