@@ -41,6 +41,8 @@ pub struct Atlas {
     row: i32,
     /// Normalstärke
     pub nk: f32,
+    /// nutzbare Breite (für Bilder, die später in einen schmaleren Streifen kopiert werden)
+    pub lim: i32,
 }
 
 impl Default for Atlas {
@@ -51,7 +53,7 @@ impl Default for Atlas {
 
 impl Atlas {
     pub fn new() -> Self {
-        let mut a = Atlas { pages: vec![Page::new()], map: HashMap::new(), x: 4, y: 4, row: 0, nk: 0.55 };
+        let mut a = Atlas { pages: vec![Page::new()], map: HashMap::new(), x: 4, y: 4, row: 0, nk: 0.55, lim: PAGE };
         // weißes Texel für Flächen
         for j in 0..2 {
             for i in 0..2 {
@@ -82,7 +84,7 @@ impl Atlas {
         (self.pages.len() - 1) as f32 + (self.y + self.row) as f32 / PAGE as f32
     }
     fn place(&mut self, w: i32, h: i32) -> (usize, i32, i32) {
-        if self.x + w + 2 > PAGE {
+        if self.x + w + 2 > self.lim {
             self.x = 4;
             self.y += self.row + 3;
             self.row = 0;

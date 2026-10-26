@@ -1177,7 +1177,7 @@ pub fn fog_gate() -> PropArt {
         block(&mut c, x, 10, 12, 4, 66, &st, &st, 3.0);
         for y in 20..70 {
             if h01(x, y / 3, 9) > 0.8 {
-                c.lit(x + 6, y, hex(0x5FF2C8), 0.6);
+                c.lit(x + 6, y, hex(0xF2C85A), 0.7);
             }
         }
     }

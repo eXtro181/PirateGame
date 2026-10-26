@@ -66,7 +66,124 @@ pub struct Art {
     pub player: CharSheet,
     /// reservierter Streifen für den Spieler-Bogen: Seite, x, y
     pub player_slot: (u32, i32, i32),
+    /// reservierter Bereich für das eigene Schiff (wird bei Ausbauten neu gezeichnet)
+    pub ship_slot: DynSlot,
+    pub ship_upg: Option<sw_art::ships::Upg>,
+    /// reservierter Bereich für den gerade aktiven Seeboss (Ungeheuer + Schiff)
+    pub boss_slot: DynSlot,
+    pub boss_loaded: Option<String>,
     pub pages: u32,
+}
+
+/// Ein reservierter Atlasbereich, dessen Inhalt zur Laufzeit neu gezeichnet und hochgeladen wird.
+#[derive(Clone, Copy)]
+pub struct DynSlot {
+    pub page: u32,
+    pub x: i32,
+    pub y: i32,
+    pub w: i32,
+    pub h: i32,
+}
+impl DynSlot {
+    /// Leerer Arbeitsatlas in Bereichsbreite.
+    fn atlas(&self) -> Atlas {
+        let mut a = Atlas::new();
+        a.lim = self.w;
+        a
+    }
+    fn fix(&self, s: &mut Spr) {
+        s.page = self.page as u16;
+        s.x = (s.x as i32 + self.x) as u16;
+        s.y = (s.y as i32 + self.y) as u16;
+    }
+    /// Arbeitsatlas (Seite 0, oben links w×h) in den Bereich hochladen.
+    fn upload(&self, frame: &mut Frame, a: &Atlas) -> bool {
+        let used = a.used() * PAGE as f32;
+        if a.pages.len() > 1 || used > self.h as f32 {
+            warn!("Bereich zu klein: {:.0} px belegt, {} px frei", used, self.h);
+            return false;
+        }
+        let pg = &a.pages[0];
+        let (sw, sh) = (self.w, self.h);
+        let cut = |src: &Vec<u8>| -> Vec<u8> {
+            let mut out = vec![0u8; (sw * sh * 4) as usize];
+            for y in 0..sh {
+                let o = (y * PAGE * 4) as usize;
+                out[(y * sw * 4) as usize..((y + 1) * sw * 4) as usize].copy_from_slice(&src[o..o + (sw * 4) as usize]);
+            }
+            out
+        };
+        frame.uploads.push(Upload { tex: Tex::AtlasCol, layer: self.page, x: self.x as u32, y: self.y as u32, w: sw as u32, h: sh as u32, data: cut(&pg.col) });
+        frame.uploads.push(Upload { tex: Tex::AtlasNrm, layer: self.page, x: self.x as u32, y: self.y as u32, w: sw as u32, h: sh as u32, data: cut(&pg.nrm) });
+        true
+    }
+}
+
+/// Eigenes Schiff mit den Ausbauten neu zeichnen (9 Kurse).
+pub fn build_ship(art: &mut Art, frame: &mut Frame, u: sw_art::ships::Upg) {
+    if art.ship_upg == Some(u) {
+        return;
+    }
+    let slot = art.ship_slot;
+    let mut a = slot.atlas();
+    let (_, h, foot) = sw_art::ships::ship_size("player");
+    let mut v: Vec<Spr> = (0..=8)
+        .map(|k| {
+            let c = sw_art::ships::ship_frame("player", k, u);
+            a.add_trim(&format!("s:player{k}"), &c, c.w / 2, h - foot)
+        })
+        .collect();
+    if slot.upload(frame, &a) {
+        for s in v.iter_mut() {
+            slot.fix(s);
+        }
+        art.ships.insert("player".into(), v);
+        art.ship_upg = Some(u);
+    }
+}
+
+/// Bilder eines Seebosses (Ungeheuer-Bogen + Schiff in geraden Kursen) in den Boss-Bereich laden.
+pub fn build_sea_boss(art: &mut Art, frame: &mut Frame, el: &str, beast: &str) {
+    if art.boss_loaded.as_deref() == Some(el) {
+        return;
+    }
+    let t0 = bevy::platform::time::Instant::now();
+    let slot = art.boss_slot;
+    let mut a = slot.atlas();
+    let mut sh = beast_sheet(&mut a, beast);
+    let (_, h, foot) = sw_art::ships::ship_size(el);
+    let mut v: Vec<Spr> = vec![];
+    for k in 0..=8usize {
+        if k % 2 == 0 {
+            let c = sw_art::ships::ship_frame(el, k, Default::default());
+            v.push(a.add_trim(&format!("s:{el}{k}"), &c, c.w / 2, h - foot));
+        } else {
+            v.push(v[k - 1]);
+        }
+    }
+    if !slot.upload(frame, &a) {
+        return;
+    }
+    for d in sh.f.iter_mut() {
+        for an in d.iter_mut() {
+            for s in an.iter_mut() {
+                slot.fix(s);
+            }
+        }
+    }
+    for s in v.iter_mut() {
+        slot.fix(s);
+    }
+    if let Some(old) = art.boss_loaded.take() {
+        art.ships.remove(&old);
+    }
+    for k in sw_art::beasts::KINDS.iter().filter(|k| sw_art::beasts::sea_boss(k.key)) {
+        art.chars.remove(k.key);
+    }
+    art.chars.insert(beast.to_string(), sh);
+    art.ships.insert(el.to_string(), v);
+    art.boss_loaded = Some(el.to_string());
+    info!("Seeboss {el} gezeichnet in {:.2}s", t0.elapsed().as_secs_f32());
 }
 impl Art {
     pub fn spr(&self, name: &str) -> Spr {
@@ -201,6 +318,9 @@ fn beast_sheet(a: &mut Atlas, key: &str) -> CharSheet {
 
 /// Höhe des reservierten Streifens für den Spieler-Bogen (volle Seitenbreite).
 const PLAYER_STRIP: i32 = 208;
+/// Höhe des Bereichs für das eigene Schiff (9 Kurse) und für den aktiven Seeboss.
+const SHIP_STRIP: i32 = 560;
+const BOSS_STRIP: i32 = 1260;
 
 /// Spieler-Bilderbogen in einem reservierten Streifen der ersten Atlasseite
 /// (wird bei Änderungen des Aussehens neu gebaut und nur dieser Ausschnitt hochgeladen).
@@ -244,6 +364,10 @@ pub fn build(frame: &mut Frame) -> Art {
     a.add("white", &c, 0, 0);
     let (pp, px, py) = a.reserve(PAGE - 8, PLAYER_STRIP);
     let player_slot = (pp as u32, px, py);
+    let (sp, sx, sy) = a.reserve(PAGE - 8, SHIP_STRIP);
+    let ship_slot = DynSlot { page: sp as u32, x: sx, y: sy, w: PAGE - 8, h: SHIP_STRIP };
+    let (bp, bx, by) = a.reserve(PAGE - 8, BOSS_STRIP);
+    let boss_slot = DynSlot { page: bp as u32, x: bx, y: by, w: PAGE - 8, h: BOSS_STRIP };
 
     // ---------------------------------------------------------------- Schrift und UI
     let mut glyphs = HashMap::new();
@@ -496,25 +620,13 @@ pub fn build(frame: &mut Frame) -> Art {
 
     // ---------------------------------------------------------------- Wesen (Kreaturen-Rig)
     for k in sw_art::beasts::KINDS.iter() {
+        if sw_art::beasts::sea_boss(k.key) {
+            continue; // werden beim Kampfbeginn in den Boss-Bereich gezeichnet
+        }
         let sh = beast_sheet(&mut a, k.key);
         chs.insert(k.key.to_string(), sh);
     }
-    let mut ships = HashMap::new();
-    for st in ["player", "fire", "ice", "wind", "earth"] {
-        let (_, h, foot) = sw_art::ships::ship_size(st);
-        // Bossschiffe nur in geraden Kursen (Atlasfläche), ungerade nehmen den Nachbarn
-        let step = if st == "player" { 1 } else { 2 };
-        let mut v: Vec<Spr> = vec![];
-        for k in 0..=8usize {
-            if k % step == 0 {
-                let c = sw_art::ships::ship_frame(st, k);
-                v.push(a.add_trim(&format!("s:{st}{k}"), &c, c.w / 2, h - foot));
-            } else {
-                v.push(v[k - 1]);
-            }
-        }
-        ships.insert(st.to_string(), v);
-    }
+    let ships = HashMap::new();
     let wp = cr::whirlpool();
     a.add("fx:whirl", &wp, wp.w / 2, wp.h / 2);
     for i in 0..2 {
@@ -543,6 +655,10 @@ pub fn build(frame: &mut Frame) -> Art {
         ships,
         player: CharSheet::default(),
         player_slot,
+        ship_slot,
+        ship_upg: None,
+        boss_slot,
+        boss_loaded: None,
         pages: pages + 1,
     };
     let look = chars::player_look(&[0, 1, 1, 5, 0, 0, 0, 0], "cutlass");

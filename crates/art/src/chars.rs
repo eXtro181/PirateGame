@@ -1457,7 +1457,7 @@ pub fn preset(name: &str) -> (Look, f32) {
         "lanternMaid" => Look { skin: 0xE0B896, hair_col: 0xA8A8A0, hair: 2, coat: 0x4A6170, hat: 3, robe: true, hold_lantern: Some(0x5FF2C8), weapon: None, ..d() },
         "smith" => Look { skin: 0x9A6A4C, hair_col: 0x26201E, hair: 0, beard: 2, body: 1, coat: 0x3A3430, apron: true, weapon: Some("hammer"), ..d() },
         "merchant" => Look { skin: 0xC49674, hair_col: 0x5A1A1E, hair: 2, coat: 0x3A2A3A, robe: true, hat: 3, hood_glow: false, hold_lantern: Some(0xF0A040), weapon: None, sash: Some(0xB08A3A), ..d() },
-        "innkeep" => Look { skin: 0xE0B896, hair_col: 0x8A3A22, hair: 1, beard: 3, body: 1, coat: 0x6A4A30, hat: 2, band_col: 0x2E4466, weapon: None, ..d() },
+        "shipmaster" => Look { skin: 0xB8865E, hair_col: 0xC8C4BC, hair: 1, beard: 3, body: 1, coat: 0x23324A, hat: 1, hat_col: 0x1E1E26, apron: true, sash: Some(0xC8A048), weapon: None, ..d() },
         "carver" => Look { skin: 0xC49674, hair_col: 0xA8A8A0, hair: 3, beard: 2, coat: 0x4A5A36, hat: 0, weapon: None, patch: true, ..d() },
         "crewFire" => Look { skin: 0x9A6A4C, hair_col: 0x26201E, hair: 3, coat: 0x8A2A30, hat: 2, band_col: 0xC2502E, weapon: Some("cutlass"), ..d() },
         "crewIce" => Look { skin: 0xE0B896, hair_col: 0xE8E4E0, hair: 2, coat: 0x2E4466, hat: 0, weapon: Some("rapier"), ..d() },
@@ -1488,7 +1488,7 @@ pub fn preset(name: &str) -> (Look, f32) {
     (l, s)
 }
 
-pub const PRESET_NAMES: [&str; 30] = [
+pub const PRESET_NAMES: [&str; 31] = [
     "abyssPirate", "voodoo", "orcCaptain", "stormHarpy", "bellConstruct", "gorgonQueen", "clockStorm",
-    "skeleton", "skelBrute", "skelGunner", "drowned", "drownedIce", "ashSkeleton", "stormSailor", "lanternMaid", "smith", "merchant", "carver", "crewFire", "crewIce", "crewWind", "crewEarth", "villagerA", "villagerB", "villagerC", "villagerD", "kingFire", "kingIce", "kingWind", "kingEarth",
+    "skeleton", "skelBrute", "skelGunner", "drowned", "drownedIce", "ashSkeleton", "stormSailor", "lanternMaid", "smith", "merchant", "shipmaster", "carver", "crewFire", "crewIce", "crewWind", "crewEarth", "villagerA", "villagerB", "villagerC", "villagerD", "kingFire", "kingIce", "kingWind", "kingEarth",
 ];

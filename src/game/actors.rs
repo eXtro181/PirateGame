@@ -305,6 +305,20 @@ impl Game {
         a.y = y;
     }
 
+    /// Liegt der Punkt in einem Bossraum (mit Rand bis zum Nebeltor)?
+    pub fn in_arena(&self, x: f32, y: f32) -> bool {
+        self.world.arenas.values().any(|a| ((x - a.x) / (a.r + 64.0)).powi(2) + ((y - a.y) / (a.ry + 64.0)).powi(2) < 1.0)
+    }
+    /// Gewöhnliche Gegner betreten keinen Bossraum.
+    pub fn move_enemy(&self, a: &mut Actor, dx: f32, dy: f32) {
+        let mut b = *a;
+        self.move_actor(&mut b, dx, dy);
+        if self.in_arena(b.x, b.y) && !self.in_arena(a.x, a.y) {
+            return;
+        }
+        *a = b;
+    }
+
     pub fn update_player(&mut self, dt: f32) {
         let mut p = std::mem::replace(&mut self.player, Player::new(&self.save));
         let look_key = p.look_key.clone();
@@ -882,7 +896,7 @@ impl Game {
                 }
             }
             let mut a = e.a;
-            g.move_actor(&mut a, (dx / l + sx * 0.6) * sp * dt, (dy / l + sy * 0.6) * sp * dt);
+            g.move_enemy(&mut a, (dx / l + sx * 0.6) * sp * dt, (dy / l + sy * 0.6) * sp * dt);
             e.a = a;
             e.a.face(dx, dy);
             e.a.anim = "walk";
@@ -948,7 +962,7 @@ impl Game {
                 e.a.frame = 3.0;
                 if charge {
                     let mut a = e.a;
-                    self.move_actor(&mut a, e.a.fx * 260.0 * dt, e.a.fy * 260.0 * dt);
+                    self.move_enemy(&mut a, e.a.fx * 260.0 * dt, e.a.fy * 260.0 * dt);
                     e.a = a;
                     if !e.hit_done && e.a.dist(px, py) < 28.0 {
                         e.hit_done = true;
@@ -1067,7 +1081,7 @@ impl Game {
         }
         if o.push != (0.0, 0.0) && poise_def < 50.0 {
             let mut a = e.a;
-            self.move_actor(&mut a, o.push.0, o.push.1);
+            self.move_enemy(&mut a, o.push.0, o.push.1);
             self.enemies[i].a = a;
         }
     }

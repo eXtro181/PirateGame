@@ -350,12 +350,20 @@ impl WorldView {
                     }
                 }
             }
-            if kind == "foggate" && p.open == false {
-                // Nebelwand: leuchtende, wogende Schleier
-                for k in 0..10 {
-                    let a = t * 0.8 + k as f32 * 0.7;
-                    frame.glow(p.x - 30.0 + k as f32 * 6.5, p.y - 30.0 + a.sin() * 10.0, 20.0, [90, 200, 190, 70]);
+            if kind == "foggate" {
+                // Nebeltor: goldgelb schimmernder, wogender Schleier zwischen den Pfeilern
+                for k in 0..14 {
+                    let a = t * 0.9 + k as f32 * 0.55;
+                    let x = p.x - 28.0 + k as f32 * 4.3;
+                    frame.glow(x, p.y - 34.0 + a.sin() * 12.0, 16.0, [255, 205, 90, 60]);
+                    frame.glow(x + (a * 1.3).cos() * 3.0, p.y - 14.0 + (a * 0.7).cos() * 8.0, 10.0, [255, 230, 140, 70]);
                 }
+                for k in 0..6 {
+                    let ph = (t * 0.35 + k as f32 / 6.0).fract();
+                    let x = p.x - 24.0 + ((k * 37) % 48) as f32;
+                    frame.glow(x, p.y - 4.0 - ph * 64.0, 3.0, [255, 240, 170, (220.0 * (1.0 - ph)) as u8]);
+                }
+                frame.light(LightDef { x: p.x, y: p.y - 4.0, z: 30.0, r: 150.0, col: [1.4, 1.05, 0.45], flicker: 0.25 });
             }
         }
         if kind == "saberfire" && !p.lit {

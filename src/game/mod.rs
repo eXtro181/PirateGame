@@ -205,7 +205,7 @@ impl Game {
             ship,
             ghosts: vec![],
             sharks: vec![],
-            kraken: Kraken::new(214.0 * TS as f32, 66.0 * TS as f32),
+            kraken: Kraken::new(294.0 * TS as f32, 126.0 * TS as f32),
             sea_bosses: vec![],
             sea_boss: None,
             sea_el: None,
@@ -456,6 +456,14 @@ impl Game {
     // ---------------------------------------------------------------- Hauptschleife
     pub fn update(&mut self, dt: f32, art: &mut Art, frame: &mut Frame) {
         self.t += dt;
+        // Schiffsbilder: eigenes Schiff mit Ausbauten, aktiver Seeboss (beides nur bei Änderung)
+        let s = &self.save;
+        let u = sw_art::ships::Upg { speed: s.ship_speed.clamp(0, 10) as u8, def: s.ship_def.clamp(0, 10) as u8, atk: s.ship_atk.clamp(0, 10) as u8 };
+        crate::art::build_ship(art, frame, u);
+        if let Some(i) = self.sea_boss {
+            let d = self.sea_bosses[i].def();
+            crate::art::build_sea_boss(art, frame, d.el, d.beast);
+        }
         self.save.play_time += dt as f64;
         let (cmd, modal) = self.ui.update(dt, &self.input);
         if let Some(c) = cmd {
@@ -1094,6 +1102,36 @@ impl Game {
             Cmd::Close => self.ui.list = None,
             Cmd::Pause => self.pause_menu(),
             Cmd::Stats => self.stats_view(),
+            Cmd::ShipMenu => {
+                let items = ship_entries(&self.save);
+                self.ui.open_list("Schiffsmeister", items, Cmd::EndTalk, true, false);
+            }
+            Cmd::ShipUp(i) => {
+                let lvl = ship_level(&self.save, i);
+                let cost = ship_up_cost(lvl);
+                if lvl < 10 && self.save.pearls >= cost {
+                    self.save.pearls -= cost;
+                    match i {
+                        0 => self.save.ship_speed += 1,
+                        1 => {
+                            self.save.ship_def += 1;
+                            self.ship.max_hp = 120.0 + 24.0 * self.save.ship_def as f32;
+                            self.ship.hp = self.ship.max_hp;
+                        }
+                        _ => self.save.ship_atk += 1,
+                    }
+                    self.sfx("level");
+                    self.ui.toast(&format!("{} +{}", SHIP_UPS[i].0, lvl + 1));
+                    self.persist(true);
+                }
+                let items = ship_entries(&self.save);
+                self.ui.open_list("Schiffsmeister", items, Cmd::EndTalk, true, false);
+            }
+            Cmd::Cheat => {
+                self.gain_pearls(1_000_000, None);
+                self.ui.toast("+1 000 000 Perlen");
+                self.persist(true);
+            }
             Cmd::Options => {
                 self.ui.list = None;
                 self.open_options = true;
@@ -1537,6 +1575,7 @@ impl Game {
                 entry("Steuerung", "", "", false, Cmd::Legend),
                 entry("Werte", "", "", false, Cmd::Stats),
                 entry("Optionen", "", "", false, Cmd::Options),
+                entry("Cheat: +1 Mio Perlen", "", "Füllt den Perlenbeutel um eine Million auf.", false, Cmd::Cheat),
                 entry("Speichern und zum Titel", "", "", false, Cmd::ToTitle),
             ],
             Cmd::Close,

@@ -376,6 +376,13 @@ pub struct Save {
     pub mounted: HashMap<String, bool>,
     #[serde(default)]
     pub megalodon: bool,
+    /// Schiffsausbauten beim Schiffsmeister (0..=10)
+    #[serde(default)]
+    pub ship_speed: i32,
+    #[serde(default)]
+    pub ship_def: i32,
+    #[serde(default)]
+    pub ship_atk: i32,
     /// besiegte Seebosse (Wrack erbeutet)
     #[serde(default)]
     pub sea_kings: HashMap<String, bool>,
@@ -436,7 +443,7 @@ pub fn upgrade_cost(lvl: i32) -> (i64, i32) {
 pub fn new_save(name: &str, look: LookIdx, origin: &str, gift: &str, now: f64) -> Save {
     let o = ORIGINS.iter().find(|x| x.id == origin).unwrap_or(&ORIGINS[0]);
     Save {
-        version: 3,
+        version: 4,
         name: name.to_string(),
         look,
         origin: o.id.into(),
@@ -465,6 +472,9 @@ pub fn new_save(name: &str, look: LookIdx, origin: &str, gift: &str, now: f64) -
         figureheads: HashMap::new(),
         mounted: HashMap::new(),
         megalodon: false,
+        ship_speed: 0,
+        ship_def: 0,
+        ship_atk: 0,
         sea_kings: HashMap::new(),
         wrecks: HashMap::new(),
         crew: vec![],
@@ -480,7 +490,15 @@ pub fn new_save(name: &str, look: LookIdx, origin: &str, gift: &str, now: f64) -
 const FIRES: [&str; 11] = ["kueste", "hain", "asche", "asche2", "frost", "frost2", "raben", "raben2", "mangroven", "mangroven2", "ende"];
 /// Ältere/fehlerhafte Spielstände reparieren.
 pub fn migrate(s: &mut Save) {
-    s.version = 3;
+    let old = s.version;
+    s.version = 4;
+    if old < 4 {
+        // v4: Karte vergrößert, alles um (80, 60) Kacheln verschoben
+        if let Some(st) = s.stain.as_mut() {
+            st.x += (80 * crate::world::TS) as f32;
+            st.y += (60 * crate::world::TS) as f32;
+        }
+    }
     if s.weapon.is_empty() {
         s.weapon = "cutlass".into();
     }

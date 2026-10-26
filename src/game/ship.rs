@@ -126,9 +126,9 @@ impl Game {
             .collect();
         self.spawn_sea_bosses();
         if !self.kraken.dead() {
-            self.kraken = Kraken::new(214.0 * TS as f32, 66.0 * TS as f32);
+            self.kraken = Kraken::new(294.0 * TS as f32, 126.0 * TS as f32);
         }
-        self.sharks = [(210, 140), (110, 80), (220, 60), (100, 150), (200, 170), (110, 200), (150, 30), (60, 120)]
+        self.sharks = [(290, 200), (190, 140), (300, 120), (180, 210), (280, 230), (190, 260), (230, 90), (140, 180)]
             .iter()
             .map(|&(x, y)| {
                 let (x, y) = ((x * TS) as f32, (y * TS) as f32);
@@ -160,10 +160,13 @@ impl Game {
     pub fn broadside(&mut self, h: &Hull, side: f32, dmg: f32, owner: Owner) {
         let (fx, fy) = (h.h.sin(), -h.h.cos());
         let (nx, ny) = (h.h.cos() * side, h.h.sin() * side);
-        for i in -1..=1 {
-            let i = i as f32;
-            let sx = h.x + fx * i * 16.0 + nx * 16.0;
-            let sy = h.y + fy * i * 12.0 * 0.75 + ny * 12.0;
+        // eigenes Schiff: mehr Kanonen mit dem Angriffs-Ausbau; Bossschiffe feuern fünf Kugeln
+        let n = if owner == Owner::Player { 3 + self.save.ship_atk / 3 } else { 5 };
+        let gap = if owner == Owner::Player { 20.0 } else { 26.0 };
+        for i in 0..n {
+            let i = i as f32 - (n - 1) as f32 / 2.0;
+            let sx = h.x + fx * i * gap + nx * 20.0;
+            let sy = h.y + fy * i * gap * 0.75 + ny * 15.0;
             let mut s = Shot::new(owner, "cannon", sx, sy, 12.0, nx * 340.0 + fx * h.v + rr(-20.0, 20.0), (ny * 340.0 + fy * h.v) * 0.8, dmg);
             s.r = 8.0;
             s.life = 0.9;
@@ -177,6 +180,7 @@ impl Game {
     }
 
     pub fn update_ship(&mut self, dt: f32, steer: bool) {
+        self.ship.max_hp = 120.0 + 24.0 * self.save.ship_def as f32;
         let mut h = self.ship.hull.clone();
         h.flash = (h.flash - dt).max(0.0);
         self.ship.cool[0] = (self.ship.cool[0] - dt).max(0.0);
@@ -209,13 +213,13 @@ impl Game {
         let st = self.input.stick;
         if st.length() > 0.5 {
             let want = st.x.atan2(-st.y);
-            h.h = turn_to(h.h, want, 1.6 * dt);
+            h.h = turn_to(h.h, want, 1.6 * dt * (1.0 + self.save.ship_speed as f32 * 0.04));
             self.ship.sail = self.ship.sail.max(2);
         } else {
             let ax = self.input.axis();
-            h.h = wrap(h.h + ax.x * dt * (0.7 + h.v / 120.0));
+            h.h = wrap(h.h + ax.x * dt * (0.7 + h.v / 120.0) * (1.0 + self.save.ship_speed as f32 * 0.04));
         }
-        let target = self.ship.sail as f32 * 60.0 * if self.shanty_t > 0.0 { 1.35 } else { 1.0 };
+        let target = self.ship.sail as f32 * 60.0 * if self.shanty_t > 0.0 { 1.35 } else { 1.0 } * (1.0 + self.save.ship_speed as f32 * 0.06);
         h.v += (target - h.v) * (dt * 0.8).min(1.0);
         let (fx, fy) = (h.h.sin(), -h.h.cos());
         let (nx, ny) = (h.x + fx * h.v * dt, h.y + fy * h.v * dt);
@@ -231,7 +235,7 @@ impl Game {
             }
         }
         self.wake(&mut h, dt);
-        let dmg = 40.0 * if self.save.origin == "kanonier" { 1.3 } else { 1.0 };
+        let dmg = 40.0 * if self.save.origin == "kanonier" { 1.3 } else { 1.0 } * (1.0 + self.save.ship_atk as f32 * 0.12);
         if self.input.pressed(Act::Attack) && self.ship.cool[0] <= 0.0 {
             self.broadside(&h, -1.0, dmg, Owner::Player);
             self.ship.cool[0] = 1.6;
@@ -246,6 +250,7 @@ impl Game {
     }
 
     pub fn ship_damage(&mut self, n: f32) {
+        let n = n * (1.0 - self.save.ship_def as f32 * 0.04);
         self.ship.hp -= n;
         self.ship.hull.flash = 0.12;
         self.shake(5.0);
@@ -464,11 +469,11 @@ impl Game {
         let h = &self.ship.hull;
         if vis(h.x, h.y, 200.0) {
             let (k, flip) = sw_art::ships::ship_dir(h.dir16());
-            let s = art.ships["player"][k];
+            let s = art.ships.get("player").map(|v| v[k]).unwrap_or_default();
             let b = (h.bob.sin() * 2.0).round();
             let a = (h.alpha * 255.0) as u8;
             let fl = if h.flash > 0.0 { flags::FLASH } else { 0 } | if self.hover == Hover::Ship { flags::OUTLINE } else { 0 };
-            f.shadow(h.x, h.y + 4.0, 70.0, 20.0, 0.3);
+            f.shadow(h.x, h.y + 4.0, 92.0, 26.0, 0.3);
             f.sprite(&s, h.x, h.y + b, SprOpt { flip, tint: [255, 255, 255, a], flags: fl, ..Default::default() });
             if self.sailing {
                 f.light(LightDef { x: h.x, y: h.y, z: 60.0, r: 220.0, col: [1.0, 0.72, 0.42], flicker: 0.1 });
@@ -485,7 +490,8 @@ impl Game {
             // Geisterschiffe wie das eigene Schiff in 16 Richtungen; das Fleischschiff blutrot getönt
             let tint = if g.monster == "fleshShip" { [255, 150, 150, a] } else { [255, 255, 255, a] };
             let (k, flip) = sw_art::ships::ship_dir(h.dir16());
-            f.sprite(&art.ships["player"][k], h.x, h.y + b, SprOpt { flip, tint, flags: fl | flags::GHOST, ..Default::default() });
+            let Some(sv) = art.ships.get("player") else { continue };
+            f.sprite(&sv[k], h.x, h.y + b, SprOpt { flip, tint, flags: fl | flags::GHOST, ..Default::default() });
             if !g.dead() {
                 f.light(LightDef { x: h.x, y: h.y, z: 50.0, r: 160.0, col: [0.35, 1.0, 0.82], flicker: 0.2 });
             }

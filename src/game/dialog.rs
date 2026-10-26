@@ -29,6 +29,9 @@ pub enum Cmd {
     Stats,
     Options,
     ToTitle,
+    Cheat,
+    ShipMenu,
+    ShipUp(usize),
 }
 
 #[derive(Clone)]
@@ -136,6 +139,14 @@ pub fn dialog_for(g: &mut Game, ni: usize) -> Script {
                 ],
             }
         }
+        "shipmaster" => Script {
+            pages: if first {
+                pages(&["Brack. Schiffsmeister der Glutwacht, seit das Feuer brennt.", "Bring mir Perlen, und ich mache aus deinem Kahn etwas, vor dem selbst die Könige der See ausweichen. Segel, Panzer, Kanonen – bis zur zehnten Stufe."])
+            } else {
+                pages(&["Na, was soll's sein? Schneller, härter oder lauter?"])
+            },
+            choices: vec![ch("Schiff ausbauen", Cmd::ShipMenu), bye],
+        },
         "merchant" => {
             let crew = crew_talk(s);
             Script {
@@ -180,6 +191,29 @@ fn crew_talk(s: &Save) -> Vec<String> {
     }
     let names: Vec<&str> = s.crew.iter().map(|e| crew(e).name).collect();
     vec![format!("Du hast {} von 4 an Bord. {}.", s.crew.len(), names.join(", ")), "Eine volle Crew singt lauter. Und lautes Singen hält die Geister fern.".into()]
+}
+
+/// Schiffsausbauten: Tempo, Verteidigung, Angriff (je bis +10).
+pub const SHIP_UPS: [(&str, &str); 3] = [
+    ("Tempo", "Mehr Segel, schnelleres Wenden. Jede Stufe +6 % Fahrt."),
+    ("Verteidigung", "Eisenbänder und Panzerplatten. Jede Stufe +24 Rumpf, −4 % Schaden."),
+    ("Angriff", "Mehr Kanonen und Geschütze. Jede Stufe +12 % Schaden, mehr Kugeln je Breitseite."),
+];
+pub fn ship_up_cost(lvl: i32) -> i64 {
+    (1500.0 * 1.45f64.powi(lvl)).round() as i64
+}
+pub fn ship_level(s: &Save, i: usize) -> i32 {
+    [s.ship_speed, s.ship_def, s.ship_atk][i]
+}
+pub fn ship_entries(s: &Save) -> Vec<Entry> {
+    (0..3)
+        .map(|i| {
+            let lvl = ship_level(s, i);
+            let cost = ship_up_cost(lvl);
+            let right = if lvl >= 10 { "+10 (voll)".to_string() } else { format!("+{lvl} → +{} · {cost}", lvl + 1) };
+            entry(SHIP_UPS[i].0, &right, SHIP_UPS[i].1, lvl >= 10 || s.pearls < cost, Cmd::ShipUp(i))
+        })
+        .collect()
 }
 
 pub fn level_entries(s: &Save) -> Vec<Entry> {

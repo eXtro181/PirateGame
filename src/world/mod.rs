@@ -11,8 +11,8 @@ use sw_art::noise::{Noise, Rng};
 use sw_art::terrain::{Biome, Mat, TerrainMap, FACE_ROWS};
 
 pub const TS: i32 = 32;
-pub const MW: i32 = 400;
-pub const MH: i32 = 300;
+pub const MW: i32 = 560;
+pub const MH: i32 = 420;
 const FH: i32 = FACE_ROWS;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
@@ -49,13 +49,13 @@ impl Zone {
     }
 }
 pub static ZONE_DEFS: [ZoneDef; 7] = [
-    ZoneDef { key: "kueste", name: "Strand der Ertränkten", biome: Biome::Coast, music: "salz", cx: 160, cy: 200, rx: 46, ry: 26, seed: 1, king: None, sealed: false },
-    ZoneDef { key: "hain", name: "Glutwacht", biome: Biome::Hub, music: "hain", cx: 160, cy: 112, rx: 48, ry: 34, seed: 2, king: None, sealed: false },
-    ZoneDef { key: "asche", name: "Aschebucht", biome: Biome::Fire, music: "glut", cx: 268, cy: 100, rx: 42, ry: 30, seed: 3, king: Some("fire"), sealed: false },
-    ZoneDef { key: "frost", name: "Frostgrotte", biome: Biome::Frost, music: "frost", cx: 56, cy: 58, rx: 44, ry: 32, seed: 4, king: Some("ice"), sealed: false },
-    ZoneDef { key: "raben", name: "Hafen Rabenwacht", biome: Biome::Wind, music: "sturm", cx: 56, cy: 176, rx: 44, ry: 32, seed: 5, king: Some("wind"), sealed: false },
-    ZoneDef { key: "mangroven", name: "Fluchmangroven", biome: Biome::Earth, music: "tiefe", cx: 268, cy: 196, rx: 42, ry: 30, seed: 6, king: Some("earth"), sealed: false },
-    ZoneDef { key: "ende", name: "Ende der Welt", biome: Biome::End, music: "ende", cx: 272, cy: 28, rx: 22, ry: 15, seed: 7, king: None, sealed: true },
+    ZoneDef { key: "kueste", name: "Strand der Ertränkten", biome: Biome::Coast, music: "salz", cx: 240, cy: 260, rx: 46, ry: 26, seed: 1, king: None, sealed: false },
+    ZoneDef { key: "hain", name: "Glutwacht", biome: Biome::Hub, music: "hain", cx: 240, cy: 172, rx: 48, ry: 34, seed: 2, king: None, sealed: false },
+    ZoneDef { key: "asche", name: "Aschebucht", biome: Biome::Fire, music: "glut", cx: 348, cy: 160, rx: 42, ry: 30, seed: 3, king: Some("fire"), sealed: false },
+    ZoneDef { key: "frost", name: "Frostgrotte", biome: Biome::Frost, music: "frost", cx: 136, cy: 118, rx: 44, ry: 32, seed: 4, king: Some("ice"), sealed: false },
+    ZoneDef { key: "raben", name: "Hafen Rabenwacht", biome: Biome::Wind, music: "sturm", cx: 136, cy: 236, rx: 44, ry: 32, seed: 5, king: Some("wind"), sealed: false },
+    ZoneDef { key: "mangroven", name: "Fluchmangroven", biome: Biome::Earth, music: "tiefe", cx: 348, cy: 256, rx: 42, ry: 30, seed: 6, king: Some("earth"), sealed: false },
+    ZoneDef { key: "ende", name: "Ende der Welt", biome: Biome::End, music: "ende", cx: 352, cy: 88, rx: 22, ry: 15, seed: 7, king: None, sealed: true },
 ];
 
 pub fn fire_name(id: &str) -> &'static str {
@@ -85,10 +85,10 @@ pub struct SeaRegion {
     pub r: i32,
 }
 pub static SEAS: [SeaRegion; 4] = [
-    SeaRegion { el: "fire", key: "glutsee", name: "Glutsee", cx: 360, cy: 110, r: 30 },
-    SeaRegion { el: "ice", key: "eismeer", name: "Eismeer", cx: 150, cy: 26, r: 24 },
-    SeaRegion { el: "wind", key: "sturmsee", name: "Sturmsee", cx: 56, cy: 264, r: 30 },
-    SeaRegion { el: "earth", key: "tiefengrund", name: "Tiefengrund", cx: 340, cy: 264, r: 30 },
+    SeaRegion { el: "fire", key: "glutsee", name: "Glutsee", cx: 478, cy: 196, r: 36 },
+    SeaRegion { el: "ice", key: "eismeer", name: "Eismeer", cx: 236, cy: 36, r: 30 },
+    SeaRegion { el: "wind", key: "sturmsee", name: "Sturmsee", cx: 46, cy: 352, r: 38 },
+    SeaRegion { el: "earth", key: "tiefengrund", name: "Tiefengrund", cx: 470, cy: 362, r: 38 },
 ];
 impl SeaRegion {
     pub fn center(&self) -> (f32, f32) {
@@ -435,11 +435,11 @@ impl World {
         self.sea_props(&mut rng);
         let rt = |v: &[(i32, i32)]| v.iter().map(|&(x, y)| ((x * TS) as f32, (y * TS) as f32)).collect::<Vec<_>>();
         self.ghost_routes = vec![
-            rt(&[(214, 150), (226, 160), (206, 168), (196, 150)]),
-            rt(&[(104, 96), (112, 80), (118, 140)]),
-            rt(&[(204, 46), (226, 54), (214, 70)]),
-            rt(&[(108, 210), (124, 226), (96, 224)]),
-            rt(&[(100, 120), (92, 140), (112, 152)]),
+            rt(&[(294, 210), (306, 220), (286, 228), (276, 210)]),
+            rt(&[(184, 156), (192, 140), (198, 200)]),
+            rt(&[(284, 106), (306, 114), (294, 130)]),
+            rt(&[(188, 270), (204, 286), (176, 284)]),
+            rt(&[(180, 180), (172, 200), (192, 212)]),
         ];
     }
 
@@ -1115,6 +1115,10 @@ impl World {
         self.prop_t("brazier", wx1 - 11, cy - 7);
         self.npc("merchant", wx1 - 8, cy - 7, "merchant", "Händlerin Sabeth", "merchant", false, None);
         self.npc("maid", fx - 2, fy + 2, "lanternMaid", "Die Laternenmagd", "maid", false, None);
+        // Schiffsmeister am Südtor, nahe dem Anleger
+        self.npc("shipmaster", cx + 7, wy1 - 3, "shipmaster", "Schiffsmeister Brack", "shipmaster", false, None);
+        self.prop_t("anchorDeco", cx + 10, wy1 - 4);
+        self.prop_t("crates", cx + 4, wy1 - 4);
         // ---- Tafel der Crew (Südosten)
         let (tx, ty) = (cx + 14, cy + 14);
         self.prop_t("table", tx, ty);

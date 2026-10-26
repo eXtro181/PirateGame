@@ -306,7 +306,8 @@ pub fn apply(e: &Env, g: &mut Globals, dark: bool, exposure: f32, fx_high: bool)
     g.fog = [e.fog[0], e.fog[1], e.fog[2], e.fog_k];
     g.lift = [e.lift[0] + 0.004, e.lift[1] + 0.008, e.lift[2] + 0.016, e.contrast + 0.06];
     g.gain = [e.gain[0], e.gain[1], e.gain[2], e.sat * if dark { 0.75 } else { 1.0 }];
-    g.misc = [(e.vignette + 0.2).min(1.0), if fx_high { 0.018 } else { 0.0 }, if fx_high { e.bloom } else { 0.2 }, exposure];
+    // +15 % Helligkeit gegenüber der ursprünglichen Abstimmung (Wunsch: man sieht sonst zu wenig)
+    g.misc = [(e.vignette + 0.2).min(1.0), if fx_high { 0.018 } else { 0.0 }, if fx_high { e.bloom } else { 0.2 }, exposure * 1.15];
     g.water_a = [e.water_a[0], e.water_a[1], e.water_a[2], 1.0];
     g.water_b = [e.water_b[0], e.water_b[1], e.water_b[2], 1.0];
     g.water_c = [e.water_c[0], e.water_c[1], e.water_c[2], 0.3];

@@ -223,17 +223,25 @@ fn main() {
         "ships" => {
             use sw_art::ships::*;
             let styles: Vec<&str> = std::env::args().nth(3).map(|a| a.split(',').map(|s| Box::leak(s.to_string().into_boxed_str()) as &str).collect()).unwrap_or_else(|| vec!["player", "fire", "ice", "wind", "earth"]);
-            let mut bg = Canvas::new(1600, 330 * styles.len() as i32);
+            let mut bg = Canvas::new(2600, 520 * styles.len() as i32);
             let water = sw_art::color::ramp_n(sw_art::color::hex(0x1E5A7A), 6, 1.0);
             for y in 0..bg.h { for x in 0..bg.w { let v = ((x / 7 + y / 5) % 9 == 0) as usize + 2; let i = bg.idx(x, y); bg.col[i] = water[v]; } }
             let t = std::time::Instant::now();
-            for (ri, st) in styles.iter().enumerate() {
+            for (ri, st0) in styles.iter().enumerate() {
+                // "player7" = eigenes Schiff mit allen Ausbauten auf Stufe 7
+                let (st, u) = match st0.strip_prefix("player") {
+                    Some(n) if !n.is_empty() => {
+                        let n: u8 = n.parse().unwrap_or(0);
+                        ("player", Upg { speed: n, def: n, atk: n })
+                    }
+                    _ => (*st0, Upg::default()),
+                };
                 let (w, h, foot) = ship_size(st);
                 let mut x = 20;
                 for k in [0usize, 2, 4, 6, 8, 3] {
-                    let c = ship_frame(st, k);
+                    let c = ship_frame(st, k, u);
                     if let Some((x0, _, x1, _)) = c.bounds() {
-                        bg.place(&c, x - x0 + c.w / 2, ri as i32 * 330 + 300, c.w / 2, h - foot);
+                        bg.place(&c, x - x0 + c.w / 2, ri as i32 * 520 + 480, c.w / 2, h - foot);
                         x += x1 - x0 + 14;
                     }
                     let _ = w;
