@@ -220,9 +220,8 @@ pub enum Target {
     Shark(usize),
     Kraken,
     SeaBoss(usize),
-    /// Endboss auf See (Geisterkapitän, Schiffsgestalt)
+    /// Endboss auf See: der Fliegende Holländer (bzw. sein roter Kraken)
     EndShip,
-    /// Tau der Herzglocke im Schlund der Kehrseite
     Player,
     Ship,
 }

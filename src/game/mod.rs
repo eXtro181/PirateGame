@@ -934,6 +934,10 @@ impl Game {
         let s = &self.save;
         let f = |x: f32, y: f32, h: f32, label: &str, act: Use, prop: Option<usize>| Focus { x, y, h, label: label.into(), act, prop };
         for (i, fi) in self.world.fires.iter().enumerate() {
+            // das Säbelfeuer am Grund erscheint erst nach dem Sieg über Malakor
+            if self.world.props[fi.prop].hidden {
+                continue;
+            }
             out.push(f(fi.x, fi.y, 72.0, if s.lit_fires.contains(&fi.id) { "Rasten" } else { "Feuer entzünden" }, Use::Fire(i), Some(fi.prop)));
         }
         for (i, n) in self.npcs.iter().enumerate() {

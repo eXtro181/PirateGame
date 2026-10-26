@@ -101,7 +101,7 @@ pub fn dialog_for(g: &mut Game, ni: usize) -> Script {
             }
             if missing == 0 {
                 if wrecks_missing == 0 {
-                    return Script { pages: pages(&["Der Strudel ruft dich. Mitten in der Glutwacht, zwischen den brennenden Schiffen. Spring vom Steg.", "Und wenn du am Ende der Welt stehst … grüß den Kapitän nicht von mir."]), choices: vec![bye] };
+                    return Script { pages: pages(&["Der Strudel ruft dich. Mitten in der Glutwacht, zwischen den brennenden Schiffen. Fahr mit dem Schiff hinein.", "Und wenn du am Ende der Welt stehst … grüß Malakor nicht von mir."]), choices: vec![bye] };
                 }
                 return Script {
                     pages: vec![
@@ -127,8 +127,10 @@ pub fn dialog_for(g: &mut Game, ni: usize) -> Script {
                 pages(&["Die Throne um das Feuer sind kalt. Sie warten auf ihre Gesichter."])
             } else if wrecks_missing > 0 {
                 pages(&["Die Gesichter sind heimgekehrt. Doch der See ist noch nicht satt. Er will die Schiffe der vier Ungeheuer."])
+            } else if s.megalodon {
+                pages(&["Malakor liegt am Grund, und das Meer am Ende der Welt ist leer. Du hast den Ertrunkenen König gestürzt.", "Doch die See vergisst nicht. Sie füllt sich wieder mit Königen und Ungeheuern, stärker als zuvor. Wenn du willst, beginnt deine Fahrt von vorn – du behältst alles, was du bist."])
             } else {
-                pages(&["Hörst du es? Der See singt. Er wird sich öffnen, und du wirst fallen. Fürchte dich nicht."])
+                pages(&["Hörst du es? Der See singt. Der Strudel ist offen. Fahr mit dem Schiff hinein – zwischen den Armen hindurch.", "Am Ende der Welt wartet Malakor, der Ertrunkene König, auf seinem Fliegenden Holländer."])
             },
             choices: [
                 vec![ch("Stufe aufsteigen", Cmd::LevelMenu)],

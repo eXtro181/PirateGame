@@ -198,6 +198,10 @@ impl Game {
                 self.debug_end();
                 self.end.state = EP::Approach;
                 self.end_rise();
+                if n == 1 {
+                    // mitten im Aufstieg ansehen
+                    self.end.st_t = 3.2;
+                }
                 if n >= 2 {
                     self.end.state = EP::Ship;
                     self.end.st_t = 0.0;
@@ -658,7 +662,7 @@ impl Game {
                     }
                     EP::Drain => {
                         let k = (e.st_t / 4.5).clamp(0.0, 1.0);
-                        (k * 0.75, 1.0 - k * 0.5, k * 0.12, k * 60.0)
+                        (k * 0.75, 1.0 - k * 0.5, k * 0.12, 0.0)
                     }
                     _ => (0.0, 1.0, 0.0, 0.0),
                 };
@@ -667,7 +671,10 @@ impl Game {
                 let fl = if e.flash > 0.0 { flags::FLASH } else { 0 } | if hov && !e.kraken_up() { flags::OUTLINE } else { 0 };
                 f.reflect(&s, e.x, e.y, 1.0, [80, 110, 100, 90], t);
                 f.shadow(e.x, e.y + 20.0, HULL_RX + 60.0, HULL_RY, 0.35);
-                f.sprite(&s, e.x, e.y + bob + sink, SprOpt { flip, cut_bottom: cut, tint, flags: fl, rot: tilt * e.face, ..Default::default() });
+                // der verdeckte Teil liegt unter Wasser: Bild um ihn absenken (steigt auf / sinkt)
+                let under = (s.h as f32 - s.ay as f32).max(0.0);
+                let low = s.h as f32 * cut - under * cut.min(1.0) + sink;
+                f.sprite(&s, e.x, e.y + bob + low.max(0.0), SprOpt { flip, cut_bottom: cut, tint, flags: fl, rot: tilt * e.face, ..Default::default() });
                 // grüne Laternen und Seelenlicht
                 for i in 0..6 {
                     let x = e.x + (i as f32 / 5.0 - 0.5) * 760.0;
@@ -717,7 +724,7 @@ impl Game {
                 let cut = 1.0 - (0.3 + 0.55 * rise);
                 let fl = if kr.flash > 0.0 { flags::FLASH } else { 0 } | if self.hover == Hover::T(Target::EndShip) || self.lock == Some(Target::EndShip) { flags::OUTLINE } else { 0 };
                 let b = (kr.t * 1.3).sin() * 5.0;
-                f.sprite(&m, kr.x, kr.y + 30.0 + b, SprOpt { cut_bottom: cut, flags: fl, tint: [255, 255, 255, (rise.min(1.0) * 255.0) as u8], ..Default::default() });
+                f.sprite(&m, kr.x, kr.y + 30.0 + b + m.h as f32 * cut, SprOpt { cut_bottom: cut, flags: fl, tint: [255, 255, 255, (rise.min(1.0) * 255.0) as u8], ..Default::default() });
                 f.light(LightDef { x: kr.x, y: kr.y, z: 120.0, r: 260.0, col: [1.4, 0.5, 0.3], flicker: 0.2 });
             }
         }
@@ -735,13 +742,18 @@ impl Game {
             return;
         }
         let (vx, vy, vw, vh) = f.view();
-        for i in 0..90 {
+        // das Wasser weicht: der Grund schimmert durch
+        let g = ((t - 3.0) / 2.4).clamp(0.0, 1.0);
+        if g > 0.0 {
+            f.over(Frame::quad_rect(vx - 40.0, vy - 40.0, vw + 80.0, vh + 80.0, [70, 78, 62, (g * 150.0) as u8], modes::SOLID, 0), false);
+        }
+        for i in 0..170 {
             let fi = i as f32;
             let ph = (self.t * (0.5 + (fi * 0.37).fract() * 0.5) + fi * 0.137).fract();
             let x = vx + ((fi * 97.3) % vw) + ph * 320.0;
             let y = vy + ((fi * 53.7) % vh) + ph * 210.0;
-            let a = (k * 200.0 * (1.0 - ph)) as u8;
-            f.over(Frame::quad_rect(x, y, 26.0 + (i % 3) as f32 * 10.0, 2.0, [210, 240, 245, a], modes::SOLID, 0), false);
+            let a = (k * 235.0 * (1.0 - ph)) as u8;
+            f.over(Frame::quad_rect(x, y, 30.0 + (i % 4) as f32 * 14.0, 2.0 + (i % 2) as f32, [215, 242, 248, a], modes::SOLID, 0), false);
         }
     }
 }

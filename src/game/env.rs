@@ -218,7 +218,7 @@ pub fn env(zone: &str, sailing_open_sea: bool) -> Env {
             light_k: 1.2,
             ..base
         },
-        // Kehrseite, Phase 1: spiegelglatte Stille, kaltes Mondsilber
+        // Ende der Welt vor dem Kampf: spiegelglatte Stille, kaltes Mondsilber
         "stille" => Env {
             rays: 0.3,
             ambient: l(0x7A86A8, 0.5),

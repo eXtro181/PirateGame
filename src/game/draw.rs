@@ -470,7 +470,7 @@ impl Game {
         if let Some(m) = art.map.get(if open { "mk:bone1" } else { "mk:bone0" }).copied() {
             let cut = 1.0 - rise;
             f.shadow(bx, by + 4.0, 150.0 - z * 0.2, 40.0, 0.4);
-            f.sprite(&m, bx, by + 30.0 - z, SprOpt { cut_bottom: cut, flags: fl, ev: z.max(0.0), ..Default::default() });
+            f.sprite(&m, bx, by + 30.0 - z + m.h as f32 * cut, SprOpt { cut_bottom: cut, flags: fl, ev: z.max(0.0), ..Default::default() });
         }
         f.light(LightDef { x: bx, y: by, z: 140.0 + z, r: 320.0, col: [0.4, 1.4, 0.9], flicker: 0.2 });
     }
