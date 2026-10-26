@@ -92,7 +92,7 @@ pub fn dialog_for(g: &mut Game, ni: usize) -> Script {
             }
             if missing == 0 {
                 if wrecks_missing == 0 {
-                    return Script { pages: pages(&["Der Strudel ruft dich. Mitten in der Glutwacht, wo der See schwarz wird.", "Und wenn du am Ende der Welt stehst … grüß den Moloch nicht von mir."]), choices: vec![bye] };
+                    return Script { pages: pages(&["Der Strudel ruft dich. Mitten in der Glutwacht, wo der See schwarz wird.", "Und wenn du am Ende der Welt stehst … grüß den Kapitän nicht von mir."]), choices: vec![bye] };
                 }
                 return Script {
                     pages: vec![

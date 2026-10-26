@@ -185,6 +185,25 @@ fn design(s: &str, u: Upg) -> Design {
             flag: 0x14161C,
             lamp: 0xD8E4F0,
         },
+        "ghost" => Design {
+            l: 62.0,
+            b: 19.0,
+            d: 20.0,
+            castle: (15.0, 13.0),
+            fore: 8.0,
+            masts: vec![m(30.0, 92.0, 26.0, 3), m(2.0, 112.0, 30.0, 3), m(-30.0, 86.0, 22.0, 2)],
+            sail: Sail::Torn,
+            ports: 8,
+            hull: 0x101416,
+            hull_pat: Pat::Planks(2.8),
+            wale: 0x2A7A6A,
+            deck: 0x22282A,
+            sailc: 0x2E504A,
+            sail_pat: Pat::Spots(3.4),
+            trim: 0x9AFFE0,
+            flag: 0x0A0E0E,
+            lamp: 0x5FF2C8,
+        },
         "earth" => Design {
             l: 46.0,
             b: 19.0,
@@ -676,6 +695,38 @@ fn boss_decor(r: &mut Rig, el: &str, d: &Design) {
                 let tip = add(hd, v(side * 18.0, -10.0, 12.0));
                 r.tri(s0, tip, add(hd, v(side * 6.0, -8.0, -2.0)), raven);
                 r.tri(s0, add(hd, v(side * 12.0, -3.0, 10.0)), tip, raven);
+            }
+        }
+        "ghost" => {
+            // Die Letzte Fahrt: Ketten, Knochenzacken an der Reling, Schädel-Galion, Seelenfeuer
+            let bone = r.mat(mat(0xD8CFB8).spec(60));
+            let chain = r.mat(mat(0x3A3E44).pat(Pat::Rivets(1.2)).spec(160));
+            let soul = r.mat(mat(0x5FF2C8).glow(2.0).bias(0.5).soft());
+            for i in 0..18 {
+                let y = -l * 0.55 + i as f32 * (l * 1.2 / 18.0);
+                for side in [-1.0f32, 1.0] {
+                    let hw = hull_half(d, y, dz);
+                    r.spike(v(side * hw, y, dz + 2.0), v(side * (hw + 1.5), y + 0.5, dz + 6.0 + (i % 3) as f32 * 1.5), 1.1, bone);
+                }
+            }
+            for (k, y) in [(-1.0f32, -20.0f32), (1.0, -4.0), (-1.0, 14.0), (1.0, 28.0)] {
+                let hw = hull_half(d, y, dz);
+                let a = v(k * hw, y, dz + 1.0);
+                r.curve(&[a, add(a, v(k * 3.0, 2.0, -6.0)), add(a, v(k * 2.0, 4.0, -13.0)), v(k * (hw - 2.0), y + 5.0, -0.5)], 0.9, 0.9, chain);
+            }
+            for mm in &d.masts {
+                let top = dz + mm.h;
+                for k in 0..3 {
+                    let a = k as f32 * 2.1;
+                    r.spike(v(a.cos() * 1.2, mm.y + a.sin() * 1.2, top), v(a.cos() * 2.0, mm.y + a.sin() * 1.6, top + 6.0 + k as f32 * 2.0), 1.4, soul);
+                }
+            }
+            let hd = v(0.0, l * 1.18, bow_z + 1.0);
+            r.ell_dir(hd, v(0.0, 1.0, 0.3), v(5.0, 6.0, 5.4), bone);
+            r.ell(add(hd, v(0.0, 3.0, -4.4)), v(3.4, 3.0, 1.6), bone);
+            for sx in [-2.0f32, 2.0] {
+                r.dot(add(hd, v(sx, 5.4, 1.0)), 0x5FF2C8, 2.4, 2);
+                r.spike(add(hd, v(sx * 1.4, -1.0, 4.0)), add(hd, v(sx * 3.4, -5.0, 11.0)), 1.4, bone);
             }
         }
         _ => {

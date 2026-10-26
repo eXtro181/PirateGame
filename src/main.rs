@@ -227,7 +227,11 @@ fn setup(world: &mut bevy::ecs::world::World) {
                     }
                 }
             }
-            if let Some(el) = app.params.get("seaboss").cloned() {
+            if app.params.contains_key("endsea") {
+                if let Scene::Play(g) = &mut app.scene {
+                    g.debug_end();
+                }
+            } else if let Some(el) = app.params.get("seaboss").cloned() {
                 if let Scene::Play(g) = &mut app.scene {
                     g.debug_sea_boss(&el, app.params.contains_key("phase2"));
                 }

@@ -588,7 +588,7 @@ impl Game {
                 let kk = (b.hp / b.max_hp).max(0.0);
                 Ui::rect(f, bx, by, (bw * kk).round(), 5.0, col::BLOOD);
                 Ui::rect(f, bx, by, (bw * kk).round(), 1.0, col::BLOOD_L);
-                if b.phase == 1 && !b.mega {
+                if b.phase == 1 {
                     Ui::rect(f, bx + bw / 2.0, by - 1.0, 1.0, 7.0, col::BRASS);
                 }
             }
@@ -599,13 +599,25 @@ impl Game {
     }
 
     fn draw_sea_boss_bar(&self, f: &mut Frame, art: &Art) {
-        if let Some(si) = self.sea_boss {
+        let bar = if let Some(si) = self.sea_boss {
             let b = &self.sea_bosses[si];
+            Some((b.name(), b.hp, b.max_hp))
+        } else if self.end.on_sea() {
+            Some((crate::game::endboss::END_SHIP, self.end.hp, self.end.max_hp))
+        } else {
+            None
+        };
+        if let Some((name, hp, max_hp)) = bar {
+            struct B {
+                hp: f32,
+                max_hp: f32,
+            }
+            let b = B { hp, max_hp };
             let (w, h) = f.ui_size();
             let bw = (w - 60.0).min(320.0);
             let bx = (w / 2.0 - bw / 2.0).round();
             let by = h - 28.0;
-            text::t(f, art, b.name(), bx, by - 12.0, col::BONE);
+            text::t(f, art, name, bx, by - 12.0, col::BONE);
             Ui::rect(f, bx - 1.0, by - 1.0, bw + 2.0, 7.0, col::BRASS_D);
             Ui::rect(f, bx, by, bw, 5.0, [15, 10, 12, 255]);
             if self.boss_ghost > b.hp {

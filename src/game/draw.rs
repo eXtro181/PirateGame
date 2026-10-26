@@ -125,18 +125,7 @@ impl Game {
                     }
                 }
             };
-            if b.mega {
-                // ein Bogen, das Element färbt Glut, Kristalle und Augen (und tönt den Leib)
-                let tint = match b.el {
-                    "ice" => [130, 200, 255, 255],
-                    "wind" => [215, 230, 255, 255],
-                    "earth" => [160, 235, 120, 255],
-                    _ => [255, 150, 80, 255],
-                };
-                if let Some(sh) = art.chars.get("moloch") {
-                    draw_char(f, sh, &boss_pose(&b.a, ph), fl, tint, 0.45);
-                }
-            } else if b.human {
+            if b.human {
                 if let Some(sh) = art.chars.get(b.sheet) {
                     draw_char(f, sh, &b.a, fl, [255; 4], 0.5);
                 }
@@ -265,6 +254,7 @@ impl Game {
         self.draw_sea(art, f);
         self.draw_sea_bosses(art, f);
         self.draw_crew(art, f);
+        self.draw_end(art, f);
         self.draw_critters(f);
         self.fx.draw(f);
         self.fx.lights(f);

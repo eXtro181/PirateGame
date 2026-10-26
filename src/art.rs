@@ -142,15 +142,16 @@ pub fn build_ship(art: &mut Art, frame: &mut Frame, u: sw_art::ships::Upg) {
     }
 }
 
-/// Bilder eines Seebosses (Ungeheuer-Bogen + Schiff in geraden Kursen) in den Boss-Bereich laden.
-pub fn build_sea_boss(art: &mut Art, frame: &mut Frame, el: &str, beast: &str) {
+/// Bilder eines Bosses auf See (Schiff `el` in geraden Kursen, dazu ggf. der Ungeheuer-Bogen)
+/// in den Boss-Bereich laden.
+pub fn build_sea_boss(art: &mut Art, frame: &mut Frame, el: &str, beast: Option<&str>) {
     if art.boss_loaded.as_deref() == Some(el) {
         return;
     }
     let t0 = bevy::platform::time::Instant::now();
     let slot = art.boss_slot;
     let mut a = slot.atlas();
-    let mut sh = beast_sheet(&mut a, beast);
+    let mut sh = beast.map(|b| beast_sheet(&mut a, b)).unwrap_or_default();
     let (_, h, foot) = sw_art::ships::ship_size(el);
     let mut v: Vec<Spr> = vec![];
     for k in 0..=8usize {
@@ -180,7 +181,9 @@ pub fn build_sea_boss(art: &mut Art, frame: &mut Frame, el: &str, beast: &str) {
     for k in sw_art::beasts::KINDS.iter().filter(|k| sw_art::beasts::sea_boss(k.key)) {
         art.chars.remove(k.key);
     }
-    art.chars.insert(beast.to_string(), sh);
+    if let Some(b) = beast {
+        art.chars.insert(b.to_string(), sh);
+    }
     art.ships.insert(el.to_string(), v);
     art.boss_loaded = Some(el.to_string());
     info!("Seeboss {el} gezeichnet in {:.2}s", t0.elapsed().as_secs_f32());
@@ -620,8 +623,8 @@ pub fn build(frame: &mut Frame) -> Art {
 
     // ---------------------------------------------------------------- Wesen (Kreaturen-Rig)
     for k in sw_art::beasts::KINDS.iter() {
-        if sw_art::beasts::sea_boss(k.key) {
-            continue; // werden beim Kampfbeginn in den Boss-Bereich gezeichnet
+        if sw_art::beasts::sea_boss(k.key) || k.key == "moloch" {
+            continue; // Seebosse: beim Kampfbeginn in den Boss-Bereich; Moloch gibt es nicht mehr
         }
         let sh = beast_sheet(&mut a, k.key);
         chs.insert(k.key.to_string(), sh);

@@ -162,10 +162,11 @@ fn main() {
         "humans" => {
             use sw_art::chars::*;
             let mut bg = bake_chunk(&Flat(Biome::Hub, Mat::Grass), &mut mats, &en, 0, 0, 1280).crop(0, 0, 1280, 720);
-            let names = ["abyssPirate", "voodoo", "orcCaptain", "stormHarpy", "bellConstruct", "gorgonQueen", "clockStorm"];
+            let arg: Option<Vec<String>> = std::env::args().nth(3).map(|a| a.split(',').map(|x| x.to_string()).collect());
+            let names: Vec<String> = arg.unwrap_or_else(|| ["abyssPirate", "voodoo", "orcCaptain", "stormHarpy", "bellConstruct", "gorgonQueen", "clockStorm"].iter().map(|x| x.to_string()).collect());
             for (ri, nm) in names.iter().enumerate() {
                 let (l, s) = preset(nm);
-                let y = 20 + (ri as i32 + 1) * 98;
+                let y = 20 + (ri as i32 + 1) * if names.len() <= 4 { 150 } else { 98 };
                 let mut x = 40;
                 for (d, a, f) in [("down", "idle", 0), ("side", "idle", 1), ("up", "idle", 2), ("side", "walk", 1), ("down", "walk", 4), ("side", "atk", 0), ("side", "atk", 3), ("down", "atk", 3), ("down", "cast", 2), ("down", "shoot", 1), ("down", "hurt", 0), ("down", "dead", 0)] {
                     let fr = frame(&l, d, a, f, s);

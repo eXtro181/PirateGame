@@ -45,6 +45,75 @@ impl WorldView {
         v
     }
 
+    /// Nach einer Änderung des Bodens (aufsteigende Insel): Chunks neu backen, Maske neu bauen.
+    pub fn refresh(&mut self, w: &World, frame: &mut Frame) {
+        for s in self.cache.slots.iter_mut() {
+            *s = None;
+        }
+        self.cache.map.clear();
+        self.build_mask(w, frame);
+    }
+
+    /// Weltrand am Ende der Welt: das Meer stürzt im Süden und Osten über die Kante ins Nichts.
+    fn draw_world_edge(&self, w: &World, frame: &mut Frame, t: f32) {
+        let (x0, y0, x1, y1) = w.end_rect;
+        if x1 <= x0 {
+            return;
+        }
+        let (vx, vy, vw, vh) = frame.view();
+        let ts = TS as f32;
+        let edge = 6;
+        let lip_y = ((y1 - edge + 1) * TS) as f32;
+        let lip_x = ((x1 - edge + 1) * TS) as f32;
+        let (ax, ay) = ((x0 + 4) as f32 * ts, (y0 + 4) as f32 * ts);
+        // Süden: breiter Vorhang nach unten
+        if lip_y > vy - 40.0 && lip_y < vy + vh + 40.0 {
+            let mut x = (vx.max(ax) / 4.0).floor() * 4.0;
+            while x < (vx + vw).min(lip_x + 8.0) {
+                let k = (x / 4.0) as i32;
+                let ph = (t * 1.6 + (k as f32 * 0.37).sin() * 0.5).fract();
+                for seg in 0..6 {
+                    let y = lip_y - 4.0 + seg as f32 * 34.0 + ph * 34.0;
+                    let fade = 1.0 - seg as f32 / 6.0;
+                    let bright = if k % 3 == 0 { 255.0 } else { 190.0 };
+                    let col = [(bright * 0.75 * fade) as u8, (bright * 0.95 * fade) as u8, (bright * fade) as u8, (220.0 * fade) as u8];
+                    frame.over(Frame::quad_rect(x, y, 3.0, 26.0 + seg as f32 * 2.0, col, modes::SOLID, 0), false);
+                }
+                x += 4.0;
+            }
+            // Gischt an der Kante
+            let mut x = (vx.max(ax) / 24.0).floor() * 24.0;
+            while x < (vx + vw).min(lip_x) {
+                let a = t * 2.2 + x * 0.05;
+                frame.glow(x + a.sin() * 6.0, lip_y - 2.0 + (a * 1.3).cos() * 3.0, 16.0, [220, 250, 255, 110]);
+                frame.glow(x + 12.0, lip_y + 150.0 + (a * 0.7).sin() * 20.0, 30.0, [120, 160, 180, 40]);
+                x += 24.0;
+            }
+        }
+        // Osten: das Wasser fließt über die Kante und fällt seitlich hinab
+        if lip_x > vx - 200.0 && lip_x < vx + vw + 40.0 {
+            let mut y = (vy.max(ay) / 6.0).floor() * 6.0;
+            while y < (vy + vh + 120.0).min(lip_y + 8.0) {
+                let k = (y / 6.0) as i32;
+                let ph = (t * 1.4 + (k as f32 * 0.53).sin() * 0.5).fract();
+                frame.over(Frame::quad_rect(lip_x - 10.0 + ph * 10.0, y, 14.0, 2.0, [200, 240, 250, 200], modes::SOLID, 0), false);
+                for seg in 0..4 {
+                    let yy = y + 4.0 + seg as f32 * 22.0 + ph * 22.0;
+                    let fade = 1.0 - seg as f32 / 4.0;
+                    frame.over(Frame::quad_rect(lip_x + 6.0 + seg as f32 * 5.0, yy, 3.0, 18.0, [(180.0 * fade) as u8, (225.0 * fade) as u8, (240.0 * fade) as u8, (200.0 * fade) as u8], modes::SOLID, 0), false);
+                }
+                y += 6.0;
+            }
+            let mut y = (vy.max(ay) / 28.0).floor() * 28.0;
+            while y < (vy + vh).min(lip_y) {
+                let a = t * 2.0 + y * 0.04;
+                frame.glow(lip_x + (a).sin() * 4.0, y, 16.0, [220, 250, 255, 100]);
+                y += 28.0;
+            }
+        }
+        let _ = (x0, y0);
+    }
+
     /// Maske (8 px je Texel): r = Uferabstand (0..64 px), g = Abgrund, b = Tiefe, a = Wasser.
     fn build_mask(&mut self, w: &World, frame: &mut Frame) {
         let (mw, mh) = ((MW * TS / 8) as usize, (MH * TS / 8) as usize);
@@ -254,6 +323,7 @@ impl WorldView {
                 }
             }
         }
+        self.draw_world_edge(w, frame, t);
         // Wasserfälle
         for wf in &w.waterfalls {
             let x0 = (wf.tx * TS) as f32;

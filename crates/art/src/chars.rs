@@ -41,7 +41,7 @@ pub enum Role {
 }
 /// Rolle einer Vorgabe (für `wants_anim`).
 pub fn preset_role(name: &str) -> Role {
-    if name.starts_with("villager") || matches!(name, "lanternMaid" | "smith" | "merchant" | "carver") {
+    if name.starts_with("villager") || matches!(name, "lanternMaid" | "smith" | "merchant" | "shipmaster" | "carver") {
         Role::Npc
     } else if name.starts_with("crew") {
         Role::Crew
@@ -115,6 +115,10 @@ pub struct Look {
     pub bell: bool,
     /// umkreisende Geisterschädel (Farbe)
     pub skulls: Option<u32>,
+    /// vier Arme mit vier Schwertern (Skelettkapitän)
+    pub four_arms: bool,
+    /// lodernde Flammen auf Schädel, Schultern und Rippen (Farbe)
+    pub burning: Option<u32>,
 }
 impl Default for Look {
     fn default() -> Self {
@@ -156,6 +160,8 @@ impl Default for Look {
             construct: false,
             bell: false,
             skulls: None,
+            four_arms: false,
+            burning: None,
         }
     }
 }
@@ -1277,9 +1283,76 @@ fn paint_human(cv: &mut Canvas, dir: &str, p: &Pose, l: &Look, s: f32) {
     if !weapon_first {
         draw_wpn(&mut cx);
     }
+    if l.four_arms {
+        // zweites Armpaar unter den Schultern, jede Hand ein Säbel; dazu ein Säbel in der Linken
+        let bone = r(0xD8CFB8);
+        let w = l.weapon.unwrap_or("cutlass");
+        let swing = (p.w_ang - 1.3) * 0.8;
+        for sx in [-1.0f32, 1.0] {
+            if side && sx > 0.0 {
+                continue;
+            }
+            let shx = cx.x(sx * (7.0 + wide));
+            let shy = cx.y(top(-21.0));
+            let hx = cx.x(sx * (16.0 + wide) + swing * 3.0 * sx);
+            let hy = cx.y(top(-11.0 + swing * 2.0));
+            let mx = (shx + hx) / 2.0 + sx * 3.0 * s;
+            let my = (shy + hy) / 2.0 + 2.0 * s;
+            cx.c.tube(&[(shx, shy), (mx, my), (hx, hy)], 2.2 * s, 1.8 * s, &bone, 0.5, 7.0);
+            cx.c.dome(hx, hy, 2.0 * s, 2.0 * s, &bone, 1.5, 8.0, 0.3, 0.1);
+            let ang = if sx < 0.0 { 2.5 - swing } else { 0.65 + swing };
+            draw_weapon(cx.c, hx, hy, ang, w, s);
+        }
+        if !side {
+            let (hx, hy) = if up { (cx.x(10.0 + wide), cx.y(top(-16.0))) } else { (cx.x(-10.0 - wide), cx.y(top(-16.0))) };
+            draw_weapon(cx.c, hx, hy, if up { 0.3 - swing } else { 2.0 - swing }, w, s);
+        }
+    }
     if let Some(sc) = l.skulls {
         let (fx_, fy_) = (cx.fx, cx.fy);
         draw_skulls(cx.c, sc, s, fx_, fy_, p.seed);
+    }
+    if let Some(bc) = l.burning {
+        // Flammenzungen über allem, was oben am Körper liegt (Schädel, Schultern, Arme)
+        let fl = pal(&[0x6A1408, 0xB8300E, 0xE8601A, bc, 0xFFC86A, 0xFFF4C8]);
+        let (w, h) = (cx.c.w, cx.c.h);
+        let ytop = (cx.fy - 58.0 * s).max(0.0) as i32;
+        let ymax = (cx.fy - 18.0 * s) as i32;
+        for i in 0..(34.0 * s) as i32 {
+            let x = (h01(i, p.seed, 21) * w as f32) as i32;
+            // höchsten Körperpixel in dieser Spalte suchen
+            let mut y0 = -1;
+            for y in ytop.max(0)..ymax.min(h) {
+                if cx.c.a(x, y) > 0 {
+                    y0 = y;
+                    break;
+                }
+            }
+            if y0 < 0 {
+                continue;
+            }
+            let len = (4.0 + h01(i, p.seed, 22) * 9.0) * s * 0.7;
+            let sway = (h01(i, p.seed, 23) - 0.5) * 3.0;
+            let n = len as i32;
+            for k in 0..n {
+                let t = k as f32 / n.max(1) as f32;
+                let xx = x + (sway * t * t) as i32;
+                let yy = y0 - k;
+                let col = fl[((1.0 - t) * 5.0).round().clamp(0.0, 5.0) as usize];
+                cx.c.lit(xx, yy, col, 1.2 + (1.0 - t) * 0.8);
+                if t < 0.4 {
+                    cx.c.lit(xx + 1, yy, fl[2], 1.0);
+                }
+            }
+        }
+        // glühende Rippen und Augen
+        for i in 0..40 {
+            let x = (cx.fx + (h01(i, 7, 24) - 0.5) * 16.0 * s) as i32;
+            let y = (cx.fy - (20.0 + h01(i, 7, 25) * 16.0) * s) as i32;
+            if cx.c.a(x, y) > 0 && i % 3 == 0 {
+                cx.c.glow(x, y, fl[3], 0.9);
+            }
+        }
     }
     if let Some(a) = l.aura {
         let ac = hex(a);
@@ -1479,6 +1552,15 @@ pub fn preset(name: &str) -> (Look, f32) {
             s = 1.5;
             Look { skin: 0x6A7A80, hair_col: 0x24394A, hair: 4, beard: 2, coat: 0x24394A, hat: 1, hat_col: 0x16232E, crown: Some(0xD8E4F0), weapon: Some("cutlass"), drowned: true, eye_col: 0xD8E4F0, aura: Some(0x8FA3A8), cast_col: 0xD8E4F0, ..d() }
         }
+        // Endboss an Land: der Geisterkapitän (Phase 3) und der brennende Skelettkapitän (Phase 4)
+        "ghostCaptain" => {
+            s = 1.6;
+            Look { skin: 0x7ACBB8, hair_col: 0xC8F0E8, hair: 4, beard: 3, coat: 0x14262A, pants: 0x1A2A2E, hat: 1, hat_col: 0x0E1A1C, sash: Some(0x5FF2C8), weapon: Some("cutlass"), drowned: true, hover: 3.0, eye_col: 0x9AFFE0, aura: Some(0x5FF2C8), cast_col: 0x9AFFE0, skulls: Some(0x5FF2C8), ..d() }
+        }
+        "burningCaptain" => {
+            s = 1.75;
+            Look { skeleton: true, coat: 0x2A1210, rags: true, hat: 1, hat_col: 0x1A0A0A, weapon: Some("cutlass"), eye_col: 0xFFB04A, aura: Some(0xFF6A2A), cast_col: 0xFF8A3A, skulls: Some(0xFF7A2A), four_arms: true, burning: Some(0xFF9A3A), ..d() }
+        }
         "kingEarth" => {
             s = 1.5;
             Look { skin: 0x5C7454, hair_col: 0x1F4A4C, hair: 2, beard: 3, body: 1, coat: 0x34473A, robe: true, crown: Some(0x9ACF6A), weapon: Some("anchor"), drowned: true, eye_col: 0x9ACF6A, aura: Some(0x5C7454), cast_col: 0x9ACF6A, horns: true, ..d() }
@@ -1488,7 +1570,7 @@ pub fn preset(name: &str) -> (Look, f32) {
     (l, s)
 }
 
-pub const PRESET_NAMES: [&str; 31] = [
+pub const PRESET_NAMES: [&str; 33] = [
     "abyssPirate", "voodoo", "orcCaptain", "stormHarpy", "bellConstruct", "gorgonQueen", "clockStorm",
-    "skeleton", "skelBrute", "skelGunner", "drowned", "drownedIce", "ashSkeleton", "stormSailor", "lanternMaid", "smith", "merchant", "shipmaster", "carver", "crewFire", "crewIce", "crewWind", "crewEarth", "villagerA", "villagerB", "villagerC", "villagerD", "kingFire", "kingIce", "kingWind", "kingEarth",
+    "skeleton", "skelBrute", "skelGunner", "drowned", "drownedIce", "ashSkeleton", "stormSailor", "lanternMaid", "smith", "merchant", "shipmaster", "carver", "crewFire", "crewIce", "crewWind", "crewEarth", "villagerA", "villagerB", "villagerC", "villagerD", "kingFire", "kingIce", "kingWind", "kingEarth", "ghostCaptain", "burningCaptain",
 ];

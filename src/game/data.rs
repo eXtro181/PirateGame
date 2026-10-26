@@ -219,8 +219,9 @@ pub const KINGS: [King; 4] = [
 pub fn king(k: &str) -> &'static King {
     KINGS.iter().find(|x| x.key == k).unwrap_or(&KINGS[0])
 }
-pub const MEGA_NAME: &str = "Moloch, der Weltschlinger";
-pub const MEGA_HP: f32 = 3200.0;
+pub const MEGA_NAME: &str = "Kapitän Schwarzwasser, der Geisterkapitän";
+pub const MEGA_NAME2: &str = "Schwarzwasser, der brennende Skelettkapitän";
+pub const MEGA_HP: f32 = 2800.0;
 pub const MEGA_DMG: f32 = 36.0;
 pub const MEGA_PEARLS: f32 = 20000.0;
 pub fn el_col(el: &str) -> [f32; 3] {
@@ -386,6 +387,9 @@ pub struct Save {
     /// besiegte Seebosse (Wrack erbeutet)
     #[serde(default)]
     pub sea_kings: HashMap<String, bool>,
+    /// Seeschlacht am Ende der Welt gewonnen (die Insel ist aufgetaucht)
+    #[serde(default)]
+    pub end_naval: bool,
     /// in der Glutwacht abgelegte Wracks
     #[serde(default)]
     pub wrecks: HashMap<String, bool>,
@@ -477,6 +481,7 @@ pub fn new_save(name: &str, look: LookIdx, origin: &str, gift: &str, now: f64) -
         ship_atk: 0,
         sea_kings: HashMap::new(),
         wrecks: HashMap::new(),
+        end_naval: false,
         crew: vec![],
         talked: HashMap::new(),
         ship_dock: "kueste".into(),

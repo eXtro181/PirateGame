@@ -5,6 +5,7 @@ pub mod boss;
 pub mod critters;
 pub mod crew;
 pub mod data;
+pub mod endboss;
 pub mod dialog;
 pub mod draw;
 pub mod env;
@@ -26,6 +27,7 @@ use critters::Critter;
 use crew::CrewGuns;
 use data::*;
 use dialog::*;
+use endboss::*;
 use env::Env;
 use fx::*;
 use input::{Act, Input};
@@ -117,6 +119,9 @@ pub struct Game {
     pub sea_bosses: Vec<SeaBoss>,
     pub sea_boss: Option<usize>,
     pub crew_guns: CrewGuns,
+    pub end: EndBoss,
+    /// Boden geändert (aufsteigende Insel): Chunks und Maske neu bauen
+    pub world_dirty: bool,
     /// Seegebiet unter dem Schiff (Element), für Licht und Teilchen
     pub sea_el: Option<&'static str>,
     pub critters: Vec<Critter>,
@@ -212,6 +217,8 @@ impl Game {
             sea_bosses: vec![],
             sea_boss: None,
             crew_guns: CrewGuns::default(),
+            end: EndBoss::default(),
+            world_dirty: false,
             sea_el: None,
             critters: vec![],
             cam_f: (0.0, 0.0),
@@ -288,6 +295,11 @@ impl Game {
             g.apply_berth(bi);
         }
         g.whirlpool_open = g.whirl_ready();
+        if g.save.end_naval || g.save.megalodon {
+            g.world.raise_end_island();
+            g.view.refresh(&g.world, frame);
+        }
+        g.reset_end();
         // Truhen
         for &ci in &g.world.chests.clone() {
             let id = g.world.props[ci].chest_id.clone().unwrap_or_default();
@@ -353,6 +365,9 @@ impl Game {
                     out.push(Target::SeaBoss(i));
                 }
             }
+            if self.end.on_sea() {
+                out.push(Target::EndShip);
+            }
         }
         out
     }
@@ -372,7 +387,7 @@ impl Game {
                     (x, y, 70.0, 50.0)
                 }
             }),
-            Target::EndShip => None,
+            Target::EndShip => self.end.on_sea().then_some((self.end.hull.x, self.end.hull.y, 62.0, 50.0)),
             Target::Player => Some((self.player.a.x, self.player.a.y, self.player.a.hurt_r, 28.0)),
             Target::Ship => Some((self.ship.hull.x, self.ship.hull.y, 40.0, 20.0)),
         }
@@ -385,7 +400,7 @@ impl Game {
             Target::Shark(i) => self.hurt_shark(i, dmg),
             Target::Kraken => self.hurt_kraken(dmg),
             Target::SeaBoss(i) => self.hurt_sea_boss(i, dmg),
-            Target::EndShip => {}
+            Target::EndShip => self.hurt_end(dmg),
             Target::Player => {
                 self.hurt_player(dmg, Target::Player, o);
             }
@@ -468,7 +483,13 @@ impl Game {
         crate::art::build_ship(art, frame, u);
         if let Some(i) = self.sea_boss {
             let d = self.sea_bosses[i].def();
-            crate::art::build_sea_boss(art, frame, d.el, d.beast);
+            crate::art::build_sea_boss(art, frame, d.el, Some(d.beast));
+        } else if matches!(self.end.state, EP::Ship1 | EP::Ship2 | EP::Sink) {
+            crate::art::build_sea_boss(art, frame, "ghost", None);
+        }
+        if self.world_dirty {
+            self.world_dirty = false;
+            self.view.refresh(&self.world, frame);
         }
         self.save.play_time += dt as f64;
         let (cmd, modal) = self.ui.update(dt, &self.input);
@@ -593,6 +614,7 @@ impl Game {
             self.update_sea(dt);
             self.update_sea_bosses(dt);
             self.update_crew(dt);
+            self.update_end(dt);
             self.fx.update(dt);
             // in den Abgrund gestürzt?
             if !self.sailing && self.player.state != PS::Dead && self.player.state != PS::Roll {
@@ -611,6 +633,9 @@ impl Game {
         self.update_zone(dt);
         self.update_boss_arena();
         self.update_camera(dt, frame);
+        if self.whirlpool_open && self.sailing && self.cutscene.is_none() && (self.ship.hull.x - self.world.whirlpool.0).hypot(self.ship.hull.y - self.world.whirlpool.1) < 90.0 {
+            self.enter_whirlpool();
+        }
         let biome = if self.sailing {
             match self.sea_el {
                 Some("fire") => 5,
@@ -662,39 +687,33 @@ impl Game {
             Cut::Whirl { t, moved } => {
                 let t = t + dt;
                 if t < 2.4 {
-                    // vom Steg in den Strudel: kreisend hinab
+                    // mit dem Schiff in den Strudel: kreisend hinab
                     let (wx, wy) = self.world.whirlpool;
-                    let p = &mut self.player;
-                    let (dx, dy) = (p.a.x - wx, p.a.y - wy);
+                    let h = &mut self.ship.hull;
+                    let (dx, dy) = (h.x - wx, h.y - wy);
                     let (r, a) = ((dx.hypot(dy) * (1.0 - dt * 0.9)).max(2.0), dy.atan2(dx) + dt * (2.0 + t * 2.0));
-                    p.a.x = wx + a.cos() * r;
-                    p.a.y = wy + a.sin() * r;
-                    p.a.face(-a.sin(), a.cos());
-                    p.a.at += dt;
+                    h.x = wx + a.cos() * r;
+                    h.y = wy + a.sin() * r;
+                    h.h += dt * (2.5 + t * 2.0);
+                    h.v = 0.0;
+                    h.alpha = (1.0 - (t - 1.4).max(0.0)).max(0.0);
                     if rnd() < 0.5 {
                         self.fx.burst("splash", wx + rr(-40.0, 40.0), wy + rr(-20.0, 20.0), 2, BurstOpt { speed: Some(80.0), up: Some(120.0), ..Default::default() });
                     }
                     self.ui.fade = ((t - 1.2) * 1.2).clamp(0.0, 1.0);
                     self.cutscene = Some(Cut::Whirl { t, moved });
                 } else if !moved {
-                    if let Some(d) = self.world.docks.iter().find(|d| d.zone == Zone::Hain).cloned() {
-                        self.ship.hull.x = d.x;
-                        self.ship.hull.y = d.y;
-                        self.ship.hull.h = d.heading;
-                        self.ship.hull.v = 0.0;
-                        self.ship.sail = 0;
-                    }
-                    self.save.ship_dock = "hain".into();
-                    self.sailing = false;
-                    self.player.hidden = false;
-                    self.player.state = PS::Free;
-                    self.player.a.x = self.world.end_arrive.0;
-                    self.player.a.y = self.world.end_arrive.1;
-                    if !self.save.lit_fires.iter().any(|f| f == "ende") {
-                        self.save.lit_fires.push("ende".into());
-                    }
-                    self.light_fires();
-                    self.cam_f = (self.player.a.x, self.player.a.y);
+                    // Ankunft auf dem Meer am Ende der Welt
+                    let (ex, ey) = self.world.end_arrive;
+                    self.ship.hull.x = ex;
+                    self.ship.hull.y = ey;
+                    self.ship.hull.h = std::f32::consts::FRAC_PI_2;
+                    self.ship.hull.v = 0.0;
+                    self.ship.hull.alpha = 1.0;
+                    self.ship.sail = 1;
+                    self.ship.rise = Some(0.0);
+                    self.cam_f = (ex, ey);
+                    self.ui.banner("DAS ENDE DER WELT", "Wo das Meer ins Nichts stürzt", "boss", 3.5);
                     self.persist(true);
                     self.cutscene = Some(Cut::Whirl { t, moved: true });
                 } else {
@@ -742,7 +761,7 @@ impl Game {
             }
         }
         self.zone_t = (self.zone_t - dt).max(0.0);
-        let mut target = env::env(z.def().key, self.sailing && !on_island);
+        let mut target = if z == Zone::Ende { env::env("ende", false) } else { env::env(z.def().key, self.sailing && !on_island) };
         // elementare Seegebiete: Stimmung zum Rand hin weich einblenden
         let mut sea = (0.0f32, "");
         if self.sailing && !on_island {
@@ -830,10 +849,6 @@ impl Game {
                 let got = s.sea_kings.get(b.el).copied().unwrap_or(false);
                 out.push(f(b.x, b.y, 50.0, if got { "Wrack ablegen" } else { "Ein leerer Steg" }, Use::Berth(bi), Some(b.prop)));
             }
-        }
-        if self.whirlpool_open {
-            let (x, y) = self.world.pier_end;
-            out.push(f(x, y, 40.0, "In den Strudel springen", Use::Whirl, None));
         }
         for (di, d) in self.world.docks.iter().enumerate() {
             let here = (self.ship.hull.x - d.x).hypot(self.ship.hull.y - d.y) < 48.0;
@@ -970,6 +985,7 @@ impl Game {
         self.player.hidden = true;
     }
     fn respawn(&mut self, art: &Art) {
+        self.reset_end();
         self.death_t = None;
         self.ui.fade = 0.0;
         self.player.hidden = false;
@@ -1458,7 +1474,21 @@ impl Game {
         self.shake(5.0);
         self.save.ship_dock = d.zone.def().key.into();
     }
+    /// Testlauf: mit dem Schiff am Ende der Welt ankommen (Seeschlacht gegen die Letzte Fahrt).
+    pub fn debug_end(&mut self) {
+        self.debug_board();
+        let (ex, ey) = self.world.end_arrive;
+        self.ship.hull.x = ex;
+        self.ship.hull.y = ey;
+        self.ship.hull.h = std::f32::consts::FRAC_PI_2;
+        self.cam_f = (ex, ey);
+    }
     pub fn debug_boss(&mut self, key: &str, phase2: bool) {
+        if key == "mega" && !self.world.end_risen {
+            self.world.raise_end_island();
+            self.world_dirty = true;
+            self.end.state = EP::Done;
+        }
         let bi = if key == "mega" { self.bosses.len() - 1 } else { KINGS.iter().position(|k| k.key == key).unwrap_or(0) };
         let zone = if key == "mega" { "ende" } else { KINGS[bi].zone };
         if let Some(a) = self.world.arenas.get(zone).cloned() {
@@ -1565,7 +1595,6 @@ impl Game {
     }
     fn enter_whirlpool(&mut self) {
         self.cutscene = Some(Cut::Whirl { t: 0.0, moved: false });
-        self.player.state = PS::Free;
         self.lock = None;
         self.sfx("rise");
         self.ui.banner("Der Strudel", "Die See nimmt dich mit", "boss", 3.0);

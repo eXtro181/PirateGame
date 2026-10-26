@@ -1,5 +1,6 @@
-//! Bosse: vier Geisterkönige (Phase 1 als König, Phase 2 als Monster aus der Vorlage) und
-//! Moloch, der brennende Skelett-Megalodon, dessen Element nach der Verwandlung wechselt.
+//! Bosse: vier Geisterkönige (Phase 1 als König, Phase 2 als Monster) und der Endboss an Land:
+//! Kapitän Schwarzwasser als Geisterkapitän (dritte Phase des Endkampfs), der sich in den
+//! brennenden Skelettkapitän mit vier Säbeln verwandelt (vierte Phase).
 //! Angriffe sind datengetrieben: combo, dash, slam, cone, volley, rain, nova, gust, spikes, sweep.
 
 use super::actors::*;
@@ -117,13 +118,24 @@ fn table(mega: bool, phase: i32, el: &str) -> Vec<(AK, f32, AO)> {
     use AK::*;
     let s = S;
     if mega {
-        return vec![
-            (Dash, 4.0, AO { len: 220.0 * s, ..o() }),
-            (Cone, 3.0, AO { r: 110.0 * s, w: 0.5, ..o() }),
-            (Rain, 2.0, AO { n: 8, r: 20.0 * s, ..o() }),
-            (Nova, 2.0, AO { r: 80.0 * s, ..o() }),
-            (Volley, 2.0, AO { n: 6, spread: 1.0, ..o() }),
-        ];
+        return if phase == 1 {
+            // Geisterkapitän: Säbelfolgen, Seelenschüsse, Geisterhände, Sturmangriff
+            vec![
+                (Combo, 4.0, AO { n: 3, reach: 40.0 * s, ..o() }),
+                (Volley, 2.0, AO { n: 5, spread: 0.8, ..o() }),
+                (Rain, 2.0, AO { n: 6, r: 18.0 * s, ..o() }),
+                (Dash, 2.0, AO { len: 190.0 * s, ..o() }),
+            ]
+        } else {
+            // brennender Skelettkapitän: vier Säbel, Wirbel, Feuerring, Glutregen
+            vec![
+                (Combo, 4.0, AO { n: 4, reach: 46.0 * s, fast: true, ..o() }),
+                (Sweep, 3.0, AO { reach: 96.0 * s, ..o() }),
+                (Nova, 2.0, AO { r: 90.0 * s, ..o() }),
+                (Rain, 2.0, AO { n: 9, r: 20.0 * s, ..o() }),
+                (Dash, 2.0, AO { len: 210.0 * s, ..o() }),
+            ]
+        };
     }
     if phase == 1 {
         match el {
@@ -145,7 +157,7 @@ fn table(mega: bool, phase: i32, el: &str) -> Vec<(AK, f32, AO)> {
 impl Boss {
     pub fn new(key: &'static str, ar: &crate::world::Arena) -> Self {
         let mega = key == "mega";
-        let (name, hp, el, sheet) = if mega { (MEGA_NAME.to_string(), MEGA_HP, "fire", "") } else {
+        let (name, hp, el, sheet) = if mega { (MEGA_NAME.to_string(), MEGA_HP, "ice", "ghostCaptain") } else {
             let k = king(key);
             (k.name.to_string(), k.hp, k.key, k.sheet)
         };
@@ -163,7 +175,7 @@ impl Boss {
             phase: 1,
             state: BS::Dormant,
             st_t: 0.0,
-            human: !mega,
+            human: true,
             hidden: true,
             home: (ar.x + 80.0, ar.y - 20.0),
             arena: (ar.x, ar.y, ar.r, ar.ry),
@@ -174,16 +186,16 @@ impl Boss {
             sheet,
             h: 100.0,
         };
-        b.set_body(!mega);
+        b.set_body(true);
         b
     }
     pub fn set_body(&mut self, human: bool) {
         self.human = human;
         if human {
-            self.a.r = 14.0;
-            self.a.hurt_r = 24.0;
-            self.body_y = 36.0;
-            self.h = 110.0;
+            self.a.r = if self.mega { 16.0 } else { 14.0 };
+            self.a.hurt_r = if self.mega { 30.0 } else { 24.0 };
+            self.body_y = if self.mega { 44.0 } else { 36.0 };
+            self.h = if self.mega { 130.0 } else { 110.0 };
         } else {
             self.a.r = if self.mega { 36.0 } else { 28.0 };
             self.a.hurt_r = if self.mega { 68.0 } else { 48.0 };
@@ -211,10 +223,13 @@ impl Boss {
         self.hidden = true;
         self.a.x = self.home.0;
         self.a.y = self.home.1;
-        self.el = if self.mega { "fire" } else { king(self.key).key };
+        self.el = if self.mega { "ice" } else { king(self.key).key };
         self.name = if self.mega { MEGA_NAME.into() } else { king(self.key).name.into() };
+        if self.mega {
+            self.sheet = "ghostCaptain";
+        }
         self.atk = None;
-        self.set_body(!self.mega);
+        self.set_body(true);
     }
     pub fn parryable(&self) -> bool {
         self.human && self.atk.as_ref().map(|a| a.kind == AK::Combo).unwrap_or(false)
@@ -298,9 +313,15 @@ impl Game {
                 if rnd() < 0.6 {
                     self.fx.rise(part(b.el), b.a.x + rr(-40.0, 40.0), b.a.y, 2, 20.0, Some(kind_col(part(b.el))));
                 }
-                if b.st_t > 1.4 && b.human {
-                    b.set_body(false);
-                    if !b.mega {
+                let morph = if b.mega { b.sheet != "burningCaptain" } else { b.human };
+                if b.st_t > 1.4 && morph {
+                    if b.mega {
+                        // der Geisterkapitän fängt Feuer: Skelett mit vier Säbeln
+                        b.sheet = "burningCaptain";
+                        b.name = MEGA_NAME2.into();
+                        b.el = "fire";
+                    } else {
+                        b.set_body(false);
                         b.name = king(b.key).monster.into();
                     }
                     self.flash([1.0, 1.0, 1.0], 0.9);
@@ -309,7 +330,7 @@ impl Game {
                     self.fx.burst(part(b.el), b.a.x, b.a.y - 40.0, 50, BurstOpt { speed: Some(280.0), col: Some(kind_col(part(b.el))), ..Default::default() });
                     self.fx.ring(b.a.x, b.a.y, 20.0, 240.0, 0.8, el_col(b.el));
                     let n = b.name.clone();
-                    self.ui.banner(&n, if b.mega { "Das Ende der Welt erwacht" } else { "Die zweite Gestalt" }, "boss", 2.6);
+                    self.ui.banner(&n, if b.mega { "Die vierte Gestalt" } else { "Die zweite Gestalt" }, "boss", 2.6);
                 }
                 if b.st_t > 2.6 {
                     Self::boss_idle(b);
@@ -373,14 +394,6 @@ impl Game {
 
     fn boss_start(&mut self, b: &mut Boss, kind: AK, o: AO) {
         let (px, py) = (self.player.a.x, self.player.a.y);
-        if b.mega && b.phase == 2 {
-            let els = ["fire", "ice", "wind", "earth"];
-            let nel = els[(rnd() * 4.0) as usize % 4];
-            if nel != b.el {
-                b.el = nel;
-                self.fx.ring(b.a.x, b.a.y - 40.0, 20.0, 120.0, 0.5, el_col(nel));
-            }
-        }
         b.state = BS::Attack;
         b.st_t = 0.0;
         b.a.face(px - b.a.x, py - b.a.y);
@@ -761,7 +774,7 @@ impl Game {
         self.sfx("death");
         let pearls = if mega { MEGA_PEARLS } else { king(key).pearls };
         if mega {
-            self.ui.banner("DAS ENDE DER WELT", "Moloch ist gefallen. Die See wird still.", "big", 5.0);
+            self.ui.banner("DAS ENDE DER WELT", "Kapitän Schwarzwasser ist gefallen. Die See wird still.", "big", 5.0);
         } else {
             let n = king(key).name.split(',').next().unwrap_or("").to_string();
             self.ui.banner("SEELE ERBEUTET", &n, "big", 5.0);
