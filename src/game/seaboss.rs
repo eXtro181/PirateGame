@@ -528,7 +528,8 @@ impl Game {
             self.fx.rise("soul", x, y, 60, 120.0, None);
             self.gain_pearls(d.pearls, Some((x, y)));
             self.save.sea_kings.insert(d.el.into(), true);
-            self.ui.banner(&format!("{} ERBEUTET", d.wreck.to_uppercase()), "Bring es zur Glutwacht", "big", 4.0);
+            self.ui.banner(&format!("{} ERBEUTET", d.wreck.to_uppercase()), "Es brennt nun im See der Glutwacht", "big", 4.0);
+            self.check_whirl();
             if self.sea_boss == Some(i) {
                 self.sea_boss = None;
             }

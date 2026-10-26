@@ -188,6 +188,53 @@ pub fn build_ship(art: &mut Art, frame: &mut Frame, u: sw_art::ships::Upg) {
     }
 }
 
+/// Bossschiffe im See der Glutwacht (Element, Kurs 0..=8): im Kreis um den Strudel, Bug im
+/// Uhrzeigersinn, NO, SO (gespiegelt), SW (gespiegelt), NW.
+pub const HUB_WRECKS: [(&str, usize); 4] = [("fire", 6), ("ice", 6), ("wind", 2), ("earth", 2)];
+
+/// Verkohlt ein Schiffsbild: Holz und Tuch schwarzbraun, Segel mit Brandlöchern und glühenden
+/// Rändern, Glutnester im Rumpf.
+fn char_ship(c: &mut Canvas, el: &str) {
+    let nz = sw_art::noise::Noise::new(77 + el.len() as u32 * 13);
+    let (w, h) = (c.w, c.h);
+    let alpha = c.col.iter().map(|p| p[3]).collect::<Vec<_>>();
+    for y in 0..h {
+        for x in 0..w {
+            let i = c.idx(x, y);
+            if alpha[i] == 0 {
+                continue;
+            }
+            let p = c.col[i];
+            let ev = c.ev[i];
+            let n = nz.fbm(x as f32 * 0.045, y as f32 * 0.045, 3);
+            let lum = (p[0] as f32 * 0.3 + p[1] as f32 * 0.5 + p[2] as f32 * 0.2) / 255.0;
+            // hohe, helle Flächen (Segel): Brandlöcher mit glühendem Saum
+            if ev > 70.0 && lum > 0.42 {
+                if n > 0.12 {
+                    c.clear(x, y);
+                    continue;
+                }
+                if n > 0.04 {
+                    c.col[i] = [70, 26, 10, 255];
+                    c.glow(x, y, [255, 120, 40, 255], 0.5 + (n - 0.04) * 4.0);
+                    continue;
+                }
+            }
+            // verkohlen: dunkel, warm, Ruß in Flecken
+            let soot = (0.5 - n * 0.6).clamp(0.22, 0.62);
+            let k = |v: u8, add: f32| ((v as f32 * soot + add) as f32).min(255.0) as u8;
+            c.col[i] = [k(p[0], 10.0), k(p[1], 5.0), k(p[2], 3.0), p[3]];
+            // Glutnester: glimmende Risse im Holz
+            let e = nz.ridged(x as f32 * 0.09 + 3.0, y as f32 * 0.09, 2);
+            if e > 0.95 && ev < 60.0 && sw_art::noise::h01(x, y, 5) < 0.5 {
+                let g = (e - 0.95) * 12.0;
+                c.col[i] = [150, 50, 14, 255];
+                c.glow(x, y, [255, 110 + (g * 80.0) as u8, 30, 255], 0.6 + g);
+            }
+        }
+    }
+}
+
 /// Bilder eines Bosses auf See (Schiff `el` in geraden Kursen, dazu ggf. der Ungeheuer-Bogen)
 /// in den Boss-Bereich laden.
 pub fn build_sea_boss(art: &mut Art, frame: &mut Frame, el: &str, beast: Option<&str>) {
@@ -572,7 +619,6 @@ pub fn build(frame: &mut Frame) -> Art {
             stc::brazier(),
             stc::hooded_statue(),
             stc::banner_pole(),
-            stc::berth(),
             stc::buoy(),
         ];
         for i in 0..3 {
@@ -591,11 +637,15 @@ pub fn build(frame: &mut Frame) -> Art {
             list.push(stc::burning_wreck(i));
             list.push(stc::sunk_mast(i));
         }
-        for el in ["fire", "ice", "wind", "earth"] {
-            list.push(stc::wreck(el));
-        }
         for pa in list {
             add_prop(&mut a, &mut props, pa);
+        }
+        // besiegte Bossschiffe in Originalgröße im See der Glutwacht: verkohlt, mit Glutnestern
+        let (_, h, foot) = sw_art::ships::ship_size("fire");
+        for (el, k) in HUB_WRECKS {
+            let mut c = sw_art::ships::ship_frame(el, k, Default::default());
+            char_ship(&mut c, el);
+            a.add_trim(&format!("hw:{el}"), &c, c.w / 2, h - foot);
         }
     }
 

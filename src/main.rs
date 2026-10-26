@@ -187,11 +187,11 @@ fn setup(world: &mut bevy::ecs::world::World) {
                 s.lit_fires = vec![fire];
             }
             if app.params.contains_key("open") {
-                // alles erfüllt: Throne und Stege voll, Strudel offen
+                // alles erfüllt: Throne voll, Bossschiffe im See, Strudel offen
                 for k in ["fire", "ice", "wind", "earth"] {
                     s.figureheads.insert(k.into(), true);
                     s.mounted.insert(k.into(), true);
-                    s.wrecks.insert(k.into(), true);
+                    s.sea_kings.insert(k.into(), true);
                 }
             }
             if app.params.contains_key("crew") {

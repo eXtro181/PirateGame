@@ -50,7 +50,7 @@ impl Zone {
 }
 pub static ZONE_DEFS: [ZoneDef; 7] = [
     ZoneDef { key: "kueste", name: "Strand der Ertränkten", biome: Biome::Coast, music: "salz", cx: 240, cy: 260, rx: 46, ry: 26, seed: 1, king: None, sealed: false },
-    ZoneDef { key: "hain", name: "Glutwacht", biome: Biome::Hub, music: "hain", cx: 240, cy: 172, rx: 48, ry: 34, seed: 2, king: None, sealed: false },
+    ZoneDef { key: "hain", name: "Glutwacht", biome: Biome::Hub, music: "hain", cx: 240, cy: 172, rx: 36, ry: 33, seed: 2, king: None, sealed: false },
     ZoneDef { key: "asche", name: "Aschebucht", biome: Biome::Fire, music: "glut", cx: 348, cy: 160, rx: 42, ry: 30, seed: 3, king: Some("fire"), sealed: false },
     ZoneDef { key: "frost", name: "Frostgrotte", biome: Biome::Frost, music: "frost", cx: 136, cy: 118, rx: 44, ry: 32, seed: 4, king: Some("ice"), sealed: false },
     ZoneDef { key: "raben", name: "Hafen Rabenwacht", biome: Biome::Wind, music: "sturm", cx: 136, cy: 236, rx: 44, ry: 32, seed: 5, king: Some("wind"), sealed: false },
@@ -151,8 +151,6 @@ pub struct PropInst {
     pub loot: Option<String>,
     pub mimic: Option<String>,
     pub slot: Option<&'static str>,
-    /// Liegeplatz für ein Wrack (Element)
-    pub berth: Option<&'static str>,
     pub gate: Option<&'static str>,
     /// Hindernis auf See (blockiert auch das Schiff)
     pub sea: bool,
@@ -229,11 +227,13 @@ pub struct Slot {
     pub y: f32,
 }
 #[derive(Clone, Debug)]
-pub struct Berth {
+/// Ein besiegtes Bossschiff im See der Glutwacht (sichtbar, sobald der Seeboss besiegt ist).
+pub struct HubWreck {
     pub el: &'static str,
-    pub prop: usize,
     pub x: f32,
     pub y: f32,
+    /// Kurs (Bug im Uhrzeigersinn um den Strudel)
+    pub h: f32,
 }
 #[derive(Clone, Debug)]
 pub struct WalkerDef {
@@ -290,7 +290,7 @@ pub struct World {
     pub gates: Vec<Gate>,
     pub arenas: HashMap<&'static str, Arena>,
     pub slots: Vec<Slot>,
-    pub berths: Vec<Berth>,
+    pub hub_wrecks: Vec<HubWreck>,
     /// Ende des Stegs im See der Glutwacht (dort zieht der Strudel hinab)
     pub pier_end: (f32, f32),
     pub walkers: Vec<WalkerDef>,
@@ -347,7 +347,7 @@ impl World {
             gates: vec![],
             arenas: HashMap::new(),
             slots: vec![],
-            berths: vec![],
+            hub_wrecks: vec![],
             pier_end: (0.0, 0.0),
             walkers: vec![],
             waterfalls: vec![],
@@ -1005,16 +1005,13 @@ impl World {
         self.item("pearls", cx + 28, cy - 20);
         self.npc("herald", cx - 6, cy + 6, "carver", "Alter Galionsschnitzer", "herald", true, None);
     }
-    /// Die Glutwacht: dunkle Piratenfestung im Stil eines Feuerbandschreins, in fünf Ebenen
-    /// gebaut. Ebene 0: Hafenhof mit dem großen See (Zufahrt für das Schiff durch das Seetor im
-    /// Osten, Strudel in der Mitte, Liegeplätze der Wracks), Crew-Tafel, Friedhof, Schiffsmeister.
-    /// Ebene 1: Promenade mit Schmiede (West) und Händlerin (Ost). Ebene 2: Feuerterrasse mit dem
-    /// Säbelfeuer und den vier Thronen. Ebene 3: Schreinterrasse mit dem Bergfried und zwei
-    /// Bastionen. Ebene 4: Wachplattformen auf den Bastionen. Treppen verbinden die Ebenen.
+    /// Glutwacht nach dem Vorbild eines Feuerband-Schreins: kompakter Ring aus Mauern um einen
+    /// See in der Mitte. Im See ein eigener Steg zum Strudel, am Inselrand der Anleger fürs Schiff.
+    /// Nördlich über dem See die Feuerterrasse mit Säbelfeuer und Thronen, dahinter der Schrein.
     fn layout_hub(&mut self, rng: &mut Rng) {
         let d = self.cur.def();
         let (cx, cy) = (d.cx, d.cy);
-        let (wx0, wx1, wy0, wy1) = (cx - 30, cx + 30, cy - 28, cy + 24);
+        let (wx0, wx1, wy0, wy1) = (cx - 22, cx + 22, cy - 27, cy + 21);
         let px = |tx: i32| (tx * TS) as f32;
         let py = |ty: i32| (ty * TS) as f32;
         // Hof pflastern (auch wo die Insel ausfranst)
@@ -1031,37 +1028,30 @@ impl World {
                 self.biome[i] = Biome::Hub;
             }
         }
-        // ---- Ebenen (Terrassen mit Mauerfronten) und Treppen
-        self.terrace(wx0 + 1, wy0 + 1, wx1 - 1, cy - 6, 1);
-        self.terrace(wx0 + 1, wy0 + 1, wx1 - 1, cy - 12, 2);
-        self.terrace(cx - 12, wy0 + 1, cx + 12, cy - 20, 3);
-        self.terrace(wx0 + 1, wy0 + 1, wx0 + 9, cy - 20, 3);
-        self.terrace(wx1 - 9, wy0 + 1, wx1 - 1, cy - 20, 3);
-        self.terrace(wx0 + 1, wy0 + 1, wx0 + 6, wy0 + 5, 4);
-        self.terrace(wx1 - 6, wy0 + 1, wx1 - 1, wy0 + 5, 4);
-        for x in [cx - 1, wx0 + 6, wx1 - 8] {
-            self.stair(x, 3, cy - 6);
-        }
-        for x in [cx - 1, cx - 21, cx + 19] {
+        // ---- Ebenen: Feuerterrasse (1), Schrein (2), Wachplattformen (3)
+        self.terrace(wx0 + 1, wy0 + 1, wx1 - 1, cy - 12, 1);
+        self.terrace(cx - 13, wy0 + 1, cx + 13, cy - 21, 2);
+        self.terrace(wx0 + 1, wy0 + 1, wx0 + 6, wy0 + 6, 3);
+        self.terrace(wx1 - 6, wy0 + 1, wx1 - 1, wy0 + 6, 3);
+        for x in [wx0 + 2, wx1 - 4] {
             self.stair(x, 3, cy - 12);
         }
-        for x in [cx - 1, wx0 + 5, wx1 - 6] {
-            self.stair(x, if x == cx - 1 { 3 } else { 2 }, cy - 20);
-        }
-        self.stair(wx0 + 3, 2, wy0 + 5);
-        self.stair(wx1 - 4, 2, wy0 + 5);
+        self.stair(cx - 1, 3, cy - 21);
+        self.stair(wx0 + 3, 2, wy0 + 6);
+        self.stair(wx1 - 4, 2, wy0 + 6);
         for y in wy0 + 1..=cy - 12 {
             for x in wx0 + 1..=wx1 - 1 {
-                if self.level[idx(x, y)] >= 2 {
-                    self.ground[idx(x, y)] = if self.level[idx(x, y)] >= 3 { Mat::Marble } else { Mat::Cobble };
+                let l = self.level[idx(x, y)];
+                if l >= 1 {
+                    self.ground[idx(x, y)] = if l >= 2 { Mat::Marble } else { Mat::Cobble };
                 }
             }
         }
-        // ---- großer See mit dem Strudel, Kanal zum Seetor im Osten
-        let (lx, ly) = (cx, cy + 8);
-        self.pond(lx, ly, 15, 9, Some(Mat::Marble), 0.05);
+        // ---- der See in der Mitte, Kanal zum Seetor im Osten (für das Schiff zum Strudel)
+        let (lx, ly) = (cx, cy + 2);
+        self.pond(lx, ly, 16, 12, Some(Mat::Marble), 0.03);
         for y in ly - 3..=ly + 3 {
-            for x in lx + 10..=cx + 66 {
+            for x in lx + 12..=cx + 60 {
                 if inb(x, y) {
                     let i = idx(x, y);
                     self.ground[i] = Mat::Water;
@@ -1070,7 +1060,7 @@ impl World {
                 }
             }
         }
-        for x in lx + 10..=wx1 + 6 {
+        for x in lx + 12..=wx1 + 4 {
             for y in [ly - 4, ly + 4] {
                 if inb(x, y) && self.ground[idx(x, y)] != Mat::Water {
                     self.ground[idx(x, y)] = Mat::Marble;
@@ -1078,24 +1068,34 @@ impl World {
             }
         }
         self.whirlpool = (px(lx) + 16.0, py(ly) + 16.0);
-        // Hafen: Anleger im See, nahe dem Südtor
-        self.dock(Zone::Hain, cx - 8, cy + 20, 0, -1);
-        self.pier_end = self.docks.last().map(|d| (d.px, d.py)).unwrap_or((px(lx), py(ly)));
-        // Liegeplätze der Wracks am Seeufer
-        for (el, tx, ty) in [("fire", lx - 15, ly - 3), ("ice", lx - 7, ly - 8), ("wind", lx + 7, ly - 8), ("earth", lx - 14, ly + 6)] {
-            let (bx, by) = tpos(tx, ty);
-            let pi = self.prop_x("berth", bx, by, |p| {
-                p.berth = Some(el);
-                p.interact = Some("berth");
-                p.no_collide = true;
-            });
-            self.berths.push(Berth { el, prop: pi, x: bx, y: by });
+        // Steg im See: vom Südufer zwischen den Schiffen hindurch bis vor den Strudel
+        let (s0, s1) = (ly + 7, ly + 14);
+        for y in s0..=s1 {
+            for x in lx - 1..=lx + 1 {
+                let i = idx(x, y);
+                self.ground[i] = Mat::Plank;
+                self.path[i] = true;
+                self.level[i] = 0;
+            }
         }
-        // ---- Feuerterrasse (Ebene 2): Säbelfeuer und die Throne der Galionsfiguren
-        let (fx, fy) = (cx, cy - 16);
-        self.plaza(fx, fy, 6, 3, Mat::Marble, Some(2));
+        for y in (s0..=s1).step_by(2) {
+            self.prop_t("bridgePost", lx - 2, y);
+            self.prop_t("bridgePost", lx + 2, y);
+        }
+        self.prop_t("lamppost", lx - 2, s0 - 1);
+        self.prop_t("lamppost", lx + 2, s0 - 1);
+        self.pier_end = (px(lx) + 16.0, py(s0) + 8.0);
+        // Ring der besiegten Bossschiffe um den Strudel (Ellipse, je 90°, diagonal)
+        let (wx, wy) = self.whirlpool;
+        for (k, a) in [-45.0f32, 45.0, 135.0, 225.0].iter().enumerate() {
+            let a = a.to_radians();
+            self.hub_wrecks.push(HubWreck { el: ["fire", "ice", "wind", "earth"][k], x: wx + a.cos() * 340.0, y: wy + a.sin() * 250.0, h: a + std::f32::consts::PI });
+        }
+        // ---- Feuerterrasse (Ebene 1): Säbelfeuer, Throne der Galionsfiguren, Schmied und Händlerin
+        let (fx, fy) = (cx, cy - 17);
+        self.plaza(fx, fy, 6, 2, Mat::Marble, Some(1));
         self.fire("hain", fx, fy);
-        for (el, tx, ty) in [("fire", fx - 8, fy - 1), ("ice", fx - 4, fy - 3), ("wind", fx + 4, fy - 3), ("earth", fx + 8, fy - 1)] {
+        for (el, tx, ty) in [("fire", fx - 9, fy), ("ice", fx - 5, fy - 2), ("wind", fx + 5, fy - 2), ("earth", fx + 9, fy)] {
             let (sx, sy) = tpos(tx, ty);
             let pi = self.prop_x("figureheadSlot", sx, sy, |p| {
                 p.slot = Some(el);
@@ -1103,17 +1103,33 @@ impl World {
             });
             self.slots.push(Slot { el, prop: pi, x: sx, y: sy });
         }
-        for (i, (tx, ty)) in [(fx - 3, fy + 2), (fx + 3, fy + 2), (fx - 6, fy + 2), (fx + 6, fy + 2)].iter().enumerate() {
+        for (i, (tx, ty)) in [(fx - 3, fy + 3), (fx + 3, fy + 3), (fx - 7, fy + 3), (fx + 7, fy + 3)].iter().enumerate() {
             self.prop_t(&format!("swordGrave{}", i % 3), *tx, *ty);
         }
-        for (i, (tx, ty)) in [(fx - 10, fy - 2), (fx - 2, fy - 4), (fx + 2, fy - 4), (fx + 10, fy - 2)].iter().enumerate() {
+        for (i, (tx, ty)) in [(fx - 11, fy - 1), (fx - 2, fy - 2), (fx + 2, fy - 2), (fx + 11, fy - 1)].iter().enumerate() {
             self.prop_tn(&format!("candles{}", i % 3), *tx, *ty);
         }
-        for (tx, ty) in [(fx - 3, fy - 1), (fx + 3, fy - 1), (cx - 3, cy - 14), (cx + 3, cy - 14)] {
+        for (tx, ty) in [(fx - 3, fy - 1), (fx + 3, fy - 1)] {
             self.prop_t("brazier", tx, ty);
         }
+        // Säulenreihe an der Terrassenkante über dem See
+        for dx in [-13, -7, 7, 13] {
+            self.prop_t("stoneColumn", cx + dx, cy - 14);
+        }
         self.npc("maid", fx - 2, fy + 1, "lanternMaid", "Die Laternenmagd", "maid", false, None);
-        // ---- Schreinterrasse (Ebene 3) mit Bergfried, Statuen und Bannern
+        let (sx, sy) = (wx0 + 6, cy - 16);
+        self.plaza(sx, sy, 3, 2, Mat::Dirt, Some(1));
+        self.prop_t("forge", sx - 1, sy - 2);
+        self.prop_t("anchorDeco", sx + 3, sy + 1);
+        self.prop_t("barrels", sx - 4, sy + 1);
+        self.npc("smith", sx, sy, "smith", "Schmied Harrow", "smith", false, None);
+        let (mx, my) = (wx1 - 6, cy - 16);
+        self.plaza(mx, my, 3, 2, Mat::Dirt, Some(1));
+        self.prop_t("stall0", mx, my - 2);
+        self.prop_t("crates", mx - 4, my + 1);
+        self.prop_t("barrels", mx + 4, my + 1);
+        self.npc("merchant", mx, my, "merchant", "Händlerin Sabeth", "merchant", false, None);
+        // ---- Schrein (Ebene 2): Bergfried, Statuen, Banner
         let (kx, ky) = (px(cx) + 16.0, py(cy - 24) + 24.0);
         self.prop("fortKeep", kx, ky);
         for dx in [-10, 10] {
@@ -1122,14 +1138,13 @@ impl World {
         for dx in [-6, 6] {
             self.prop_t("bannerPole", cx + dx, cy - 22);
         }
-        // Bastionen (Ebene 3) und Wachplattformen (Ebene 4) mit Kanonen und Feuerbecken
+        // Wachplattformen (Ebene 3) mit Kanonen und Feuerbecken
         for (bx, flip) in [(wx0 + 4, false), (wx1 - 4, true)] {
-            self.prop_tf("cannon", bx, cy - 22, flip);
-            self.prop_t("brazier", bx + if flip { -3 } else { 3 }, cy - 23);
-            self.prop_tf("cannon", bx - if flip { -1 } else { 1 }, wy0 + 3, flip);
+            self.prop_tf("cannon", bx, wy0 + 3, flip);
+            self.prop_t("brazier", bx + if flip { -2 } else { 2 }, wy0 + 2);
             self.prop_t("bannerPole", bx, wy0 + 2);
         }
-        // ---- Mauern und Türme (Seetor im Osten)
+        // ---- Mauern und Türme (Seetor im Osten, Landtor im Süden)
         let mut k = 0;
         let mut x = wx0 + 2;
         while x <= wx1 - 2 {
@@ -1148,67 +1163,46 @@ impl World {
             }
             y += 4;
         }
-        for (tx, ty) in [(wx0, wy0), (wx1, wy0), (wx0, wy1), (wx1, wy1), (wx0, cy - 4), (wx1, ly - 6), (wx1, ly + 6)] {
+        for (tx, ty) in [(wx0, wy0), (wx1, wy0), (wx0, wy1), (wx1, wy1), (wx1, ly - 6), (wx1, ly + 6)] {
             self.prop("fortTower", px(tx) + 16.0, py(ty) + 16.0);
         }
-        // Landtor im Süden
         let gy = py(wy1) + 24.0;
         for dx in [-70.0f32, 70.0] {
             self.prop("gateTower", px(cx) + 16.0 + dx, gy - 6.0);
         }
         self.prop_x("fortArch", px(cx) + 16.0, gy, |p| p.no_collide = true);
-        // ---- Promenade (Ebene 1): Schmiede im Westen, Händlerin im Osten
-        self.plaza(wx0 + 9, cy - 9, 5, 2, Mat::Dirt, Some(1));
-        self.prop_t("forge", wx0 + 8, cy - 11);
-        self.prop_t("cannon", wx0 + 3, cy - 8);
-        self.prop_t("barrels", wx0 + 13, cy - 11);
-        self.prop_t("anchorDeco", wx0 + 12, cy - 8);
-        self.prop_t("brazier", wx0 + 11, cy - 9);
-        self.npc("smith", wx0 + 9, cy - 9, "smith", "Schmied Harrow", "smith", false, None);
-        self.plaza(wx1 - 9, cy - 9, 5, 2, Mat::Dirt, Some(1));
-        self.prop_t("stall0", wx1 - 9, cy - 11);
-        self.prop_t("stall1", wx1 - 5, cy - 11);
-        self.prop_t("crates", wx1 - 13, cy - 11);
-        self.prop_t("barrels", wx1 - 3, cy - 8);
-        self.prop_t("brazier", wx1 - 12, cy - 9);
-        self.npc("merchant", wx1 - 9, cy - 9, "merchant", "Händlerin Sabeth", "merchant", false, None);
-        // ---- Hafenhof (Ebene 0): Schiffsmeister am Anleger, Crew-Tafel, Friedhof
-        self.npc("shipmaster", cx - 4, cy + 21, "shipmaster", "Schiffsmeister Brack", "shipmaster", false, None);
-        self.prop_t("anchorDeco", cx - 1, cy + 22);
-        self.prop_t("crates", cx - 12, cy + 21);
-        self.prop_t("barrels", cx - 13, cy + 19);
-        let (tx, ty) = (cx + 15, cy + 20);
+        // ---- Seeufer (Ebene 0): Crew-Tafel im Südosten, Friedhof im Südwesten und Westen
+        let (tx, ty) = (cx + 11, cy + 18);
         self.prop_t("table", tx, ty);
         self.prop_t("bench", tx, ty + 2);
         self.prop_t("table", tx + 5, ty);
         self.prop_t("bench", tx + 5, ty + 2);
-        self.prop_t("brazier", tx + 2, ty - 3);
-        self.prop_t("barrels", tx + 8, ty - 2);
+        self.prop_t("brazier", tx + 8, ty - 1);
+        self.prop_t("barrels", tx + 9, ty + 2);
         self.crew_spots = [(tx - 1, ty + 1), (tx + 1, ty + 1), (tx + 4, ty + 1), (tx + 6, ty + 1)].iter().map(|&(x, y)| tpos(x, y)).collect();
-        for gy in 0..2 {
-            for gx in 0..4 {
-                let (tx, ty) = (wx0 + 3 + gx * 3, cy + 15 + gy * 3);
-                if (gx + gy) % 3 == 0 {
-                    self.prop_t(&format!("swordGrave{}", (gx + gy) % 3), tx, ty);
-                } else {
-                    self.prop_t(if (gx + gy) % 2 == 0 { "grave0" } else { "grave1" }, tx, ty);
-                }
+        for (i, (gx, gy)) in [(wx0 + 3, cy + 17), (wx0 + 6, cy + 18), (wx0 + 9, cy + 19), (wx0 + 2, cy + 8), (wx0 + 3, cy + 12), (wx0 + 2, cy - 2)].iter().enumerate() {
+            if i % 3 == 0 {
+                self.prop_t(&format!("swordGrave{}", i % 3), *gx, *gy);
+            } else {
+                self.prop_t(if i % 2 == 0 { "grave0" } else { "grave1" }, *gx, *gy);
             }
         }
-        self.prop_t("skullpile", wx0 + 15, cy + 21);
-        self.prop_t("hoodedStatue", wx0 + 2, cy + 21);
-        for (tx, ty) in [(cx - 3, wy1 - 2), (cx + 3, wy1 - 2), (cx - 3, cy - 4), (cx + 3, cy - 4), (cx - 22, cy - 4), (cx + 22, cy - 4)] {
+        self.prop_t("skullpile", wx0 + 12, cy + 19);
+        self.prop_t("hoodedStatue", wx0 + 2, cy + 3);
+        for (tx, ty) in [(cx - 3, wy1 - 2), (cx + 3, wy1 - 2), (cx - 4, s1 + 1), (cx + 4, s1 + 1), (wx0 + 3, cy - 9), (wx1 - 3, cy - 9)] {
             self.prop_t("brazier", tx, ty);
         }
-        for (tx, ty) in [(wx0 + 3, cy - 2), (wx1 - 3, cy - 2), (wx0 + 3, wy1 - 4)] {
-            self.prop_t("emberTree0", tx, ty);
-        }
-        for (tx, ty) in [(wx0 + 6, wy1 - 2), (wx1 - 6, wy1 - 2)] {
-            self.prop_t("cannon", tx, ty);
-        }
-        // ---- Draußen: Weg zum Strand, tote Bäume
-        self.road(&[(cx, wy1 + 1), (cx, cy + 30)], Mat::Cobble, 1);
-        for (x, y, r, n) in [(-40, -6, 6.0, 5), (-36, 18, 5.0, 4), (0, -33, 6.0, 3)] {
+        self.prop_t("emberTree0", wx0 + 3, cy - 6);
+        self.prop_t("emberTree0", wx1 - 3, ly + 9);
+        // ---- Draußen: Weg zum Anleger am Südrand der Insel, Schiffsmeister am Steg, tote Bäume
+        self.road(&[(cx, wy1 + 1), (cx, wy1 + 6)], Mat::Cobble, 1);
+        self.dock(Zone::Hain, cx, wy1 + 4, 0, 1);
+        let (dpx, dpy) = self.docks.last().map(|d| (d.px, d.py)).unwrap_or((px(cx), py(wy1 + 8)));
+        let (dtx, dty) = ((dpx / TS as f32) as i32, (dpy / TS as f32) as i32);
+        self.npc("shipmaster", dtx - 3, dty - 4, "shipmaster", "Schiffsmeister Brack", "shipmaster", false, None);
+        self.prop_t("crates", dtx + 3, dty - 5);
+        self.prop_t("anchorDeco", dtx - 5, dty - 6);
+        for (x, y, r, n) in [(-30, -4, 5.0, 4), (-28, 14, 4.0, 3), (28, -14, 4.0, 3)] {
             self.grove(cx + x, cy + y, r, rng, n, None);
         }
     }

@@ -70,7 +70,7 @@ pub fn dialog_for(g: &mut Game, ni: usize) -> Script {
     let def = g.npcs[ni].def.clone();
     let s = &mut g.save;
     let missing = FIGS.iter().filter(|f| !s.mounted.get(**f).copied().unwrap_or(false)).count();
-    let wrecks_missing = FIGS.iter().filter(|f| !s.wrecks.get(**f).copied().unwrap_or(false)).count();
+    let wrecks_missing = FIGS.iter().filter(|f| !s.sea_kings.get(**f).copied().unwrap_or(false)).count();
     let n = s.talked.entry(def.id.to_string()).or_insert(0);
     let first = *n == 0;
     *n += 1;
@@ -83,8 +83,8 @@ pub fn dialog_for(g: &mut Game, ni: usize) -> Script {
                         "Ah … noch einer, den die See wieder ausgespuckt hat.",
                         "Hör zu, Ertränkter. Nördlich von hier liegt die Glutwacht, die letzte Festung der Freibeuter. Dort brennt das Säbelfeuer.",
                         "Um das Feuer stehen vier leere Throne. Vier Könige der Geisterflotte tragen ihre Galionsfiguren in sich: Glut, Frost, Sturm und Tiefe.",
-                        "Und draußen auf der See schlafen vier Ungeheuer, die einst Schiffe waren. Versenk sie und bring ihre Wracks an die Stege im Festungssee.",
-                        "Erst wenn Throne und Stege voll sind, öffnet sich der See zum Ende der Welt.",
+                        "Und draußen auf der See schlafen vier Ungeheuer, die einst Schiffe waren. Versenk sie, dann brennen ihre Schiffe im See der Festung.",
+                        "Erst wenn die Throne besetzt sind und vier Schiffe im See brennen, öffnet sich der Strudel zum Ende der Welt.",
                         "Dein Schiff wartet am Steg. Es steigt aus der Tiefe, wenn du es rufst.",
                     ]),
                     choices: vec![bye],
@@ -92,11 +92,11 @@ pub fn dialog_for(g: &mut Game, ni: usize) -> Script {
             }
             if missing == 0 {
                 if wrecks_missing == 0 {
-                    return Script { pages: pages(&["Der Strudel ruft dich. Mitten in der Glutwacht, wo der See schwarz wird.", "Und wenn du am Ende der Welt stehst … grüß den Kapitän nicht von mir."]), choices: vec![bye] };
+                    return Script { pages: pages(&["Der Strudel ruft dich. Mitten in der Glutwacht, zwischen den brennenden Schiffen. Spring vom Steg.", "Und wenn du am Ende der Welt stehst … grüß den Kapitän nicht von mir."]), choices: vec![bye] };
                 }
                 return Script {
                     pages: vec![
-                        format!("Die Throne sind voll. Aber {wrecks_missing} Steg{} im Festungssee noch leer.", if wrecks_missing > 1 { "e sind" } else { " ist" }),
+                        format!("Die Throne sind voll. Aber im Festungssee {} noch {wrecks_missing} Schiff{}.", if wrecks_missing > 1 { "fehlen" } else { "fehlt" }, if wrecks_missing > 1 { "e" } else { "" }),
                         "Die Ungeheuer schlafen in den vier Ecken der See: Glutsee im Osten, Eismeer im Norden, Sturmsee im Südwesten, Tiefengrund im Südosten.".into(),
                     ],
                     choices: vec![bye],
@@ -117,7 +117,7 @@ pub fn dialog_for(g: &mut Game, ni: usize) -> Script {
             } else if missing > 0 {
                 pages(&["Die Throne um das Feuer sind kalt. Sie warten auf ihre Gesichter."])
             } else if wrecks_missing > 0 {
-                pages(&["Die Gesichter sind heimgekehrt. Doch der See ist noch nicht satt. Er will die Wracks."])
+                pages(&["Die Gesichter sind heimgekehrt. Doch der See ist noch nicht satt. Er will die Schiffe der vier Ungeheuer."])
             } else {
                 pages(&["Hörst du es? Der See singt. Er wird sich öffnen, und du wirst fallen. Fürchte dich nicht."])
             },

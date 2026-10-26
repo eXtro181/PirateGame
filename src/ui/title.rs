@@ -4,7 +4,7 @@
 use crate::art::Art;
 use crate::game::fx::{c, rnd, rr, Fx, P};
 use crate::gfx::{flags, Frame, LightDef, SprOpt};
-use std::f32::consts::{PI, TAU};
+use std::f32::consts::PI;
 
 /// Weltpunkt, um den das Titelbild aufgebaut wird (offenes Meer zwischen Eismeer und Aschebucht).
 pub const TITLE_SEA: (f32, f32) = (330.0 * 32.0, 52.0 * 32.0);

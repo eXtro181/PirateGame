@@ -519,6 +519,35 @@ impl Game {
                 f.light(LightDef { x: k.x, y: k.y, z: 80.0, r: 200.0, col: [0.7, 0.3, 0.6], flicker: 0.2 });
             }
         }
+        // besiegte Bossschiffe in Originalgröße, brennend im Kreis um den Strudel
+        let flames = art.prop("burningWreck0").map(|p| p.frames.clone()).unwrap_or_default();
+        for (i, w) in self.world.hub_wrecks.iter().enumerate() {
+            if !self.save.sea_kings.get(w.el).copied().unwrap_or(false) || !vis(w.x, w.y, 420.0) {
+                continue;
+            }
+            let Some(s) = art.map.get(&format!("hw:{}", w.el)) else { continue };
+            let d16 = ((w.h / (TAU / 16.0)).round() as i32).rem_euclid(16) as usize;
+            let (_, flip) = sw_art::ships::ship_dir(d16);
+            let t = self.t + i as f32 * 1.7;
+            let bob = ((t * 0.5).sin() * 2.0).round();
+            f.shadow(w.x, w.y + 6.0, 210.0, 70.0, 0.35);
+            f.sprite(s, w.x, w.y + bob, SprOpt { flip, ..Default::default() });
+            // Flammen entlang des Rumpfs (Bug bis Heck) und an den Masten
+            let (fx, fy) = (w.h.sin(), -w.h.cos() * 0.62);
+            for k in 0..9 {
+                let fk = k as f32;
+                let (along, z, sc) = if k < 6 { (-0.75 + fk * 0.3, 34.0 + (fk * 1.9).sin() * 8.0, 1.0 + (fk * 2.3).sin().abs() * 0.5) } else { ((fk - 7.0) * 0.45, 95.0 + (fk * 3.1).sin().abs() * 70.0, 0.8) };
+                let (x, y) = (w.x + fx * along * 170.0, w.y + fy * along * 170.0);
+                if !flames.is_empty() {
+                    let fi = ((t * 10.0) as usize + k * 3) % flames.len();
+                    f.sprite_z(&flames[fi], x, y - z, y + 2.0, SprOpt { scale: sc, flags: flags::GLOW, tint: [255, 255, 255, 230], ev: z, ..Default::default() });
+                }
+                let rise = ((t * 0.4 + fk * 0.23) % 1.0) * 90.0;
+                f.glow(x + (t * 1.3 + fk).sin() * 8.0, y - z - 30.0 - rise, 2.0, [255, 170, 80, (200.0 * (1.0 - rise / 90.0)) as u8]);
+            }
+            f.light(LightDef { x: w.x, y: w.y, z: 90.0, r: 420.0, col: [1.9, 0.8, 0.3], flicker: 0.35 });
+            f.light(LightDef { x: w.x + fx * 110.0, y: w.y + fy * 110.0, z: 40.0, r: 220.0, col: [1.5, 0.6, 0.2], flicker: 0.5 });
+        }
         // Strudel im See der Glutwacht: Trichter, zwei Schaumkränze, kreisendes Treibgut
         if self.whirlpool_open {
             let (wx, wy) = self.world.whirlpool;
