@@ -211,7 +211,7 @@ impl Game {
         e.hp = e.max_hp;
         e.state = EP::Mirror;
         e.st_t = 0.0;
-        self.ui.banner("DIE KEHRSEITE", "Etwas Riesiges spiegelt sich im Wasser, das nicht da ist", "boss", 4.0);
+        self.ui.banner("DIE KEHRSEITE", "Glocken läuten unter dem Wasser. Folge ihnen.", "boss", 4.0);
         self.sfx("rise");
         self.shake(6.0);
     }
@@ -230,6 +230,10 @@ impl Game {
     pub fn debug_end_phase(&mut self, n: u32) {
         self.debug_end();
         self.end_begin();
+        let (x, y) = (self.end.x - 420.0, self.end.y + 160.0);
+        self.ship.hull.x = x;
+        self.ship.hull.y = y;
+        self.cam_f = (x, y);
         let k = ng_k(&self.save);
         let e = &mut self.end;
         match n {
@@ -421,6 +425,17 @@ impl Game {
     // ------------------------------------------------------------ Phase 1: Spiegelbild
     fn end_mirror(&mut self, dt: f32, k: f32) {
         let (sx, sy, sh) = (self.ship.hull.x, self.ship.hull.y, self.ship.hull.h);
+        // aus der Ferne nur Glockenschläge, die den Weg weisen
+        if (sx - self.end.x).hypot(sy - self.end.y) > 760.0 {
+            self.end.bell_t -= dt;
+            if self.end.bell_t <= 0.0 {
+                self.end.bell_t = 6.0;
+                self.sfx("bell");
+                let (ex, ey) = (self.end.x, self.end.y);
+                self.fx.ring(ex, ey, 30.0, 900.0, 2.5, [0.8, 0.85, 1.0]);
+            }
+            return;
+        }
         let e = &mut self.end;
         e.lit_t -= dt;
         if e.lit_t <= 0.0 {
