@@ -221,6 +221,8 @@ pub enum Target {
     SeaBoss(usize),
     /// Endboss auf See (Geisterkapitän, Schiffsgestalt)
     EndShip,
+    /// Tau der Herzglocke im Schlund der Kehrseite
+    Rope(usize),
     Player,
     Ship,
 }
@@ -859,7 +861,8 @@ impl Game {
             self.on_parry(from);
             return false;
         }
-        let dmg = (dmg * p.d.armor).round();
+        let dmg = (dmg * p.d.armor * ng_dmg(&self.save)).round();
+        let p = &mut self.player;
         p.hp -= dmg;
         p.a.flash = 0.12;
         p.iframes = 0.45;
@@ -926,8 +929,8 @@ impl Game {
             def: di,
             state: if d.mimic { ES::Lurk } else { ES::Idle },
             st_t: rnd(),
-            hp: d.hp,
-            max_hp: d.hp,
+            hp: d.hp * ng_hp(&self.save),
+            max_hp: d.hp * ng_hp(&self.save),
             home: (sp.x, sp.y),
             cool: 0.0,
             poise: d.poise,

@@ -300,6 +300,7 @@ impl Game {
     pub fn update_sea_bosses(&mut self, dt: f32) {
         let (sx, sy) = (self.ship.hull.x, self.ship.hull.y);
         let sailing = self.sailing;
+        let ngk = ng_hp(&self.save);
         for i in 0..self.sea_bosses.len() {
             let b = &mut self.sea_bosses[i];
             b.t += dt;
@@ -318,6 +319,8 @@ impl Game {
                         b.state = SS::Rise;
                         b.st_t = 0.0;
                         b.cool = 2.4;
+                        b.max_hp = b.def().hp * ngk;
+                        b.hp = b.max_hp;
                         let (n, sub) = (b.def().monster, SEAS.iter().find(|s| s.el == b.def().el).map(|s| s.name).unwrap_or(""));
                         self.sea_boss = Some(i);
                         self.boss_ghost = self.sea_bosses[i].hp;

@@ -261,6 +261,27 @@ fn main() {
             bg.place(&c, 400, 640, c.w / 2, c.h - 150);
             save_lit(&bg, &format!("{out}/title.png"), 1);
         }
+        "inversa" => {
+            let t = std::time::Instant::now();
+            let a = sw_art::inversa::frame(false);
+            let b = sw_art::inversa::frame(true);
+            let bell = sw_art::inversa::heart_bell();
+            let rib = sw_art::inversa::rib(0);
+            eprintln!("Kehrseite: {:?}", t.elapsed());
+            let mut bg = Canvas::new(1900, 900);
+            let water = sw_art::color::ramp_n(sw_art::color::hex(0x1E3A4A), 6, 1.0);
+            for y in 0..bg.h { for x in 0..bg.w { let i = bg.idx(x, y); bg.col[i] = water[2]; } }
+            let (_, h, foot) = sw_art::inversa::SIZE;
+            bg.place(&a, 460, 660, a.w / 2, h - foot);
+            bg.place(&b, 1380, 660, b.w / 2, h - foot);
+            for (x, y, _) in sw_art::inversa::lantern_screen() {
+                let i = bg.idx((460.0 + x) as i32, (660.0 + y) as i32);
+                bg.col[i] = [255, 0, 255, 255];
+            }
+            bg.place(&bell, 200, 880, bell.w / 2, bell.h - 10);
+            bg.place(&rib, 1700, 880, rib.w / 2, rib.h - 10);
+            save_lit(&bg, &format!("{out}/inversa.png"), 1);
+        }
         "heads" => {
             use sw_art::buildings::*;
             let mut bg = bake_chunk(&Flat(Biome::Fire, Mat::Ash), &mut mats, &en, 0, 0, 1280).crop(0, 0, 640, 220);

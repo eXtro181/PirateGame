@@ -656,15 +656,15 @@ impl Fx {
     }
 }
 
-pub const SFX: [&str; 30] = [
-    "swing", "heavy", "hit", "crit", "hurt", "roll", "parry", "parried", "drink", "heal", "bones", "crush", "cannon", "pistol", "tide", "crash", "roar", "death", "pearls", "kindle", "chest", "level", "lock", "rise", "zap", "charge", "board", "click", "crackle", "fog",
+pub const SFX: [&str; 33] = [
+    "swing", "heavy", "hit", "crit", "hurt", "roll", "parry", "parried", "drink", "heal", "bones", "crush", "cannon", "pistol", "tide", "crash", "roar", "death", "pearls", "kindle", "chest", "level", "lock", "rise", "zap", "charge", "board", "click", "crackle", "fog", "bell", "chain", "thud",
 ];
 
 pub fn sfx(name: &str) -> Vec<f32> {
     use Ft::*;
     use Wave::*;
     let len = match name {
-        "death" | "rise" => 3.2,
+        "death" | "rise" | "bell" => 3.2,
         "kindle" | "roar" => 1.8,
         "cannon" | "crash" | "tide" | "level" | "pearls" | "chest" | "zap" | "fog" => 1.0,
         _ => 0.6,
@@ -672,6 +672,22 @@ pub fn sfx(name: &str) -> Vec<f32> {
     let mut x = Fx::new(len, name.bytes().map(|b| b as u32).sum::<u32>() + 3);
     match name {
         "swing" => x.noise(0.0, 900.0, 3200.0, 0.16, 0.35, Band, 1.5, false),
+        "bell" => {
+            // tiefe Glocke unter Wasser: unharmonische Teiltöne, langer Nachhall
+            for (f, v, d) in [(98.0f32, 0.32f32, 3.0f32), (196.0, 0.16, 2.4), (270.0, 0.14, 2.0), (530.0, 0.07, 1.4), (812.0, 0.04, 0.9)] {
+                x.tone(0.0, Sine, f, f * 0.995, d, v);
+            }
+            x.noise(0.0, 300.0, 300.0, 0.05, 0.25, Band, 1.0, false);
+        }
+        "chain" => {
+            for k in 0..6 {
+                x.noise(k as f32 * 0.06, 2600.0, 2200.0, 0.05, 0.35, Band, 1.0, false);
+            }
+        }
+        "thud" => {
+            x.tone(0.0, Sine, 62.0, 40.0, 0.35, 0.5);
+            x.noise(0.0, 120.0, 80.0, 0.2, 0.25, Low, 1.0, false);
+        }
         "heavy" => x.noise(0.0, 400.0, 1800.0, 0.3, 0.5, Band, 1.2, false),
         "hit" => {
             x.noise(0.0, 1400.0, 1400.0, 0.08, 0.5, Band, 1.0, false);

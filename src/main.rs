@@ -230,7 +230,11 @@ fn setup(world: &mut bevy::ecs::world::World) {
                     }
                 }
             }
-            if app.params.contains_key("endsea") {
+            if let Some(n) = app.params.get("endphase").and_then(|v| v.parse::<u32>().ok()) {
+                if let Scene::Play(g) = &mut app.scene {
+                    g.debug_end_phase(n);
+                }
+            } else if app.params.contains_key("endsea") {
                 if let Scene::Play(g) = &mut app.scene {
                     g.debug_end();
                 }
@@ -357,6 +361,7 @@ fn tick(
 
     let mut sfx: Vec<&'static str> = vec![];
     let mut go_title = false;
+    let mut restart: Option<Save> = None;
     let mut start: Option<(Option<save::Profile>, Save)> = None;
     let mut fire_dist = None;
     match &mut app.scene {
@@ -420,6 +425,10 @@ fn tick(
             if g.to_title {
                 go_title = true;
             }
+            if g.restart {
+                g.restart = false;
+                restart = Some(g.save.clone());
+            }
             let (px, py) = (g.player.a.x, g.player.a.y);
             fire_dist = g.world.fires.iter().filter(|fi| g.world.props[fi.prop].lit).map(|fi| (fi.x - px).hypot(fi.y - py)).reduce(f32::min);
         }
@@ -454,6 +463,15 @@ fn tick(
     }
     if let Some((p, s)) = start {
         start_game(app, p, s, art, f);
+    }
+    if let Some(s) = restart {
+        // Neues Spiel+: Welt neu aufbauen, Spielstand behalten
+        let p = app.profile.take();
+        start_game(app, p, s, art, f);
+        if let Scene::Play(g) = &mut app.scene {
+            let n = g.save.ng;
+            g.ui.banner(&format!("NEUE FAHRT · NG+{}", if n > 1 { n.to_string() } else { String::new() }), "Die See ist wieder hungrig.", "boss", 4.5);
+        }
     }
     if go_title {
         app.scene = Scene::Title;

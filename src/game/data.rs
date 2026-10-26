@@ -219,10 +219,10 @@ pub const KINGS: [King; 4] = [
 pub fn king(k: &str) -> &'static King {
     KINGS.iter().find(|x| x.key == k).unwrap_or(&KINGS[0])
 }
-pub const MEGA_NAME: &str = "Kapitän Schwarzwasser, der Geisterkapitän";
-pub const MEGA_NAME2: &str = "Schwarzwasser, der brennende Skelettkapitän";
-pub const MEGA_HP: f32 = 2800.0;
-pub const MEGA_DMG: f32 = 36.0;
+pub const MEGA_NAME: &str = "Der Ertrunkene";
+pub const MEGA_NAME2: &str = "Der Ertrunkene, die andere Seite";
+pub const MEGA_HP: f32 = 2400.0;
+pub const MEGA_DMG: f32 = 32.0;
 pub const MEGA_PEARLS: f32 = 20000.0;
 pub fn el_col(el: &str) -> [f32; 3] {
     match el {
@@ -395,6 +395,9 @@ pub struct Save {
     pub wrecks: HashMap<String, bool>,
     #[serde(default)]
     pub crew: Vec<String>,
+    /// Neues Spiel+: Anzahl abgeschlossener Fahrten (0 = erste Fahrt)
+    #[serde(default)]
+    pub ng: i32,
     #[serde(default)]
     pub talked: HashMap<String, i32>,
     #[serde(default)]
@@ -436,6 +439,14 @@ pub fn derived(s: &Save) -> Derived {
         armor: if s.items.contains_key("ring") { 0.88 } else { 1.0 },
         st_regen: if s.items.contains_key("coat") { 1.3 } else { 1.0 },
     }
+}
+/// Neues Spiel+: Lebenspunkte der Gegner je Fahrt
+pub fn ng_hp(s: &Save) -> f32 {
+    1.0 + 0.5 * s.ng.max(0) as f32
+}
+/// Neues Spiel+: Schaden der Gegner je Fahrt
+pub fn ng_dmg(s: &Save) -> f32 {
+    1.0 + 0.3 * s.ng.max(0) as f32
 }
 pub fn level_cost(level: i32) -> i64 {
     (120.0 * 1.1f64.powi(level)).round() as i64
@@ -483,6 +494,7 @@ pub fn new_save(name: &str, look: LookIdx, origin: &str, gift: &str, now: f64) -
         wrecks: HashMap::new(),
         end_naval: false,
         crew: vec![],
+        ng: 0,
         talked: HashMap::new(),
         ship_dock: "kueste".into(),
         explored: if gift == "chart" { ["kueste", "hain", "asche", "frost", "raben", "mangroven"].iter().map(|s| s.to_string()).collect() } else { vec!["kueste".into()] },

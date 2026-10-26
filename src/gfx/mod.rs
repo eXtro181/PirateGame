@@ -138,6 +138,8 @@ pub mod flags {
     pub const GLOW: u8 = 4;
     pub const GHOST: u8 = 8;
     pub const GREY: u8 = 16;
+    /// Spiegelung im Wasser: mit der Wasseroberfläche gemischt (nur Bodenliste)
+    pub const REFLECT: u8 = 64;
 }
 
 /// Optionen für ein Sprite.
@@ -173,6 +175,8 @@ pub struct LightDef {
 #[derive(Resource, Default)]
 pub struct Frame {
     pub ground: Vec<Q>,
+    /// Spiegelungen im Wasser (nach dem Boden gezeichnet)
+    pub reflections: Vec<Q>,
     pub decals: Vec<Q>,
     pub world: Vec<(f32, u32, Q)>,
     pub over_alpha: Vec<Q>,
@@ -199,6 +203,7 @@ const ATLAS_PX: f32 = sw_art::atlas::PAGE as f32;
 impl Frame {
     pub fn begin(&mut self) {
         self.ground.clear();
+        self.reflections.clear();
         self.decals.clear();
         self.world.clear();
         self.over_alpha.clear();
@@ -313,6 +318,41 @@ impl Frame {
             sway: 0,
         });
     }
+    /// Spiegelbild eines Sprites im Wasser: kopfüber unter der Wasserlinie `y`, in waagrechten
+    /// Streifen wellig verschoben. `tint.a` = Deckkraft der Spiegelung.
+    pub fn reflect(&mut self, s: &Spr, x: f32, y: f32, scale: f32, tint: [u8; 4], t: f32) {
+        let n = 24;
+        let h = s.h as f32;
+        // Teil über dem Fuß (über Wasser) wird gespiegelt
+        let above = (s.ay as f32).min(h);
+        if above <= 1.0 {
+            return;
+        }
+        let ax = s.ax as f32 * scale;
+        for i in 0..n {
+            let a0 = above * i as f32 / n as f32;
+            let a1 = above * (i + 1) as f32 / n as f32;
+            // Bildzeilen (von oben) im Atlas: Fuß minus Abstand
+            let r0 = s.ay as f32 - a0;
+            let r1 = s.ay as f32 - a1;
+            let wob = ((y + a0 * scale) * 0.09 + t * 1.8).sin() * (1.5 + a0 * 0.03);
+            let x0 = x - ax + wob;
+            let x1 = x0 + s.w as f32 * scale;
+            let (yy0, yy1) = (y + a0 * scale, y + a1 * scale);
+            let u0 = s.x as f32 / ATLAS_PX;
+            let u1 = (s.x as f32 + s.w as f32) / ATLAS_PX;
+            let v0 = (s.y as f32 + r0) / ATLAS_PX;
+            let v1 = (s.y as f32 + r1) / ATLAS_PX;
+            self.reflections.push(Q {
+                p: [[x0, yy0], [x1, yy0], [x1, yy1], [x0, yy1]],
+                uv: [[u0, v0], [u1, v0], [u1, v1], [u0, v1]],
+                col: tint,
+                ext: [s.page as u8, modes::ATLAS, 0, flags::REFLECT],
+                prm: [0.0, 0.0],
+                sway: 0,
+            });
+        }
+    }
     pub fn ground_rect(&mut self, x: f32, y: f32, w: f32, h: f32, mode: u8) {
         self.ground.push(Self::quad_rect(x, y, w, h, [255; 4], mode, 0));
     }
@@ -407,15 +447,18 @@ pub fn pack_frame(mut f: ResMut<Frame>, mut p: ResMut<Packed>, time: Res<Time>) 
     f.world.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal).then(a.1.cmp(&b.1)));
     p.verts.clear();
     let mut start = 0u32;
-    let lists: [&Vec<Q>; 2] = [&f.ground, &f.decals];
     let mut r = [(0u32, 0u32); 6];
-    for (i, l) in lists.iter().enumerate() {
-        for q in l.iter() {
-            push_q(&mut p.verts, q);
-        }
-        r[i] = (start, l.len() as u32);
-        start += l.len() as u32;
+    for q in f.ground.iter().chain(f.reflections.iter()) {
+        push_q(&mut p.verts, q);
     }
+    let ng = (f.ground.len() + f.reflections.len()) as u32;
+    r[0] = (start, ng);
+    start += ng;
+    for q in f.decals.iter() {
+        push_q(&mut p.verts, q);
+    }
+    r[1] = (start, f.decals.len() as u32);
+    start += f.decals.len() as u32;
     for (_, _, q) in f.world.iter() {
         push_q(&mut p.verts, q);
     }

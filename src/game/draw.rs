@@ -133,7 +133,18 @@ impl Game {
                     }
                 }
             };
-            if b.human {
+            if b.human && b.sheet.starts_with("drowned") {
+                // der Ertrunkene: dein eigenes Aussehen, bleich und triefend; die andere Seite gespiegelt
+                let other = b.sheet == "drowned2";
+                let mut a = b.a;
+                if other {
+                    a.fx = -a.fx;
+                }
+                draw_char(f, &art.player, &a, fl | flags::GHOST * other as u8, if other { [150, 175, 235, 255] } else { [175, 205, 215, 255] }, 0.5);
+                if rnd() < 0.3 {
+                    f.glow(b.a.x + rr(-8.0, 8.0), b.a.y - rr(4.0, 50.0), 2.0, [160, 210, 230, 160]);
+                }
+            } else if b.human {
                 if let Some(sh) = art.chars.get(b.sheet) {
                     draw_char(f, sh, &b.a, fl, [255; 4], 0.5);
                 }

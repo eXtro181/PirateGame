@@ -1910,6 +1910,7 @@ impl World {
     }
     /// Vor dem Aufstieg: Insel unter Wasser, Requisiten verborgen.
     pub fn sink_end_island(&mut self) {
+        self.docks.retain(|d| d.zone != Zone::Ende);
         for &(i, _) in &self.end_island {
             self.ground[i] = Mat::Water;
             self.path[i] = false;
@@ -1918,6 +1919,7 @@ impl World {
             self.props[pi].hidden = true;
         }
         self.end_risen = false;
+        self.compute_shore();
     }
     pub fn in_end(&self, x: f32, y: f32) -> bool {
         let (x0, y0, x1, y1) = self.end_rect;

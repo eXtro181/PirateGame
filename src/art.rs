@@ -119,6 +119,40 @@ impl DynSlot {
     }
 }
 
+/// Die Kehrseite (Endboss): Leib mit geschlossenem und offenem Maul, Herzglocke, zwei Rippen.
+pub fn build_kehrseite(art: &mut Art, frame: &mut Frame) {
+    if art.boss_loaded.as_deref() == Some("kehrseite") {
+        return;
+    }
+    let t0 = bevy::platform::time::Instant::now();
+    let slot = art.boss_slot;
+    let mut a = slot.atlas();
+    let (_, h, foot) = sw_art::inversa::SIZE;
+    let mut v: Vec<(String, Spr)> = vec![];
+    for (i, open) in [false, true].iter().enumerate() {
+        let c = sw_art::inversa::frame(*open);
+        v.push((format!("kh:{i}"), a.add_trim(&format!("kh:{i}"), &c, c.w / 2, h - foot)));
+    }
+    let c = sw_art::inversa::heart_bell();
+    v.push(("kh:bell".into(), a.add_trim("kh:bell", &c, c.w / 2, c.h - 10)));
+    for i in 0..2 {
+        let c = sw_art::inversa::rib(i);
+        v.push((format!("kh:rib{i}"), a.add_trim(&format!("kh:rib{i}"), &c, c.w / 2, c.h - 10)));
+    }
+    if !slot.upload(frame, &a) {
+        return;
+    }
+    if let Some(old) = art.boss_loaded.take() {
+        art.ships.remove(&old);
+    }
+    for (k, mut s) in v {
+        slot.fix(&mut s);
+        art.map.insert(k, s);
+    }
+    art.boss_loaded = Some("kehrseite".into());
+    info!("Kehrseite gezeichnet in {:.2}s", t0.elapsed().as_secs_f32());
+}
+
 /// Titelbild: großes brennendes Schiff und ein Krakenarm-Glied (im Boss-Bereich).
 pub fn build_title(art: &mut Art, frame: &mut Frame) {
     if art.boss_loaded.as_deref() == Some("title") {
@@ -130,27 +164,7 @@ pub fn build_title(art: &mut Art, frame: &mut Frame) {
     let mut ship = a.add_trim("t:ship", &c, c.w / 2, c.h - 130);
     // Krakenarm-Glied: dunkle, glänzende Haut mit hellen Saugnäpfen auf der Unterseite
     let n = 40;
-    let mut seg = Canvas::new(n, n);
-    let skin = ramp_n(hex(0x3A2236), 6, 1.0);
-    for y in 0..n {
-        for x in 0..n {
-            let (dx, dy) = ((x as f32 + 0.5 - 20.0) / 19.0, (y as f32 + 0.5 - 20.0) / 19.0);
-            let d2 = dx * dx + dy * dy;
-            if d2 > 1.0 {
-                continue;
-            }
-            let l = (-dx * 0.5 - dy * 0.7 + (1.0 - d2).sqrt() * 0.6).clamp(0.0, 1.0);
-            seg.put(x, y, pick(&skin, l), (1.0 - d2).sqrt() * 6.0);
-            // Saugnäpfe: runde helle Ringe auf der Unterseite
-            for (sx, sy) in [(-0.45f32, 0.5f32), (0.1, 0.62), (0.55, 0.42)] {
-                let r = ((dx - sx).powi(2) + (dy - sy).powi(2)).sqrt();
-                if r < 0.17 {
-                    seg.set(x, y, if r < 0.08 { hex(0x6A4450) } else { hex(0xC8A8A0) });
-                }
-            }
-        }
-    }
-    seg.outline(true, 0.7);
+    let seg = tentacle_seg(0x3A2236, 0x6A4450, 0xC8A8A0);
     let mut sg = a.add("t:seg", &seg, n / 2, n / 2);
     if !slot.upload(frame, &a) {
         return;
@@ -163,6 +177,35 @@ pub fn build_title(art: &mut Art, frame: &mut Frame) {
         art.ships.remove(&old);
     }
     art.boss_loaded = Some("title".into());
+}
+
+/// Krakenarm-Glied (40×40): glänzende Haut, Saugnäpfe auf der Unterseite.
+fn tentacle_seg(skin: u32, cup_in: u32, cup: u32) -> Canvas {
+    let n = 40;
+    let mut seg = Canvas::new(n, n);
+    let skin = ramp_n(hex(skin), 6, 1.0);
+    for y in 0..n {
+        for x in 0..n {
+            let (dx, dy) = ((x as f32 + 0.5 - 20.0) / 19.0, (y as f32 + 0.5 - 20.0) / 19.0);
+            let d2 = dx * dx + dy * dy;
+            if d2 > 1.0 {
+                continue;
+            }
+            let l = (-dx * 0.5 - dy * 0.7 + (1.0 - d2).sqrt() * 0.6).clamp(0.0, 1.0);
+            seg.put(x, y, pick(&skin, l), (1.0 - d2).sqrt() * 6.0);
+            if l > 0.7 {
+                seg.spec(x, y, 140);
+            }
+            for (sx, sy) in [(-0.45f32, 0.5f32), (0.1, 0.62), (0.55, 0.42)] {
+                let r = ((dx - sx).powi(2) + (dy - sy).powi(2)).sqrt();
+                if r < 0.17 {
+                    seg.set(x, y, if r < 0.08 { hex(cup_in) } else { hex(cup) });
+                }
+            }
+        }
+    }
+    seg.outline(true, 0.7);
+    seg
 }
 
 /// Eigenes Schiff mit den Ausbauten neu zeichnen (9 Kurse).
@@ -728,6 +771,8 @@ pub fn build(frame: &mut Frame) -> Art {
     let ships = HashMap::new();
     let wp = cr::whirlpool();
     a.add("fx:whirl", &wp, wp.w / 2, wp.h / 2);
+    // Krakenarme des Strudels: dunkelgrün, Saugnäpfe blassgrün
+    a.add("k:seg", &tentacle_seg(0x16301E, 0x2A4A30, 0x9AB894), 20, 20);
     for i in 0..2 {
         let c = cr::whirl_foam(i);
         a.add(&format!("fx:whirlFoam{i}"), &c, c.w / 2, c.h / 2);

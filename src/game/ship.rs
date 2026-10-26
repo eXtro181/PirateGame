@@ -212,12 +212,15 @@ impl Game {
         }
         let st = self.input.stick;
         if st.length() > 0.5 {
-            let want = st.x.atan2(-st.y);
+            // die Hände der Kehrseite halten das Spiegelbild: Steuer verkehrt
+            let inv = if self.end.invert_t > 0.0 { -1.0 } else { 1.0 };
+            let want = (st.x * inv).atan2(-st.y);
             h.h = turn_to(h.h, want, 1.6 * dt * (1.0 + self.save.ship_speed as f32 * 0.04));
             self.ship.sail = self.ship.sail.max(2);
         } else {
             let ax = self.input.axis();
-            h.h = wrap(h.h + ax.x * dt * (0.7 + h.v / 120.0) * (1.0 + self.save.ship_speed as f32 * 0.04));
+            let inv = if self.end.invert_t > 0.0 { -1.0 } else { 1.0 };
+            h.h = wrap(h.h + ax.x * inv * dt * (0.7 + h.v / 120.0) * (1.0 + self.save.ship_speed as f32 * 0.04));
         }
         let target = self.ship.sail as f32 * 60.0 * if self.shanty_t > 0.0 { 1.35 } else { 1.0 } * (1.0 + self.save.ship_speed as f32 * 0.06);
         h.v += (target - h.v) * (dt * 0.8).min(1.0);
@@ -250,7 +253,7 @@ impl Game {
     }
 
     pub fn ship_damage(&mut self, n: f32) {
-        let n = n * (1.0 - self.save.ship_def as f32 * 0.04);
+        let n = n * (1.0 - self.save.ship_def as f32 * 0.04) * ng_dmg(&self.save);
         self.ship.hp -= n;
         self.ship.hull.flash = 0.12;
         self.shake(5.0);
@@ -572,6 +575,53 @@ impl Game {
                 }
                 f.glow(wx, wy, 26.0, [95, 242, 200, 160]);
                 f.light(LightDef { x: wx, y: wy, z: 20.0, r: 280.0, col: [0.35, 1.0, 0.82], flicker: 0.3 });
+                self.draw_whirl_arms(art, f);
+            }
+        }
+    }
+
+    /// Acht dunkelgrüne Krakenarme rund um den offenen Strudel. Sie wiegen sich im Wasser und
+    /// greifen zu, wenn der Spieler vom Steg springt (oder das Schiff hineinfährt).
+    fn draw_whirl_arms(&self, art: &Art, f: &mut Frame) {
+        let Some(seg) = art.map.get("k:seg") else { return };
+        let (wx, wy) = self.world.whirlpool;
+        let t = self.t;
+        // Ziel und Fortschritt des Zugriffs
+        let (grab, gx, gy, gz) = match self.cutscene {
+            Some(Cut::Grab { t: ct, moved: false }) => (ct, self.player.a.x, self.player.a.y, 26.0),
+            Some(Cut::Whirl { t: ct, moved: false }) => (ct + 0.6, self.ship.hull.x, self.ship.hull.y, 40.0),
+            _ => (-1.0, 0.0, 0.0, 0.0),
+        };
+        for i in 0..8 {
+            let fi = i as f32;
+            let a = fi / 8.0 * TAU + 0.2;
+            let (bx, by) = (wx + a.cos() * 118.0, wy + a.sin() * 86.0);
+            // Ruhelage: Spitze nach außen gebogen, wiegt sich
+            let sway = (t * 0.9 + fi * 1.7).sin();
+            let ra = a + sway * 0.25;
+            let (mut tx, mut ty, mut tz) = (bx + ra.cos() * (70.0 + sway * 20.0), by + ra.sin() * (52.0 + sway * 14.0), 70.0 + (t * 1.3 + fi).sin() * 30.0);
+            let mut arch = 110.0 + (fi * 2.3).sin() * 30.0;
+            if grab >= 0.0 {
+                let k = ((grab - 0.15 - fi * 0.05) / 0.8).clamp(0.0, 1.0);
+                let k = k * k * (3.0 - 2.0 * k);
+                let wa = fi / 8.0 * TAU;
+                tx += (gx + wa.cos() * 12.0 - tx) * k;
+                ty += (gy + wa.sin() * 7.0 - ty) * k;
+                tz += (gz + (fi - 3.5) * 5.0 - tz) * k;
+                arch += 40.0 * k;
+            }
+            let n = 32;
+            let (px, py) = (-(ty - by), tx - bx);
+            let pl = px.hypot(py).max(1.0);
+            f.glow(bx, by, 22.0, [150, 210, 170, 70]);
+            for k in 0..n {
+                let s = k as f32 / (n - 1) as f32;
+                let wave = (t * 1.6 + fi * 1.3 - s * 4.0).sin() * 16.0 * s * (1.0 - s) * 4.0;
+                let x = bx + (tx - bx) * s + px / pl * wave;
+                let gy2 = by + (ty - by) * s + py / pl * wave * 0.6;
+                let z = tz * s + arch * (s * std::f32::consts::PI).sin();
+                let sc = 0.95 * (1.0 - s) + 0.25;
+                f.sprite_z(seg, x, gy2 - z, gy2 + s * 2.0, SprOpt { scale: sc, ev: z, ..Default::default() });
             }
         }
     }

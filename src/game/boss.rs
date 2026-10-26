@@ -92,6 +92,8 @@ pub struct Boss {
     pub monster: &'static str,
     pub sheet: &'static str,
     pub h: f32,
+    /// der Ertrunkene trinkt aus deinen Flaschen (verbleibende Schlucke)
+    pub drinks: u8,
 }
 
 fn part(el: &str) -> &'static str {
@@ -119,21 +121,21 @@ fn table(mega: bool, phase: i32, el: &str) -> Vec<(AK, f32, AO)> {
     let s = S;
     if mega {
         return if phase == 1 {
-            // Geisterkapitän: Säbelfolgen, Seelenschüsse, Geisterhände, Sturmangriff
+            // der Ertrunkene: kämpft wie du – Hiebfolgen, Rollangriff, Geisterblitze, Wasserregen
             vec![
                 (Combo, 4.0, AO { n: 3, reach: 40.0 * s, ..o() }),
-                (Volley, 2.0, AO { n: 5, spread: 0.8, ..o() }),
-                (Rain, 2.0, AO { n: 6, r: 18.0 * s, ..o() }),
-                (Dash, 2.0, AO { len: 190.0 * s, ..o() }),
+                (Dash, 2.5, AO { len: 170.0 * s, ..o() }),
+                (Volley, 2.0, AO { n: 3, spread: 0.5, ..o() }),
+                (Rain, 1.5, AO { n: 6, r: 18.0 * s, ..o() }),
             ]
         } else {
-            // brennender Skelettkapitän: vier Säbel, Wirbel, Feuerring, Glutregen
+            // die andere Seite: schneller, gespiegelt, Flutwelle
             vec![
-                (Combo, 4.0, AO { n: 4, reach: 46.0 * s, fast: true, ..o() }),
-                (Sweep, 3.0, AO { reach: 96.0 * s, ..o() }),
-                (Nova, 2.0, AO { r: 90.0 * s, ..o() }),
+                (Combo, 4.0, AO { n: 4, reach: 44.0 * s, fast: true, ..o() }),
+                (Sweep, 2.5, AO { reach: 90.0 * s, ..o() }),
+                (Nova, 2.0, AO { r: 86.0 * s, slow: true, ..o() }),
                 (Rain, 2.0, AO { n: 9, r: 20.0 * s, ..o() }),
-                (Dash, 2.0, AO { len: 210.0 * s, ..o() }),
+                (Dash, 2.0, AO { len: 200.0 * s, ..o() }),
             ]
         };
     }
@@ -157,7 +159,7 @@ fn table(mega: bool, phase: i32, el: &str) -> Vec<(AK, f32, AO)> {
 impl Boss {
     pub fn new(key: &'static str, ar: &crate::world::Arena) -> Self {
         let mega = key == "mega";
-        let (name, hp, el, sheet) = if mega { (MEGA_NAME.to_string(), MEGA_HP, "ice", "ghostCaptain") } else {
+        let (name, hp, el, sheet) = if mega { (MEGA_NAME.to_string(), MEGA_HP, "ice", "drowned") } else {
             let k = king(key);
             (k.name.to_string(), k.hp, k.key, k.sheet)
         };
@@ -185,6 +187,7 @@ impl Boss {
             monster: "",
             sheet,
             h: 100.0,
+            drinks: 2,
         };
         b.set_body(true);
         b
@@ -226,8 +229,9 @@ impl Boss {
         self.el = if self.mega { "ice" } else { king(self.key).key };
         self.name = if self.mega { MEGA_NAME.into() } else { king(self.key).name.into() };
         if self.mega {
-            self.sheet = "ghostCaptain";
+            self.sheet = "drowned";
         }
+        self.drinks = 2;
         self.atk = None;
         self.set_body(true);
     }
@@ -238,10 +242,13 @@ impl Boss {
 
 impl Game {
     pub fn boss_activate(&mut self, i: usize) {
+        let k = ng_hp(&self.save);
         let b = &mut self.bosses[i];
         if b.state != BS::Dormant {
             return;
         }
+        b.max_hp = if b.mega { MEGA_HP } else { king(b.key).hp } * k;
+        b.hp = b.max_hp;
         b.hidden = false;
         b.state = BS::Intro;
         b.st_t = 0.0;
@@ -313,13 +320,13 @@ impl Game {
                 if rnd() < 0.6 {
                     self.fx.rise(part(b.el), b.a.x + rr(-40.0, 40.0), b.a.y, 2, 20.0, Some(kind_col(part(b.el))));
                 }
-                let morph = if b.mega { b.sheet != "burningCaptain" } else { b.human };
+                let morph = if b.mega { b.sheet != "drowned2" } else { b.human };
                 if b.st_t > 1.4 && morph {
                     if b.mega {
-                        // der Geisterkapitän fängt Feuer: Skelett mit vier Säbeln
-                        b.sheet = "burningCaptain";
+                        // die andere Seite: gespiegelt, kälter, schneller
+                        b.sheet = "drowned2";
                         b.name = MEGA_NAME2.into();
-                        b.el = "fire";
+                        b.el = "wind";
                     } else {
                         b.set_body(false);
                         b.name = king(b.key).monster.into();
@@ -330,7 +337,7 @@ impl Game {
                     self.fx.burst(part(b.el), b.a.x, b.a.y - 40.0, 50, BurstOpt { speed: Some(280.0), col: Some(kind_col(part(b.el))), ..Default::default() });
                     self.fx.ring(b.a.x, b.a.y, 20.0, 240.0, 0.8, el_col(b.el));
                     let n = b.name.clone();
-                    self.ui.banner(&n, if b.mega { "Die vierte Gestalt" } else { "Die zweite Gestalt" }, "boss", 2.6);
+                    self.ui.banner(&n, if b.mega { "Der Kampf läuft kopfüber weiter" } else { "Die zweite Gestalt" }, "boss", 2.6);
                 }
                 if b.st_t > 2.6 {
                     Self::boss_idle(b);
@@ -345,6 +352,20 @@ impl Game {
             return;
         }
         match b.state {
+            BS::Idle if b.mega && b.drinks > 0 && b.hp < b.max_hp * if b.phase == 1 { 0.62 } else { 0.3 } && b.st_t > 0.4 => {
+                // der Ertrunkene trinkt aus deinen Flaschen
+                b.drinks -= 1;
+                b.hp = (b.hp + b.max_hp * 0.18).min(b.max_hp);
+                b.a.anim = "drink";
+                b.a.frame = 0.0;
+                b.st_t = -0.6;
+                if self.player.flasks > 0 {
+                    self.player.flasks -= 1;
+                }
+                self.fx.rise("heal", b.a.x, b.a.y, 24, 20.0, None);
+                self.sfx("drink");
+                self.ui.toast("Er trinkt aus deiner Flasche.");
+            }
             BS::Idle => {
                 let d = b.a.dist(px, py);
                 let want = if b.human { 60.0 } else if b.mega { 140.0 } else { 100.0 };
@@ -744,7 +765,7 @@ impl Game {
             if b.mega {
                 b.human = true;
             }
-            let t = if b.mega { "Moloch erwacht".to_string() } else { format!("{} verwandelt sich …", b.name.split(',').next().unwrap_or("")) };
+            let t = if b.mega { "Die Spiegelung kippt".to_string() } else { format!("{} verwandelt sich …", b.name.split(',').next().unwrap_or("")) };
             self.sfx("roar");
             self.shake(8.0);
             self.ui.banner(&t, "", "boss", 1.6);
@@ -772,9 +793,9 @@ impl Game {
         self.flash([1.0, 1.0, 1.0], 1.0);
         self.shake(20.0);
         self.sfx("death");
-        let pearls = if mega { MEGA_PEARLS } else { king(key).pearls };
+        let pearls = if mega { MEGA_PEARLS } else { king(key).pearls } * (1.0 + 0.25 * self.save.ng as f32);
         if mega {
-            self.ui.banner("DAS ENDE DER WELT", "Kapitän Schwarzwasser ist gefallen. Die See wird still.", "big", 5.0);
+            self.ui.banner("DIE KEHRSEITE IST STILL", "Du hast dich selbst wiedergefunden.", "big", 5.0);
         } else {
             let n = king(key).name.split(',').next().unwrap_or("").to_string();
             self.ui.banner("SEELE ERBEUTET", &n, "big", 5.0);
@@ -782,6 +803,13 @@ impl Game {
         self.gain_pearls(pearls as i64, Some((x, y)));
         if mega {
             self.save.megalodon = true;
+            self.save.end_naval = true;
+            self.end.state = crate::game::endboss::EP::Done;
+            if !self.save.lit_fires.iter().any(|f| f == "ende") {
+                self.save.lit_fires.push("ende".into());
+            }
+            self.save.last_fire = "ende".into();
+            self.light_fires();
             self.timers.push((6.0, Timed::Ending));
         } else {
             self.save.kings.insert(key.into(), true);

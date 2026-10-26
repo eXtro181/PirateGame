@@ -272,6 +272,14 @@ fn fs_gbuf(v: VOut) -> GOut {
         rgb *= 0.84 + m1 * 0.3 + (m2 - 0.5) * 0.1;
         rgb *= mix(vec3<f32>(1.05, 1.0, 0.93), vec3<f32>(0.95, 1.0, 1.06), smoothstep(0.3, 0.7, m2));
     }
+    if ((flags & 64u) != 0u) {
+        // Spiegelung: die Wasseroberfläche bleibt, das Bild schimmert hindurch
+        var w = water(v.world);
+        let k = v.col.a * 0.85;
+        w.alb = vec4<f32>(mix(w.alb.rgb, rgb, k), 1.0);
+        w.emi = vec4<f32>(w.emi.rgb * (1.0 - k * 0.6) + glow * 0.7, 1.0);
+        return w;
+    }
     let elev = n.b * 510.0 + v.prm.x;
     o.alb = vec4<f32>(rgb, 1.0);
     o.nrm = vec4<f32>(n.rg, clamp(elev / 510.0, 0.0, 1.0), n.a);

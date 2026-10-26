@@ -32,6 +32,8 @@ pub enum Cmd {
     Cheat,
     ShipMenu,
     ShipUp(usize),
+    /// Neues Spiel+ beginnen
+    NewGamePlus,
 }
 
 #[derive(Clone)]
@@ -121,11 +123,13 @@ pub fn dialog_for(g: &mut Game, ni: usize) -> Script {
             } else {
                 pages(&["Hörst du es? Der See singt. Er wird sich öffnen, und du wirst fallen. Fürchte dich nicht."])
             },
-            choices: vec![
-                ch("Stufe aufsteigen", Cmd::LevelMenu),
-                ch("Über das Säbelfeuer", Cmd::TalkPages(pages(&["Das Feuer brennt auf den Klingen aller Kapitäne, die hier fielen. Es verlöscht nie ganz.", "Solange es brennt, kehrst du zurück. Wie wir alle. Das ist der Fluch der Glutwacht – und ihr Trost."]))),
-                bye,
-            ],
+            choices: [
+                vec![ch("Stufe aufsteigen", Cmd::LevelMenu)],
+                if s.megalodon { vec![ch(&crate::game::ng_label(s.ng + 1), Cmd::NewGamePlus)] } else { vec![] },
+                vec![ch("Über das Säbelfeuer", Cmd::TalkPages(pages(&["Das Feuer brennt auf den Klingen aller Kapitäne, die hier fielen. Es verlöscht nie ganz.", "Solange es brennt, kehrst du zurück. Wie wir alle. Das ist der Fluch der Glutwacht – und ihr Trost."]))),
+                bye],
+            ]
+            .concat(),
         },
         "smith" => {
             let lvl = s.weapon_level;
