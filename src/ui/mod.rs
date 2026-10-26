@@ -3,5 +3,6 @@
 pub mod hud;
 pub mod menu;
 pub mod text;
+pub mod title;
 pub mod textinput;
 pub mod touch;

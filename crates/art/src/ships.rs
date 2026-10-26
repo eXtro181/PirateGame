@@ -64,6 +64,15 @@ pub fn ship_frame(style: &str, k: usize, u: Upg) -> Canvas {
     render_yaw(&r, h + PI, w, hh, foot)
 }
 
+/// Großes Einzelbild für das Titelbild (schräg von vorn, Maßstab frei).
+pub fn title_ship(scale: f32, w: i32, h: i32, foot: i32) -> Canvas {
+    let mut r = Rig::new();
+    build(&mut r, "black", Upg::default());
+    r.water = Some(-0.5);
+    r.scale(scale);
+    render_yaw(&r, 2.5 * TAU / 16.0 + PI, w, h, foot)
+}
+
 /// Das Schiffsmodell (ohne Maßstab und Wasserlinie), z. B. für Wracks.
 pub fn ship_rig(style: &str) -> Rig {
     let mut r = Rig::new();
@@ -184,6 +193,25 @@ fn design(s: &str, u: Upg) -> Design {
             trim: 0xC8A048,
             flag: 0x14161C,
             lamp: 0xD8E4F0,
+        },
+        "black" => Design {
+            l: 62.0,
+            b: 19.0,
+            d: 20.0,
+            castle: (15.0, 13.0),
+            fore: 8.0,
+            masts: vec![m(30.0, 92.0, 26.0, 3), m(2.0, 112.0, 30.0, 3), m(-30.0, 86.0, 22.0, 2)],
+            sail: Sail::Torn,
+            ports: 8,
+            hull: 0x0C0C10,
+            hull_pat: Pat::Planks(2.8),
+            wale: 0x6A1A10,
+            deck: 0x1A1416,
+            sailc: 0x16141A,
+            sail_pat: Pat::Spots(3.4),
+            trim: 0x8A6A3A,
+            flag: 0x050506,
+            lamp: 0xFF8A3A,
         },
         "ghost" => Design {
             l: 62.0,
@@ -695,6 +723,39 @@ fn boss_decor(r: &mut Rig, el: &str, d: &Design) {
                 let tip = add(hd, v(side * 18.0, -10.0, 12.0));
                 r.tri(s0, tip, add(hd, v(side * 6.0, -8.0, -2.0)), raven);
                 r.tri(s0, add(hd, v(side * 12.0, -3.0, 10.0)), tip, raven);
+            }
+        }
+        "black" => {
+            // Titelschiff: schwarze Galeone in Flammen, Glut in den Nähten, Totenkopf-Galion
+            let flame = r.mat(mat(0xFF8A2A).glow(2.0).bias(0.45).soft());
+            let ember = r.mat(mat(0xC2341E).glow(1.4).bias(0.2));
+            let bone = r.mat(mat(0xD8CFB8).spec(60));
+            for k in 0..2 {
+                let z = dz - 4.0 - k as f32 * 5.0;
+                for side in [-1.0f32, 1.0] {
+                    let mut pts = vec![];
+                    let mut y = -l * 0.7;
+                    while y < l * 0.75 {
+                        let hw = hull_half(d, y, z);
+                        if hw > 1.0 {
+                            pts.push(v(side * (hw + 0.1), y, z + ((y * 0.27 + k as f32).sin() * 1.4)));
+                        }
+                        y += 3.0;
+                    }
+                    r.tube(&pts, 0.5, 0.5, ember);
+                }
+            }
+            for i in 0..22 {
+                let y = -l * 0.6 + i as f32 * (l * 1.25 / 22.0);
+                let side = if i % 2 == 0 { -1.0 } else { 1.0 };
+                let hw = hull_half(d, y, dz);
+                let hgt = 4.0 + ((i * 7) % 6) as f32;
+                r.spike(v(side * hw * 0.9, y, dz + 1.5), v(side * hw * 0.85, y + 0.5, dz + 1.5 + hgt), 2.0, flame);
+            }
+            let hd = v(0.0, l * 1.18, bow_z + 1.0);
+            r.ell_dir(hd, v(0.0, 1.0, 0.3), v(5.0, 6.0, 5.4), bone);
+            for sx in [-2.0f32, 2.0] {
+                r.dot(add(hd, v(sx, 5.4, 1.0)), 0xFF8A3A, 2.4, 2);
             }
         }
         "ghost" => {

@@ -251,6 +251,16 @@ fn main() {
             eprintln!("Schiffe: {:?}", t.elapsed());
             save_lit(&bg, &format!("{out}/ships.png"), 1);
         }
+        "title" => {
+            let t = std::time::Instant::now();
+            let c = sw_art::ships::title_ship(3.2, 760, 700, 150);
+            eprintln!("Titelschiff: {:?}", t.elapsed());
+            let mut bg = Canvas::new(800, 720);
+            let water = sw_art::color::ramp_n(sw_art::color::hex(0x1E3A4A), 6, 1.0);
+            for y in 0..bg.h { for x in 0..bg.w { let i = bg.idx(x, y); bg.col[i] = water[2]; } }
+            bg.place(&c, 400, 640, c.w / 2, c.h - 150);
+            save_lit(&bg, &format!("{out}/title.png"), 1);
+        }
         "heads" => {
             use sw_art::buildings::*;
             let mut bg = bake_chunk(&Flat(Biome::Fire, Mat::Ash), &mut mats, &en, 0, 0, 1280).crop(0, 0, 640, 220);

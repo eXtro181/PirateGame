@@ -1455,7 +1455,7 @@ impl Game {
                 "Du hast es getan. Das Wasser am Ende der Welt ist still.".into(),
                 "Die Throne der Glutwacht haben ihre Gesichter wieder, und die Wracks ruhen im See. Sie werden heimfahren, eines nach dem anderen.".into(),
                 "Und du? Die See hat dich zurückgegeben. Vielleicht, damit du ihr dies hier zurückgibst.".into(),
-                "Danke fürs Spielen von Schwarzwasser.".into(),
+                "Danke fürs Spielen von Throne of the Drowned.".into(),
             ],
             vec![ch("Weitersegeln", Cmd::EndTalk)],
         );

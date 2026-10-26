@@ -119,6 +119,52 @@ impl DynSlot {
     }
 }
 
+/// Titelbild: großes brennendes Schiff und ein Krakenarm-Glied (im Boss-Bereich).
+pub fn build_title(art: &mut Art, frame: &mut Frame) {
+    if art.boss_loaded.as_deref() == Some("title") {
+        return;
+    }
+    let slot = art.boss_slot;
+    let mut a = slot.atlas();
+    let c = sw_art::ships::title_ship(2.7, 660, 600, 130);
+    let mut ship = a.add_trim("t:ship", &c, c.w / 2, c.h - 130);
+    // Krakenarm-Glied: dunkle, glänzende Haut mit hellen Saugnäpfen auf der Unterseite
+    let n = 40;
+    let mut seg = Canvas::new(n, n);
+    let skin = ramp_n(hex(0x3A2236), 6, 1.0);
+    for y in 0..n {
+        for x in 0..n {
+            let (dx, dy) = ((x as f32 + 0.5 - 20.0) / 19.0, (y as f32 + 0.5 - 20.0) / 19.0);
+            let d2 = dx * dx + dy * dy;
+            if d2 > 1.0 {
+                continue;
+            }
+            let l = (-dx * 0.5 - dy * 0.7 + (1.0 - d2).sqrt() * 0.6).clamp(0.0, 1.0);
+            seg.put(x, y, pick(&skin, l), (1.0 - d2).sqrt() * 6.0);
+            // Saugnäpfe: runde helle Ringe auf der Unterseite
+            for (sx, sy) in [(-0.45f32, 0.5f32), (0.1, 0.62), (0.55, 0.42)] {
+                let r = ((dx - sx).powi(2) + (dy - sy).powi(2)).sqrt();
+                if r < 0.17 {
+                    seg.set(x, y, if r < 0.08 { hex(0x6A4450) } else { hex(0xC8A8A0) });
+                }
+            }
+        }
+    }
+    seg.outline(true, 0.7);
+    let mut sg = a.add("t:seg", &seg, n / 2, n / 2);
+    if !slot.upload(frame, &a) {
+        return;
+    }
+    slot.fix(&mut ship);
+    slot.fix(&mut sg);
+    art.map.insert("t:ship".into(), ship);
+    art.map.insert("t:seg".into(), sg);
+    if let Some(old) = art.boss_loaded.take() {
+        art.ships.remove(&old);
+    }
+    art.boss_loaded = Some("title".into());
+}
+
 /// Eigenes Schiff mit den Ausbauten neu zeichnen (9 Kurse).
 pub fn build_ship(art: &mut Art, frame: &mut Frame, u: sw_art::ships::Upg) {
     if art.ship_upg == Some(u) {
@@ -394,7 +440,7 @@ pub fn build(frame: &mut Frame) -> Art {
         a.add(&format!("ui:comp{f}"), &sw_art::ui::compass(f), 0, 0);
     }
     a.add("ui:emblem", &sw_art::ui::emblem(), 0, 0);
-    a.add("ui:logo", &sw_art::ui::logo("SCHWARZWASSER"), 0, 0);
+    a.add("ui:logo", &sw_art::ui::logo("THRONE OF THE DROWNED"), 0, 0);
     a.add("ui:corner", &sw_art::ui::panel_corner(), 0, 0);
 
     // ---------------------------------------------------------------- Bäume

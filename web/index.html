@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#0B1016">
-<title>Schwarzwasser</title>
+<title>Throne of the Drowned</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icon-180.png">
 <style>
@@ -18,7 +18,7 @@ canvas#bevy { display: block; width: 100%; height: 100%; outline: none; image-re
 </head>
 <body>
 <div id="wrap"><canvas id="bevy" tabindex="0"></canvas></div>
-<div id="load"><b>SCHWARZWASSER</b><span id="loadmsg">Die Gezeiten erwachen …</span></div>
+<div id="load"><b>THRONE OF THE DROWNED</b><span id="loadmsg">Die Gezeiten erwachen …</span></div>
 <script type="module">
 import init from './schwarzwasser.js';
 init().catch(e => { if (!String(e).includes('Using exceptions for control flow')) { document.getElementById('loadmsg').textContent = 'Fehler: ' + e; console.error(e); } });

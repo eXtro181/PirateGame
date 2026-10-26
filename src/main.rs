@@ -1,4 +1,4 @@
-//! Schwarzwasser – Soulslike-Piratenspiel in HD-Pixelart (Rust/Bevy, eigener wgpu-Renderer).
+//! Throne of the Drowned – Soulslike-Piratenspiel in HD-Pixelart (Rust/Bevy, eigener wgpu-Renderer).
 //! Alles – Grafik, Welt, Musik – wird beim Start aus Code erzeugt.
 
 mod art;
@@ -63,7 +63,7 @@ impl App {
                 DefaultPlugins
                     .set(WindowPlugin {
                         primary_window: Some(Window {
-                            title: "Schwarzwasser".into(),
+                            title: "Throne of the Drowned".into(),
                             canvas: Some("#bevy".into()),
                             fit_canvas_to_parent: true,
                             prevent_default_event_handling: true,
@@ -171,7 +171,8 @@ fn setup(world: &mut bevy::ecs::world::World) {
         profile: None,
         t: 0.0,
         fx: Fx::default(),
-        env: { let mut e = game::env::env("hain", false); e.sun = [e.sun[0] * 0.8, e.sun[1] * 0.6, e.sun[2] * 0.5]; e.ambient = [e.ambient[0] * 0.75, e.ambient[1] * 0.75, e.ambient[2] * 0.9]; e },
+        // Titelbild: nächtliches offenes Meer, das brennende Schiff ist die Hauptlichtquelle
+        env: { let mut e = game::env::env("kueste", true); e.sun = [e.sun[0] * 0.45, e.sun[1] * 0.4, e.sun[2] * 0.45]; e.ambient = [e.ambient[0] * 0.6, e.ambient[1] * 0.6, e.ambient[2] * 0.7]; e.fog_k = 0.16; e },
         params,
     };
     let mut art = art;
@@ -421,15 +422,16 @@ fn tick(
                 app.input.mouse = starts[0].1;
                 app.input.click = true;
             }
-            // Langsamer Kameraflug über die Glutwacht
+            // Titelbild: das brennende schwarze Schiff im Meer, umschlungen von Krakenarmen
+            art::build_title(art, f);
             if let Some((w, v)) = app.title.as_mut() {
-                let hub = w.fires.iter().find(|x| x.id == "hain").map(|x| (x.x, x.y)).unwrap_or((5000.0, 3600.0));
                 let t = app.t * 0.05;
-                let (cx, cy) = (hub.0 + t.sin() * 520.0, hub.1 - 260.0 + (t * 0.7).cos() * 220.0);
+                let (cx, cy) = (ui::title::TITLE_SEA.0 + t.sin() * 40.0, ui::title::TITLE_SEA.1 - 150.0 + (t * 0.7).cos() * 20.0);
                 f.set_camera(cx, cy);
                 game::env::apply(&app.env, &mut f.g, app.opt.dark, app.opt.exposure * 0.9, app.opt.fx_high);
-                v.draw(w, art, f, (cx, cy + 300.0), None, dt);
-                app.fx.ambient(dt, f.view(), 1, false);
+                v.draw(w, art, f, (cx, cy + 120.0), None, dt);
+                ui::title::draw(art, f, &mut app.fx, app.t, dt);
+                app.fx.ambient(dt, f.view(), 6, true);
                 app.fx.update(dt);
                 app.fx.draw(f);
                 let (vx, vy, vw, vh) = f.view();

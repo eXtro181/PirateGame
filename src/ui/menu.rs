@@ -630,7 +630,7 @@ impl Menu {
         let py = (h / 2.0 - ph / 2.0).round();
         Self::panel_title(f, art, px, py, pw, ph, "Credits");
         let lines = [
-            ("Schwarzwasser", col::GOLD),
+            ("Throne of the Drowned", col::GOLD),
             ("Ein Soulslike über Ertrunkene, Geisterkönige und das Ende der Welt.", col::BONE),
             ("", col::BONE),
             ("Alle Grafiken, Shantys und Klänge werden beim Start aus Code erzeugt:", col::BONE),
