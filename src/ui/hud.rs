@@ -66,6 +66,8 @@ impl Ui {
         self.dialog.is_some() || self.list.is_some() || self.map_open || self.legend_open
     }
     pub fn banner(&mut self, title: &str, sub: &str, kind: &'static str, dur: f32) {
+        // immer nur ein Banner: das neue ersetzt das alte (sonst überlagern sich die Schriften)
+        self.banners.clear();
         self.banners.push(Banner { title: title.into(), sub: sub.into(), kind, dur, t: 0.0 });
     }
     pub fn toast(&mut self, s: &str) {
@@ -387,7 +389,7 @@ impl Game {
                 self.draw_hud(f, art);
             }
         }
-        if self.zone_t > 0.0 {
+        if self.zone_t > 0.0 && self.ui.banners.is_empty() {
             let a = self.zone_t.min(4.0 - self.zone_t).min(1.0);
             text::draw(f, art, self.zone_key.def().name, w / 2.0, 14.0, text::a(col::BONE, a), Al::C, 2.0, true);
         }
