@@ -9,7 +9,7 @@ pub mod view;
 use std::collections::HashMap;
 use sw_art::noise::{Noise, Rng};
 use crate::game::data::shop_def;
-use sw_art::terrain::{Biome, EdgeNoise, Mat, TerrainMap, BANK_PX, FACE_PX, FACE_ROWS, RIM_PX};
+use sw_art::terrain::{face_px, Biome, EdgeNoise, Mat, TerrainMap, BANK_PX, FACE_ROWS, RIM_PX};
 
 pub const TS: i32 = 32;
 pub const MW: i32 = 560;
@@ -468,22 +468,25 @@ impl World {
         if inb(tx, ty) && self.stairs[idx(tx, ty)] {
             return (l, true);
         }
-        // Wand nach Süden
+        // Wand bzw. Hang nach Süden
+        let fpx = face_px(if inb(tx, ty) { self.biome[idx(tx, ty)] } else { Biome::Coast });
         let mut d = 3;
-        while d <= FACE_PX {
+        while d <= fpx {
             if self.lpx(px, py + d) < l {
                 return (l, false);
             }
             d += 6;
         }
-        if self.lpx(px, py + FACE_PX) < l {
+        if self.lpx(px, py + fpx) < l {
             return (l, false);
         }
         // Böschung seitlich, Kante oben
-        for d in [3, 8, 13, BANK_PX - 2] {
+        let mut d = 3;
+        while d < BANK_PX {
             if self.lpx(px - d, py) < l || self.lpx(px + d, py) < l {
                 return (l, false);
             }
+            d += 6;
         }
         for d in [3, 7, RIM_PX - 2] {
             if self.lpx(px, py - d) < l {
@@ -1777,7 +1780,12 @@ impl World {
                 if !self.stairs[i] || !self.cliff[i] {
                     continue;
                 }
-                for oy in [-1, 1] {
+                // Naturhänge sind tiefer als die Mauern: Weg reicht zwei Reihen höher
+                let up = if self.biome[i] == Biome::Hub { -1 } else { -2 };
+                for oy in [up, -1, 1] {
+                    if !inb(x, y + oy) {
+                        continue;
+                    }
                     let j = idx(x, y + oy);
                     if !self.stairs[j] && !matches!(self.ground[j], Mat::Water | Mat::Abyss) {
                         add.push(j);
@@ -1812,7 +1820,7 @@ impl World {
                 let (px, py) = (p.x as i32, p.y as i32);
                 let l = self.lpx(px, py);
                 let mut bad = false;
-                for d in (2..FACE_PX).step_by(8) {
+                for d in (2..face_px(self.biome[idx(tx, ty)])).step_by(8) {
                     if self.lpx(px, py + d) < l {
                         bad = true;
                     }
@@ -2554,6 +2562,9 @@ impl TerrainMap for World {
     }
     fn stairs(&self, tx: i32, ty: i32) -> bool {
         inb(tx, ty) && self.stairs[idx(tx, ty)]
+    }
+    fn town(&self, tx: i32, ty: i32) -> bool {
+        self.in_settlement((tx * TS + TS / 2) as f32, (ty * TS + TS / 2) as f32)
     }
     fn lpx(&self, px: i32, py: i32) -> u8 {
         let (tx, ty) = (px.div_euclid(TS), py.div_euclid(TS));

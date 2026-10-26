@@ -515,8 +515,17 @@ impl Canvas {
                 r - 1.5
             }
         };
-        let gx = (sample(x + 1, y) - sample(x - 1, y)) * 0.5;
-        let gy = (sample(x, y + 1) - sample(x, y - 1)) * 0.5;
+        // am Bildrand einseitig ableiten (sonst Nähte zwischen Bodenstücken)
+        let grad = |a: (i32, i32), b: (i32, i32)| -> f32 {
+            match (self.inb(a.0, a.1), self.inb(b.0, b.1)) {
+                (true, true) => (sample(a.0, a.1) - sample(b.0, b.1)) * 0.5,
+                (true, false) => sample(a.0, a.1) - r,
+                (false, true) => r - sample(b.0, b.1),
+                _ => 0.0,
+            }
+        };
+        let gx = grad((x + 1, y), (x - 1, y));
+        let gy = grad((x, y + 1), (x, y - 1));
         let gx = gx.clamp(-2.5, 2.5) * k;
         let gy = gy.clamp(-2.5, 2.5) * k;
         let u = self.up[i] as f32 / 255.0;

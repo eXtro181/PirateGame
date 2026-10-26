@@ -186,12 +186,16 @@ fn sample_nrm(uv: vec2<f32>, layer: u32, chunk: bool) -> vec4<f32> {
         }
         let px = uv * dim - 0.5;
         let fr = fract(px);
-        let b = (floor(px) + 0.5) / dim;
+        // Bodenstücke liegen je in einer eigenen Ebene: am Rand nicht auf die Gegenseite greifen
+        let lo = 0.5 / dim;
+        let hi = 1.0 - lo;
+        let b = clamp((floor(px) + 0.5) / dim, lo, hi);
         let d = 1.0 / dim;
+        let b1 = clamp(b + d, lo, hi);
         let n00 = nrm_texel(b, layer, chunk).rg;
-        let n10 = nrm_texel(b + vec2<f32>(d.x, 0.0), layer, chunk).rg;
-        let n01 = nrm_texel(b + vec2<f32>(0.0, d.y), layer, chunk).rg;
-        let n11 = nrm_texel(b + d, layer, chunk).rg;
+        let n10 = nrm_texel(vec2<f32>(b1.x, b.y), layer, chunk).rg;
+        let n01 = nrm_texel(vec2<f32>(b.x, b1.y), layer, chunk).rg;
+        let n11 = nrm_texel(b1, layer, chunk).rg;
         let n = mix(mix(n00, n10, fr.x), mix(n01, n11, fr.x), fr.y);
         return vec4<f32>(n, c.b, c.a);
     }

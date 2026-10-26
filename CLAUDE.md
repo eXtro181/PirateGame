@@ -65,6 +65,11 @@ Kurzreferenz, damit neue Sitzungen sofort weiterarbeiten können. Bei Änderunge
 - **Fortschritt** (Taste I, Pause-Menü): Könige, Seeungeheuer, Crew, Strudel, Endkampf, Fahrt. **Debug-Menü** im Pause-Menü: Trophäen der Könige/Seeungeheuer und Crew (ohne Endboss).
 - **Leben**: neue Tiere (`critters.rs`: Krähen fliegen auf, Hühner/Katzen in Siedlungen, Strandkrabben, Schneehasen, Glühwürmchen, springende Fische, Wale auf hoher See), Fußspuren und Staub (`Fx::prints`, `Game::update_life`), Rauch aus Schornsteinen, Crew und Kapitän an Deck.
 
+## Hänge statt Wände (26.10. spät)
+- Außerhalb der Festung sind Ebenenkanten flache Naturhänge: Tiefe nach Süden `terrain::face_px(biome)` (Hub 96 = Mauer, sonst `SLOPE_PX` 136), seitlich `BANK_PX` 52, oben `RIM_PX` 16; gezeichnet von `hill_pixel` (Bodentextur läuft geneigt weiter, Ausbisse, `up` 35). Hub behält Mauern (`masonry_pixel`).
+- Treppen nur in Siedlungen (`TerrainMap::town` → `World::in_settlement`) und in der Festung; sonst zeichnen Treppenkacheln einen Naturweg im Gebietsstil (`path_pixel`: Schneepfad, Bohlen im Moor …), Ränder weich in den Hang gemischt. `extend_stairs` verlängert Wege außerhalb des Hubs zwei Reihen nach oben.
+- `Canvas::normal_at` leitet am Bildrand einseitig ab; `scene.wgsl::sample_nrm` klemmt die weiche Normalenmischung auf die Chunk-Ebene.
+
 ## Offene Punkte
 - Auf echter GPU und iPhone feinjustieren (Helligkeit, Bloom, Leistung), Balancing.
 - Alte JS-Profile (IndexedDB) werden nicht übernommen.

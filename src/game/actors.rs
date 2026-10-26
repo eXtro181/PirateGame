@@ -337,7 +337,7 @@ impl Game {
         }
         let mut d = 6.0;
         let mut left_own = false;
-        while d < 170.0 {
+        while d < 210.0 {
             let (qx, qy) = (x + dx * d, y + dy * d);
             let (tx, ty) = t(qx, qy);
             if !inb(tx, ty) {
