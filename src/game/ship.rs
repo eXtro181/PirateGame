@@ -189,7 +189,7 @@ impl Game {
             *r += dt;
             h.alpha = (*r / 1.6).min(1.0);
             if rnd() < 0.7 {
-                self.fx.burst("splash", h.x + rr(-60.0, 60.0), h.y, 2, BurstOpt { speed: Some(80.0), up: Some(120.0), ..Default::default() });
+                self.fx.burst("splash", h.x + rr(-84.0, 84.0), h.y, 2, BurstOpt { speed: Some(80.0), up: Some(120.0), ..Default::default() });
             }
             if *r > 1.8 {
                 self.ship.rise = None;
@@ -476,11 +476,14 @@ impl Game {
             let b = (h.bob.sin() * 2.0).round();
             let a = (h.alpha * 255.0) as u8;
             let fl = if h.flash > 0.0 { flags::FLASH } else { 0 } | if self.hover == Hover::Ship { flags::OUTLINE } else { 0 };
-            f.shadow(h.x, h.y + 4.0, 92.0, 26.0, 0.3);
+            f.shadow(h.x, h.y + 6.0, 129.0, 36.0, 0.3);
             f.sprite(&s, h.x, h.y + b, SprOpt { flip, tint: [255, 255, 255, a], flags: fl, ..Default::default() });
             // Crew an Deck, der Kapitän am Steuer (nur wenn man segelt)
             if self.sailing && h.alpha > 0.9 {
-                let (fx, fy) = (h.h.sin(), -h.h.cos() * 0.52);
+                // Stellplätze am gezeichneten Kurs (16 Stufen) ausrichten, nicht am stufenlosen:
+                // sonst drehen sie sich vor dem Rumpfbild weiter und wirken nachgezogen
+                let hd = h.dir16() as f32 * TAU / 16.0;
+                let (fx, fy) = (hd.sin(), -hd.cos() * 0.52);
                 let side_flip = fx < 0.0;
                 let mut deck: Vec<(&CharSheet, f32, f32)> = vec![(&art.player, -46.0, 0.0)];
                 for (i, el) in self.save.crew.iter().enumerate() {
@@ -495,11 +498,13 @@ impl Game {
                     }
                 }
                 for (sh, along, across) in deck {
+                    let (along, across) = (along * 1.4, across * 1.4);
                     let (x, y) = (h.x + fx * along * 1.5 - fy * across, h.y + fy * along * 1.5 + fx * across * 0.5);
-                    let z = 20.0 + b;
+                    // Deckshöhe fest, das Schaukeln wie beim Rumpf (gleiche Richtung)
+                    let z = 28.0;
                     let fr = ((self.t * 2.0 + along) as usize) % 4;
                     let spr = sh.get(1, 0, fr);
-                    f.sprite_z(&spr, x, y - z, h.y + 1.0 + along * 0.001, SprOpt { flip: side_flip, scale: 0.62, ev: z, tint: [255, 255, 255, a], ..Default::default() });
+                    f.sprite_z(&spr, x, y + b - z, h.y + 1.0 + along * 0.001, SprOpt { flip: side_flip, scale: 0.78, ev: z, tint: [255, 255, 255, a], ..Default::default() });
                 }
             }
             if self.sailing {
@@ -634,19 +639,26 @@ impl Game {
                 tz += (gz + (fi - 3.5) * 5.0 - tz) * k;
                 arch += 40.0 * k;
             }
-            let n = 32;
-            let (px, py) = (-(ty - by), tx - bx);
-            let pl = px.hypot(py).max(1.0);
             f.glow(bx, by, 22.0, [150, 210, 170, 70]);
-            for k in 0..n {
-                let s = k as f32 / (n - 1) as f32;
-                let wave = (t * 1.6 + fi * 1.3 - s * 4.0).sin() * 16.0 * s * (1.0 - s) * 4.0;
-                let x = bx + (tx - bx) * s + px / pl * wave;
-                let gy2 = by + (ty - by) * s + py / pl * wave * 0.6;
-                let z = tz * s + arch * (s * std::f32::consts::PI).sin();
-                let sc = 0.95 * (1.0 - s) + 0.25;
-                f.sprite_z(seg, x, gy2 - z, gy2 + s * 2.0, SprOpt { scale: sc, ev: z, ..Default::default() });
-            }
+            draw_tentacle(f, seg, (bx, by), (tx, ty, tz), arch, t * 1.6 + fi * 1.3, 0.95, [255, 255, 255, 255]);
         }
+    }
+}
+
+/// Ein Krakenarm aus Gliedern: vom Fuß im Wasser (bx, by) im Bogen zur Spitze (tx, ty, Höhe tz).
+pub fn draw_tentacle(f: &mut Frame, seg: &sw_art::atlas::Spr, b: (f32, f32), tip: (f32, f32, f32), arch: f32, ph: f32, thick: f32, tint: [u8; 4]) {
+    let (bx, by) = b;
+    let (tx, ty, tz) = tip;
+    let n = 32;
+    let (px, py) = (-(ty - by), tx - bx);
+    let pl = px.hypot(py).max(1.0);
+    for k in 0..n {
+        let s = k as f32 / (n - 1) as f32;
+        let wave = (ph - s * 4.0).sin() * 16.0 * s * (1.0 - s) * 4.0;
+        let x = bx + (tx - bx) * s + px / pl * wave;
+        let gy2 = by + (ty - by) * s + py / pl * wave * 0.6;
+        let z = tz * s + arch * (s * PI).sin();
+        let sc = thick * (1.0 - s) + 0.25 * thick / 0.95;
+        f.sprite_z(seg, x, gy2 - z, gy2 + s * 2.0, SprOpt { scale: sc, ev: z, tint, ..Default::default() });
     }
 }

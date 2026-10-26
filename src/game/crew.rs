@@ -5,7 +5,7 @@
 use super::actors::*;
 use super::fx::*;
 use super::*;
-use std::f32::consts::TAU;
+use std::f32::consts::{PI, TAU};
 
 #[derive(Default)]
 pub struct CrewGuns {
@@ -19,7 +19,8 @@ pub struct CrewGuns {
     pub kraken_cool: f32,
 }
 
-/// Der eigene Riesenkraken: steigt neben dem Ziel auf und schlägt mit den Tentakeln zu.
+/// Der eigene Kraken: kein Leib, nur acht grüne Tentakel, die im Kreis um das Ziel aus dem
+/// Wasser steigen und reihum auf das feindliche Schiff niederschlagen.
 pub struct Companion {
     pub x: f32,
     pub y: f32,
@@ -65,7 +66,8 @@ impl Game {
                 self.ui.toast(&format!("Der Kraken ruht noch {} s.", self.crew_guns.kraken_cool.ceil() as i32));
             } else if let Some((_, tx, ty)) = self.crew_target() {
                 let a = rnd() * TAU;
-                self.crew_guns.kraken = Some(Companion { x: tx + a.cos() * 110.0, y: ty + a.sin() * 70.0, t: 0.0, life: 14.0, hit: 1.6 });
+                let _ = a;
+                self.crew_guns.kraken = Some(Companion { x: tx, y: ty, t: 0.0, life: 14.0, hit: 1.6 });
                 self.crew_guns.kraken_cool = KRAKEN_COOL;
                 self.ui.banner("DER KRAKEN ERHEBT SICH", "Die Crew ruft ihren Verbündeten", "small", 2.4);
                 self.sfx("roar");
@@ -145,11 +147,11 @@ impl Game {
         k.life -= dt;
         k.hit -= dt;
         if let Some((t, tx, ty)) = self.crew_target() {
-            // nah am Ziel bleiben, schlagen
-            k.x += (tx + 100.0 - k.x) * (dt * 0.8).min(1.0);
-            k.y += (ty + 50.0 - k.y) * (dt * 0.8).min(1.0);
+            // der Tentakelkreis folgt dem Ziel; reihum schlägt ein Arm zu
+            k.x += (tx - k.x) * (dt * 1.5).min(1.0);
+            k.y += (ty - k.y) * (dt * 1.5).min(1.0);
             if k.hit <= 0.0 && k.life > 1.0 {
-                k.hit = 1.5;
+                k.hit = 0.9;
                 let dmg = 45.0 * (1.0 + self.save.ship_atk as f32 * 0.08);
                 self.hurt_target(t, dmg, Target::Player, HurtOpt::default());
                 self.fx.burst("splash", tx, ty, 24, BurstOpt { speed: Some(180.0), up: Some(260.0), ..Default::default() });
@@ -157,8 +159,9 @@ impl Game {
                 self.sfx("crash");
             }
         }
-        if rnd() < 0.4 {
-            self.fx.burst("splash", k.x + rr(-80.0, 80.0), k.y, 1, BurstOpt { speed: Some(60.0), up: Some(90.0), ..Default::default() });
+        if rnd() < 0.5 {
+            let a = rnd() * TAU;
+            self.fx.burst("splash", k.x + a.cos() * 170.0, k.y + a.sin() * 115.0, 1, BurstOpt { speed: Some(60.0), up: Some(90.0), ..Default::default() });
         }
         if k.life > 0.0 && self.sailing {
             self.crew_guns.kraken = Some(k);
@@ -170,13 +173,34 @@ impl Game {
     pub fn draw_crew(&self, art: &Art, f: &mut Frame) {
         if let Some(k) = &self.crew_guns.kraken {
             let rise = (k.t / 1.2).min(1.0).min(k.life / 1.0).max(0.0);
-            if let Some(sh) = art.chars.get("seaKraken") {
-                let striking = k.hit > 1.1;
-                let s = if striking { sh.get(0, anim_index("atk"), 3) } else { sh.get(0, 0, (k.t * 3.0) as usize) };
-                let cut = 1.0 - (0.35 + 0.45 * rise);
-                // verbündet: tief blaugrün getönt, mit Seelenlicht
-                f.sprite(&s, k.x, k.y + ((k.t * 1.5).sin() * 4.0).round(), SprOpt { tint: [150, 255, 225, (rise * 255.0) as u8], cut_bottom: cut, ..Default::default() });
-                f.light(LightDef { x: k.x, y: k.y, z: 80.0, r: 220.0, col: [0.3, 1.0, 0.8], flicker: 0.2 });
+            if let Some(seg) = art.map.get("k:seg") {
+                // welcher Arm gerade schlägt (alle 0,9 s der nächste)
+                let active = ((k.t / 0.9) as usize) % 8;
+                let strike = (k.t / 0.9).fract();
+                for i in 0..8 {
+                    let fi = i as f32;
+                    let a = fi / 8.0 * TAU + 0.3;
+                    let (bx, by) = (k.x + a.cos() * 170.0, k.y + a.sin() * 115.0);
+                    let sway = (k.t * 1.1 + fi * 1.7).sin();
+                    // Ruhe: Spitze hoch über dem Fuß, leicht nach innen geneigt
+                    let ra = a + PI + sway * 0.3;
+                    let (mut tx, mut ty, mut tz) = (bx + ra.cos() * 50.0, by + ra.sin() * 34.0, 120.0 + sway * 25.0);
+                    let mut arch = 60.0;
+                    if i == active {
+                        // ausholen (hoch), dann aufs Deck niederschlagen
+                        let (lift, slam) = if strike < 0.45 { (strike / 0.45, 0.0) } else { (1.0, ((strike - 0.45) / 0.25).min(1.0)) };
+                        tz += lift * 80.0 * (1.0 - slam);
+                        tx += (k.x - tx) * slam;
+                        ty += (k.y - ty) * slam;
+                        tz += (24.0 - tz) * slam;
+                        arch += 90.0 * slam;
+                    }
+                    let tz = tz * rise;
+                    let arch = arch * rise;
+                    f.glow(bx, by, 24.0, [120, 220, 150, (70.0 * rise) as u8]);
+                    super::ship::draw_tentacle(f, seg, (bx, by), (tx, ty, tz), arch, k.t * 1.8 + fi * 1.3, 1.05, [190, 255, 200, (rise * 255.0) as u8]);
+                }
+                f.light(LightDef { x: k.x, y: k.y, z: 80.0, r: 260.0, col: [0.3, 1.0, 0.55], flicker: 0.2 });
             }
         }
         if self.crew_guns.flame_on > 0.0 {

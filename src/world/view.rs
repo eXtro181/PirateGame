@@ -324,28 +324,30 @@ impl WorldView {
             }
         }
         self.draw_world_edge(w, frame, t);
-        // Wasserfälle
+        // Wasserfälle: Fall über den Hang (Bach und Becken sind Wasserkacheln), Gischt im Becken
         for wf in &w.waterfalls {
-            let x0 = (wf.tx * TS) as f32;
-            let y0 = ((wf.ty - 3) * TS) as f32;
-            if x0 > vx + vw + 50.0 || x0 + 200.0 < vx || y0 > vy + vh + 100.0 || y0 + 300.0 < vy {
+            let x0 = wf.x;
+            let wwid = (wf.w * TS) as f32;
+            if x0 > vx + vw + 50.0 || x0 + wwid + 50.0 < vx || wf.src > vy + vh + 100.0 || wf.bot + 60.0 < vy {
                 continue;
             }
-            let wwid = (wf.w * TS) as f32;
-            let h = (3 * TS) as f32;
-            // Fallstreifen (leuchtend weiß-türkis), animiert über Überlagerung
+            let q = |x: f32, y: f32, w: f32, h: f32, c: [u8; 4]| crate::gfx::Frame::quad_rect(x, y, w, h, c, modes::SOLID, 0);
+            // Fall über den Hang
+            let h = wf.bot - wf.top;
             for k in 0..(wwid as i32 / 4) {
-                let xx = x0 + k as f32 * 4.0;
+                let xx = x0 + 4.0 + k as f32 * 3.6 * (wwid - 8.0) / wwid;
                 let ph = (t * 3.0 + k as f32 * 0.7).fract();
-                let col = if k % 3 == 0 { [240, 252, 255, 230] } else { [140, 220, 230, 200] };
-                frame.over(crate::gfx::Frame::quad_rect(xx, y0 + ph * 8.0 - 8.0, 4.0, h + 8.0, col, modes::SOLID, 0), false);
+                let col = if k % 3 == 0 { [235, 250, 255, 230] } else { [130, 210, 225, 205] };
+                frame.over(q(xx, wf.top + ph * 8.0 - 8.0, 4.0, h + 8.0, col), false);
             }
+            // Kante oben schäumt
+            frame.over(q(x0 + 2.0, wf.top - 3.0, wwid - 4.0, 5.0, [230, 248, 255, 220]), false);
             // Gischt unten
-            for k in 0..8 {
+            for k in 0..10 {
                 let a = t * 2.0 + k as f32;
-                frame.glow(x0 + wwid * (k as f32 / 8.0) + a.sin() * 6.0, y0 + h + 6.0 + (a * 1.3).cos() * 4.0, 14.0, [220, 250, 255, 90]);
+                frame.glow(x0 + wwid * (k as f32 / 10.0) + a.sin() * 6.0, wf.bot + 8.0 + (a * 1.3).cos() * 4.0, 16.0, [220, 250, 255, 90]);
             }
-            frame.light(LightDef { x: x0 + wwid / 2.0, y: y0 + h + 20.0, z: 20.0, r: 120.0, col: [0.3, 0.6, 0.7], flicker: 0.0 });
+            frame.light(LightDef { x: x0 + wwid / 2.0, y: wf.bot + 20.0, z: 20.0, r: 120.0, col: [0.3, 0.6, 0.7], flicker: 0.0 });
         }
     }
 

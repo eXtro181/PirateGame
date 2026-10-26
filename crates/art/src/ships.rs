@@ -24,21 +24,21 @@ pub struct Upg {
     pub atk: u8,
 }
 
-/// Maßstab je Stil (eigenes Schiff +30 %, Bossschiffe +45 % gegenüber vorher).
+/// Maßstab je Stil (27.10.: alle Schiffe noch einmal +40 %).
 fn ship_scale(style: &str) -> f32 {
     if style == "player" {
-        1.5
+        2.1
     } else {
-        2.32
+        3.25
     }
 }
 
 /// Bildgröße und Fußpunkt (Schiffsmitte auf der Wasserlinie) je Stil.
 pub fn ship_size(style: &str) -> (i32, i32, i32) {
     if style == "player" {
-        (300, 300, 66)
+        (420, 420, 92)
     } else {
-        (500, 500, 104)
+        (700, 700, 146)
     }
 }
 

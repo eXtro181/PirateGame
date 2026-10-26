@@ -407,13 +407,13 @@ impl Game {
         match t {
             Target::Enemy(i) => self.enemies.get(i).filter(|e| e.valid && e.state != ES::Dead).map(|e| (e.a.x, e.a.y, e.a.hurt_r, e.body_y)),
             Target::Boss(i) => self.bosses.get(i).filter(|b| !b.dead() && !b.hidden).map(|b| (b.a.x, b.a.y, b.a.hurt_r, b.body_y)),
-            Target::Ghost(i) => self.ghosts.get(i).filter(|g| !g.dead()).map(|g| (g.hull.x, g.hull.y, 40.0, 40.0)),
+            Target::Ghost(i) => self.ghosts.get(i).filter(|g| !g.dead()).map(|g| (g.hull.x, g.hull.y, 56.0, 56.0)),
             Target::Shark(i) => self.sharks.get(i).filter(|s| !s.dead()).map(|s| (s.x, s.y, 22.0, 8.0)),
             Target::Kraken => (!self.kraken.dead() && !self.kraken.hidden()).then_some((self.kraken.x, self.kraken.y, 60.0, 50.0)),
             Target::SeaBoss(i) => self.sea_bosses.get(i).filter(|b| b.hittable()).map(|b| {
                 let (x, y) = b.pos();
                 if b.state == SS::Ship {
-                    (x, y, 48.0, 40.0)
+                    (x, y, 67.0, 56.0)
                 } else {
                     (x, y, 70.0, 50.0)
                 }
@@ -432,7 +432,7 @@ impl Game {
             },
             Target::Rope(i) => self.end.ropes.get(i).filter(|r| r.hp > 0.0).map(|r| (r.x, r.y, 26.0, 30.0)),
             Target::Player => Some((self.player.a.x, self.player.a.y, self.player.a.hurt_r, 28.0)),
-            Target::Ship => Some((self.ship.hull.x, self.ship.hull.y, 40.0, 20.0)),
+            Target::Ship => Some((self.ship.hull.x, self.ship.hull.y, 56.0, 28.0)),
         }
     }
     pub fn hurt_target(&mut self, t: Target, dmg: f32, _from: Target, o: HurtOpt) {

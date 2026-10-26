@@ -458,8 +458,8 @@ fn beast_sheet(a: &mut Atlas, key: &str) -> CharSheet {
 /// Höhe des reservierten Streifens für den Spieler-Bogen (volle Seitenbreite).
 const PLAYER_STRIP: i32 = 208;
 /// Höhe des Bereichs für das eigene Schiff (9 Kurse) und für den aktiven Seeboss.
-const SHIP_STRIP: i32 = 560;
-const BOSS_STRIP: i32 = 1260;
+const SHIP_STRIP: i32 = 1180;
+const BOSS_STRIP: i32 = 2040;
 
 /// Spieler-Bilderbogen in einem reservierten Streifen der ersten Atlasseite
 /// (wird bei Änderungen des Aussehens neu gebaut und nur dieser Ausschnitt hochgeladen).

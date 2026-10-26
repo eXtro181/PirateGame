@@ -257,6 +257,11 @@ pub struct Waterfall {
     pub tx: i32,
     pub ty: i32,
     pub w: i32,
+    /// nach dem Hochland an eine echte Hangkante gesetzt: linker Rand, Bachanfang, Kante, Fuß (px)
+    pub x: f32,
+    pub src: f32,
+    pub top: f32,
+    pub bot: f32,
 }
 #[derive(Clone, Debug)]
 pub struct Deco {
@@ -524,6 +529,8 @@ impl World {
         }
         self.compute_faces();
         self.auto_stairs();
+        self.compute_field();
+        self.place_waterfalls();
         self.compute_field();
         self.compute_shore();
         for z in ZONES {
@@ -1014,17 +1021,101 @@ impl World {
             n -= 1;
         }
     }
+    /// Wunschort eines Wasserfalls; `place_waterfalls` setzt ihn nach dem Hochland an die nächste
+    /// passende Hangkante (Bach oben, Fall über den Hang, Becken unten).
     fn waterfall(&mut self, tx: i32, ty: i32, w: i32) {
-        for x in tx..tx + w {
-            for y in ty - 2..ty + 4 {
-                if inb(x, y) {
-                    let i = idx(x, y);
-                    self.ground[i] = Mat::Water;
-                    self.path[i] = true;
+        self.waterfalls.push(Waterfall { tx, ty, w, x: 0.0, src: 0.0, top: 0.0, bot: 0.0 });
+    }
+    fn place_waterfalls(&mut self) {
+        let mut wfs = std::mem::take(&mut self.waterfalls);
+        let mut keep = vec![];
+        let mut wfs_retry: Vec<Waterfall> = vec![];
+        while !wfs.is_empty() {
+        for wf in wfs.iter_mut() {
+            let mut best: Option<(i32, i32, i32)> = None;
+            // nächste passende Kante derselben Insel (Wunschort zählt nur als Richtwert)
+            let zone = if inb(wf.tx, wf.ty) { self.zone[idx(wf.tx, wf.ty)] } else { None };
+            for y in wf.ty - 60..=wf.ty + 60 {
+                for x in wf.tx - 60..=wf.tx + 60 {
+                    if !inb(x, y) || self.zone[idx(x, y)] != zone {
+                        continue;
+                    }
+                    let ok = (0..wf.w).all(|k| {
+                        let (a, b) = (x + k, y);
+                        if !inb(a, b + 1) || !inb(a, b - 6) {
+                            return false;
+                        }
+                        let (i, j) = (idx(a, b), idx(a, b + 1));
+                        let l = self.level[i];
+                        l >= 1
+                            && self.level[j] + 1 == l
+                            && self.biome[i] != Biome::Hub
+                            && !self.stairs[i]
+                            && !self.stairs[j]
+                            && !matches!(self.ground[j], Mat::Water | Mat::Abyss | Mat::Plank)
+                            && (1..6).all(|r| self.level[idx(a, b - r)] == l && !matches!(self.ground[idx(a, b - r)], Mat::Water | Mat::Abyss))
+                    }) && !self.in_settlement(((x + wf.w / 2) * TS) as f32, (y * TS) as f32);
+                    if ok {
+                        let d = (x - wf.tx).pow(2) + (y - wf.ty).pow(2);
+                        if best.map_or(true, |b| d < b.2) {
+                            best = Some((x, y, d));
+                        }
+                    }
                 }
             }
+            if best.is_none() && wf.w > 1 {
+                // schmaler versuchen
+                wf.w -= 1;
+                wfs_retry.push(wf.clone());
+                continue;
+            }
+            let Some((x, y, _)) = best else { continue };
+            let l = self.level[idx(x, y)];
+            let cx = (x * TS + wf.w * TS / 2) as i32;
+            let mut bot = y * TS;
+            while bot < (y + 6) * TS && self.lpx(cx, bot) >= l {
+                bot += 2;
+            }
+            let fpx = sw_art::terrain::face_px(self.biome[idx(x, y)]);
+            wf.tx = x;
+            wf.ty = y;
+            wf.x = (x * TS) as f32;
+            wf.bot = bot as f32;
+            wf.top = (bot - fpx) as f32;
+            wf.src = wf.top - 4.0 * TS as f32;
+            // Bach auf der oberen Ebene bis an die Kante (Wasserkacheln in Ebenenhöhe)
+            let ty_top = (bot - fpx).div_euclid(TS);
+            for r in 0..6 {
+                let yy = ty_top - r;
+                let sway = ((r as f32 * 0.9 + x as f32).sin() * 1.2).round() as i32;
+                let (a0, a1) = if r < 2 { (x, x + wf.w) } else { (x + sway + 1, x + sway + wf.w - 1).max((x + sway + 1, x + sway + 2)) };
+                for xx in a0..a1 {
+                    if inb(xx, yy) && self.level[idx(xx, yy)] == l && !self.stairs[idx(xx, yy)] {
+                        let i = idx(xx, yy);
+                        self.ground[i] = Mat::Water;
+                        self.path[i] = true;
+                    }
+                }
+            }
+            // Becken am Fuß
+            let by = bot.div_euclid(TS);
+            for yy in by..by + 3 {
+                for xx in x - 1..x + wf.w + 1 {
+                    if inb(xx, yy) && self.level[idx(xx, yy)] < l && !self.stairs[idx(xx, yy)] {
+                        let i = idx(xx, yy);
+                        if (yy == by + 2) && (xx == x - 1 || xx == x + wf.w) {
+                            continue;
+                        }
+                        self.ground[i] = Mat::Water;
+                        self.path[i] = true;
+                    }
+                }
+            }
+            keep.push(wf.clone());
         }
-        self.waterfalls.push(Waterfall { tx, ty, w });
+        wfs = std::mem::take(&mut wfs_retry);
+        }
+        self.waterfalls = keep;
     }
     fn stairs_col(&mut self, x: i32, y: i32) {
         for k in 0..8 {
@@ -1835,25 +1926,61 @@ impl World {
                 }
             }
         }
+        // Gegner, Figuren, Truhen und Gegenstände, die im Wasser, an einer Wand oder am Hang
+        // stehen, auf den nächsten festen, erreichbaren Boden rücken
         for k in 0..self.spawns.len() {
-            // Gegner von Wänden auf festen Boden rücken (erst nach Süden, dann rundum suchen)
-            let (x, y) = (self.spawns[k].x, self.spawns[k].y);
-            if self.px_walk(x as i32, y as i32).1 {
-                continue;
+            if let Some((x, y)) = self.land_spot(self.spawns[k].x, self.spawns[k].y) {
+                self.spawns[k].x = x;
+                self.spawns[k].y = y;
             }
-            'f: for r in 1..12 {
-                for a in 0..12 {
-                    let ang = a as f32 / 12.0 * std::f32::consts::TAU + std::f32::consts::FRAC_PI_2;
-                    let (nx, ny) = (x + ang.cos() * r as f32 * 12.0, y + ang.sin() * r as f32 * 12.0);
-                    let (tx, ty) = ((nx / TS as f32) as i32, (ny / TS as f32) as i32);
-                    if inb(tx, ty) && !matches!(self.ground[idx(tx, ty)], Mat::Water | Mat::Abyss) && self.px_walk(nx as i32, ny as i32).1 {
-                        self.spawns[k].x = nx;
-                        self.spawns[k].y = ny;
-                        break 'f;
-                    }
+        }
+        for k in 0..self.npcs.len() {
+            if let Some((x, y)) = self.land_spot(self.npcs[k].x, self.npcs[k].y) {
+                self.npcs[k].x = x;
+                self.npcs[k].y = y;
+            }
+        }
+        for k in 0..self.items.len() {
+            if let Some((x, y)) = self.land_spot(self.items[k].x, self.items[k].y) {
+                self.items[k].x = x;
+                self.items[k].y = y;
+            }
+        }
+        for k in 0..self.chests.len() {
+            let ci = self.chests[k];
+            if let Some((x, y)) = self.land_spot(self.props[ci].x, self.props[ci].y) {
+                self.props[ci].x = x;
+                self.props[ci].y = y;
+                self.props[ci].hidden = false;
+            }
+        }
+    }
+    /// Steht eine Figur bei (x, y) auf festem, begehbarem Boden (Fuß und Umgebung)?
+    fn stand_ok(&self, x: f32, y: f32) -> bool {
+        for (ox, oy) in [(0.0, 0.0), (-12.0, 0.0), (12.0, 0.0), (0.0, -8.0), (0.0, 10.0)] {
+            let (px, py) = (x + ox, y + oy);
+            let (tx, ty) = ((px / TS as f32).floor() as i32, (py / TS as f32).floor() as i32);
+            if !inb(tx, ty) || matches!(self.ground[idx(tx, ty)], Mat::Water | Mat::Abyss) {
+                return false;
+            }
+        }
+        self.px_walk(x as i32, y as i32).1
+    }
+    /// None, wenn der Platz passt; sonst der nächste passende Platz (Spirale, bis ~9 Kacheln).
+    fn land_spot(&self, x: f32, y: f32) -> Option<(f32, f32)> {
+        if self.stand_ok(x, y) {
+            return None;
+        }
+        for r in 1..24 {
+            for a in 0..16 {
+                let ang = a as f32 / 16.0 * std::f32::consts::TAU + std::f32::consts::FRAC_PI_2;
+                let (nx, ny) = (x + ang.cos() * r as f32 * 12.0, y + ang.sin() * r as f32 * 12.0);
+                if self.stand_ok(nx, ny) {
+                    return Some((nx, ny));
                 }
             }
         }
+        None
     }
 
     /// Rechteckige Terrasse (Kachelgrenzen einschließlich) auf Ebene `lvl`. Die unteren
