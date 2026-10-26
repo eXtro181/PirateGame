@@ -33,7 +33,7 @@ Kurzreferenz, damit neue Sitzungen sofort weiterarbeiten können. Bei Änderunge
 - Commits enden mit den Attributionszeilen aus der Sitzung.
 
 ## Namen
-- Könige: Admiral Brandvogt (Glut → Mantikor, Aschebucht), Königin Ysra Frostweh (Frost → Gorgonen-Königin, Frostgrotte), Kapitän Rabensturm (Sturm → Uhrwerk-Sturm-Monster, Rabenwacht), Morgrim Korallenhand (Tiefe → Kraken-Basilisk, Fluchmangroven). Endboss: Die Kehrseite (Thalassa Inversa), fünf Phasen, zuletzt „Der Ertrunkene“ (dein eigener zurückgebliebener Teil). Zweite Gestalten: Mantikor/Kraken-Basilisk als Rig, Gorgone/Uhrwerk-Sturm als Figur (Schlangenleib/-haar, Uhrwerkflügel).
+- Könige: Admiral Brandvogt (Glut → Mantikor, Aschebucht), Königin Ysra Frostweh (Frost → Gorgonen-Königin, Frostgrotte), Kapitän Rabensturm (Sturm → Uhrwerk-Sturm-Monster, Rabenwacht), Morgrim Korallenhand (Tiefe → Kraken-Basilisk, Fluchmangroven). Endboss: Malakor, der Ertrunkene König (Fliegender Holländer mit rotem Kraken → zu Fuß mit vier Schwertern und Tentakelbart → Knochenkraken). Zweite Gestalten: Mantikor/Kraken-Basilisk als Rig, Gorgone/Uhrwerk-Sturm als Figur (Schlangenleib/-haar, Uhrwerkflügel).
 - Crew: Kanonierin Asra, Navigatorin Lene, Bootsmann Kalo, Zimmermann Ode. Hub: Laternenmagd, Schmied Harrow, Wirt Bilge. Start: Alter Galionsschnitzer.
 
 ## Seebosse und Glutwacht (26.10.)
