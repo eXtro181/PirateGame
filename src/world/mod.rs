@@ -1304,6 +1304,34 @@ impl World {
                 lv[k] = lv[k].max(l);
             }
         }
+        // Formen glätten: einzelne Zacken abtragen, Löcher füllen (weichere, lesbare Plateaus)
+        for _ in 0..3 {
+            let prev = lv.clone();
+            for y in y0 + 1..y1 {
+                for x in x0 + 1..x1 {
+                    let k = id(x, y);
+                    if fixed[k] || !inb(x, y) {
+                        continue;
+                    }
+                    let own = prev[k];
+                    let (mut ge, mut gt) = (0, 0);
+                    for (ox, oy) in [(1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (-1, 1), (1, -1), (-1, -1)] {
+                        let q = prev[id(x + ox, y + oy)];
+                        if q >= own {
+                            ge += 1;
+                        }
+                        if q > own {
+                            gt += 1;
+                        }
+                    }
+                    if own > 0 && ge < 4 {
+                        lv[k] = own - 1;
+                    } else if gt >= 6 {
+                        lv[k] = own + 1;
+                    }
+                }
+            }
+        }
         // Glätten: höchstens eine Ebene Unterschied zu jedem Nachbarn (geschützte Kacheln bleiben)
         for _ in 0..8 {
             let mut changed = false;

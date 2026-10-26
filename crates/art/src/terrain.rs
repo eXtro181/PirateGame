@@ -874,6 +874,10 @@ pub fn bake_chunk<M: TerrainMap>(m: &M, mats: &mut Materials, en: &EdgeNoise, x0
                 continue;
             }
             let b = m.biome(tx, ty);
+            // Höhenkante nach Westen, Osten oder Norden: sichtbarer Hang statt unsichtbarer Wand
+            if mt != Mat::Water && slope_pixel(m, mats, en, &mut c, x, y, px, py, mt, b) {
+                continue;
+            }
             let tex = mats.get(mt, b);
             let ti = tex.idx(px.rem_euclid(TEX), py.rem_euclid(TEX));
             let mut col = tex.col[ti];
@@ -962,6 +966,117 @@ pub fn bake_chunk<M: TerrainMap>(m: &M, mats: &mut Materials, en: &EdgeNoise, x0
         }
     }
     c
+}
+
+/// Hang an einer Ebenenkante (West/Ost/Nord): auf der höheren Kachel fällt ein Böschungsstreifen
+/// zur tieferen hin ab – Grasabbruch oben, Erde und Steine im Hang, dunkle Kante unten. Auf der
+/// tieferen Kachel liegt am Fuß ein Schattenstreifen. Gibt true zurück, wenn der Pixel gezeichnet ist.
+#[allow(clippy::too_many_arguments)]
+fn slope_pixel<M: TerrainMap>(m: &M, mats: &mut Materials, en: &EdgeNoise, c: &mut Canvas, x: i32, y: i32, px: i32, py: i32, mt: Mat, b: Biome) -> bool {
+    let tx = px.div_euclid(T);
+    let ty = py.div_euclid(T);
+    let l = m.level(tx, ty);
+    let (lx, ly) = (px.rem_euclid(T), py.rem_euclid(T));
+    let lower = |dx: i32, dy: i32| -> bool {
+        let n = m.mat(tx + dx, ty + dy);
+        m.level(tx + dx, ty + dy) < l && !n.transparent() && m.face(tx + dx, ty + dy).is_none()
+    };
+    let higher = |dx: i32, dy: i32| -> bool { m.level(tx + dx, ty + dy) > l && m.face(tx + dx, ty + dy).is_none() };
+    // Hangbreite schwankt leicht entlang der Kante
+    let band = |along: i32, seed: i32| -> f32 { 17.0 + en.at(along * 2, seed) * 5.0 + en.at(along * 7, seed + 5) * 1.5 };
+    let mut d = f32::MAX;
+    let mut dir = (0.0f32, 0.0f32);
+    if l > 0 {
+        if lower(-1, 0) {
+            let bw = band(py, 11);
+            if (lx as f32) < bw && (lx as f32) / bw < d {
+                d = lx as f32 / bw;
+                dir = (-1.0, 0.0);
+            }
+        }
+        if lower(1, 0) {
+            let bw = band(py, 23);
+            let dd = (T - 1 - lx) as f32;
+            if dd < bw && dd / bw < d {
+                d = dd / bw;
+                dir = (1.0, 0.0);
+            }
+        }
+        if lower(0, -1) {
+            let bw = band(px, 37) * 0.7;
+            if (ly as f32) < bw && (ly as f32) / bw < d {
+                d = ly as f32 / bw;
+                dir = (0.0, -1.0);
+            }
+        }
+    }
+    if d < 1.0 {
+        let bp = biome_pal(b);
+        let grassy = matches!(mt, Mat::Grass | Mat::Meadow | Mat::Moss | Mat::Snow);
+        let tex = mats.get(mt, b);
+        let ti = tex.idx(px.rem_euclid(TEX), py.rem_euclid(TEX));
+        // oben: Gras-/Bodenlippe mit heller Kante
+        if d > 0.78 {
+            let col = if d < 0.84 { outline_of(tex.col[ti]) } else { shade(tex.col[ti], 0.92) };
+            c.put(x, y, col, 2.0 + (d - 0.78) * 4.0);
+            let i = c.idx(x, y);
+            c.up[i] = 40;
+            c.ev[i] = 0.0;
+            return true;
+        }
+        // Hangfläche: Erde/Fels mit Steinen, zur Kante hin dunkler
+        let st = &bp.cliff;
+        let n = en.at(px * 7, py * 7) * 0.5 + 0.5;
+        let stone = hash(px / 3, py / 3, 91) % 23 == 0;
+        let mut v = 0.32 + d * 0.38 + n * 0.12;
+        // Licht von links oben: Westhänge dunkler, Osthänge heller
+        v += match dir {
+            (x, _) if x < 0.0 => -0.08,
+            (x, _) if x > 0.0 => 0.06,
+            _ => 0.1,
+        };
+        let mut col = pick(st, v.clamp(0.0, 1.0));
+        if grassy && d > 0.45 && n > 0.55 {
+            col = mix(col, bp.grass[1], 0.55);
+        }
+        if stone {
+            col = pick(&bp.stone, 0.6 + n * 0.2);
+        }
+        if d < 0.12 {
+            col = shade(col, 0.6);
+        }
+        // Relief: Höhe fällt zur tieferen Seite (daraus entstehen die Normalen)
+        c.put(x, y, col, -6.0 + d * 6.0 + if stone { 1.5 } else { 0.0 });
+        let i = c.idx(x, y);
+        c.up[i] = (90.0 + (1.0 - d) * 110.0) as u8;
+        c.ev[i] = 0.0;
+        if grassy && d > 0.6 {
+            let _ = mt;
+        }
+        return true;
+    }
+    // Fuß eines Hangs auf der tieferen Kachel: weicher Schattenstreifen
+    let mut sh = 0.0f32;
+    if higher(-1, 0) {
+        sh = sh.max(1.0 - lx as f32 / 9.0);
+    }
+    if higher(1, 0) {
+        sh = sh.max(1.0 - (T - 1 - lx) as f32 / 9.0);
+    }
+    if higher(0, -1) && m.face(tx, ty - 1).is_none() {
+        sh = sh.max(1.0 - ly as f32 / 7.0);
+    }
+    if sh > 0.0 {
+        let tex = mats.get(mt, b);
+        let ti = tex.idx(px.rem_euclid(TEX), py.rem_euclid(TEX));
+        let col = shade(tex.col[ti], 1.0 - sh * 0.4);
+        c.put(x, y, col, tex.rel[ti] - sh);
+        let i = c.idx(x, y);
+        c.up[i] = 0;
+        c.ev[i] = 0.0;
+        return true;
+    }
+    false
 }
 
 /// Schatten unter einer Wand (die Kacheln direkt unterhalb einer Klippe).
