@@ -866,7 +866,7 @@ impl Game {
         let t = self.t;
         let body = |open: bool| art.map.get(if open { "kh:1" } else { "kh:0" }).copied();
         match e.state {
-            EP::Mirror | EP::Twin | EP::Dive => {
+            EP::Mirror | EP::Twin | EP::Dive if self.sailing => {
                 // nur in der Spiegelung: kopfüber unter der Wasserlinie
                 let dim = if e.state == EP::Mirror { 1.0 } else { 0.55 };
                 if let Some(s) = body(false) {
@@ -967,7 +967,9 @@ impl Game {
                 let sink = if e.state == EP::Dive { (e.st_t / 2.0).min(1.0) } else { 0.0 };
                 f.shadow(h.x, h.y + 4.0, 92.0, 26.0, 0.3 * h.alpha);
                 f.sprite(&v[k], h.x, h.y + bob + sink * 40.0, SprOpt { flip, tint: [120, 140, 255, (h.alpha * 255.0) as u8], flags: fl, cut_bottom: sink * 0.6, ..Default::default() });
-                f.reflect(&v[k], h.x, h.y, 1.0, [60, 70, 140, 110], t);
+                if self.sailing {
+                    f.reflect(&v[k], h.x, h.y, 1.0, [60, 70, 140, 110], t);
+                }
                 f.light(LightDef { x: h.x, y: h.y, z: 60.0, r: 220.0, col: [0.4, 0.55, 1.4], flicker: 0.15 });
             }
             if let Some((x, y, kt)) = e.pale_kraken {
