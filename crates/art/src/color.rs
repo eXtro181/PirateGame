@@ -109,7 +109,23 @@ pub fn pal(v: &[u32]) -> Vec<Rgba> {
     v.iter().map(|&x| hex(x)).collect()
 }
 /// Index in einer Palette über einen kontinuierlichen Wert 0..1.
+/// Ton aus einer Palette: zwischen benachbarten Stufen weich gemischt (fotorealistische
+/// Schattierung statt harter Bänder).
 pub fn pick(p: &[Rgba], v: f32) -> Rgba {
+    if p.len() < 2 {
+        return p[0];
+    }
+    let f = v.clamp(0.0, 1.0) * (p.len() as f32 - 1.0);
+    let i = (f.floor() as usize).min(p.len() - 1);
+    let j = (i + 1).min(p.len() - 1);
+    let t = f - i as f32;
+    let (a, b) = (p[i], p[j]);
+    let l = |x: u8, y: u8| (x as f32 + (y as f32 - x as f32) * t).round() as u8;
+    [l(a[0], b[0]), l(a[1], b[1]), l(a[2], b[2]), l(a[3], b[3])]
+}
+
+/// Ton aus einer Palette in harten Stufen (für Muster, die bewusst abgestuft sind).
+pub fn pick_step(p: &[Rgba], v: f32) -> Rgba {
     let i = (v * (p.len() as f32 - 1.0) + 0.5).floor().clamp(0.0, p.len() as f32 - 1.0) as usize;
     p[i]
 }

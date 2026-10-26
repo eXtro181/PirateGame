@@ -166,6 +166,19 @@ fn fs_light(f: FOut) -> @location(0) vec4<f32> {
         li = floor(li * 12.0 + dith * 12.0 + 0.5) / 12.0;
     }
     var c = alb * li + spec + em;
+    // Streulicht im Dunst: jede Lichtquelle leuchtet als weicher Hof in der Luft um sich
+    if (hd) {
+        var halo = vec3<f32>(0.0);
+        for (var i = 0; i < nl; i = i + 1) {
+            let L = G.lights[i];
+            let lp = vec2<f32>(L.pos.x, L.pos.y - L.pos.z);
+            let dd = length(sp - lp) / max(L.pos.w, 1.0);
+            if (dd > 1.0) { continue; }
+            let fl2 = 1.0 + sin(t * 9.0 + f32(i) * 2.1) * 0.5 * L.col.w;
+            halo += L.col.rgb * exp(-dd * 5.0) * fl2;
+        }
+        c += halo * (0.05 + G.fog.w * 0.6);
+    }
     // Blitz (Gewitter)
     c += alb * G.counts.y * vec3<f32>(0.8, 0.85, 1.0);
     // Tiefennebel nach Bodenzeile (fern = oben), Ferne zusätzlich in Nebelfarbe getaucht
