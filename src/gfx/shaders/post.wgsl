@@ -177,7 +177,7 @@ fn fs_light(f: FOut) -> @location(0) vec4<f32> {
             let fl2 = 1.0 + sin(t * 9.0 + f32(i) * 2.1) * 0.5 * L.col.w;
             halo += L.col.rgb * exp(-dd * 5.0) * fl2;
         }
-        c += halo * (0.05 + G.fog.w * 0.6);
+        c += halo * (0.04 + G.fog.w * 0.3);
     }
     // Blitz (Gewitter)
     c += alb * G.counts.y * vec3<f32>(0.8, 0.85, 1.0);
