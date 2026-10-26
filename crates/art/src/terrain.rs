@@ -219,6 +219,38 @@ pub struct MatTex {
     pub c: Canvas,
 }
 
+/// Stufenlose Palette: zwischen benachbarten Tönen gemischt (fotorealistischer als harte Stufen).
+fn pickf(p: &[Rgba], v: f32) -> Rgba {
+    let f = v.clamp(0.0, 1.0) * (p.len() as f32 - 1.0);
+    let i = (f.floor() as usize).min(p.len() - 1);
+    let j = (i + 1).min(p.len() - 1);
+    let t = f - i as f32;
+    let a = p[i];
+    let b = p[j];
+    let l = |x: u8, y: u8| (x as f32 + (y as f32 - x as f32) * t).round() as u8;
+    [l(a[0], b[0]), l(a[1], b[1]), l(a[2], b[2]), a[3].max(b[3])]
+}
+
+/// Feine Körnung und Farbrauschen über der ganzen Textur (Fotolook statt glatter Flächen).
+fn grain(c: &mut Canvas, seed: u32) {
+    let nz = Noise::new(seed ^ 0x5A5A);
+    for y in 0..c.h {
+        for x in 0..c.w {
+            let i = c.idx(x, y);
+            let p = c.col[i];
+            if p[3] == 0 {
+                continue;
+            }
+            let fine = nz.fbmp(x as f32 / 8.0, y as f32 / 8.0, 2, 32) * 0.07;
+            let g = (h01(x, y, seed as i32) - 0.5) * 0.07;
+            let k = 1.0 + fine + g;
+            let warm = (h01(x, y, seed as i32 + 9) - 0.5) * 6.0;
+            let f = |v: u8, d: f32| (v as f32 * k + d).clamp(0.0, 255.0) as u8;
+            c.col[i] = [f(p[0], warm), f(p[1], 0.0), f(p[2], -warm), p[3]];
+        }
+    }
+}
+
 fn wrap(v: i32) -> i32 {
     v.rem_euclid(TEX)
 }
@@ -230,7 +262,7 @@ fn field(c: &mut Canvas, p: &[Rgba], nz: &Noise, freq: i32, amt: f32, base: f32,
         for x in 0..TEX {
             let n = nz.fbmp(x as f32 * f, y as f32 * f, 4, freq);
             let v = base + n * amt + (bayer(x, y) - 0.5) * dith;
-            let col = pick(p, v);
+            let col = pickf(p, v);
             c.put(x, y, col, 0.0);
         }
     }
@@ -255,8 +287,7 @@ fn tex_grass(bp: &BiomePal, seed: u32, flowers: f32) -> Canvas {
             let v = n * 1.25 + n2;
             // 3 Stufen mit Bayer-Übergang
             let d = (bayer(x, y) - 0.5) * 0.22;
-            let k = if v + d < -0.32 { 1 } else if v + d < 0.3 { 2 } else { 3 };
-            c.put(x, y, g[k], 0.0);
+            c.put(x, y, pickf(&g[1..=3], ((v + d * 0.4) * 0.8 + 0.5).clamp(0.0, 1.0)), n2 * 2.0);
         }
     }
     let mut r = Rng::new(seed as u64);
@@ -422,7 +453,7 @@ fn tex_cobble(bp: &BiomePal, seed: u32, p: &[Rgba], cells: i32, moss: bool) -> C
                 let gy = d1y - d1;
                 let l = (gx * 0.6 + gy * 0.8) * 9.0; // weg von der Mitte nach unten rechts = dunkel
                 let v = 0.55 + k - l * 0.35 + (bayer(x, y) - 0.5) * 0.12 + nz.n2(x as f32 * 0.3, y as f32 * 0.3) * 0.08;
-                let col = pick(&p[1..], v);
+                let col = pickf(&p[1..], v);
                 c.put(x, y, col, h * 2.0);
             }
         }
@@ -457,7 +488,7 @@ fn tex_marble(bp: &BiomePal, seed: u32) -> Canvas {
             if lx == 31 || ly == 31 {
                 v -= 0.15;
             }
-            let col = pick(&st[1..], v);
+            let col = pickf(&st[1..], v);
             c.put(x, y, col, 1.0);
             c.spec(x, y, 60);
         }
@@ -485,7 +516,7 @@ fn tex_plank(seed: u32) -> Canvas {
                 if ly == 6 {
                     v -= 0.2;
                 }
-                let col = if ly == 7 || (x - seam).rem_euclid(TEX) == 0 { w[0] } else { pick(&w[1..], v) };
+                let col = if ly == 7 || (x - seam).rem_euclid(TEX) == 0 { w[0] } else { pickf(&w[1..], v) };
                 c.put(x, y, col, if ly == 7 { -1.0 } else { 1.0 });
             }
         }
@@ -581,7 +612,7 @@ fn tex_snow(bp: &BiomePal, seed: u32) -> Canvas {
         for x in 0..TEX {
             let n = nz.fbmp(x as f32 / 32.0, y as f32 / 32.0, 4, 4);
             let v = 0.68 + n * 0.5 + (bayer(x, y) - 0.5) * 0.12;
-            c.put(x, y, pick(&g[2..], v), n * 3.0);
+            c.put(x, y, pickf(&g[2..], v), n * 3.0);
             c.spec(x, y, 40);
         }
     }
@@ -603,7 +634,7 @@ fn tex_ice(seed: u32) -> Canvas {
         for x in 0..TEX {
             let n = nz.fbmp(x as f32 / 64.0, y as f32 / 64.0, 3, 4);
             let v = 0.55 + n * 0.5 + (bayer(x, y) - 0.5) * 0.1;
-            c.put(x, y, pick(&p, v), 0.0);
+            c.put(x, y, pickf(&p, v), 0.0);
             c.spec(x, y, 200);
         }
     }
@@ -710,7 +741,7 @@ impl Materials {
         self.cache.entry((m, b)).or_insert_with(|| {
             let bp = biome_pal(b);
             let s = 100 + m as u32 * 17 + b as u32 * 131;
-            match m {
+            let mut c = match m {
                 Mat::Grass => tex_grass(&bp, s, if b == Biome::Hub { 0.5 } else { 0.25 }),
                 Mat::Meadow => tex_grass(&bp, s, 1.6),
                 Mat::Dirt => tex_path(&bp, s, &bp.path, 26),
@@ -726,7 +757,9 @@ impl Materials {
                 Mat::Rock => tex_rock(&bp, s),
                 Mat::Moss => tex_moss(&bp, s),
                 Mat::Water | Mat::Abyss => Canvas::flat(TEX, TEX),
-            }
+            };
+            grain(&mut c, s);
+            c
         })
     }
 }
@@ -943,7 +976,7 @@ pub fn bake_chunk<M: TerrainMap>(m: &M, mats: &mut Materials, en: &EdgeNoise, x0
                     (shade(st[0], 0.8), -1.0)
                 } else {
                     let v = 0.5 + (id % 3) as f32 * 0.06 - l * 0.4 - (1.0 - dw / rim_w) * 0.15 + (bayer(px, py) - 0.5) * 0.1;
-                    (pick(&st[..5], v), 1.5 + (e * 4.0).min(1.5))
+                    (pickf(&st[..5], v), 1.5 + (e * 4.0).min(1.5))
                 };
                 let col2 = if dw < 2.0 { mix(col2, hex(0x203848), 0.25) } else { col2 };
                 c.put(x, y, col2, rel2);
@@ -1035,12 +1068,20 @@ fn slope_pixel<M: TerrainMap>(m: &M, mats: &mut Materials, en: &EdgeNoise, c: &m
             (x, _) if x > 0.0 => 0.06,
             _ => 0.1,
         };
-        let mut col = pick(st, v.clamp(0.0, 1.0));
-        if grassy && d > 0.45 && n > 0.55 {
-            col = mix(col, bp.grass[1], 0.55);
+        let mut col = pickf(st, v.clamp(0.0, 1.0));
+        if grassy {
+            // Grasböschung: Oberfläche im Schatten der Neigung, Fels nur in einzelnen Ausbissen,
+            // unten ein Streifen Erde
+            let lit = 0.62 + d * 0.3 + match dir {
+                (x, _) if x < 0.0 => -0.07,
+                (x, _) if x > 0.0 => 0.07,
+                _ => 0.08,
+            };
+            let g = shade(tex.col[ti], lit);
+            col = if n > 0.74 { col } else if d < 0.16 { mix(g, bp.path[1], 0.6 - d * 2.0) } else { g };
         }
         if stone {
-            col = pick(&bp.stone, 0.6 + n * 0.2);
+            col = pickf(&bp.stone, 0.6 + n * 0.2);
         }
         if d < 0.12 {
             col = shade(col, 0.6);
@@ -1145,7 +1186,7 @@ fn face_pixel<M: TerrainMap>(m: &M, mats: &mut Materials, en: &EdgeNoise, c: &mu
         if fy < lip {
             let gp = &bp.grass;
             let t = fy as f32 / lip as f32;
-            let col = if fy == lip - 1 { outline_of(gp[2]) } else if fy == lip - 2 { gp[1] } else { pick(&gp[1..5], 0.75 - t * 0.6) };
+            let col = if fy == lip - 1 { outline_of(gp[2]) } else if fy == lip - 2 { gp[1] } else { pickf(&gp[1..5], 0.75 - t * 0.6) };
             c.put(x, y, col, 3.0 - t * 2.0);
             let i = c.idx(x, y);
             c.up[i] = (60.0 + t * 160.0) as u8;
@@ -1209,7 +1250,7 @@ fn face_pixel<M: TerrainMap>(m: &M, mats: &mut Materials, en: &EdgeNoise, c: &mu
         let streak = en.at(px * 5, 999) + en.at(px * 2, fy * 2) * 0.3;
         if has_lip && streak > 0.38 && t < 0.7 && lx > 1 && lx < wcol - 2 {
             let mc = bp.moss[((streak - 0.38) * 9.0).clamp(0.0, 3.0) as usize];
-            let col = mix(pick(cl, v.clamp(0.0, 1.0)), mc, 0.65);
+            let col = mix(pickf(cl, v.clamp(0.0, 1.0)), mc, 0.65);
             c.put(x, y, col, rel);
             let i = c.idx(x, y);
             c.up[i] = up;
@@ -1222,7 +1263,7 @@ fn face_pixel<M: TerrainMap>(m: &M, mats: &mut Materials, en: &EdgeNoise, c: &mu
         rel -= 2.0;
     }
     v += (bayer(px, py) - 0.5) * 0.08;
-    let mut col = pick(cl, v.clamp(0.0, 1.0));
+    let mut col = pickf(cl, v.clamp(0.0, 1.0));
     let below = m.mat(tx, ty + (rows - row));
     let to_bottom = hgt - fy;
     if to_bottom < 8 {
@@ -1301,7 +1342,7 @@ fn masonry_pixel(c: &mut Canvas, x: i32, y: i32, px: i32, fy: i32, hgt: i32, bp:
         }
     }
     let to_bottom = hgt - fy;
-    let mut col = pick(&st, v.clamp(0.0, 1.0));
+    let mut col = pickf(&st, v.clamp(0.0, 1.0));
     if to_bottom < 8 {
         col = shade(col, 0.72 + to_bottom as f32 * 0.035);
         if water {
@@ -1331,7 +1372,7 @@ fn stairs_pixel(c: &mut Canvas, x: i32, y: i32, px: i32, fy: i32, hgt: i32, bp: 
     } else if k < 4 {
         (st[3], 0.5, 120u8)
     } else {
-        (pick(&st[1..4], 0.5 - (k - 4) as f32 * 0.1), 0.0, 230u8) // Setzstufe
+        (pickf(&st[1..4], 0.5 - (k - 4) as f32 * 0.1), 0.0, 230u8) // Setzstufe
     };
     let col = if fy > hgt - 3 { shade(col, 0.8) } else { col };
     c.put(x, y, col, rel);

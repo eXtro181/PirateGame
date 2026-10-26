@@ -1216,40 +1216,40 @@ impl World {
         let (w, h) = (x1 - x0 + 1, y1 - y0 + 1);
         let id = |x: i32, y: i32| ((y - y0) * w + (x - x0)) as usize;
         // geschützte Punkte (Kachel, Radius)
-        let mut keep: Vec<(i32, i32, i32)> = vec![];
+        let mut keep: Vec<(i32, i32, i32, bool)> = vec![];
         let t = |x: f32, y: f32| ((x / TS as f32) as i32, (y / TS as f32) as i32);
         for f in &self.fires {
             let (a, b) = t(f.x, f.y);
-            keep.push((a, b, 4));
+            keep.push((a, b, 4, true));
         }
         for n in &self.npcs {
             let (a, b) = t(n.x, n.y);
-            keep.push((a, b, 3));
+            keep.push((a, b, 3, true));
         }
         for it in &self.items {
             let (a, b) = t(it.x, it.y);
-            keep.push((a, b, 2));
+            keep.push((a, b, 2, false));
         }
         for &ci in &self.chests {
             let (a, b) = t(self.props[ci].x, self.props[ci].y);
-            keep.push((a, b, 2));
+            keep.push((a, b, 2, false));
         }
         for sp in &self.spawns {
             let (a, b) = t(sp.x, sp.y);
-            keep.push((a, b, 2));
+            keep.push((a, b, 2, false));
         }
         for dk in &self.docks {
             let (a, b) = t(dk.px, dk.py);
-            keep.push((a, b, 6));
+            keep.push((a, b, 6, true));
         }
         for g in &self.gates {
             let (a, b) = t(g.x, g.y);
-            keep.push((a, b, 5));
+            keep.push((a, b, 5, true));
         }
         for wk in &self.walkers {
             for p in &wk.pts {
                 let (a, b) = t(p.0, p.1);
-                keep.push((a, b, 2));
+                keep.push((a, b, 2, false));
             }
         }
         let arenas: Vec<Arena> = self.arenas.values().cloned().collect();
@@ -1273,7 +1273,8 @@ impl World {
                     fixed[k] = true;
                     continue;
                 }
-                if keep.iter().any(|&(a, b, r)| (a - x).abs() <= r && (b - y).abs() <= r) {
+                // Feuer, Figuren, Anleger und Tore bleiben auf ihrer Ebene (runde Bereiche)
+                if keep.iter().any(|&(a, b, r, hard)| hard && (a - x).pow(2) + (b - y).pow(2) <= r * r + r) {
                     fixed[k] = true;
                     continue;
                 }
@@ -1281,7 +1282,7 @@ impl World {
                 let dx = (x - d.cx) as f32 / d.rx as f32;
                 let dy = (y - d.cy) as f32 / d.ry as f32;
                 let core = (1.0 - (dx * dx + dy * dy).sqrt()).max(0.0);
-                let n = self.nz.fbm(x as f32 * 0.055 + d.seed as f32 * 3.1, y as f32 * 0.055 + 9.0, 3);
+                let n = self.nz.fbm(x as f32 * 0.038 + d.seed as f32 * 3.1, y as f32 * 0.038 + 9.0, 3);
                 let hgt = n * 1.5 + core * 0.9 - 0.15;
                 let mut l = ((hgt * 5.0).floor().max(0.0) as i32).min(4) as u8;
                 // Wasserabstand begrenzt die Höhe (Strände bleiben flach)
@@ -1326,7 +1327,71 @@ impl World {
                 }
             }
         }
-        // Glätten: höchstens eine Ebene Unterschied zu jedem Nachbarn (geschützte Kacheln bleiben)
+        // Gegner, Truhen, Gegenstände und Wege der Wanderer: kleine ebene Flächen auf der Höhe
+        // ihrer Umgebung (statt Gruben auf Ebene 0, die das Hochland zerstückeln)
+        let soft: Vec<(i32, i32, i32)> = keep.iter().filter(|k| !k.3).map(|k| (k.0, k.1, k.2)).collect();
+        let circle = |a: i32, b: i32, r: i32| {
+            let mut v = vec![];
+            for yy in b - r..=b + r {
+                for xx in a - r..=a + r {
+                    if (xx - a).pow(2) + (yy - b).pow(2) <= r * r + r && xx >= x0 && xx <= x1 && yy >= y0 && yy <= y1 && inb(xx, yy) {
+                        v.push(id(xx, yy));
+                    }
+                }
+            }
+            v
+        };
+        for &(a, b, r) in &soft {
+            if a < x0 || a > x1 || b < y0 || b > y1 {
+                continue;
+            }
+            let c = lv[id(a, b)];
+            for k in circle(a, b, r) {
+                if !fixed[k] {
+                    lv[k] = c;
+                }
+            }
+        }
+        for round in 0..4 {
+            self.relax_levels(&mut lv, &fixed, x0, y0, x1, y1);
+            if round == 3 {
+                break;
+            }
+            for &(a, b, r) in &soft {
+                let cs = circle(a, b, r);
+                let m = cs.iter().filter(|k| !fixed[**k]).map(|k| lv[*k]).min();
+                if let Some(m) = m {
+                    for k in cs {
+                        if !fixed[k] {
+                            lv[k] = m;
+                        }
+                    }
+                }
+            }
+        }
+        for y in y0..=y1 {
+            for x in x0..=x1 {
+                if inb(x, y) && !fixed[id(x, y)] {
+                    let i = idx(x, y);
+                    self.level[i] = lv[id(x, y)];
+                    // Höhen: Felsboden auf den oberen Stufen
+                    if self.level[i] >= 3 && !self.path[i] {
+                        self.ground[i] = match d.biome {
+                            Biome::Frost => Mat::Snow,
+                            Biome::Fire => Mat::Hex,
+                            Biome::Earth => Mat::Moss,
+                            _ => if self.level[i] >= 4 { Mat::Rock } else { self.ground[i] },
+                        };
+                    }
+                }
+            }
+        }
+    }
+
+    /// Höchstens eine Ebene Unterschied zu jedem Nachbarn (geschützte Kacheln bleiben).
+    fn relax_levels(&self, lv: &mut [u8], fixed: &[bool], x0: i32, y0: i32, x1: i32, y1: i32) {
+        let w = x1 - x0 + 1;
+        let id = |x: i32, y: i32| ((y - y0) * w + (x - x0)) as usize;
         for _ in 0..8 {
             let mut changed = false;
             for y in y0..=y1 {
@@ -1355,23 +1420,6 @@ impl World {
             }
             if !changed {
                 break;
-            }
-        }
-        for y in y0..=y1 {
-            for x in x0..=x1 {
-                if inb(x, y) && !fixed[id(x, y)] {
-                    let i = idx(x, y);
-                    self.level[i] = lv[id(x, y)];
-                    // Höhen: Felsboden auf den oberen Stufen
-                    if self.level[i] >= 3 && !self.path[i] {
-                        self.ground[i] = match d.biome {
-                            Biome::Frost => Mat::Snow,
-                            Biome::Fire => Mat::Hex,
-                            Biome::Earth => Mat::Moss,
-                            _ => if self.level[i] >= 4 { Mat::Rock } else { self.ground[i] },
-                        };
-                    }
-                }
             }
         }
     }

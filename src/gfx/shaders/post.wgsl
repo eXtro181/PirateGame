@@ -107,11 +107,20 @@ fn fs_light(f: FOut) -> @location(0) vec4<f32> {
     }
     li += G.sun_col.rgb * nd * sh * (0.5 + 0.5 * ao);
     let hv = normalize(sd + view_dir);
-    spec += G.sun_col.rgb * pow(max(dot(n, hv), 0.0), 40.0) * spec_k * sh * G.sun_col.w;
+    let hd = G.hd3.x > 0.5;
+    // Glanz: glatte Flächen (Wasser, Metall) mit scharfen, hellen Spitzlichtern
+    var sexp = 40.0;
+    var spnorm = 1.0;
+    if (hd) {
+        sexp = mix(12.0, 220.0, spec_k * spec_k);
+        spnorm = (sexp + 8.0) / 48.0;
+    }
+    spec += G.sun_col.rgb * pow(max(dot(n, hv), 0.0), sexp) * spec_k * sh * G.sun_col.w * spnorm;
 
     // Punktlichter in 3D
     let nl = i32(G.counts.x);
     let t = G.screen.z;
+    var shadows = 0;
     for (var i = 0; i < nl; i = i + 1) {
         let L = G.lights[i];
         let d3 = L.pos.xyz - p3;
@@ -121,14 +130,41 @@ fn fs_light(f: FOut) -> @location(0) vec4<f32> {
         let ndl = max(dot(n, ld), 0.0) * 0.85 + 0.15;
         var att = 1.0 - dist / L.pos.w;
         att = att * att;
+        var lsh = 1.0;
+        if (hd) {
+            // natürlicher Abfall: hell am Licht, langer weicher Ausläufer
+            let x = dist / L.pos.w;
+            let wnd = 1.0 - x * x;
+            att = wnd * wnd / (1.0 + 7.0 * x * x);
+            // Schlagschatten der nahen Lichter: Strahl zum Licht durch das Höhenfeld
+            if (shadows < 8 && att > 0.04 && dist > 10.0) {
+                shadows = shadows + 1;
+                let jit2 = hash21(vec2<f32>(ip) * 1.31 + vec2<f32>(f32(i), 2.3));
+                for (var k = 1; k <= 10; k = k + 1) {
+                    let s2 = (f32(k) - jit2) / 10.5;
+                    let q = p3 + d3 * s2;
+                    if (q.z > L.pos.z - 4.0) { break; }
+                    let sp2 = vec2<f32>(q.x, q.y - q.z);
+                    let suv = (sp2 - G.view.xy) / G.view.zw;
+                    if (suv.x < 0.0 || suv.y < 0.0 || suv.x > 1.0 || suv.y > 1.0) { break; }
+                    let e2 = textureLoad(t_b, vec2<i32>(suv * dim), 0).b * 510.0;
+                    if (e2 > q.z + 4.0 && abs(sp2.y + e2 - q.y) < 16.0) {
+                        lsh = 0.25 + 0.75 * s2 * s2;
+                        break;
+                    }
+                }
+            }
+        }
         let fl = 1.0 + (sin(t * 11.0 + f32(i) * 1.7) * 0.5 + sin(t * 17.0 + f32(i)) * 0.5) * L.col.w;
-        li += L.col.rgb * ndl * att * fl * (0.6 + 0.4 * ao);
+        li += L.col.rgb * ndl * att * fl * (0.6 + 0.4 * ao) * lsh;
         let h2 = normalize(ld + view_dir);
-        spec += L.col.rgb * pow(max(dot(n, h2), 0.0), 24.0) * spec_k * att;
+        spec += L.col.rgb * pow(max(dot(n, h2), 0.0), select(24.0, sexp, hd)) * spec_k * att * lsh * select(1.0, 0.4, hd);
     }
-    // weiche Stufen wie in Pixelkunst (leicht gedithert)
-    let dith = (hash21(vec2<f32>(ip)) - 0.5) / 24.0;
-    li = floor(li * 12.0 + dith * 12.0 + 0.5) / 12.0;
+    if (!hd) {
+        // weiche Stufen wie in Pixelkunst (leicht gedithert)
+        let dith = (hash21(vec2<f32>(ip)) - 0.5) / 24.0;
+        li = floor(li * 12.0 + dith * 12.0 + 0.5) / 12.0;
+    }
     var c = alb * li + spec + em;
     // Blitz (Gewitter)
     c += alb * G.counts.y * vec3<f32>(0.8, 0.85, 1.0);
