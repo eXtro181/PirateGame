@@ -253,6 +253,18 @@ fn setup(world: &mut bevy::ecs::world::World) {
             } else if app.params.contains_key("sail") {
                 if let Scene::Play(g) = &mut app.scene {
                     g.debug_board();
+                    if app.params.get("pos").map(|p| p == "whirl").unwrap_or(false) {
+                        // Testlauf: mit dem Schiff kurz vor dem offenen Strudel
+                        let (wx, wy) = g.world.whirlpool;
+                        g.ship.hull.x = wx + 240.0;
+                        g.ship.hull.y = wy + 40.0;
+                        g.ship.hull.h = -std::f32::consts::FRAC_PI_2;
+                        g.cam_f = (wx + 240.0, wy + 40.0);
+                    }
+                    if let Some(d) = app.params.get("hdg").and_then(|v| v.parse::<f32>().ok()) {
+                        // Testlauf: Kurs in Grad (0 = Nord, im Uhrzeigersinn)
+                        g.ship.hull.h = d.to_radians();
+                    }
                     if app.params.contains_key("zoo") {
                         g.debug_sea_zoo();
                     }

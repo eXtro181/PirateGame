@@ -688,7 +688,7 @@ impl Game {
         self.update_hub_wrecks(dt);
         self.update_boss_arena();
         self.update_camera(dt, frame);
-        if self.whirlpool_open && self.sailing && self.cutscene.is_none() && (self.ship.hull.x - self.world.whirlpool.0).hypot(self.ship.hull.y - self.world.whirlpool.1) < 90.0 {
+        if self.whirlpool_open && self.sailing && self.cutscene.is_none() && (self.ship.hull.x - self.world.whirlpool.0).hypot(self.ship.hull.y - self.world.whirlpool.1) < 250.0 {
             self.enter_whirlpool();
         }
         let biome = if self.sailing {
@@ -743,12 +743,22 @@ impl Game {
             }
             Cut::Whirl { t, moved } => {
                 let t = t + dt;
-                if t < 2.4 {
-                    // mit dem Schiff in den Strudel: kreisend hinab
+                if t < 1.0 {
+                    // die Arme packen das Schiff: es kommt zum Stehen und ruckt
+                    self.ship.hull.v *= 0.85;
+                    self.ship.sail = 0;
+                    if t > 0.6 {
+                        self.shake(3.0);
+                    }
+                    self.cutscene = Some(Cut::Whirl { t, moved });
+                } else if t < 3.4 {
+                    // ... und ziehen es kreisend hinab
+                    let t0 = t;
+                    let t = t - 1.0;
                     let (wx, wy) = self.world.whirlpool;
                     let h = &mut self.ship.hull;
                     let (dx, dy) = (h.x - wx, h.y - wy);
-                    let (r, a) = ((dx.hypot(dy) * (1.0 - dt * 0.9)).max(2.0), dy.atan2(dx) + dt * (2.0 + t * 2.0));
+                    let (r, a) = ((dx.hypot(dy) * (1.0 - dt * 1.3)).max(2.0), dy.atan2(dx) + dt * (1.2 + t * 2.2));
                     h.x = wx + a.cos() * r;
                     h.y = wy + a.sin() * r;
                     h.h += dt * (2.5 + t * 2.0);
@@ -758,7 +768,7 @@ impl Game {
                         self.fx.burst("splash", wx + rr(-40.0, 40.0), wy + rr(-20.0, 20.0), 2, BurstOpt { speed: Some(80.0), up: Some(120.0), ..Default::default() });
                     }
                     self.ui.fade = ((t - 1.2) * 1.2).clamp(0.0, 1.0);
-                    self.cutscene = Some(Cut::Whirl { t, moved });
+                    self.cutscene = Some(Cut::Whirl { t: t0, moved });
                 } else if !moved {
                     self.arrive_end();
                     self.cutscene = Some(Cut::Whirl { t, moved: true });

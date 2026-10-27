@@ -43,6 +43,21 @@ pub fn ship_size(style: &str) -> (i32, i32, i32) {
     }
 }
 
+/// Bildschirmversatz (x, y) eines Punkts auf dem Deck des eigenen Schiffs relativ zum Ankerpunkt
+/// (Mitte Wasserlinie): `along` Bug(+)/Heck(−), `across` Steuerbord(+), `up` über dem Deck,
+/// alles in Modellmaßen. Gleiche Projektion wie das Schiffsbild (16 Kurse, gespiegelt).
+pub fn deck_point(dir16: usize, along: f32, across: f32, up: f32) -> (f32, f32) {
+    let (k, flip) = ship_dir(dir16);
+    let d = design("player", Upg::default());
+    let sc = ship_scale("player");
+    let p = [across * sc, along * sc, (d.d * 0.875 + up) * sc];
+    let yaw = k as f32 * TAU / 16.0 + PI;
+    let q = crate::rig::rot(p, 2, yaw, [0.0; 3]);
+    let (sp, cp) = crate::rig::PITCH.sin_cos();
+    let x = if flip { -q[0] } else { q[0] };
+    (x, q[1] * sp - q[2] * cp)
+}
+
 /// Kurs 0..16 → (gerendertes Bild 0..=8, gespiegelt)
 pub fn ship_dir(dir16: usize) -> (usize, bool) {
     let d = dir16 % 16;

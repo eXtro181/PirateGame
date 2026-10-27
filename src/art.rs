@@ -103,6 +103,7 @@ impl DynSlot {
             warn!("Bereich zu klein: {:.0} px belegt, {} px frei", used, self.h);
             return false;
         }
+        info!("Bereich: {:.0} von {} px", used, self.h);
         let pg = &a.pages[0];
         let (sw, sh) = (self.w, self.h);
         let cut = |src: &Vec<u8>| -> Vec<u8> {
@@ -462,8 +463,8 @@ fn beast_sheet(a: &mut Atlas, key: &str) -> CharSheet {
 /// Höhe des reservierten Streifens für den Spieler-Bogen (volle Seitenbreite).
 const PLAYER_STRIP: i32 = 208;
 /// Höhe des Bereichs für das eigene Schiff (9 Kurse) und für den aktiven Seeboss.
-const SHIP_STRIP: i32 = 260;
-const BOSS_STRIP: i32 = 1560;
+const SHIP_STRIP: i32 = 300;
+const BOSS_STRIP: i32 = 1520;
 
 /// Spieler-Bilderbogen in einem reservierten Streifen der ersten Atlasseite
 /// (wird bei Änderungen des Aussehens neu gebaut und nur dieser Ausschnitt hochgeladen).
@@ -690,6 +691,9 @@ pub fn build(frame: &mut Frame) -> Art {
             stc::wall_h(0),
             stc::wall_h(1),
             stc::wall_v(),
+            stc::slipway(),
+            stc::crane(),
+            stc::rope_coil(),
             stc::gate_arch(),
             stc::brazier(),
             stc::hooded_statue(),

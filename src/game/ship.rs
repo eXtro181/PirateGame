@@ -477,12 +477,14 @@ impl Game {
             f.sprite(&s, h.x, h.y + b, SprOpt { flip, tint: [255, 255, 255, a], flags: fl, ..Default::default() });
             // Crew an Deck, der Kapitän am Steuer (nur wenn man segelt)
             if self.sailing && h.alpha > 0.9 {
-                // Stellplätze am gezeichneten Kurs (16 Stufen) ausrichten, nicht am stufenlosen:
-                // sonst drehen sie sich vor dem Rumpfbild weiter und wirken nachgezogen
-                let hd = h.dir16() as f32 * TAU / 16.0;
-                let (fx, fy) = (hd.sin(), -hd.cos() * 0.52);
-                let side_flip = fx < 0.0;
-                let mut deck: Vec<(&CharSheet, f32, f32)> = vec![(&art.player, -46.0, 0.0)];
+                // Plätze an Deck in Modellmaßen, projiziert wie das Schiffsbild (gleicher Kurs,
+                // gleiche Kippung): Kapitän am Steuer auf dem Achterdeck, Crew mittschiffs
+                let d16 = h.dir16();
+                let hd = d16 as f32 * TAU / 16.0;
+                let (sx, sy) = (hd.sin(), -hd.cos());
+                // Blickrichtung der Figuren: wie der Bug
+                let (dir, flip) = if sx.abs() > sy.abs() * 0.8 { (2, sx < 0.0) } else if sy < 0.0 { (1, false) } else { (0, false) };
+                let mut deck: Vec<(&CharSheet, f32, f32, f32)> = vec![(&art.player, -36.0, 0.0, 6.0)];
                 for (i, el) in self.save.crew.iter().enumerate() {
                     let key = match el.as_str() {
                         "fire" => "crewFire",
@@ -491,17 +493,15 @@ impl Game {
                         _ => "crewEarth",
                     };
                     if let Some(sh) = art.chars.get(key) {
-                        deck.push((sh, [-18.0, 6.0, 26.0, 44.0][i % 4], [6.0, -6.0, 5.0, -4.0][i % 4]));
+                        deck.push((sh, [-16.0, 0.0, 14.0, 26.0][i % 4], [5.0, -5.0, 5.0, -4.0][i % 4], 0.0));
                     }
                 }
-                for (sh, along, across) in deck {
-                    let (along, across) = (along * 1.4, across * 1.4);
-                    let (x, y) = (h.x + fx * along * 1.5 - fy * across, h.y + fy * along * 1.5 + fx * across * 0.5);
-                    // Deckshöhe fest, das Schaukeln wie beim Rumpf (gleiche Richtung)
-                    let z = 28.0;
-                    let fr = ((self.t * 2.0 + along) as usize) % 4;
-                    let spr = sh.get(1, 0, fr);
-                    f.sprite_z(&spr, x, y + b - z, h.y + 1.0 + along * 0.001, SprOpt { flip: side_flip, scale: 0.78, ev: z, tint: [255, 255, 255, a], ..Default::default() });
+                for (k, (sh, along, across, up)) in deck.into_iter().enumerate() {
+                    let (ox, oy) = sw_art::ships::deck_point(d16, along, across, up);
+                    let (x, y) = (h.x + ox, h.y + b + oy);
+                    let fr = ((self.t * 2.0 + k as f32 * 0.7) as usize) % 4;
+                    let spr = sh.get(dir, 0, fr);
+                    f.sprite_z(&spr, x, y, h.y + 1.0 + k as f32 * 0.01, SprOpt { flip, scale: 0.85, ev: -oy, tint: [255, 255, 255, a], ..Default::default() });
                 }
             }
             if self.sailing {
@@ -606,13 +606,17 @@ impl Game {
         }
     }
 
-    /// Acht dunkelgrüne Krakenarme rund um den offenen Strudel; sie wiegen sich im Wasser, das
-    /// Schiff fährt zwischen ihnen hindurch hinein.
+    /// Acht dunkelgrüne Krakenarme rund um den offenen Strudel; sie wiegen sich im Wasser und
+    /// packen das Schiff, sobald es sich nähert, und ziehen es in die Tiefe.
     fn draw_whirl_arms(&self, art: &Art, f: &mut Frame) {
         let Some(seg) = art.map.get("k:seg") else { return };
         let (wx, wy) = self.world.whirlpool;
         let t = self.t;
-        let (grab, gx, gy, gz) = (-1.0f32, 0.0f32, 0.0f32, 0.0f32);
+        // kurz bevor das Schiff den Strudel erreicht, greifen die Arme zu und ziehen es hinein
+        let (grab, gx, gy, gz) = match self.cutscene {
+            Some(Cut::Whirl { t: ct, moved: false }) => (ct, self.ship.hull.x, self.ship.hull.y, 50.0),
+            _ => (-1.0, 0.0, 0.0, 0.0),
+        };
         for i in 0..8 {
             let fi = i as f32;
             let a = fi / 8.0 * TAU + 0.2;

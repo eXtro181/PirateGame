@@ -121,17 +121,17 @@ fn main() {
             save_lit(&bg, &format!("{out}/dutchman.png"), 1);
         }
         "shipsize" => {
-            for st in ["player", "fire", "ice", "wind", "earth"] {
+            for (st, u) in [("player", 0u8), ("player", 5), ("player", 10), ("fire", 0)] {
                 let mut a = sw_art::atlas::Atlas::new();
                 a.lim = 2040;
                 for k in 0..=8 {
                     if st != "player" && k % 2 == 1 { continue; }
-                    let c = sw_art::ships::ship_frame(st, k, Default::default());
+                    let c = sw_art::ships::ship_frame(st, k, sw_art::ships::Upg { speed: u, def: u, atk: u });
                     let b = c.bounds().unwrap();
                     eprintln!("{st} {k}: {}x{}", b.2 - b.0, b.3 - b.1);
                     a.add_trim(&format!("{k}"), &c, c.w / 2, c.h - 10);
                 }
-                eprintln!("{st}: used {:.0} px", a.used() * 2048.0);
+                eprintln!("{st} {u}: used {:.0} px", a.used() * 2048.0);
             }
         }
         "grave" => {

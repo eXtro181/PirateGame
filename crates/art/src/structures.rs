@@ -682,3 +682,97 @@ pub fn sunk_mast(seed: i32) -> PropArt {
     r.tube(&[top, v(-20.0, 4.0, 0.0)], 0.4, 0.4, rope);
     prop(&format!("sunkMast{seed}"), &r, 110, 120, 16).circle(6.0)
 }
+
+// ================================================================= Werft des Schiffsmeisters
+
+/// Helling mit einem Schiff im Bau: Kiel auf Pallen, Spanten wie Rippen, unten erste Planken,
+/// Gerüst mit Laufbohlen, Bug- und Achtersteven.
+pub fn slipway() -> PropArt {
+    let mut r = Rig::new();
+    let m = mats(&mut r);
+    let fresh = r.mat(mat(0x8A6440).pat(Pat::Grain));
+    let plank = r.mat(mat(0x6A4A2E).pat(Pat::Planks(2.4)));
+    let tar = r.mat(mat(0x1E1814).pat(Pat::Grain).spec(60));
+    // Rampe aus Bohlen
+    r.cube(v(0.0, 0.0, 1.5), v(84.0, 26.0, 1.5), plank);
+    for k in 0..7 {
+        let x = -66.0 + k as f32 * 22.0;
+        r.cube(v(x, 0.0, 5.0), v(3.0, 8.0, 3.0), m.wood);
+    }
+    // Kiel, Steven
+    r.tube(&[v(-70.0, 0.0, 9.0), v(70.0, 0.0, 9.0)], 2.6, 2.6, tar);
+    r.curve(&[v(68.0, 0.0, 9.0), v(80.0, 0.0, 20.0), v(84.0, 0.0, 44.0)], 2.4, 1.8, fresh);
+    r.curve(&[v(-70.0, 0.0, 9.0), v(-74.0, 0.0, 26.0), v(-72.0, 0.0, 40.0)], 2.4, 2.0, fresh);
+    // Spanten
+    for i in 0..11 {
+        let x = -60.0 + i as f32 * 12.0;
+        let k = (1.0 - (x / 72.0).powi(2)).max(0.1).sqrt();
+        let w = 24.0 * k;
+        for side in [-1.0f32, 1.0] {
+            r.curve(&[v(x, 0.0, 9.0), v(x, side * w * 0.8, 14.0), v(x, side * w, 26.0), v(x, side * w * 0.96, 40.0)], 1.5, 1.2, fresh);
+        }
+    }
+    // erste Plankengänge unten
+    for row in 0..3 {
+        let z = 13.0 + row as f32 * 4.5;
+        for side in [-1.0f32, 1.0] {
+            let pts: Vec<V3> = (0..=12).map(|j| {
+                let x = -58.0 + j as f32 * 10.0;
+                let k = (1.0 - (x / 72.0).powi(2)).max(0.1).sqrt();
+                let w = 24.0 * k * (0.82 + row as f32 * 0.07);
+                v(x, side * w, z)
+            }).collect();
+            r.tube(&pts, 1.6, 1.6, plank);
+        }
+    }
+    // Gerüst mit Laufbohlen
+    for x in [-56.0f32, -20.0, 16.0, 52.0] {
+        for side in [-1.0f32, 1.0] {
+            r.cyl(v(x, side * 32.0, 0.0), 1.3, 1.3, 44.0, m.wood);
+        }
+        r.tube(&[v(x, -32.0, 30.0), v(x, 32.0, 30.0)], 0.9, 0.9, m.wood);
+    }
+    for side in [-1.0f32, 1.0] {
+        r.cube(v(-2.0, side * 32.0, 30.0), v(60.0, 3.0, 0.8), plank);
+    }
+    // Leiter
+    r.tube(&[v(60.0, 34.0, 0.0), v(56.0, 34.0, 30.0)], 0.8, 0.8, m.wood);
+    r.tube(&[v(64.0, 34.0, 0.0), v(60.0, 34.0, 30.0)], 0.8, 0.8, m.wood);
+    prop("slipway", &r, 200, 150, 40).shadow(80.0, 10.0).boxc(78.0, 22.0)
+}
+
+/// Ladekran: Mast mit schrägem Ausleger, Seil, hängende Kiste, Gegengewicht, Laterne.
+pub fn crane() -> PropArt {
+    let mut r = Rig::new();
+    let m = mats(&mut r);
+    let rope = r.mat(mat(0x6A5434).soft());
+    let lamp = r.mat(mat(0xFFC060).glow(2.0).bias(0.45));
+    r.cube(v(0.0, 0.0, 3.0), v(9.0, 9.0, 3.0), m.trim);
+    r.cyl(v(0.0, 0.0, 6.0), 3.0, 3.0, 84.0, m.wood);
+    r.tube(&[v(0.0, 0.0, 70.0), v(44.0, 0.0, 96.0)], 2.0, 1.4, m.wood);
+    r.tube(&[v(0.0, 0.0, 88.0), v(44.0, 0.0, 96.0)], 0.6, 0.6, rope);
+    r.tube(&[v(0.0, 0.0, 74.0), v(-16.0, 0.0, 80.0)], 1.6, 1.6, m.wood);
+    r.cube(v(-16.0, 0.0, 74.0), v(4.0, 4.0, 5.0), m.iron);
+    r.tube(&[v(44.0, 0.0, 95.0), v(44.0, 0.0, 44.0)], 0.6, 0.6, rope);
+    r.cube(v(44.0, 0.0, 36.0), v(8.0, 8.0, 7.0), m.wood);
+    r.cube(v(44.0, 0.0, 43.5), v(8.4, 8.4, 0.6), m.iron);
+    r.tube(&[v(0.0, 3.0, 60.0), v(0.0, 8.0, 62.0)], 0.5, 0.5, m.iron);
+    r.ball(v(0.0, 9.0, 59.0), 2.2, lamp);
+    prop("crane", &r, 120, 140, 20).shadow(14.0, 5.0).circle(9.0).light(0.0, -60.0, 60.0, 180.0, [1.6, 1.0, 0.5], 0.15)
+}
+
+/// Taurolle.
+pub fn rope_coil() -> PropArt {
+    let mut r = Rig::new();
+    let rope = r.mat(mat(0x8A7048).pat(Pat::Stripes(1.2)));
+    for k in 0..4 {
+        let z = 1.5 + k as f32 * 2.4;
+        let rad = 9.0 - k as f32 * 1.2;
+        let pts: Vec<V3> = (0..=24).map(|j| {
+            let a = j as f32 / 24.0 * std::f32::consts::TAU;
+            v(a.cos() * rad, a.sin() * rad, z)
+        }).collect();
+        r.tube(&pts, 1.4, 1.4, rope);
+    }
+    prop("ropeCoil", &r, 32, 30, 8).shadow(10.0, 3.0)
+}

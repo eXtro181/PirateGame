@@ -1598,8 +1598,31 @@ impl World {
         let (dpx, dpy) = self.docks.last().map(|d| (d.px, d.py)).unwrap_or((px(cx), py(wy1 + 8)));
         let (dtx, dty) = ((dpx / TS as f32) as i32, (dpy / TS as f32) as i32);
         self.npc("shipmaster", dtx - 3, dty - 4, "shipmaster", "Schiffsmeister Brack", "shipmaster", false, None);
-        self.prop_t("crates", dtx + 3, dty - 5);
-        self.prop_t("anchorDeco", dtx - 5, dty - 6);
+        // Werft auf einem breiten Holzkai beidseits des Anlegers: Helling mit Schiff im Bau,
+        // Kran, Holz, Taue, Laternen – weithin sichtbar
+        for y in dty - 9..=dty - 3 {
+            for x in dtx - 12..=dtx + 13 {
+                if inb(x, y) && (self.ground[idx(x, y)] == Mat::Water || y >= dty - 6) {
+                    let i = idx(x, y);
+                    self.ground[i] = Mat::Plank;
+                    self.path[i] = true;
+                    self.level[i] = 0;
+                }
+            }
+        }
+        self.prop_t("slipway", dtx + 7, dty - 6);
+        self.prop_t("crane", dtx - 7, dty - 5);
+        self.prop_t("crates", dtx + 2, dty - 6);
+        self.prop_t("anchorDeco", dtx - 5, dty - 7);
+        self.prop_t("logPile", dtx - 9, dty - 7);
+        self.prop_t("ropeCoil", dtx - 1, dty - 6);
+        self.prop_t("ropeCoil", dtx + 1, dty - 3);
+        self.prop_t("barrels", dtx - 6, dty - 2);
+        self.prop_t("cannon", dtx + 3, dty - 2);
+        self.prop_t("lamppost", dtx - 2, dty - 2);
+        self.prop_t("lamppost", dtx + 2, dty - 9);
+        self.prop_t("flagPole", dtx - 9, dty - 3);
+        self.prop_t("signpost", dtx - 1, dty - 8);
         for (x, y, r, n) in [(-30, -4, 5.0, 4), (-28, 14, 4.0, 3), (28, -14, 4.0, 3)] {
             self.grove(cx + x, cy + y, r, rng, n, None);
         }
