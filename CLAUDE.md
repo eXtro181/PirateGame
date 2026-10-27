@@ -62,6 +62,7 @@ Feuer-IDs: `kueste hain asche asche2 frost frost2 raben raben2 mangroven mangrov
 - **NG+** (`save.ng`): nach dem Sieg bei der Laternenmagd. Könige, Seebosse, Throne, Endkampf zurückgesetzt; Stufe, Ausrüstung, Schiff, Crew bleiben. Gegner-Leben × (1 + 0,5·ng), Schaden × (1 + 0,3·ng).
 - **Schiff**: Ausbauten Tempo/Rumpf/Geschütze bis 10 beim Schiffsmeister. Crew-Geschütze (Taste C auf See): 1 Mörser, 2 Kettenkugeln, 3 Flammenwerfer, 4 Kraken-Begleiter (acht grüne Tentakel um das Ziel). F = Shanty der Crew. Crew und Kapitän stehen per `deck_point` an Deck und drehen sich mit dem Kurs.
 - **Leben**: Tiere (`critters.rs`), Fußspuren/Staub, Rauch aus Schornsteinen (`World::chimneys`), Dorfbewohner, Glühwürmchen.
+- **Cheats** (Pause-Menü): „Unendlich Perlen“ schaltet `save.inf_pearls` um (Some = alter Stand, wird beim Abschalten zurückgegeben; Perlen bleiben auf `INF_PEARLS`, kein Perlenfleck beim Tod, Anzeige „unendlich“ über `pearl_str`). Debug-Menü: Trophäen der Könige/Seeungeheuer, ganze Crew, „Alle Säbelfeuer“ (alle sichtbaren Feuer entzündet, das Feuer am Ende der Welt erst nach Malakor).
 - Namen Crew: Kanonierin Asra, Navigatorin Lene, Bootsmann Kalo, Zimmermann Ode. Start-NPC: Alter Galionsschnitzer.
 
 ## Grafik

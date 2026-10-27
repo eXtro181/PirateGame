@@ -567,6 +567,10 @@ impl Game {
         if self.pearl_gain_t <= 0.0 {
             self.pearl_gain = 0;
         }
+        if self.save.inf_pearls.is_some() {
+            self.save.pearls = INF_PEARLS;
+            self.pearl_shown = INF_PEARLS as f32;
+        }
         self.pearl_shown += (self.save.pearls as f32 - self.pearl_shown) * (dt * 6.0).min(1.0);
         if (self.pearl_shown - self.save.pearls as f32).abs() < 1.0 {
             self.pearl_shown = self.save.pearls as f32;
@@ -1108,9 +1112,11 @@ impl Game {
         self.save.deaths += 1;
         let (x, y) = (self.player.a.x, self.player.a.y);
         let safe = if !self.world.blocked(x, y, 4.0, false, None) && self.world.g((x / TS as f32) as i32, (y / TS as f32) as i32) != Mat::Abyss { (x, y) } else { self.last_safe };
-        self.save.stain = if self.save.pearls > 0 { Some(Stain { x: safe.0, y: safe.1, pearls: self.save.pearls }) } else { None };
-        self.save.pearls = 0;
-        self.pearl_shown = 0.0;
+        if self.save.inf_pearls.is_none() {
+            self.save.stain = if self.save.pearls > 0 { Some(Stain { x: safe.0, y: safe.1, pearls: self.save.pearls }) } else { None };
+            self.save.pearls = 0;
+            self.pearl_shown = 0.0;
+        }
         self.stain_t = 0.0;
         self.death_t = Some(0.0);
         self.lock = None;
@@ -1300,9 +1306,17 @@ impl Game {
                 self.new_game_plus();
             }
             Cmd::Cheat => {
-                self.gain_pearls(1_000_000, None);
-                self.ui.toast("+1 000 000 Perlen");
+                if let Some(old) = self.save.inf_pearls.take() {
+                    self.save.pearls = old;
+                    self.pearl_shown = old as f32;
+                    self.ui.toast("Unendlich Perlen: aus");
+                } else {
+                    self.save.inf_pearls = Some(self.save.pearls);
+                    self.save.pearls = INF_PEARLS;
+                    self.ui.toast("Unendlich Perlen: an");
+                }
                 self.persist(true);
+                self.pause_menu();
             }
             Cmd::Options => {
                 self.ui.list = None;
@@ -1361,7 +1375,7 @@ impl Game {
     }
     fn level_menu(&mut self) {
         let s = &self.save;
-        let title = format!("Stufe {} · nächste {} Perlen · du hast {}", s.level, level_cost(s.level), s.pearls);
+        let title = format!("Stufe {} · nächste {} Perlen · du hast {}", s.level, level_cost(s.level), pearl_str(s));
         self.ui.open_list(&title, level_entries(s), Cmd::EndTalk, true, true);
     }
     fn level_stat(&mut self, i: usize) {
@@ -1408,7 +1422,7 @@ impl Game {
         self.persist(true);
     }
     fn weapon_shop(&mut self) {
-        let t = format!("Waffen · {} Perlen", self.save.pearls);
+        let t = format!("Waffen · {} Perlen", pearl_str(&self.save));
         let sel = self.ui.list.as_ref().map(|l| l.sel);
         self.ui.open_list(&t, weapon_entries(&self.save), Cmd::EndTalk, true, true);
         if let (Some(s), Some(l)) = (sel, self.ui.list.as_mut()) {
@@ -1431,7 +1445,7 @@ impl Game {
         self.persist(true);
     }
     fn shop(&mut self) {
-        let t = format!("Handeln · {} Perlen", self.save.pearls);
+        let t = format!("Handeln · {} Perlen", pearl_str(&self.save));
         let sel = self.ui.list.as_ref().map(|l| l.sel);
         self.ui.open_list(&t, shop_entries(&self.save), Cmd::EndTalk, true, true);
         if let (Some(s), Some(l)) = (sel, self.ui.list.as_mut()) {
@@ -1482,7 +1496,7 @@ impl Game {
                 entry(&label, &if sold { "ausverkauft".to_string() } else { p.to_string() }, it.desc, sold || s.pearls < p, Cmd::Buy(k, p))
             })
             .collect();
-        let t = format!("{} · {} · {} Perlen", d.name, d.town, s.pearls);
+        let t = format!("{} · {} · {} Perlen", d.name, d.town, pearl_str(s));
         let sel = self.ui.list.as_ref().map(|l| l.sel);
         self.ui.open_list(&t, items, Cmd::EndTalk, true, true);
         if let (Some(s), Some(l)) = (sel, self.ui.list.as_mut()) {
@@ -1887,8 +1901,8 @@ impl Game {
                 entry("Fortschritt", "I", "", false, Cmd::Progress),
                 entry("Werte", "", "", false, Cmd::Stats),
                 entry("Optionen", "", "", false, Cmd::Options),
-                entry("Cheat: +1 Mio Perlen", "", "Füllt den Perlenbeutel um eine Million auf.", false, Cmd::Cheat),
-                entry("Debug-Menü", "", "Boss-Trophäen und Crew herbeizaubern (ohne Endboss).", false, Cmd::Debug),
+                entry("Cheat: Unendlich Perlen", if self.save.inf_pearls.is_some() { "an" } else { "aus" }, "Der Perlenbeutel wird nie leer. Nochmals wählen schaltet ab und stellt den alten Stand wieder her.", false, Cmd::Cheat),
+                entry("Debug-Menü", "", "Boss-Trophäen, Crew und Säbelfeuer herbeizaubern (ohne Endboss).", false, Cmd::Debug),
                 entry("Speichern und zum Titel", "", "", false, Cmd::ToTitle),
             ],
             Cmd::Close,
@@ -1973,7 +1987,14 @@ impl Game {
             items.push(entry(&format!("Trophäe: {}", k.wreck), if yes(&s.sea_kings, k.el) { "vorhanden" } else { "" }, "Das Ungeheuer gilt als versenkt, sein Schiff brennt im See der Glutwacht.", yes(&s.sea_kings, k.el), Cmd::DebugGive("sea", k.el)));
         }
         items.push(entry("Ganze Crew an Bord", &format!("{}/4", s.crew.len()), "Alle vier Crewmitglieder heuern an.", s.crew.len() >= 4, Cmd::DebugGive("crew", "")));
+        let (lit, all) = self.fire_count();
+        items.push(entry("Alle Säbelfeuer", &format!("{lit}/{all}"), "Entzündet jedes Säbelfeuer, alle Reiseziele sind offen (das Feuer am Ende der Welt erst nach Malakor).", lit >= all, Cmd::DebugGive("fires", "")));
         self.ui.open_list("Debug-Menü", items, Cmd::Pause, true, true);
+    }
+    /// entzündete und erreichbare Säbelfeuer (verborgene zählen nicht)
+    fn fire_count(&self) -> (usize, usize) {
+        let open: Vec<_> = self.world.fires.iter().filter(|f| !self.world.props[f.prop].hidden).collect();
+        (open.iter().filter(|f| self.save.lit_fires.contains(&f.id)).count(), open.len())
     }
     fn debug_give(&mut self, kind: &str, el: &'static str) {
         match kind {
@@ -2017,6 +2038,17 @@ impl Game {
                     }
                 }
                 self.ui.toast(&format!("Trophäe: {}", sea_king(el).wreck));
+            }
+            "fires" => {
+                for i in 0..self.world.fires.len() {
+                    let f = &self.world.fires[i];
+                    if !self.world.props[f.prop].hidden && !self.save.lit_fires.contains(&f.id) {
+                        self.save.lit_fires.push(f.id.clone());
+                    }
+                }
+                self.light_fires();
+                self.sfx("kindle");
+                self.ui.toast("Alle Säbelfeuer brennen.");
             }
             "crew" => {
                 for c in ["fire", "ice", "wind", "earth"] {

@@ -378,6 +378,9 @@ pub struct Save {
     pub lit_fires: Vec<String>,
     #[serde(default)]
     pub stain: Option<Stain>,
+    /// Cheat „Unendlich Perlen“: Some(Perlen vor dem Einschalten)
+    #[serde(default)]
+    pub inf_pearls: Option<i64>,
     #[serde(default)]
     pub kings: HashMap<String, bool>,
     #[serde(default)]
@@ -475,6 +478,12 @@ pub const SHOPS: [ShopDef; 4] = [
 pub fn shop_def(k: &str) -> &'static ShopDef {
     SHOPS.iter().find(|s| s.key == k).unwrap_or(&SHOPS[0])
 }
+/// Perlenstand bei „Unendlich Perlen“
+pub const INF_PEARLS: i64 = 999_999_999;
+/// Perlenstand als Text („unendlich“ beim Cheat)
+pub fn pearl_str(s: &Save) -> String {
+    if s.inf_pearls.is_some() { "unendlich".into() } else { s.pearls.to_string() }
+}
 pub fn level_cost(level: i32) -> i64 {
     (120.0 * 1.1f64.powi(level)).round() as i64
 }
@@ -510,6 +519,7 @@ pub fn new_save(name: &str, look: LookIdx, origin: &str, gift: &str, now: f64) -
         last_fire: "kueste".into(),
         lit_fires: vec![],
         stain: None,
+        inf_pearls: None,
         kings: HashMap::new(),
         figureheads: HashMap::new(),
         mounted: HashMap::new(),

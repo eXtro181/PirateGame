@@ -567,7 +567,7 @@ impl Game {
             text::t(f, art, "R", cx + 32.0, cy + 2.0, [143, 163, 168, 180]);
         }
         // Perlen unten rechts
-        let pt = (self.pearl_shown as i64).to_string();
+        let pt = if self.save.inf_pearls.is_some() { "unendlich".to_string() } else { (self.pearl_shown as i64).to_string() };
         let pw = text::width(art, &pt);
         f.ui_spr(&art.spr("i:pearl"), w - 26.0 - pw, h - 24.0, SprOpt::default());
         text::tr(f, art, &pt, w - 8.0, h - 18.0, col::BONE);
@@ -662,7 +662,7 @@ impl Game {
         if self.shanty_t > 0.0 {
             text::tc(f, art, &format!("♪ {}", self.shanty_name), w / 2.0, 30.0, col::SOUL);
         }
-        let pt = (self.pearl_shown as i64).to_string();
+        let pt = if self.save.inf_pearls.is_some() { "unendlich".to_string() } else { (self.pearl_shown as i64).to_string() };
         let pw = text::width(art, &pt);
         f.ui_spr(&art.spr("i:pearl"), w - 26.0 - pw, h - 24.0, SprOpt::default());
         text::tr(f, art, &pt, w - 8.0, h - 18.0, col::BONE);
