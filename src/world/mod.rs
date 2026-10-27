@@ -38,25 +38,21 @@ pub struct ZoneDef {
     pub rx: i32,
     pub ry: i32,
     pub seed: u32,
-    pub king: Option<&'static str>,
     pub sealed: bool,
 }
 impl Zone {
     pub fn def(self) -> &'static ZoneDef {
         &ZONE_DEFS[self as usize]
     }
-    pub fn from_key(k: &str) -> Option<Zone> {
-        ZONES.iter().copied().find(|z| z.def().key == k)
-    }
 }
 pub static ZONE_DEFS: [ZoneDef; 7] = [
-    ZoneDef { key: "kueste", name: "Galgenstrand", biome: Biome::Coast, music: "salz", cx: 240, cy: 260, rx: 46, ry: 26, seed: 1, king: None, sealed: false },
-    ZoneDef { key: "hain", name: "Glutwacht", biome: Biome::Hub, music: "hain", cx: 240, cy: 172, rx: 36, ry: 33, seed: 2, king: None, sealed: false },
-    ZoneDef { key: "asche", name: "Aschebucht", biome: Biome::Fire, music: "glut", cx: 348, cy: 160, rx: 42, ry: 30, seed: 3, king: Some("fire"), sealed: false },
-    ZoneDef { key: "frost", name: "Frostgrotte", biome: Biome::Frost, music: "frost", cx: 136, cy: 118, rx: 44, ry: 32, seed: 4, king: Some("ice"), sealed: false },
-    ZoneDef { key: "raben", name: "Hafen Rabenwacht", biome: Biome::Wind, music: "sturm", cx: 136, cy: 236, rx: 44, ry: 32, seed: 5, king: Some("wind"), sealed: false },
-    ZoneDef { key: "mangroven", name: "Fluchmangroven", biome: Biome::Earth, music: "tiefe", cx: 348, cy: 256, rx: 42, ry: 30, seed: 6, king: Some("earth"), sealed: false },
-    ZoneDef { key: "ende", name: "Ende der Welt", biome: Biome::End, music: "ende", cx: 482, cy: 362, rx: 60, ry: 45, seed: 7, king: None, sealed: true },
+    ZoneDef { key: "kueste", name: "Galgenstrand", biome: Biome::Coast, music: "salz", cx: 240, cy: 260, rx: 46, ry: 26, seed: 1, sealed: false },
+    ZoneDef { key: "hain", name: "Glutwacht", biome: Biome::Hub, music: "hain", cx: 240, cy: 172, rx: 36, ry: 33, seed: 2, sealed: false },
+    ZoneDef { key: "asche", name: "Aschebucht", biome: Biome::Fire, music: "glut", cx: 348, cy: 160, rx: 42, ry: 30, seed: 3, sealed: false },
+    ZoneDef { key: "frost", name: "Frostgrotte", biome: Biome::Frost, music: "frost", cx: 136, cy: 118, rx: 44, ry: 32, seed: 4, sealed: false },
+    ZoneDef { key: "raben", name: "Hafen Rabenwacht", biome: Biome::Wind, music: "sturm", cx: 136, cy: 236, rx: 44, ry: 32, seed: 5, sealed: false },
+    ZoneDef { key: "mangroven", name: "Fluchmangroven", biome: Biome::Earth, music: "tiefe", cx: 348, cy: 256, rx: 42, ry: 30, seed: 6, sealed: false },
+    ZoneDef { key: "ende", name: "Ende der Welt", biome: Biome::End, music: "ende", cx: 482, cy: 362, rx: 60, ry: 45, seed: 7, sealed: true },
 ];
 
 pub fn fire_name(id: &str) -> &'static str {
@@ -79,17 +75,16 @@ pub fn fire_name(id: &str) -> &'static str {
 /// Seegebiet eines Seebosses (Kachelkoordinaten, Radius in Kacheln).
 pub struct SeaRegion {
     pub el: &'static str,
-    pub key: &'static str,
     pub name: &'static str,
     pub cx: i32,
     pub cy: i32,
     pub r: i32,
 }
 pub static SEAS: [SeaRegion; 4] = [
-    SeaRegion { el: "fire", key: "glutsee", name: "Glutsee", cx: 478, cy: 196, r: 36 },
-    SeaRegion { el: "ice", key: "eismeer", name: "Eismeer", cx: 236, cy: 36, r: 30 },
-    SeaRegion { el: "wind", key: "sturmsee", name: "Sturmsee", cx: 46, cy: 352, r: 38 },
-    SeaRegion { el: "earth", key: "tiefengrund", name: "Tiefengrund", cx: 50, cy: 52, r: 38 },
+    SeaRegion { el: "fire", name: "Glutsee", cx: 478, cy: 196, r: 36 },
+    SeaRegion { el: "ice", name: "Eismeer", cx: 236, cy: 36, r: 30 },
+    SeaRegion { el: "wind", name: "Sturmsee", cx: 46, cy: 352, r: 38 },
+    SeaRegion { el: "earth", name: "Tiefengrund", cx: 50, cy: 52, r: 38 },
 ];
 impl SeaRegion {
     pub fn center(&self) -> (f32, f32) {
@@ -172,7 +167,6 @@ pub struct Fire {
 }
 #[derive(Clone, Debug)]
 pub struct Spawn {
-    pub id: String,
     pub kind: &'static str,
     pub x: f32,
     pub y: f32,
@@ -230,7 +224,6 @@ pub struct Arena {
     pub y: f32,
     pub r: f32,
     pub ry: f32,
-    pub gate: Option<usize>,
 }
 #[derive(Clone, Debug)]
 pub struct Slot {
@@ -284,7 +277,6 @@ pub struct PropInfo {
     pub circle: f32,
     pub boxc: (f32, f32),
     pub big: Option<(f32, f32)>,
-    pub light: Option<([f32; 4], [f32; 3], f32)>,
 }
 
 pub struct World {
@@ -322,11 +314,8 @@ pub struct World {
     pub end_arrive: (f32, f32),
     /// Ende der Welt: Meeresgebiet (Kacheln x0, y0, x1, y1) in der Südost-Ecke
     pub end_rect: (i32, i32, i32, i32),
-    /// Kacheln der Insel, die nach der Seeschlacht aus dem Meer steigt (Index, Boden)
-    pub end_island: Vec<(usize, Mat)>,
-    /// Requisiten auf der Insel (bis zum Aufstieg verborgen)
+    /// Säbelfeuer und Laternen am Grund (bis zum Sieg über Malakor verborgen)
     pub end_props: Vec<usize>,
-    pub end_risen: bool,
     /// das Meer am Ende der Welt ist leergelaufen (Meeresgrund)
     pub drained: bool,
     pub crew_spots: Vec<(f32, f32)>,
@@ -340,6 +329,8 @@ pub struct World {
     pub flat_areas: Vec<(i32, i32, i32, i32)>,
     /// Sarg, aus dem der Ertrunkene beim allerersten Start steigt
     pub wake_coffin: (f32, f32),
+    /// Häuser mit rauchendem Schornstein (Indizes in `props`)
+    pub chimneys: Vec<usize>,
     cur: Zone,
     nz: Noise,
     info: Box<dyn Fn(&str) -> Option<PropInfo> + Send + Sync>,
@@ -389,9 +380,7 @@ impl World {
             whirlpool: (0.0, 0.0),
             end_arrive: (0.0, 0.0),
             end_rect: (0, 0, 0, 0),
-            end_island: vec![],
             end_props: vec![],
-            end_risen: true,
             drained: false,
             crew_spots: vec![],
             grid: HashMap::new(),
@@ -400,6 +389,7 @@ impl World {
             en: EdgeNoise::new(),
             flat_areas: vec![],
             wake_coffin: (0.0, 0.0),
+            chimneys: vec![],
             cur: Zone::Kueste,
             nz: Noise::new(4242),
             info,
@@ -440,17 +430,6 @@ impl World {
             }
         }
         best
-    }
-    pub fn biome_at(&self, x: f32, y: f32) -> Biome {
-        let (tx, ty) = ((x / TS as f32) as i32, (y / TS as f32) as i32);
-        if inb(tx, ty) {
-            self.biome[idx(tx, ty)]
-        } else {
-            Biome::Coast
-        }
-    }
-    pub fn level_at(&self, x: f32, y: f32) -> u8 {
-        self.lpx(x.floor() as i32, y.floor() as i32)
     }
     /// Geglättetes Höhenfeld aus den Kachelebenen (3×3 weichgezeichnet).
     fn compute_field(&mut self) {
@@ -507,9 +486,6 @@ impl World {
         }
         (l, true)
     }
-    pub fn is_land(&self, tx: i32, ty: i32) -> bool {
-        self.g(tx, ty) != Mat::Water
-    }
 
     // ------------------------------------------------------------ Erzeugung
     fn generate(&mut self) {
@@ -546,6 +522,10 @@ impl World {
             self.scatter(z, &mut rng);
         }
         self.settle_on_cliffs();
+        self.chimneys = (0..self.props.len()).filter(|&i| {
+            let k = &self.props[i].kind;
+            k.starts_with("townhouse") || k == "tavern" || k == "forge"
+        }).collect();
         let mut rng = Rng::new(9191);
         self.sea_props(&mut rng);
         let rt = |v: &[(i32, i32)]| v.iter().map(|&(x, y)| ((x * TS) as f32, (y * TS) as f32)).collect::<Vec<_>>();
@@ -882,7 +862,7 @@ impl World {
     }
     fn spawn(&mut self, kind: &'static str, tx: i32, ty: i32, elite: bool) {
         let (x, y) = tpos(tx, ty);
-        self.spawns.push(Spawn { id: format!("{kind}@{tx},{ty}"), kind, x, y, elite });
+        self.spawns.push(Spawn { kind, x, y, elite });
     }
     #[allow(clippy::too_many_arguments)]
     fn npc(&mut self, id: &'static str, tx: i32, ty: i32, preset: &'static str, name: &'static str, dialog: &'static str, sit: bool, crew: Option<&'static str>) {
@@ -981,20 +961,7 @@ impl World {
             p.open = true;
         });
         self.gates.push(Gate { key, x: tx, y: ty, dir, prop: gp });
-        let gi = self.gates.len() - 1;
-        self.arenas.insert(key, Arena { x: (cx * TS + TS / 2) as f32, y: (cy * TS + TS / 2) as f32, r: (r * TS) as f32, ry: r as f32 * 0.75 * TS as f32, gate: Some(gi) });
-    }
-    fn fence_col(&mut self, x: i32, y0: i32, y1: i32) {
-        for y in y0..=y1 {
-            self.prop_t("fencePost", x, y);
-        }
-    }
-    fn fence_row(&mut self, x0: i32, x1: i32, y: i32) {
-        let mut x = x0;
-        while x <= x1 {
-            self.prop_t("fenceH", x, y);
-            x += 2;
-        }
+        self.arenas.insert(key, Arena { x: (cx * TS + TS / 2) as f32, y: (cy * TS + TS / 2) as f32, r: (r * TS) as f32, ry: r as f32 * 0.75 * TS as f32 });
     }
     fn grove(&mut self, cx: i32, cy: i32, r: f32, rng: &mut Rng, mut n: i32, table: Option<&[(&'static str, u32)]>) {
         let tbl: Vec<(&'static str, u32)> = match table {
@@ -1131,16 +1098,6 @@ impl World {
         wfs = std::mem::take(&mut wfs_retry);
         }
         self.waterfalls = keep;
-    }
-    fn stairs_col(&mut self, x: i32, y: i32) {
-        for k in 0..8 {
-            if inb(x, y + k) {
-                let i = idx(x, y + k);
-                if self.cliff[i] {
-                    self.stairs[i] = true;
-                }
-            }
-        }
     }
 
     // ------------------------------------------------------------ Gebiete
@@ -2453,18 +2410,8 @@ impl World {
             self.prop_tf(&format!("seaStack{}d", k % 3), x, y0 + 1 + (k % 2), k % 2 == 0);
             k += 1;
         }
-        // versunkene Insel (Kampfplatz der dritten und vierten Phase)
+        // Kampfplatz am Meeresgrund (Malakor), Säbelfeuer erscheint nach dem Sieg
         let (cx, cy) = (486, 360);
-        self.end_island.clear();
-        for y in cy - 12..=cy + 12 {
-            for x in cx - 18..=cx + 18 {
-                let dd = ((x - cx) as f32 / 16.0).powi(2) + ((y - cy) as f32 / 10.0).powi(2) + self.nz.n2(x as f32 * 0.3, y as f32 * 0.3) * 0.12;
-                if dd <= 1.0 {
-                    let m = if dd > 0.78 { Mat::Ash } else { Mat::Hex };
-                    self.end_island.push((idx(x, y), m));
-                }
-            }
-        }
         let p0 = self.props.len();
         self.fire("ende", cx - 12, cy + 4);
         let mut a = 0.0f32;
@@ -2479,7 +2426,7 @@ impl World {
         for &pi in &self.end_props {
             self.props[pi].hidden = true;
         }
-        self.arenas.insert("ende", Arena { x: (cx * TS + TS / 2) as f32, y: (cy * TS + TS / 2) as f32, r: (12 * TS) as f32, ry: (7 * TS) as f32, gate: None });
+        self.arenas.insert("ende", Arena { x: (cx * TS + TS / 2) as f32, y: (cy * TS + TS / 2) as f32, r: (12 * TS) as f32, ry: (7 * TS) as f32 });
         // Ankunft aus dem Strudel (auf dem Wasser, westlich der Insel)
         self.end_arrive = tpos(x0 + 18, cy - 16);
         // Wracks und Felsen in der toten See
@@ -2497,50 +2444,8 @@ impl World {
                 p.flip = flip;
             });
         }
-        self.end_risen = false;
     }
 
-    /// Die Insel am Ende der Welt steigt auf (Boden setzen, Requisiten zeigen, Ufer neu berechnen).
-    pub fn raise_end_island(&mut self) {
-        if self.end_risen {
-            return;
-        }
-        for &(i, m) in &self.end_island {
-            self.ground[i] = m;
-            self.path[i] = true;
-        }
-        for &pi in &self.end_props {
-            self.props[pi].hidden = false;
-        }
-        self.end_risen = true;
-        self.compute_shore();
-        // Anleger an der Westspitze der Insel
-        if let Some(a) = self.arenas.get("ende").cloned() {
-            let (cx, cy) = ((a.x / TS as f32) as i32, (a.y / TS as f32) as i32);
-            let (lx, ly) = (cx - 15, cy);
-            self.docks.push(Dock {
-                zone: Zone::Ende,
-                x: ((lx - 7) * TS + TS / 2) as f32,
-                y: (ly * TS + TS / 2) as f32,
-                px: (lx * TS + TS / 2) as f32,
-                py: (ly * TS + TS / 2) as f32,
-                heading: -std::f32::consts::FRAC_PI_2,
-            });
-        }
-    }
-    /// Vor dem Aufstieg: Insel unter Wasser, Requisiten verborgen.
-    pub fn sink_end_island(&mut self) {
-        self.docks.retain(|d| d.zone != Zone::Ende);
-        for &(i, _) in &self.end_island {
-            self.ground[i] = Mat::Water;
-            self.path[i] = false;
-        }
-        for &pi in &self.end_props {
-            self.props[pi].hidden = true;
-        }
-        self.end_risen = false;
-        self.compute_shore();
-    }
     /// Nach dem Sieg über den Holländer: das Meer am Ende der Welt ist über den Rand gelaufen.
     /// Sand, Schlick und Pfützen, Haiskelette, Wracks, Korallen, Tang, Muscheln.
     pub fn drain_end(&mut self) {
@@ -2842,9 +2747,6 @@ impl World {
         }
         (nx, ny)
     }
-    pub fn same_level(&self, a: (f32, f32), b: (f32, f32)) -> bool {
-        self.level_mask(a.0, a.1) & self.level_mask(b.0, b.1) != 0
-    }
     pub fn line_clear(&self, x0: f32, y0: f32, x1: f32, y1: f32) -> bool {
         if self.level_mask(x0, y0) & self.level_mask(x1, y1) == 0 {
             return false;
@@ -2858,9 +2760,6 @@ impl World {
             }
         }
         true
-    }
-    pub fn stairs_col_pub(&mut self, x: i32, y: i32) {
-        self.stairs_col(x, y)
     }
 }
 

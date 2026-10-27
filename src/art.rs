@@ -798,8 +798,8 @@ pub fn build(frame: &mut Frame) -> Art {
 
     // ---------------------------------------------------------------- Wesen (Kreaturen-Rig)
     for k in sw_art::beasts::KINDS.iter() {
-        if sw_art::beasts::sea_boss(k.key) || k.key == "moloch" {
-            continue; // Seebosse: beim Kampfbeginn in den Boss-Bereich; Moloch gibt es nicht mehr
+        if sw_art::beasts::sea_boss(k.key) {
+            continue; // Seebosse: beim Kampfbeginn in den Boss-Bereich
         }
         let sh = beast_sheet(&mut a, k.key);
         chs.insert(k.key.to_string(), sh);

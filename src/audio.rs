@@ -46,7 +46,6 @@ mod web {
         pub ctx: AudioContext,
         pub master: GainNode,
         pub music: GainNode,
-        pub crew: GainNode,
         pub sfx: GainNode,
         pub amb: GainNode,
         pub wind: GainNode,
@@ -98,9 +97,6 @@ mod web {
             let music = g(0.0)?;
             music.connect_with_audio_node(&master).ok()?;
             music.connect_with_audio_node(&rev).ok()?;
-            let crew = g(0.0)?;
-            crew.connect_with_audio_node(&master).ok()?;
-            crew.connect_with_audio_node(&rev).ok()?;
             let sfx = g(0.7)?;
             sfx.connect_with_audio_node(&master).ok()?;
             sfx.connect_with_audio_node(&rev).ok()?;
@@ -117,7 +113,7 @@ mod web {
                 let s = source(&ctx, &b, to, true)?;
                 s.start().ok()?;
             }
-            Some(Graph { ctx, master, music, crew, sfx, amb: ambg, wind, drone, cur: vec![], bufs: Default::default() })
+            Some(Graph { ctx, master, music, sfx, amb: ambg, wind, drone, cur: vec![], bufs: Default::default() })
         }
         pub fn fade(&self, p: &AudioParam, v: f32, secs: f64) {
             let now = self.ctx.current_time();
@@ -135,7 +131,7 @@ pub struct Audio {
     playing: Option<&'static str>,
     over: Option<(&'static str, f32)>,
     swap_t: f32,
-    songs: HashMap<&'static str, (Vec<f32>, Vec<f32>)>,
+    songs: HashMap<&'static str, Vec<f32>>,
     render: Option<SongRender>,
     queue: Vec<&'static str>,
     sfx_cache: HashMap<&'static str, Vec<f32>>,
@@ -194,10 +190,6 @@ impl Audio {
     pub fn play_song(&mut self, name: &'static str, secs: f32) {
         self.over = Some((name, secs));
         self.apply_mood();
-        #[cfg(target_arch = "wasm32")]
-        if let Some(g) = &self.g {
-            g.fade(&g.crew.gain(), 0.42, 1.0);
-        }
     }
 
     fn apply_mood(&mut self) {
@@ -223,9 +215,6 @@ impl Audio {
             g.fade(&g.drone.gain(), if m == "death" { 0.25 } else { 0.0 }, 1.5);
             g.fade(&g.amb.gain(), if m == "death" { 0.1 } else if m == "sea" { 0.55 } else if m == "title" { 0.4 } else { 0.3 }, 2.0);
             g.fade(&g.wind.gain(), if m == "sea" || m == "sturm" { 0.35 } else { 0.05 }, 2.0);
-            if self.over.is_none() {
-                g.fade(&g.crew.gain(), if m == "sea" { 0.16 } else { 0.0 }, 2.0);
-            }
         }
     }
 
@@ -270,7 +259,7 @@ impl Audio {
         if let Some(r) = self.render.as_mut() {
             if r.step(18) {
                 let r = self.render.take().unwrap();
-                self.songs.insert(r.name, (r.music, r.crew));
+                self.songs.insert(r.name, r.music);
             }
         }
         if let Some((n, t)) = self.over.as_mut() {
@@ -279,10 +268,6 @@ impl Audio {
             if *t <= 0.0 {
                 self.over = None;
                 self.apply_mood();
-                #[cfg(target_arch = "wasm32")]
-                if let Some(g) = &self.g {
-                    g.fade(&g.crew.gain(), if self.mood == "sea" { 0.16 } else { 0.0 }, 5.0);
-                }
             }
         }
         #[cfg(target_arch = "wasm32")]
@@ -311,24 +296,18 @@ impl Audio {
                     }
                     self.playing = self.target;
                     if let Some(t) = self.target {
-                        let (m, c) = &self.songs[t];
+                        let m = &self.songs[t];
                         let key_m = format!("{t}:m");
-                        let key_c = format!("{t}:c");
                         if !g.bufs.contains_key(&key_m) {
                             if let Some(b) = web::buffer(&g.ctx, m, synth::SR) {
                                 g.bufs.insert(key_m.clone(), b);
                             }
-                            if let Some(b) = web::buffer(&g.ctx, c, synth::SR) {
-                                g.bufs.insert(key_c.clone(), b);
-                            }
                         }
                         let now = g.ctx.current_time() + 0.05;
-                        for (k, to) in [(&key_m, &g.music), (&key_c, &g.crew)] {
-                            if let Some(b) = g.bufs.get(k) {
-                                if let Some(s) = web::source(&g.ctx, b, to, true) {
-                                    let _ = s.start_with_when(now);
-                                    g.cur.push(s);
-                                }
+                        if let Some(b) = g.bufs.get(&key_m) {
+                            if let Some(s) = web::source(&g.ctx, b, &g.music, true) {
+                                let _ = s.start_with_when(now);
+                                g.cur.push(s);
                             }
                         }
                         let lvl = if t == "salz" { 0.6 } else { 0.85 };

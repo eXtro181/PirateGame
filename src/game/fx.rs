@@ -127,13 +127,6 @@ struct Bolt {
     t: f32,
     dur: f32,
 }
-pub struct Num {
-    pub x: f32,
-    pub y: f32,
-    pub v: String,
-    pub col: Col,
-    pub t: f32,
-}
 struct Ring {
     x: f32,
     y: f32,
@@ -149,7 +142,6 @@ pub struct Fx {
     pub parts: Vec<P>,
     slashes: Vec<Slash>,
     bolts: Vec<Bolt>,
-    pub nums: Vec<Num>,
     pub marks: Vec<Mark>,
     rings: Vec<Ring>,
     /// Fußspuren: x, y, Rest, Farbe (Sand, Schnee, Asche, Schlamm)
@@ -162,7 +154,6 @@ impl Fx {
         self.parts.clear();
         self.slashes.clear();
         self.bolts.clear();
-        self.nums.clear();
         self.marks.clear();
         self.rings.clear();
         self.prints.clear();
@@ -235,9 +226,6 @@ impl Fx {
             }
         }
         self.bolts.push(Bolt { segs, col, t: 0.0, dur });
-    }
-    pub fn num(&mut self, x: f32, y: f32, v: i32, col: Option<Col>) {
-        self.nums.push(Num { x, y, v: v.to_string(), col: col.unwrap_or([0.95, 0.9, 0.8, 1.0]), t: 0.0 });
     }
     pub fn mark(&mut self, kind: MarkKind, x: f32, y: f32, r: f32, ang: f32, w: f32, dur: f32, col: Option<Col>) {
         self.marks.push(Mark { kind, x, y, r, ang, w, t: 0.0, dur, col: col.unwrap_or([0.9, 0.2, 0.18, 0.45]) });
@@ -325,9 +313,6 @@ impl Fx {
         for s in self.bolts.iter_mut() {
             s.t += dt;
         }
-        for s in self.nums.iter_mut() {
-            s.t += dt;
-        }
         for s in self.marks.iter_mut() {
             s.t += dt;
         }
@@ -336,7 +321,6 @@ impl Fx {
         }
         self.slashes.retain(|s| s.t < s.dur);
         self.bolts.retain(|s| s.t < s.dur);
-        self.nums.retain(|s| s.t < 0.9);
         self.marks.retain(|s| s.t < s.dur);
         self.rings.retain(|s| s.t < s.dur);
     }

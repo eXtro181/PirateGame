@@ -41,7 +41,7 @@ pub enum Role {
 }
 /// Rolle einer Vorgabe (für `wants_anim`).
 pub fn preset_role(name: &str) -> Role {
-    if name.starts_with("villager") || matches!(name, "lanternMaid" | "smith" | "merchant" | "shipmaster" | "carver" | "fisherJorn" | "smithIlka" | "furWendla" | "mapOrrin" | "witchMabel") {
+    if name.starts_with("villager") || matches!(name, "lanternMaid" | "smith" | "merchant" | "shipmaster" | "carver" | "smithIlka" | "furWendla" | "mapOrrin" | "witchMabel") {
         Role::Npc
     } else if name.starts_with("crew") {
         Role::Crew
@@ -117,8 +117,6 @@ pub struct Look {
     pub skulls: Option<u32>,
     /// vier Arme mit vier Schwertern (Skelettkapitän)
     pub four_arms: bool,
-    /// lodernde Flammen auf Schädel, Schultern und Rippen (Farbe)
-    pub burning: Option<u32>,
     /// Bart aus kleinen Krakenarmen, die sich je Bild anders winden (Farbe)
     pub tentacle_beard: Option<u32>,
 }
@@ -164,7 +162,6 @@ impl Default for Look {
             skulls: None,
             four_arms: false,
             tentacle_beard: None,
-            burning: None,
         }
     }
 }
@@ -1344,48 +1341,6 @@ fn paint_human(cv: &mut Canvas, dir: &str, p: &Pose, l: &Look, s: f32) {
         let (fx_, fy_) = (cx.fx, cx.fy);
         draw_skulls(cx.c, sc, s, fx_, fy_, p.seed);
     }
-    if let Some(bc) = l.burning {
-        // Flammenzungen über allem, was oben am Körper liegt (Schädel, Schultern, Arme)
-        let fl = pal(&[0x6A1408, 0xB8300E, 0xE8601A, bc, 0xFFC86A, 0xFFF4C8]);
-        let (w, h) = (cx.c.w, cx.c.h);
-        let ytop = (cx.fy - 58.0 * s).max(0.0) as i32;
-        let ymax = (cx.fy - 18.0 * s) as i32;
-        for i in 0..(34.0 * s) as i32 {
-            let x = (h01(i, p.seed, 21) * w as f32) as i32;
-            // höchsten Körperpixel in dieser Spalte suchen
-            let mut y0 = -1;
-            for y in ytop.max(0)..ymax.min(h) {
-                if cx.c.a(x, y) > 0 {
-                    y0 = y;
-                    break;
-                }
-            }
-            if y0 < 0 {
-                continue;
-            }
-            let len = (4.0 + h01(i, p.seed, 22) * 9.0) * s * 0.7;
-            let sway = (h01(i, p.seed, 23) - 0.5) * 3.0;
-            let n = len as i32;
-            for k in 0..n {
-                let t = k as f32 / n.max(1) as f32;
-                let xx = x + (sway * t * t) as i32;
-                let yy = y0 - k;
-                let col = fl[((1.0 - t) * 5.0).round().clamp(0.0, 5.0) as usize];
-                cx.c.lit(xx, yy, col, 1.2 + (1.0 - t) * 0.8);
-                if t < 0.4 {
-                    cx.c.lit(xx + 1, yy, fl[2], 1.0);
-                }
-            }
-        }
-        // glühende Rippen und Augen
-        for i in 0..40 {
-            let x = (cx.fx + (h01(i, 7, 24) - 0.5) * 16.0 * s) as i32;
-            let y = (cx.fy - (20.0 + h01(i, 7, 25) * 16.0) * s) as i32;
-            if cx.c.a(x, y) > 0 && i % 3 == 0 {
-                cx.c.glow(x, y, fl[3], 0.9);
-            }
-        }
-    }
     if let Some(a) = l.aura {
         let ac = hex(a);
         for i in 0..30 {
@@ -1577,7 +1532,6 @@ pub fn preset(name: &str) -> (Look, f32) {
         "villagerG" => Look { skin: 0xE8C0A0, hair_col: 0xB8642A, hair: 3, coat: 0x6A3A2A, robe: true, hat: 0, sash: Some(0xC8A048), weapon: None, ..d() },
         "villagerH" => Look { skin: 0x8A5A40, hair_col: 0xA8A8A0, hair: 0, beard: 2, coat: 0x2E3E4E, hat: 1, hat_col: 0x2A2A30, weapon: None, patch: true, ..d() },
         // Händler der Siedlungen
-        "fisherJorn" => Look { skin: 0xC08A64, hair_col: 0x8A8478, hair: 1, beard: 3, body: 1, coat: 0x3E5A6A, hat: 2, band_col: 0xD8C8A0, apron: true, sash: Some(0x8A6A3A), weapon: None, ..d() },
         "smithIlka" => Look { skin: 0x9A6A4C, hair_col: 0xC2502E, hair: 3, coat: 0x4A2A22, apron: true, body: 1, sash: Some(0xF0742A), weapon: Some("hammer"), ..d() },
         "furWendla" => Look { skin: 0xF0D0B8, hair_col: 0xE8E4E0, hair: 2, coat: 0xC8C0B0, robe: true, hat: 3, sash: Some(0x6A8AA8), hold_lantern: Some(0x9AE8FF), weapon: None, ..d() },
         "mapOrrin" => Look { skin: 0xB8865E, hair_col: 0x26201E, hair: 4, beard: 1, coat: 0x23324A, hat: 1, hat_col: 0x1E1E26, sash: Some(0xC8A048), patch: true, weapon: None, ..d() },
@@ -1593,15 +1547,6 @@ pub fn preset(name: &str) -> (Look, f32) {
         "kingWind" => {
             s = 1.5;
             Look { skin: 0x6A7A80, hair_col: 0x24394A, hair: 4, beard: 2, coat: 0x24394A, hat: 1, hat_col: 0x16232E, crown: Some(0xD8E4F0), weapon: Some("cutlass"), drowned: true, eye_col: 0xD8E4F0, aura: Some(0x8FA3A8), cast_col: 0xD8E4F0, ..d() }
-        }
-        // Endboss an Land: der Geisterkapitän (Phase 3) und der brennende Skelettkapitän (Phase 4)
-        "ghostCaptain" => {
-            s = 1.6;
-            Look { skin: 0x7ACBB8, hair_col: 0xC8F0E8, hair: 4, beard: 3, coat: 0x14262A, pants: 0x1A2A2E, hat: 1, hat_col: 0x0E1A1C, sash: Some(0x5FF2C8), weapon: Some("cutlass"), drowned: true, hover: 3.0, eye_col: 0x9AFFE0, aura: Some(0x5FF2C8), cast_col: 0x9AFFE0, skulls: Some(0x5FF2C8), ..d() }
-        }
-        "burningCaptain" => {
-            s = 1.75;
-            Look { skeleton: true, coat: 0x2A1210, rags: true, hat: 1, hat_col: 0x1A0A0A, weapon: Some("cutlass"), eye_col: 0xFFB04A, aura: Some(0xFF6A2A), cast_col: 0xFF8A3A, skulls: Some(0xFF7A2A), four_arms: true, burning: Some(0xFF9A3A), ..d() }
         }
         // Endboss zu Fuß: Malakor, der Ertrunkene König – vier Schwerter, Tentakelbart, Korallenkrone
         "malakor" => {

@@ -39,7 +39,6 @@ pub enum Hover {
     None,
     T(Target),
     Npc(usize),
-    Walker(usize),
     Item(usize),
     Ship,
 }
@@ -299,7 +298,7 @@ impl Game {
         };
         // Bosse
         for k in KINGS.iter() {
-            let ar = g.world.arenas.get(k.zone).cloned().unwrap_or(crate::world::Arena { x: 0.0, y: 0.0, r: 100.0, ry: 80.0, gate: None });
+            let ar = g.world.arenas.get(k.zone).cloned().unwrap_or(crate::world::Arena { x: 0.0, y: 0.0, r: 100.0, ry: 80.0 });
             let mut b = Boss::new(k.key, &ar);
             if g.save.kings.get(k.key).copied().unwrap_or(false) {
                 b.state = BS::Dead;
@@ -307,9 +306,9 @@ impl Game {
             }
             g.bosses.push(b);
         }
-        let ar = g.world.arenas.get("ende").cloned().unwrap_or(crate::world::Arena { x: 0.0, y: 0.0, r: 100.0, ry: 80.0, gate: None });
+        let ar = g.world.arenas.get("ende").cloned().unwrap_or(crate::world::Arena { x: 0.0, y: 0.0, r: 100.0, ry: 80.0 });
         let mut mb = Boss::new("mega", &ar);
-        if g.save.megalodon {
+        if g.save.end_won {
             mb.state = BS::Dead;
             mb.hidden = true;
         }
@@ -330,7 +329,7 @@ impl Game {
         if g.save.end_naval {
             // der Holländer ist versenkt: das Meer am Ende der Welt ist leergelaufen
             g.world.drain_end();
-            if g.save.megalodon {
+            if g.save.end_won {
                 g.world.show_end_fire();
             }
             g.view.refresh(&g.world, frame);
@@ -517,6 +516,12 @@ impl Game {
             self.fx.clear();
         }
     }
+    /// Liegt (x, y) im Nahbereich um die Kamera? Nur dort werden Gegner, Bewohner und Tiere
+    /// berechnet (etwa drei Bildschirmbreiten).
+    pub fn near(&self, x: f32, y: f32) -> bool {
+        let (cx, cy) = self.cam_f;
+        (x - cx).abs() < 1500.0 && (y - cy).abs() < 1000.0
+    }
     pub fn light_fires(&mut self) {
         for i in 0..self.world.fires.len() {
             let lit = self.save.lit_fires.contains(&self.world.fires[i].id);
@@ -653,8 +658,12 @@ impl Game {
         self.input.enabled = true;
         let frozen = modal && self.ui.dialog.is_none();
         if !frozen {
+            // nur die Inseln in der Nähe leben: ferne Gegner ruhen, bis man zurückkommt
             for i in 0..self.enemies.len() {
-                self.update_enemy(i, dt);
+                let (ex, ey) = (self.enemies[i].a.x, self.enemies[i].a.y);
+                if self.near(ex, ey) {
+                    self.update_enemy(i, dt);
+                }
             }
             for i in 0..self.bosses.len() {
                 self.update_boss(i, dt);
@@ -929,7 +938,7 @@ impl Game {
 
     fn update_boss_arena(&mut self) {
         let mi = self.bosses.len() - 1;
-        if self.bosses[mi].state == BS::Dormant && !self.save.megalodon && self.end.state == EP::Seabed && !self.sailing {
+        if self.bosses[mi].state == BS::Dormant && !self.save.end_won && self.end.state == EP::Seabed && !self.sailing {
             if let Some(a) = self.world.arenas.get("ende") {
                 if ((self.player.a.x - a.x) / a.r).hypot((self.player.a.y - a.y) / a.ry) < 0.55 {
                     self.boss_activate(mi);
@@ -942,48 +951,50 @@ impl Game {
     fn interactables(&self) -> Vec<Focus> {
         let mut out = vec![];
         let s = &self.save;
-        let f = |x: f32, y: f32, h: f32, label: &str, act: Use, prop: Option<usize>| Focus { x, y, h, label: label.into(), act, prop };
+        // nur was in Reichweite des Spielers liegt (spart jedes Bild Listen und Texte für die ganze Welt)
+        let (px, py) = (self.player.a.x, self.player.a.y);
+        let f = |x: f32, y: f32, h: f32, label: &str, act: Use, prop: Option<usize>| ((x - px).abs() < 90.0 && (y - py).abs() < 90.0).then(|| Focus { x, y, h, label: label.into(), act, prop });
         for (i, fi) in self.world.fires.iter().enumerate() {
             // das Säbelfeuer am Grund erscheint erst nach dem Sieg über Malakor
             if self.world.props[fi.prop].hidden {
                 continue;
             }
-            out.push(f(fi.x, fi.y, 72.0, if s.lit_fires.contains(&fi.id) { "Rasten" } else { "Feuer entzünden" }, Use::Fire(i), Some(fi.prop)));
+            out.extend(f(fi.x, fi.y, 72.0, if s.lit_fires.contains(&fi.id) { "Rasten" } else { "Feuer entzünden" }, Use::Fire(i), Some(fi.prop)));
         }
         for (i, n) in self.npcs.iter().enumerate() {
-            out.push(f(n.a.x, n.a.y, 72.0, "Sprechen", Use::Npc(i), None));
+            out.extend(f(n.a.x, n.a.y, 72.0, "Sprechen", Use::Npc(i), None));
         }
         for (i, it) in self.items.iter().enumerate() {
-            out.push(f(it.x, it.y, 40.0, "Aufheben", Use::Item(i), None));
+            out.extend(f(it.x, it.y, 40.0, "Aufheben", Use::Item(i), None));
         }
         for &ci in &self.world.chests {
             let p = &self.world.props[ci];
             if !p.open && !p.hidden {
-                out.push(f(p.x, p.y, 44.0, "Öffnen", Use::Chest(ci), Some(ci)));
+                out.extend(f(p.x, p.y, 44.0, "Öffnen", Use::Chest(ci), Some(ci)));
             }
         }
         for (gi, g) in self.world.gates.iter().enumerate() {
             let k = king_for_zone(g.key);
             let bi = KINGS.iter().position(|x| x.key == k).unwrap_or(0);
             if !self.world.props[g.prop].hidden && !s.kings.get(k).copied().unwrap_or(false) && self.bosses[bi].state == BS::Dormant {
-                out.push(f(g.x, g.y + 16.0, 80.0, "Durch den Nebel schreiten", Use::Gate(gi), Some(g.prop)));
+                out.extend(f(g.x, g.y + 16.0, 80.0, "Durch den Nebel schreiten", Use::Gate(gi), Some(g.prop)));
             }
         }
         for (si, sl) in self.world.slots.iter().enumerate() {
             if !s.mounted.get(sl.el).copied().unwrap_or(false) {
-                out.push(f(sl.x, sl.y, 60.0, if s.figureheads.get(sl.el).copied().unwrap_or(false) { "Galionsfigur anbringen" } else { "Ein leerer Bug" }, Use::Slot(si), Some(sl.prop)));
+                out.extend(f(sl.x, sl.y, 60.0, if s.figureheads.get(sl.el).copied().unwrap_or(false) { "Galionsfigur anbringen" } else { "Ein leerer Bug" }, Use::Slot(si), Some(sl.prop)));
             }
         }
         for (i, d) in self.world.doors.iter().enumerate() {
-            out.push(f(d.x, d.y, 40.0, &format!("Laden in {} betreten", d.name), Use::Enter(i), None));
-            out.push(f(d.exit.0, d.exit.1, 40.0, "Hinausgehen", Use::Leave(i), None));
+            out.extend(f(d.x, d.y, 40.0, &format!("Laden in {} betreten", d.name), Use::Enter(i), None));
+            out.extend(f(d.exit.0, d.exit.1, 40.0, "Hinausgehen", Use::Leave(i), None));
         }
         for (di, d) in self.world.docks.iter().enumerate() {
             let here = (self.ship.hull.x - d.x).hypot(self.ship.hull.y - d.y) < 48.0;
-            out.push(f(d.px, d.py, 60.0, if here { "An Bord gehen" } else { "Schiff rufen" }, if here { Use::Board(di) } else { Use::Call(di) }, None));
+            out.extend(f(d.px, d.py, 60.0, if here { "An Bord gehen" } else { "Schiff rufen" }, if here { Use::Board(di) } else { Use::Call(di) }, None));
         }
         if let Some(st) = &s.stain {
-            out.push(f(st.x, st.y, 36.0, "Perlen zurückholen", Use::Stain, None));
+            out.extend(f(st.x, st.y, 36.0, "Perlen zurückholen", Use::Stain, None));
         }
         out
     }
@@ -1540,7 +1551,7 @@ impl Game {
         if let Some(m) = mimic {
             // die Truhe beißt zurück
             let kind: &'static str = self.edefs.iter().find(|d| d.key == m).map(|d| d.key).unwrap_or("mimicChest");
-            let sp = Spawn { id: format!("mimic{ci}"), kind, x, y: y + 4.0, elite: false };
+            let sp = Spawn { kind, x, y: y + 4.0, elite: false };
             let mut e = self.make_enemy(&sp, art);
             e.state = ES::Chase;
             self.enemies.push(e);
@@ -1624,8 +1635,9 @@ impl Game {
         // Schornsteine der Häuser in der Nähe rauchen
         let (cx, cy) = self.cam_f;
         if rnd() < dt * 8.0 {
-            for p in self.world.props.iter() {
-                if p.hidden || !(p.kind.starts_with("townhouse") || p.kind == "tavern" || p.kind == "forge") {
+            for &pi in &self.world.chimneys {
+                let p = &self.world.props[pi];
+                if p.hidden {
                     continue;
                 }
                 if (p.x - cx).abs() > 700.0 || (p.y - cy).abs() > 500.0 || rnd() > 0.35 {
@@ -1682,8 +1694,7 @@ impl Game {
         s.figureheads.clear();
         s.mounted.clear();
         s.sea_kings.clear();
-        s.wrecks.clear();
-        s.megalodon = false;
+        s.end_won = false;
         s.end_naval = false;
         s.stain = None;
         s.last_fire = "kueste".into();
@@ -1756,7 +1767,7 @@ impl Game {
             // Raster um den Spieler; die Mitte bleibt frei
             let cell = if i >= 14 { i + 1 } else { i };
             let (cx, cy) = ((cell % 6) as f32 - 2.5, (cell / 6) as f32 - 2.0);
-            let sp = Spawn { id: format!("zoo{i}"), kind: k, x: px + cx * 130.0, y: py + cy * 105.0 + 30.0, elite: false };
+            let sp = Spawn { kind: k, x: px + cx * 130.0, y: py + cy * 105.0 + 30.0, elite: false };
             let mut e = self.make_enemy(&sp, art);
             e.state = ES::Lurk;
             e.a.fy = 1.0;
@@ -1945,7 +1956,7 @@ impl Game {
         items.push(head("Das Ende der Welt"));
         let whirl = if self.whirl_ready() { "offen" } else { "geschlossen" };
         items.push(entry("Der Strudel", whirl, "Öffnet sich, wenn vier Galionsfiguren thronen und vier Ungeheuer versenkt sind.", false, Cmd::None));
-        items.push(entry(crate::game::endboss::END_NAME, if s.megalodon { "besiegt" } else { "wartet" }, "Der Fliegende Holländer, sein roter Kraken, Malakor und sein Gebein.", false, Cmd::None));
+        items.push(entry(crate::game::endboss::END_NAME, if s.end_won { "besiegt" } else { "wartet" }, "Der Fliegende Holländer, sein roter Kraken, Malakor und sein Gebein.", false, Cmd::None));
         items.push(entry("Fahrt", &if s.ng > 0 { format!("Neues Spiel+{}", s.ng) } else { "Erste Fahrt".into() }, "", false, Cmd::None));
         self.ui.open_list("Fortschritt", items, Cmd::Close, true, true);
     }

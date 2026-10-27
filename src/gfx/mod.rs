@@ -128,7 +128,6 @@ pub mod modes {
     pub const CHUNK: u8 = 1;
     pub const SOLID: u8 = 2;
     pub const WATER: u8 = 3;
-    pub const ABYSS: u8 = 4;
     pub const FOG: u8 = 5;
     pub const SOFT: u8 = 6;
 }
@@ -137,7 +136,6 @@ pub mod flags {
     pub const OUTLINE: u8 = 2;
     pub const GLOW: u8 = 4;
     pub const GHOST: u8 = 8;
-    pub const GREY: u8 = 16;
     /// Spiegelung im Wasser: mit der Wasseroberfläche gemischt (nur Bodenliste)
     pub const REFLECT: u8 = 64;
 }
@@ -360,19 +358,6 @@ impl Frame {
     pub fn shadow(&mut self, x: f32, y: f32, rx: f32, ry: f32, a: f32) {
         let mut q = Self::quad_rect(x - rx, y - ry, rx * 2.0, ry * 2.0, [10, 12, 30, (a * 255.0) as u8], modes::SOFT, 0);
         q.col[3] = (a.clamp(0.0, 1.0) * 255.0) as u8;
-        self.decals.push(q);
-    }
-    /// Sprite-Silhouette als Schatten (verzerrt nach hinten geneigt)
-    pub fn shadow_spr(&mut self, s: &Spr, x: f32, y: f32, flip: bool, skew: f32, a: f32) {
-        let mut q = Self::quad_spr(s, x, y, &SprOpt { flip, ..Default::default() });
-        // Silhouette flach auf den Boden legen: Höhe stauchen, nach rechts oben scheren
-        let h = q.p[3][1] - q.p[0][1];
-        let k = 0.45;
-        for i in 0..2 {
-            q.p[i][1] = y - h * k;
-            q.p[i][0] += h * skew;
-        }
-        q.col = [10, 12, 30, (a * 255.0) as u8];
         self.decals.push(q);
     }
     pub fn over(&mut self, q: Q, add: bool) {

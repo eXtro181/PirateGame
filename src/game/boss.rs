@@ -302,7 +302,7 @@ impl Game {
     }
 
     pub fn update_boss(&mut self, i: usize, dt: f32) {
-        let mut b = std::mem::replace(&mut self.bosses[i], Boss::new("fire", &crate::world::Arena { x: 0.0, y: 0.0, r: 1.0, ry: 1.0, gate: None }));
+        let mut b = std::mem::replace(&mut self.bosses[i], Boss::new("fire", &crate::world::Arena { x: 0.0, y: 0.0, r: 1.0, ry: 1.0 }));
         self.boss_logic(i, &mut b, dt);
         self.bosses[i] = b;
     }
@@ -873,9 +873,8 @@ impl Game {
         let dmg = if b.state == BS::Stagger { (dmg * 2.2).round() } else { dmg };
         b.hp -= dmg;
         b.a.flash = 0.08;
-        let (x, y, h, el, st) = (b.a.x, b.a.y, if b.human { 70.0 } else { b.h * 0.6 }, b.el, b.state);
+        let (x, y, el) = (b.a.x, b.a.y, b.el);
         let by = b.body_y;
-        self.fx.num(x, y - h, dmg as i32, if st == BS::Stagger { Some([1.0, 0.75, 0.3, 1.0]) } else { None });
         self.fx.burst(part(el), x, y - by, 6, BurstOpt { speed: Some(120.0), col: Some(kind_col(part(el))), ..Default::default() });
         self.sfx("hit");
         if self.bosses[i].mega && self.bosses[i].phase == 1 && self.bosses[i].hp <= 0.0 {
@@ -938,7 +937,7 @@ impl Game {
         }
         self.gain_pearls(pearls as i64, Some((x, y)));
         if mega {
-            self.save.megalodon = true;
+            self.save.end_won = true;
             self.save.end_naval = true;
             self.end.state = crate::game::endboss::EP::Done;
             // erst jetzt erscheint am Grund das Säbelfeuer (noch zu entzünden)

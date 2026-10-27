@@ -22,11 +22,10 @@ pub struct Actor {
     pub flash: f32,
     pub r: f32,
     pub hurt_r: f32,
-    pub alpha: f32,
 }
 impl Actor {
     pub fn new(x: f32, y: f32) -> Self {
-        Actor { x, y, fx: 0.0, fy: 1.0, anim: "idle", frame: 0.0, at: 0.0, flash: 0.0, r: 10.0, hurt_r: 14.0, alpha: 1.0 }
+        Actor { x, y, fx: 0.0, fy: 1.0, anim: "idle", frame: 0.0, at: 0.0, flash: 0.0, r: 10.0, hurt_r: 14.0 }
     }
     pub fn face(&mut self, dx: f32, dy: f32) {
         let l = dx.hypot(dy);
@@ -80,7 +79,6 @@ pub enum PS {
     Throw,
     Sit,
     Talk,
-    Stagger,
     Dead,
     Ship,
 }
@@ -619,12 +617,6 @@ impl Game {
                     p.state = PS::Free;
                 }
             }
-            PS::Stagger => {
-                p.a.anim = "hurt";
-                if p.st_t > 0.9 {
-                    p.state = PS::Free;
-                }
-            }
             PS::Drink => {
                 p.a.anim = "drink";
                 p.a.frame = if p.st_t > 0.5 { 2.0 } else if p.st_t > 0.25 { 1.0 } else { 0.0 };
@@ -869,7 +861,6 @@ impl Game {
         p.iframes = 0.45;
         let (x, y) = (p.a.x, p.a.y);
         self.fx.burst("blood", x, y - 20.0, 8, BurstOpt { speed: Some(100.0), ..Default::default() });
-        self.fx.num(x, y - 28.0, dmg as i32, Some([0.9, 0.3, 0.25, 1.0]));
         self.shake(if o.heavy { 8.0 } else { 4.0 });
         self.sfx("hurt");
         if o.push != (0.0, 0.0) {
@@ -1148,11 +1139,11 @@ impl Game {
     }
 
     pub fn hurt_enemy(&mut self, i: usize, dmg: f32, o: &HurtOpt) {
-        let (dead, crit, x, y, h, skel, poise_def, body_monster) = {
+        let (dead, crit, x, y, skel, poise_def) = {
             let e = &self.enemies[i];
             let d = &self.edefs[e.def];
             let skel = matches!(d.body, Body::Sheet(s) if s.contains("kel"));
-            (e.state == ES::Dead, e.state == ES::Stagger, e.a.x, e.a.y, e.h, skel, d.poise, !matches!(d.body, Body::Sheet(_)))
+            (e.state == ES::Dead, e.state == ES::Stagger, e.a.x, e.a.y, skel, d.poise)
         };
         if dead {
             return;
@@ -1167,7 +1158,6 @@ impl Game {
                 e.st_t = 0.0;
             }
         }
-        self.fx.num(x, y - h * if body_monster { 0.7 } else { 1.0 } - 10.0, dmg as i32, if crit { Some([1.0, 0.75, 0.3, 1.0]) } else { None });
         self.fx.burst(if skel { "bone" } else { "blood" }, x, y - 20.0, 7, BurstOpt { speed: Some(110.0), ..Default::default() });
         self.sfx(if crit { "crit" } else { "hit" });
         if self.enemies[i].hp <= 0.0 {
@@ -1320,7 +1310,12 @@ impl Game {
     // ================================================================ NPCs, Dorfbewohner, Gegenstände
     pub fn update_npcs(&mut self, dt: f32) {
         let (px, py) = (self.player.a.x, self.player.a.y);
+        let (cx, cy) = self.cam_f;
+        let near = |x: f32, y: f32| (x - cx).abs() < 1500.0 && (y - cy).abs() < 1000.0;
         for n in self.npcs.iter_mut() {
+            if !near(n.a.x, n.a.y) {
+                continue;
+            }
             n.a.at += dt;
             if !n.def.sit && n.a.dist(px, py) < 100.0 {
                 n.a.face(px - n.a.x, py - n.a.y);
@@ -1329,6 +1324,9 @@ impl Game {
             n.a.anim = if n.def.sit { "sit" } else { "idle" };
         }
         for w in self.walkers.iter_mut() {
+            if !near(w.a.x, w.a.y) {
+                continue;
+            }
             w.a.at += dt;
             if w.wait > 0.0 {
                 w.wait -= dt;

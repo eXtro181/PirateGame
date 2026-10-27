@@ -98,7 +98,7 @@ impl Game {
                 return;
             }
             match w.biome[i] {
-                Biome::Coast | Biome::Hub | Biome::Wind => {
+                Biome::Coast | Biome::Wind => {
                     if rnd() < 0.75 {
                         self.critters.push(base);
                     } else {

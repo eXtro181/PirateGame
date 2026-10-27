@@ -1,4 +1,4 @@
-//! Synthesizer: Shantys, Crew-Stimmen, Ambiente und Klangeffekte werden aus Code in PCM gerendert
+//! Synthesizer: Musik, Ambiente und Klangeffekte werden aus Code in PCM gerendert
 //! (keine Audiodateien). Die Wiedergabe übernimmt `audio.rs`.
 
 pub const SR: f32 = 22050.0;
@@ -147,8 +147,6 @@ pub enum Inst {
     Drum,
     Tick,
     Bell,
-    CrewLead,
-    CrewHum,
     /// gestrichenes Cello (langsamer Einsatz, Vibrato)
     Cello,
     /// gezupfte Harfe (Karplus-Strong)
@@ -192,7 +190,6 @@ fn tick(t: f32, vel: f32) -> Ev {
 }
 
 pub struct Song {
-    pub name: &'static str,
     pub unit: f32,
     pub len: f32,
     pub events: Vec<Ev>,
@@ -201,9 +198,6 @@ pub struct Song {
 
 fn first(c: &str) -> &str {
     c.split('+').next().unwrap_or(c)
-}
-fn nth(c: &str, i: usize) -> &str {
-    c.split('+').nth(i).unwrap_or(c)
 }
 fn down(c: &str) -> String {
     first(c).replace('3', "2")
@@ -245,7 +239,7 @@ pub fn song(name: &str) -> Option<Song> {
             }
             ev.push(Ev { t: 0.0, dur: 6.0, inst: Bell, f: freq("D5"), vel: 0.25 });
             ev.push(Ev { t: 48.0, dur: 6.0, inst: Bell, f: freq("A4"), vel: 0.22 });
-            Song { name: "titel", unit: 60.0 / 54.0 / 3.0, len: 96.0, events: ev, gain: 0.55 }
+            Song { unit: 60.0 / 54.0 / 3.0, len: 96.0, events: ev, gain: 0.55 }
         }
         // Strand der Ertränkten: Klagewalzer in a-Moll, Blechflöte und Akkordeon
         "salz" => {
@@ -261,7 +255,7 @@ pub fn song(name: &str) -> Option<Song> {
                 ev.extend(sq(&format!("{}:6", first(c)), Cello, 0.55, t));
                 ev.push(drum(t, 52.0, 0.22));
             }
-            Song { name: "salz", unit: 60.0 / 66.0 / 3.0, len: 96.0, events: ev, gain: 0.5 }
+            Song { unit: 60.0 / 66.0 / 3.0, len: 96.0, events: ev, gain: 0.5 }
         }
         // Auf See: langsames Seemannslied in d-Dorisch, Geige über Akkordeon und Cello
         "leine" => {
@@ -276,7 +270,7 @@ pub fn song(name: &str) -> Option<Song> {
                 ev.extend(sq(&format!("{}:6", down(c)), Cello, 0.5, t));
                 ev.extend([drum(t, 55.0, 0.3), tick(t + 3.0, 0.08)]);
             }
-            Song { name: "leine", unit: 60.0 / 80.0 / 3.0, len: 96.0, events: ev, gain: 0.5 }
+            Song { unit: 60.0 / 80.0 / 3.0, len: 96.0, events: ev, gain: 0.5 }
         }
         // Am Säbelfeuer: Cello allein, darunter leise Harfe
         "atem" => {
@@ -285,7 +279,7 @@ pub fn song(name: &str) -> Option<Song> {
                 ev.extend(arp(c, 8.0, 1.0, i as f32 * 8.0, 0.35));
                 ev.extend(sq(&format!("{c}:8"), Pad, 0.08, i as f32 * 8.0));
             }
-            Song { name: "atem", unit: 60.0 / 58.0 / 2.0, len: 32.0, events: ev, gain: 0.55 }
+            Song { unit: 60.0 / 58.0 / 2.0, len: 32.0, events: ev, gain: 0.55 }
         }
         // Glutwacht: Glocken und Harfe wie in einem verlassenen Schrein, e-Moll
         "hain" => {
@@ -297,7 +291,7 @@ pub fn song(name: &str) -> Option<Song> {
                 ev.extend(arp(c, 6.0, 0.75, t, 0.4));
                 ev.extend(sq(&format!("{c}:6"), Pad, 0.1, t));
             }
-            Song { name: "hain", unit: 60.0 / 56.0 / 2.0, len: 48.0, events: ev, gain: 0.55 }
+            Song { unit: 60.0 / 56.0 / 2.0, len: 48.0, events: ev, gain: 0.55 }
         }
         // Aschebucht / „Glutwind“: d-Moll, Geige, Cello-Pizzicato als Harfe, ferne Trommel
         "glut" => {
@@ -309,7 +303,7 @@ pub fn song(name: &str) -> Option<Song> {
                 ev.extend(sq(&format!("{}:6", down(c)), Cello, 0.55, t));
                 ev.extend([drum(t, 50.0, 0.4), drum(t + 3.0, 46.0, 0.25)]);
             }
-            Song { name: "glut", unit: 60.0 / 70.0 / 3.0, len: 48.0, events: ev, gain: 0.5 }
+            Song { unit: 60.0 / 70.0 / 3.0, len: 48.0, events: ev, gain: 0.5 }
         }
         // Frostgrotte / „Eisige Leine“: a-Moll, Flöte über Harfe und Flächen
         "frost" => {
@@ -320,7 +314,7 @@ pub fn song(name: &str) -> Option<Song> {
                 ev.extend(arp(c, 8.0, 1.0, t, 0.3));
                 ev.extend(sq(&format!("{c}:8"), Pad, 0.12, t));
             }
-            Song { name: "frost", unit: 60.0 / 52.0 / 2.0, len: 64.0, events: ev, gain: 0.55 }
+            Song { unit: 60.0 / 52.0 / 2.0, len: 64.0, events: ev, gain: 0.55 }
         }
         // Rabenwacht / „Rabensturm“: g-Moll, Geige ruft, das Cello antwortet
         "sturm" => {
@@ -334,7 +328,7 @@ pub fn song(name: &str) -> Option<Song> {
                 ev.extend(sq(&format!("{}:8", first(c)), Cello, 0.4, t));
                 ev.extend([drum(t, 58.0, 0.45), tick(t + 2.0, 0.12), drum(t + 4.0, 55.0, 0.3), tick(t + 6.0, 0.12)]);
             }
-            Song { name: "sturm", unit: 60.0 / 90.0 / 2.0, len: 48.0, events: ev, gain: 0.5 }
+            Song { unit: 60.0 / 90.0 / 2.0, len: 48.0, events: ev, gain: 0.5 }
         }
         // Fluchmangroven / „Tiefer Grund“: c-Moll, Akkordeon und Cello in der Tiefe
         "tiefe" => {
@@ -346,7 +340,7 @@ pub fn song(name: &str) -> Option<Song> {
                 ev.extend(sq(&format!("{c}:8"), Pad, 0.18, t));
                 ev.extend([drum(t, 42.0, 0.4), drum(t + 5.0, 40.0, 0.25)]);
             }
-            Song { name: "tiefe", unit: 60.0 / 50.0 / 2.0, len: 64.0, events: ev, gain: 0.6 }
+            Song { unit: 60.0 / 50.0 / 2.0, len: 64.0, events: ev, gain: 0.6 }
         }
         // Ende der Welt: Geigenklage und tiefe Flächen, d-Moll
         "ende" => {
@@ -360,7 +354,7 @@ pub fn song(name: &str) -> Option<Song> {
                 }
             }
             ev.push(Ev { t: 0.0, dur: 8.0, inst: Bell, f: freq("D4"), vel: 0.3 });
-            Song { name: "ende", unit: 60.0 / 60.0 / 2.0, len: 64.0, events: ev, gain: 0.55 }
+            Song { unit: 60.0 / 60.0 / 2.0, len: 64.0, events: ev, gain: 0.55 }
         }
         // Bosse: drängend, aber düster – e-Phrygisch, Geige, Cello-Ostinato, Trommeln
         "boss" => {
@@ -376,7 +370,7 @@ pub fn song(name: &str) -> Option<Song> {
                     ev.push(if b % 2 == 1 { tick(t + b as f32, v) } else { drum(t + b as f32, 56.0, v) });
                 }
             }
-            Song { name: "boss", unit: 60.0 / 118.0 / 2.0, len: 64.0, events: ev, gain: 0.5 }
+            Song { unit: 60.0 / 118.0 / 2.0, len: 64.0, events: ev, gain: 0.5 }
         }
         _ => return None,
     };
@@ -394,7 +388,6 @@ pub fn render_event(buf: &mut [f32], e: &Ev, start: usize, dur: f32, rng: &mut R
         Harp => 1.6,
         Cello => 0.25,
         Pad => 0.1,
-        CrewLead | CrewHum => 0.2,
         _ => 0.05,
     };
     let total = match e.inst {
@@ -543,36 +536,14 @@ pub fn render_event(buf: &mut [f32], e: &Ev, start: usize, dur: f32, rng: &mut R
                 add(buf, start + i, s * g);
             }
         }
-        CrewLead | CrewHum => {
-            let hum = e.inst == CrewHum;
-            let mut f1 = Bq::new(Ft::Band, if hum { 420.0 } else { 560.0 }, 6.0);
-            let mut f2 = Bq::new(Ft::Band, if hum { 780.0 } else { 900.0 }, 8.0);
-            let voices: &[f32] = if hum { &[-12.0, 3.0] } else { &[-14.0, -4.0, 6.0, 13.0] };
-            let base = if hum { f } else { f * 0.5 };
-            let vf: Vec<f32> = voices.iter().map(|d| base * 2f32.powf((d + rng.f() * 4.0) / 1200.0)).collect();
-            let vr: Vec<f32> = voices.iter().map(|_| 4.5 + rng.u()).collect();
-            let mut ph: Vec<f32> = voices.iter().map(|_| rng.u()).collect();
-            for i in 0..n {
-                let t = i as f32 * dt;
-                let mut s = 0.0;
-                for k in 0..vf.len() {
-                    let vib = (t * vr[k] * std::f32::consts::TAU).sin() * e.f * 0.006;
-                    ph[k] += (vf[k] + vib) * dt;
-                    s += osc(Wave::Saw, ph[k]);
-                }
-                let o = f1.run(s) + f2.run(s) * 0.6;
-                add(buf, start + i, o * env(t, if hum { 0.4 } else { 0.08 }, (if hum { 0.18 } else { 0.5 }) * v, dur + 0.1, if hum { 0.5 } else { 0.15 }) * 2.0);
-            }
-        }
     }
 }
 
-/// Schrittweises Rendern eines Liedes (Musik- und Crew-Spur), damit kein Bild ruckelt.
+/// Schrittweises Rendern eines Liedes, damit kein Bild ruckelt.
 pub struct SongRender {
     pub name: &'static str,
     pub song: Song,
     pub music: Vec<f32>,
-    pub crew: Vec<f32>,
     pub next: usize,
     rng: Rng,
 }
@@ -580,7 +551,7 @@ impl SongRender {
     pub fn new(name: &'static str) -> Option<Self> {
         let song = song(name)?;
         let n = (song.len * song.unit * SR) as usize;
-        Some(SongRender { name, music: vec![0.0; n], crew: vec![0.0; n], next: 0, rng: Rng::new(name.len() as u32 * 7919 + 13), song })
+        Some(SongRender { name, music: vec![0.0; n], next: 0, rng: Rng::new(name.len() as u32 * 7919 + 13), song })
     }
     /// gibt true zurück, wenn fertig
     pub fn step(&mut self, max_events: usize) -> bool {
@@ -590,12 +561,7 @@ impl SongRender {
             let e = self.song.events[k];
             let start = (e.t * unit * SR) as usize;
             let dur = e.dur * unit;
-            let crew = matches!(e.inst, Inst::CrewLead | Inst::CrewHum);
-            if crew {
-                render_event(&mut self.crew, &e, start, dur, &mut self.rng);
-            } else {
-                render_event(&mut self.music, &e, start, dur, &mut self.rng);
-            }
+            render_event(&mut self.music, &e, start, dur, &mut self.rng);
         }
         self.next = end;
         if self.next >= self.song.events.len() {
@@ -604,9 +570,6 @@ impl SongRender {
             for s in self.music.iter_mut() {
                 let x = (*s * 1.6).clamp(-1.0, 1.0);
                 *s = ((x * 48.0).round() / 48.0 * 0.2 + x * 0.8) * g;
-            }
-            for s in self.crew.iter_mut() {
-                *s = (*s * 1.2).clamp(-1.0, 1.0);
             }
             return true;
         }
@@ -655,10 +618,6 @@ impl Fx {
         }
     }
 }
-
-pub const SFX: [&str; 33] = [
-    "swing", "heavy", "hit", "crit", "hurt", "roll", "parry", "parried", "drink", "heal", "bones", "crush", "cannon", "pistol", "tide", "crash", "roar", "death", "pearls", "kindle", "chest", "level", "lock", "rise", "zap", "charge", "board", "click", "crackle", "fog", "bell", "chain", "thud",
-];
 
 pub fn sfx(name: &str) -> Vec<f32> {
     use Ft::*;

@@ -124,8 +124,3 @@ pub fn pick(p: &[Rgba], v: f32) -> Rgba {
     [l(a[0], b[0]), l(a[1], b[1]), l(a[2], b[2]), l(a[3], b[3])]
 }
 
-/// Ton aus einer Palette in harten Stufen (für Muster, die bewusst abgestuft sind).
-pub fn pick_step(p: &[Rgba], v: f32) -> Rgba {
-    let i = (v * (p.len() as f32 - 1.0) + 0.5).floor().clamp(0.0, p.len() as f32 - 1.0) as usize;
-    p[i]
-}

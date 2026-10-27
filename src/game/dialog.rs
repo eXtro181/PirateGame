@@ -127,14 +127,14 @@ pub fn dialog_for(g: &mut Game, ni: usize) -> Script {
                 pages(&["Die Throne um das Feuer sind kalt. Sie warten auf ihre Gesichter."])
             } else if wrecks_missing > 0 {
                 pages(&["Die Gesichter sind heimgekehrt. Doch der See ist noch nicht satt. Er will die Schiffe der vier Ungeheuer."])
-            } else if s.megalodon {
+            } else if s.end_won {
                 pages(&["Malakor liegt am Grund, und das Meer am Ende der Welt ist leer. Du hast den Ertrunkenen König gestürzt.", "Doch die See vergisst nicht. Sie füllt sich wieder mit Königen und Ungeheuern, stärker als zuvor. Wenn du willst, beginnt deine Fahrt von vorn – du behältst alles, was du bist."])
             } else {
                 pages(&["Hörst du es? Der See singt. Der Strudel ist offen. Fahr mit dem Schiff hinein – zwischen den Armen hindurch.", "Am Ende der Welt wartet Malakor, der Ertrunkene König, auf seinem Fliegenden Holländer."])
             },
             choices: [
                 vec![ch("Stufe aufsteigen", Cmd::LevelMenu)],
-                if s.megalodon { vec![ch(&crate::game::ng_label(s.ng + 1), Cmd::NewGamePlus)] } else { vec![] },
+                if s.end_won { vec![ch(&crate::game::ng_label(s.ng + 1), Cmd::NewGamePlus)] } else { vec![] },
                 vec![ch("Über das Säbelfeuer", Cmd::TalkPages(pages(&["Das Feuer brennt auf den Klingen aller Kapitäne, die hier fielen. Es verlöscht nie ganz.", "Solange es brennt, kehrst du zurück. Wie wir alle. Das ist der Fluch der Glutwacht – und ihr Trost."]))),
                 bye],
             ]
@@ -191,19 +191,17 @@ pub fn dialog_for(g: &mut Game, ni: usize) -> Script {
             }
             if let Some(key) = def.dialog.strip_prefix("shop_") {
                 let d = shop_def(key);
-                let k: &'static str = SHOPS.iter().find(|x| x.key == key).map(|x| x.key).unwrap_or("kueste");
+                let k: &'static str = SHOPS.iter().find(|x| x.key == key).map(|x| x.key).unwrap_or("asche");
                 let greet: &[&str] = match key {
-                    "kueste" => &["Fang ist mager, seit die Toten am Strand liegen. Aber was ich hab, ist gut.", "Muschelhörner, Treibholz-Glücksbringer. Nirgends sonst auf der See."],
                     "asche" => &["Glutgrund schmiedet seit hundert Jahren mit der Hitze des Glutkönigs.", "Ascheherzen, Glutrum, das Folio. Kaufen oder gehen, der Ofen wartet nicht."],
                     "frost" => &["Komm rein, bevor dir die Finger abfallen.", "Pelze aus dem Eismeer und Eisglas aus der Grotte. Wärmt Leib und Geist."],
-                    "raben" => &["Karten, Kompasse, Federn. Alles, was einen Seemann heimbringt.", "Der Sturmkompass zeigt immer in den Wind. Den gibt es nur bei mir."],
+                    "raben" => &["Karten, Kompasse, Federn, Muschelhörner. Alles, was einen Seemann heimbringt.", "Der Sturmkompass zeigt immer in den Wind. Den gibt es nur bei mir."],
                     _ => &["Hihi. Ein Lebender im Moor. Oder fast lebendig.", "Tinkturen, Puppen, Phiolen. Die Wurzeln flüstern mir die Rezepte."],
                 };
                 return Script { pages: if first { pages(greet) } else { vec![format!("Willkommen zurück in {}.", d.town)] }, choices: vec![ch("Waren ansehen", Cmd::ShopAt(k)), bye] };
             }
             if let Some(key) = def.dialog.strip_prefix("town_") {
                 let lines: &[&str] = match key {
-                    "kueste" => &["Salzwiese gab es schon, bevor die Toten an Land kamen. Wir bleiben.", "Jorn im Laden hat ein Muschelhorn. Damit hält man länger durch.", "Nachts singen die Ertrunkenen am Strand. Wir schließen die Läden.", "Wenn die Möwen schweigen, ist die See hungrig."],
                     "asche" => &["Die Asche fällt jeden Morgen. Wir fegen sie, sie fällt wieder.", "Ilka schmiedet mit Glut aus dem Thronsaal. Frag nicht, wie sie rankommt.", "Hinter der Schlucht brennt der Thron des Admirals.", "Unsere Kinder husten. Aber sie lachen noch."],
                     "frost" => &["In Reifstein friert sogar der Schnaps.", "Wendla hat Pelze aus dem Eismeer. Sie taucht selbst dafür.", "Die Königin unter dem Eis singt manchmal. Dann knacken die Häuser.", "Ein warmes Feuer und eine Geschichte, mehr brauchen wir nicht."],
                     "raben" => &["Rabenwacht war der größte Hafen der Freibeuter.", "Orrin verkauft Karten von Orten, die es nicht mehr gibt.", "Der Sturmkönig hat die Glocken der Stadt gestohlen.", "Wenn die Raben auffliegen, kommt Sturm."],

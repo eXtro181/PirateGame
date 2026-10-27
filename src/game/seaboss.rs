@@ -104,9 +104,6 @@ impl SeaBoss {
     pub fn def(&self) -> &'static SeaKing {
         &SEA_KINGS[self.k]
     }
-    pub fn dead(&self) -> bool {
-        matches!(self.state, SS::Sink | SS::Dead)
-    }
     pub fn active(&self) -> bool {
         matches!(self.state, SS::Rise | SS::Fight | SS::Morph | SS::Ship)
     }
@@ -509,7 +506,6 @@ impl Game {
         b.flash = 0.1;
         b.hull.flash = 0.1;
         let (x, y) = b.pos();
-        self.fx.num(x, y - 90.0, n as i32, None);
         let b = &mut self.sea_bosses[i];
         if b.state == SS::Fight && b.hp <= b.max_hp * 0.5 {
             b.hp = b.max_hp * 0.5;

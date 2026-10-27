@@ -18,6 +18,8 @@ pub struct WorldView {
     pub cache: ChunkCache,
     pub buckets: HashMap<i32, Vec<usize>>,
     pub deco_b: HashMap<i32, Vec<usize>>,
+    /// Bild je Deko-Art (einmal nachgeschlagen statt Name je Bild)
+    deco_spr: HashMap<&'static str, Option<sw_art::atlas::Spr>>,
     pub time: f32,
 }
 
@@ -33,24 +35,33 @@ impl WorldView {
             cache: ChunkCache { slots: vec![None; CHUNK_SLOTS as usize], map: HashMap::new(), tick: 0, mats: Materials::new(), en: EdgeNoise::new() },
             buckets: HashMap::new(),
             deco_b: HashMap::new(),
+            deco_spr: HashMap::new(),
             time: 0.0,
         };
-        for (i, p) in world.props.iter().enumerate() {
-            v.buckets.entry(bkey(p.x, p.y)).or_default().push(i);
-        }
-        for (i, d) in world.deco.iter().enumerate() {
-            v.deco_b.entry(bkey(d.x, d.y)).or_default().push(i);
-        }
+        v.rebuild_buckets(world);
         v.build_mask(world, frame);
         v
     }
+    /// Requisiten und Deko in 256-px-Eimer: gezeichnet wird nur, was im Bild liegt.
+    fn rebuild_buckets(&mut self, world: &World) {
+        self.buckets.clear();
+        self.deco_b.clear();
+        for (i, p) in world.props.iter().enumerate() {
+            self.buckets.entry(bkey(p.x, p.y)).or_default().push(i);
+        }
+        for (i, d) in world.deco.iter().enumerate() {
+            self.deco_b.entry(bkey(d.x, d.y)).or_default().push(i);
+        }
+    }
 
-    /// Nach einer Änderung des Bodens (aufsteigende Insel): Chunks neu backen, Maske neu bauen.
+    /// Nach einer Änderung des Bodens (Meer am Ende der Welt leergelaufen): Chunks neu backen,
+    /// Eimer und Maske neu bauen.
     pub fn refresh(&mut self, w: &World, frame: &mut Frame) {
         for s in self.cache.slots.iter_mut() {
             *s = None;
         }
         self.cache.map.clear();
+        self.rebuild_buckets(w);
         self.build_mask(w, frame);
     }
 
@@ -257,21 +268,6 @@ impl WorldView {
         out
     }
 
-    pub fn missing_chunks(&self, frame: &Frame) -> usize {
-        let (vx, vy, vw, vh) = frame.view();
-        let mut n = 0;
-        for cy in ((vy - 32.0) / CHUNK as f32).floor() as i32..=((vy + vh + 96.0) / CHUNK as f32).floor() as i32 {
-            for cx in ((vx - 32.0) / CHUNK as f32).floor() as i32..=((vx + vw + 32.0) / CHUNK as f32).floor() as i32 {
-                if cx < 0 || cy < 0 || cx * CHUNK >= MW * TS || cy * CHUNK >= MH * TS {
-                    continue;
-                }
-                if !self.cache.map.contains_key(&(cx, cy)) {
-                    n += 1;
-                }
-            }
-        }
-        n
-    }
 
     /// Boden, Requisiten, Deko, Schatten und statische Lichter zeichnen.
     /// `focus` = Spielerposition (für ausblendende Kronen).
@@ -302,8 +298,8 @@ impl WorldView {
                         if d.x < vx - 40.0 || d.x > vx + vw + 40.0 || d.y < vy - 20.0 || d.y > vy + vh + 60.0 {
                             continue;
                         }
-                        let name = format!("d:{}", d.k);
-                        if let Some(s) = art.map.get(&name) {
+                        let s = *self.deco_spr.entry(d.k).or_insert_with(|| art.map.get(&format!("d:{}", d.k)).copied());
+                        if let Some(s) = s.as_ref() {
                             let lvl = 0.0;
                             let sway = if matches!(d.k, "tuft" | "tuftDark" | "tallgrass" | "snowtuft" | "reeds" | "flowersW" | "flowersY" | "flowersP" | "flowersB" | "flowersR") { 22 } else { 0 };
                             let flat = matches!(d.k, "lily" | "pebbles" | "shell" | "ember" | "bones");

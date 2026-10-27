@@ -84,7 +84,7 @@ const fn kw(key: &'static str, w: i32, h: i32, sc: f32) -> Kind {
     Kind { key, w: (w as f32 * sc) as i32, h: (h as f32 * sc) as i32, foot: (40.0 * sc) as i32, big: true, shoot: false, shadow: 0.0, roll: 0.0, only: None, sc, swim: true }
 }
 
-pub const KINDS: [Kind; 20] = [
+pub const KINDS: [Kind; 19] = [
     k("crab", 64, 48, false, false, 14.0, PI),
     k("crabWarrior", 120, 96, true, false, 28.0, PI),
     k("shell", 72, 72, false, false, 15.0, 1.3),
@@ -98,8 +98,6 @@ pub const KINDS: [Kind; 20] = [
     Kind { shoot: true, ..ks("turtleWorm", 170, 140, 42.0, 0.35, 1.2) },
     ks("manticore", 164, 156, 34.0, 1.4, 1.6),
     ks("krakenBasilisk", 170, 170, 36.0, 1.3, 1.6),
-    // ein Bogen: Glühteile neutral hell, das Element färbt das Spiel beim Zeichnen ein
-    ks("moloch", 230, 210, 58.0, 0.6, 1.3),
     Kind { key: "seaKraken", w: 210, h: 195, foot: 4, big: true, shoot: false, shadow: 0.0, roll: 0.0, only: Some("down"), sc: 1.5, swim: false },
     Kind { key: "shark", w: 100, h: 52, foot: 14, big: false, shoot: false, shadow: 0.0, roll: 0.0, only: Some("side"), sc: 1.0, swim: false },
     // Seebosse (erste Gestalt)
@@ -177,7 +175,6 @@ fn build(key: &str, p: &P, r: &mut Rig) {
         "turtleWorm" => turtle(r, p),
         "manticore" => manticore(r, p),
         "krakenBasilisk" => basilisk(r, p),
-        "moloch" => moloch(r, p, 0xF4F0EA),
         "seaKraken" => sea_kraken(r, p),
         "seaTiamat" => tiamat(r, p),
         "seaLobster" => lobster(r, p),
@@ -963,73 +960,6 @@ fn basilisk(r: &mut Rig, p: &P) {
 }
 
 // ================================================================= Moloch, der Weltschlinger
-fn moloch(r: &mut Rig, p: &P, el: u32) {
-    let hide = r.mat(mat(0x3A2E36).pat(Pat::Scales(6.0)).spec(60));
-    let plate = r.mat(mat(0x6A5A50).pat(Pat::Stripes(4.0)).spec(80));
-    let horn = r.mat(mat(0x2A2224).spec(120));
-    let glow = r.mat(mat(el).glow(1.5).bias(0.3).spec(120));
-    let maw = r.mat(mat(0x120808).soft());
-    let tooth = r.mat(mat(0xE8DEC6).spec(80).bias(0.1));
-    let lunge = if p.atk > 0.0 { p.atk * 12.0 } else if p.atk < 0.0 { p.atk * 5.0 } else { 0.0 };
-    let gape = if p.atk < 0.0 { 1.0 } else if p.atk > 0.0 { 0.35 } else { 0.45 + p.bob * 0.06 };
-    let bz = 40.0 + p.bob + if p.moving { (p.walk * 2.0).sin().abs() * 2.5 } else { 0.0 };
-    let rear = if p.atk < 0.0 { -p.atk * 0.15 } else { 0.0 };
-    let mk = r.mark();
-    // ---- sechs Säulenbeine
-    r.part();
-    for (i, (lx, ly)) in [(-1.0f32, 1.0f32), (1.0, 1.0), (-1.0, 0.0), (1.0, 0.0), (-1.0, -1.0), (1.0, -1.0)].into_iter().enumerate() {
-        let (st, lf) = step(p, i as f32 * PI * 0.66, 7.0, 6.0);
-        let hip = v(lx * 24.0, ly * 24.0 + lunge, bz - 12.0);
-        let foot = v(lx * 36.0, ly * 30.0 + st + lunge * 0.5, lf);
-        leg(r, hip, foot, 20.0, 20.0, v(lx, 0.0, 0.7), 10.0, 7.0, hide, Some(plate));
-        for c in [-1.0f32, 0.0, 1.0] {
-            r.spike(foot, add(foot, v(lx * 2.0 + c * 2.5, 4.5, -0.5)), 1.6, tooth);
-        }
-    }
-    // ---- Leib und Schwanz
-    r.part();
-    r.ell_dir(v(0.0, -4.0 + lunge, bz + 2.0), v(0.0, 1.0, 0.05), v(30.0, 40.0, 26.0), hide);
-    r.ell_dir(v(0.0, 2.0 + lunge, bz - 13.0), v(0.0, 1.0, 0.0), v(24.0, 32.0, 12.0), plate);
-    let sw = (p.t * TAU).sin() * 6.0 + p.walk.sin() * 4.0;
-    r.curve(&[v(0.0, -38.0 + lunge, bz), v(sw * 0.5, -54.0 + lunge, bz - 8.0), v(sw, -68.0 + lunge, bz - 14.0), v(sw * 1.5, -78.0 + lunge, bz - 16.0)], 13.0, 3.0, hide);
-    // Kristallkamm in zwei Reihen längs des Rückens
-    for row in [-1.0f32, 1.0] {
-        for i in 0..6 {
-            let y = 18.0 - i as f32 * 10.0;
-            let base = v(row * 8.0, y + lunge, bz + 25.0 - (i as f32 - 1.5).abs() * 2.5);
-            r.spike(base, add(base, v(row * 5.0, -6.0, 15.0 - (i as f32 - 1.5).abs() * 2.0)), 4.0, glow);
-        }
-    }
-    // ---- Kopf mit Schlund
-    r.part();
-    let hp = v(0.0, 38.0 + lunge, bz + 4.0);
-    r.ell_dir(hp, v(0.0, 1.0, -0.1), v(26.0, 18.0, 22.0), hide);
-    // Hörner
-    for side in [-1.0f32, 1.0] {
-        let b0 = add(hp, v(side * 16.0, -6.0, 14.0));
-        r.curve(&[b0, add(b0, v(side * 14.0, -6.0, 12.0)), add(b0, v(side * 18.0, -18.0, 22.0)), add(b0, v(side * 12.0, -26.0, 30.0))], 6.0, 1.2, horn);
-    }
-    let mc = add(hp, v(0.0, 14.0, -4.0));
-    let (mrx, mrz) = (18.0, 9.0 + gape * 10.0);
-    r.ell(add(mc, v(0.0, -1.0, 0.0)), v(mrx, 5.0, mrz), maw);
-    r.ell(add(mc, v(0.0, -4.0, 0.0)), v(mrx * 0.6, 3.0, mrz * 0.6), glow);
-    for i in 0..18 {
-        let a = i as f32 / 18.0 * TAU;
-        let rim = add(mc, v(a.cos() * mrx * 1.05, 1.5, a.sin() * mrz * 1.05));
-        r.spike(rim, add(mc, v(a.cos() * mrx * 0.5, 4.0, a.sin() * mrz * 0.5)), 2.2, tooth);
-    }
-    for i in 0..22 {
-        let a = i as f32 / 22.0 * TAU;
-        r.ball(add(mc, v(a.cos() * mrx * 1.2, -0.5, a.sin() * mrz * 1.2)), 3.4, hide);
-    }
-    // Augenkranz über dem Schlund und an den Seiten
-    for i in 0..6 {
-        let a = PI * 0.15 + i as f32 / 5.0 * PI * 0.7;
-        let e = add(hp, v(a.cos() * 20.0, 10.0 + a.sin() * 2.0, 9.0 + a.sin() * 7.0));
-        r.eye(e, 2.8, el, 1.6, v(a.cos() * 0.4, 1.0, 0.2));
-    }
-    r.rotate_since(mk, 0, rear, v(0.0, -30.0, 0.0));
-}
 
 // ================================================================= See-Kraken (aus dem Wasser)
 fn sea_kraken(r: &mut Rig, p: &P) {

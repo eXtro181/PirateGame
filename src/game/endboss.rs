@@ -154,7 +154,7 @@ impl Game {
     /// Bei Spielstart/Tod: Stand je nach Fortschritt.
     pub fn reset_end(&mut self) {
         self.end = EndBoss::default();
-        if self.save.megalodon {
+        if self.save.end_won {
             self.end.state = EP::Done;
         } else if self.save.end_naval {
             self.end.state = EP::Seabed;
@@ -270,7 +270,7 @@ impl Game {
         match self.end.state {
             EP::Done | EP::Seabed => return,
             EP::Dormant => {
-                if self.sailing && self.world.in_end(sx, sy) && self.cutscene.is_none() && !self.save.megalodon && !self.save.end_naval {
+                if self.sailing && self.world.in_end(sx, sy) && self.cutscene.is_none() && !self.save.end_won && !self.save.end_naval {
                     self.end.state = EP::Approach;
                     self.end.st_t = 0.0;
                 }
@@ -567,7 +567,6 @@ impl Game {
                 kr.hp -= n;
                 kr.flash = 0.1;
                 let (x, y) = (kr.x, kr.y);
-                self.fx.num(x, y - 200.0, n as i32, None);
                 if kr.hp <= 0.0 {
                     kr.dying = 0.01;
                     self.end.pull = 0.0;
@@ -583,7 +582,6 @@ impl Game {
         e.hp -= n;
         e.flash = 0.1;
         let (x, y) = (e.x + rr(-200.0, 200.0), e.y);
-        self.fx.num(x, y - 260.0, n as i32, None);
         self.fx.burst("dust", x, y - 60.0, 6, BurstOpt { speed: Some(120.0), col: Some([0.3, 0.4, 0.35, 1.0]), ..Default::default() });
         if self.end.hp <= 0.0 {
             self.end.hp = 0.0;

@@ -639,11 +639,11 @@ impl Menu {
             ("Throne of the Drowned", col::GOLD),
             ("Ein Soulslike über Ertrunkene, Geisterkönige und das Ende der Welt.", col::BONE),
             ("", col::BONE),
-            ("Alle Grafiken, Shantys und Klänge werden beim Start aus Code erzeugt:", col::BONE),
+            ("Alle Grafiken, Musik und Klänge werden beim Start aus Code erzeugt:", col::BONE),
             ("Pixel für Pixel, Note für Note – in Rust mit Bevy und eigenem Renderer.", col::BONE),
             ("", col::BONE),
             ("Idee und Spielleitung: Dennis · Umsetzung mit Claude", col::SOUL),
-            ("Shantys: Salz auf der Haut · Hol die Leine · Lied der Laternen · Glutwind", col::MIST),
+            ("Musik: Salz auf der Haut · Hol die Leine · Lied der Laternen · Glutwind", col::MIST),
             ("Eisige Leine · Rabensturm · Tiefer Grund · Weltschlund", col::MIST),
         ];
         for (i, (l, c)) in lines.iter().enumerate() {

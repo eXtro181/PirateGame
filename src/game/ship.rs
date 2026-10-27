@@ -49,7 +49,6 @@ pub struct GhostShip {
     pub route: Vec<(f32, f32)>,
     pub wp: usize,
     pub hp: f32,
-    pub max_hp: f32,
     pub cool: f32,
     pub sink_t: f32,
 }
@@ -79,7 +78,6 @@ pub struct Kraken {
     pub y: f32,
     pub home: (f32, f32),
     pub hp: f32,
-    pub max_hp: f32,
     pub up: bool,
     pub t: f32,
     pub flash: f32,
@@ -89,7 +87,7 @@ pub struct Kraken {
 }
 impl Kraken {
     pub fn new(x: f32, y: f32) -> Self {
-        Kraken { x, y, home: (x, y), hp: 900.0, max_hp: 900.0, up: false, t: 0.0, flash: 0.0, rise: 0.0, cool: 2.0, slams: vec![] }
+        Kraken { x, y, home: (x, y), hp: 900.0, up: false, t: 0.0, flash: 0.0, rise: 0.0, cool: 2.0, slams: vec![] }
     }
     pub fn dead(&self) -> bool {
         self.hp <= 0.0
@@ -119,7 +117,6 @@ impl Game {
                 route: r.clone(),
                 wp: 1 % r.len().max(1),
                 hp: 160.0,
-                max_hp: 160.0,
                 cool: 2.0,
                 sink_t: 0.0,
             })
@@ -420,7 +417,6 @@ impl Game {
         g.hp -= n;
         g.hull.flash = 0.1;
         let (x, y, name) = (g.hull.x, g.hull.y, g.name);
-        self.fx.num(x, y - 60.0, n as i32, None);
         self.fx.burst("dust", x, y - 12.0, 10, BurstOpt { speed: Some(120.0), col: Some([0.3, 0.45, 0.45, 1.0]), ..Default::default() });
         if self.ghosts[i].hp <= 0.0 {
             self.sfx("death");
@@ -437,7 +433,6 @@ impl Game {
         s.hp -= n;
         s.flash = 0.1;
         let (x, y) = (s.x, s.y);
-        self.fx.num(x, y - 30.0, n as i32, None);
         if self.sharks[i].hp <= 0.0 {
             self.gain_pearls(90, Some((x, y)));
             self.fx.burst("bone", x, y, 12, BurstOpt::default());
@@ -451,7 +446,6 @@ impl Game {
         k.hp -= n;
         k.flash = 0.1;
         let (x, y) = (k.x, k.y);
-        self.fx.num(x, y - 80.0, n as i32, None);
         if self.kraken.hp <= 0.0 {
             self.sfx("death");
             self.fx.rise("soul", x, y, 50, 120.0, None);

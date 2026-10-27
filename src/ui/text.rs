@@ -4,7 +4,6 @@ use crate::art::Art;
 use crate::gfx::{Frame, SprOpt};
 
 pub const GAP: f32 = 1.0;
-pub const LINE: f32 = 10.0;
 
 fn adv(art: &Art, ch: char) -> f32 {
     if ch == ' ' {

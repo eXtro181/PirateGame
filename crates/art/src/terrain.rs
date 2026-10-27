@@ -1457,7 +1457,9 @@ fn path_pixel(c: &mut Canvas, x: i32, y: i32, px: i32, py: i32, en: &EdgeNoise, 
 #[allow(clippy::too_many_arguments)]
 fn masonry_pixel(c: &mut Canvas, x: i32, y: i32, px: i32, fy: i32, hgt: i32, bp: &BiomePal, ev: f32, water: bool) {
     let st = pal(&[0x2A262C, 0x3C3640, 0x524A56, 0x6A6070, 0x847A88, 0xA0969E]);
-    let (mut v, mut rel, mut up) = (0.5f32, 2.0f32, 255u8);
+    let mut v: f32;
+    let mut rel: f32;
+    let mut up = 255u8;
     if fy < 6 {
         // Deckplatten mit Vorsprung und Schattenkante
         v = if fy < 4 { 0.86 - fy as f32 * 0.04 } else { 0.22 };

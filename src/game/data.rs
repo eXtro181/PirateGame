@@ -110,36 +110,35 @@ pub struct Item {
     pub key: &'static str,
     pub name: &'static str,
     pub rarity: Rarity,
-    pub icon: &'static str,
     pub desc: &'static str,
 }
 pub const ITEMS: [Item; 25] = [
-    Item { key: "pearls", name: "Perlenbeutel", rarity: Rarity::Common, icon: "pearl", desc: "Ein nasser Beutel voller Perlen." },
-    Item { key: "rum", name: "Rumflasche", rarity: Rarity::Rare, icon: "rum", desc: "Eine Rumflasche mehr an jedem Feuer." },
-    Item { key: "phial", name: "Seelenphiole", rarity: Rarity::Uncommon, icon: "phial", desc: "Füllt den Geist. Eine Phiole mehr an jedem Feuer." },
-    Item { key: "bullets", name: "Bleikugeln", rarity: Rarity::Common, icon: "bullets", desc: "Sechs Kugeln für die Pistole." },
-    Item { key: "bombs", name: "Pulverbomben", rarity: Rarity::Common, icon: "bomb", desc: "Drei Bomben. Mit 1 werfen." },
-    Item { key: "soulflower", name: "Seelenblume", rarity: Rarity::Uncommon, icon: "shard", desc: "Gezeitensplitter für den Schmied." },
-    Item { key: "shard", name: "Gezeitensplitter", rarity: Rarity::Uncommon, icon: "shard", desc: "Der Schmied härtet damit deine Waffe." },
-    Item { key: "fireball", name: "Folio der Glut", rarity: Rarity::Unique, icon: "fireball", desc: "Lehrt den Zauber Feuerball." },
-    Item { key: "bolt", name: "Sturmglas", rarity: Rarity::Rare, icon: "bolt", desc: "Dein Geist wächst um 20." },
-    Item { key: "ring", name: "Ring der Ertrunkenen", rarity: Rarity::Rare, icon: "ring", desc: "Du nimmst 12 % weniger Schaden." },
-    Item { key: "coat", name: "Mantel des Lotsen", rarity: Rarity::Rare, icon: "coat", desc: "Ausdauer erholt sich schneller." },
-    Item { key: "figurehead_fire", name: "Galionsfigur der Glut", rarity: Rarity::Unique, icon: "figurehead", desc: "Die Seele des Glutkönigs." },
-    Item { key: "figurehead_ice", name: "Galionsfigur des Frostes", rarity: Rarity::Unique, icon: "figurehead", desc: "Die Seele der Frostkönigin." },
-    Item { key: "figurehead_wind", name: "Galionsfigur des Sturms", rarity: Rarity::Unique, icon: "figurehead", desc: "Die Seele des Sturmkönigs." },
-    Item { key: "figurehead_earth", name: "Galionsfigur der Tiefe", rarity: Rarity::Unique, icon: "figurehead", desc: "Die Seele des Königs der Tiefe." },
+    Item { key: "pearls", name: "Perlenbeutel", rarity: Rarity::Common, desc: "Ein nasser Beutel voller Perlen." },
+    Item { key: "rum", name: "Rumflasche", rarity: Rarity::Rare, desc: "Eine Rumflasche mehr an jedem Feuer." },
+    Item { key: "phial", name: "Seelenphiole", rarity: Rarity::Uncommon, desc: "Füllt den Geist. Eine Phiole mehr an jedem Feuer." },
+    Item { key: "bullets", name: "Bleikugeln", rarity: Rarity::Common, desc: "Sechs Kugeln für die Pistole." },
+    Item { key: "bombs", name: "Pulverbomben", rarity: Rarity::Common, desc: "Drei Bomben. Mit 1 werfen." },
+    Item { key: "soulflower", name: "Seelenblume", rarity: Rarity::Uncommon, desc: "Gezeitensplitter für den Schmied." },
+    Item { key: "shard", name: "Gezeitensplitter", rarity: Rarity::Uncommon, desc: "Der Schmied härtet damit deine Waffe." },
+    Item { key: "fireball", name: "Folio der Glut", rarity: Rarity::Unique, desc: "Lehrt den Zauber Feuerball." },
+    Item { key: "bolt", name: "Sturmglas", rarity: Rarity::Rare, desc: "Dein Geist wächst um 20." },
+    Item { key: "ring", name: "Ring der Ertrunkenen", rarity: Rarity::Rare, desc: "Du nimmst 12 % weniger Schaden." },
+    Item { key: "coat", name: "Mantel des Lotsen", rarity: Rarity::Rare, desc: "Ausdauer erholt sich schneller." },
+    Item { key: "figurehead_fire", name: "Galionsfigur der Glut", rarity: Rarity::Unique, desc: "Die Seele des Glutkönigs." },
+    Item { key: "figurehead_ice", name: "Galionsfigur des Frostes", rarity: Rarity::Unique, desc: "Die Seele der Frostkönigin." },
+    Item { key: "figurehead_wind", name: "Galionsfigur des Sturms", rarity: Rarity::Unique, desc: "Die Seele des Sturmkönigs." },
+    Item { key: "figurehead_earth", name: "Galionsfigur der Tiefe", rarity: Rarity::Unique, desc: "Die Seele des Königs der Tiefe." },
     // Inselwaren: nur bei den Händlern der Siedlungen zu haben
-    Item { key: "shellHorn", name: "Muschelhorn", rarity: Rarity::Rare, icon: "shanty", desc: "Salzwiese. Wer hineinbläst, atmet tiefer: +20 Ausdauer." },
-    Item { key: "driftCharm", name: "Treibholz-Amulett", rarity: Rarity::Uncommon, icon: "key", desc: "Salzwiese. Die See spült dir mehr zu: +15 % Perlen von Gegnern." },
-    Item { key: "emberHeart", name: "Ascheherz", rarity: Rarity::Rare, icon: "shard", desc: "Glutgrund. Ein Klumpen Glut im Griff: +10 % Waffenschaden." },
-    Item { key: "glowRum", name: "Glutrum", rarity: Rarity::Rare, icon: "rum", desc: "Glutgrund. Eine Rumflasche mehr an jedem Feuer." },
-    Item { key: "frostMantle", name: "Frostmantel", rarity: Rarity::Rare, icon: "coat", desc: "Reifstein. Pelz aus dem Eismeer: +30 Leben." },
-    Item { key: "iceGlass", name: "Eisglas", rarity: Rarity::Rare, icon: "bolt", desc: "Reifstein. Klarer Geist: +15 Geist, +10 % Zauberkraft." },
-    Item { key: "stormCompass", name: "Sturmkompass", rarity: Rarity::Unique, icon: "key", desc: "Rabenwacht. Zeigt immer in den Wind: Schiff eine Stufe schneller." },
-    Item { key: "ravenFeather", name: "Rabenfeder", rarity: Rarity::Uncommon, icon: "coat", desc: "Rabenwacht. Leicht wie der Wind: Ausdauer erholt sich 20 % schneller." },
-    Item { key: "bogTonic", name: "Moortinktur", rarity: Rarity::Rare, icon: "phial", desc: "Moorhain. Gerbt die Haut: 8 % weniger Schaden." },
-    Item { key: "voodooDoll", name: "Voodoopuppe", rarity: Rarity::Rare, icon: "fetish", desc: "Moorhain. Flüstert Zauber: +10 Geist, +10 % Zauberkraft." },
+    Item { key: "shellHorn", name: "Muschelhorn", rarity: Rarity::Rare, desc: "Rabenwacht. Wer hineinbläst, atmet tiefer: +20 Ausdauer." },
+    Item { key: "driftCharm", name: "Treibholz-Amulett", rarity: Rarity::Uncommon, desc: "Rabenwacht. Die See spült dir mehr zu: +15 % Perlen von Gegnern." },
+    Item { key: "emberHeart", name: "Ascheherz", rarity: Rarity::Rare, desc: "Glutgrund. Ein Klumpen Glut im Griff: +10 % Waffenschaden." },
+    Item { key: "glowRum", name: "Glutrum", rarity: Rarity::Rare, desc: "Glutgrund. Eine Rumflasche mehr an jedem Feuer." },
+    Item { key: "frostMantle", name: "Frostmantel", rarity: Rarity::Rare, desc: "Reifstein. Pelz aus dem Eismeer: +30 Leben." },
+    Item { key: "iceGlass", name: "Eisglas", rarity: Rarity::Rare, desc: "Reifstein. Klarer Geist: +15 Geist, +10 % Zauberkraft." },
+    Item { key: "stormCompass", name: "Sturmkompass", rarity: Rarity::Unique, desc: "Rabenwacht. Zeigt immer in den Wind: Schiff eine Stufe schneller." },
+    Item { key: "ravenFeather", name: "Rabenfeder", rarity: Rarity::Uncommon, desc: "Rabenwacht. Leicht wie der Wind: Ausdauer erholt sich 20 % schneller." },
+    Item { key: "bogTonic", name: "Moortinktur", rarity: Rarity::Rare, desc: "Moorhain. Gerbt die Haut: 8 % weniger Schaden." },
+    Item { key: "voodooDoll", name: "Voodoopuppe", rarity: Rarity::Rare, desc: "Moorhain. Flüstert Zauber: +10 Geist, +10 % Zauberkraft." },
 ];
 pub fn item(k: &str) -> &'static Item {
     ITEMS.iter().find(|i| i.key == k).unwrap_or(&ITEMS[0])
@@ -174,10 +173,9 @@ pub struct EnemyDef {
     pub chill: bool,
     pub shot: &'static str,
     pub volley: i32,
-    pub sea: bool,
 }
 const fn en(key: &'static str, name: &'static str, hp: f32, dmg: f32, speed: f32, aggro: f32, reach: f32, windup: f32, recover: f32, pearls: f32, body: Body, poise: f32) -> EnemyDef {
-    EnemyDef { key, name, hp, dmg, speed: speed * 2.0, aggro: aggro * 2.0, reach: reach * 2.0, windup, recover, pearls, body, poise, ranged: false, aoe: 0.0, charge: false, mimic: false, burn: false, chill: false, shot: "bullet", volley: 1, sea: false }
+    EnemyDef { key, name, hp, dmg, speed: speed * 2.0, aggro: aggro * 2.0, reach: reach * 2.0, windup, recover, pearls, body, poise, ranged: false, aoe: 0.0, charge: false, mimic: false, burn: false, chill: false, shot: "bullet", volley: 1 }
 }
 pub fn enemies() -> Vec<EnemyDef> {
     use Body::*;
@@ -217,15 +215,14 @@ pub struct King {
     pub beast: &'static str,
     pub hp: f32,
     pub dmg: f32,
-    pub col: [f32; 3],
     pub figurehead: &'static str,
     pub pearls: f32,
 }
 pub const KINGS: [King; 4] = [
-    King { key: "fire", zone: "asche", name: "Admiral Brandvogt, der Glutkönig", monster: "Brandvogt, Dämonen-Kapitän-Mantikor", sheet: "kingFire", beast: "manticore", hp: 1300.0, dmg: 30.0, col: [1.0, 0.45, 0.15], figurehead: "figurehead_fire", pearls: 4000.0 },
-    King { key: "ice", zone: "frost", name: "Königin Ysra Frostweh", monster: "Ysra, Abgrund-Gorgonen-Königin", sheet: "kingIce", beast: "gorgonQueen", hp: 1250.0, dmg: 28.0, col: [0.55, 0.85, 1.0], figurehead: "figurehead_ice", pearls: 4000.0 },
-    King { key: "wind", zone: "raben", name: "Kapitän Rabensturm, der Sturmkönig", monster: "Rabensturm, Uhrwerk-Sturm-Monster", sheet: "kingWind", beast: "clockStorm", hp: 1200.0, dmg: 27.0, col: [0.8, 0.9, 1.0], figurehead: "figurehead_wind", pearls: 4000.0 },
-    King { key: "earth", zone: "mangroven", name: "Morgrim Korallenhand, König der Tiefe", monster: "Morgrim, Kraken-Basilisk-Chimäre", sheet: "kingEarth", beast: "krakenBasilisk", hp: 1450.0, dmg: 32.0, col: [0.55, 0.9, 0.4], figurehead: "figurehead_earth", pearls: 4000.0 },
+    King { key: "fire", zone: "asche", name: "Admiral Brandvogt, der Glutkönig", monster: "Brandvogt, Dämonen-Kapitän-Mantikor", sheet: "kingFire", beast: "manticore", hp: 1300.0, dmg: 30.0, figurehead: "figurehead_fire", pearls: 4000.0 },
+    King { key: "ice", zone: "frost", name: "Königin Ysra Frostweh", monster: "Ysra, Abgrund-Gorgonen-Königin", sheet: "kingIce", beast: "gorgonQueen", hp: 1250.0, dmg: 28.0, figurehead: "figurehead_ice", pearls: 4000.0 },
+    King { key: "wind", zone: "raben", name: "Kapitän Rabensturm, der Sturmkönig", monster: "Rabensturm, Uhrwerk-Sturm-Monster", sheet: "kingWind", beast: "clockStorm", hp: 1200.0, dmg: 27.0, figurehead: "figurehead_wind", pearls: 4000.0 },
+    King { key: "earth", zone: "mangroven", name: "Morgrim Korallenhand, König der Tiefe", monster: "Morgrim, Kraken-Basilisk-Chimäre", sheet: "kingEarth", beast: "krakenBasilisk", hp: 1450.0, dmg: 32.0, figurehead: "figurehead_earth", pearls: 4000.0 },
 ];
 pub fn king(k: &str) -> &'static King {
     KINGS.iter().find(|x| x.key == k).unwrap_or(&KINGS[0])
@@ -387,8 +384,9 @@ pub struct Save {
     pub figureheads: HashMap<String, bool>,
     #[serde(default)]
     pub mounted: HashMap<String, bool>,
-    #[serde(default)]
-    pub megalodon: bool,
+    /// Endkampf gewonnen (Malakor besiegt); Schlüssel im Spielstand bleibt „megalodon“
+    #[serde(default, rename = "megalodon")]
+    pub end_won: bool,
     /// das Erwachen im Sarg ist gesehen
     #[serde(default)]
     pub woke: bool,
@@ -405,9 +403,6 @@ pub struct Save {
     /// Seeschlacht am Ende der Welt gewonnen (die Insel ist aufgetaucht)
     #[serde(default)]
     pub end_naval: bool,
-    /// in der Glutwacht abgelegte Wracks
-    #[serde(default)]
-    pub wrecks: HashMap<String, bool>,
     #[serde(default)]
     pub crew: Vec<String>,
     /// Neues Spiel+: Anzahl abgeschlossener Fahrten (0 = erste Fahrt)
@@ -471,11 +466,10 @@ pub struct ShopDef {
     pub name: &'static str,
     pub goods: &'static [(&'static str, i64, bool)],
 }
-pub const SHOPS: [ShopDef; 5] = [
-    ShopDef { key: "kueste", town: "Salzwiese", name: "Fischer Jorn", goods: &[("shellHorn", 2500, true), ("driftCharm", 3200, true), ("bullets", 150, false), ("bombs", 300, false)] },
+pub const SHOPS: [ShopDef; 4] = [
     ShopDef { key: "asche", town: "Glutgrund", name: "Schmiedin Ilka", goods: &[("emberHeart", 5000, true), ("glowRum", 7000, true), ("fireball", 6000, true), ("bombs", 260, false)] },
     ShopDef { key: "frost", town: "Reifstein", name: "Pelzhändlerin Wendla", goods: &[("frostMantle", 4500, true), ("iceGlass", 4000, true), ("phial", 2500, false)] },
-    ShopDef { key: "raben", town: "Rabenwacht", name: "Kartenhändler Orrin", goods: &[("stormCompass", 6000, true), ("ravenFeather", 3500, true), ("bullets", 130, false)] },
+    ShopDef { key: "raben", town: "Rabenwacht", name: "Kartenhändler Orrin", goods: &[("stormCompass", 6000, true), ("ravenFeather", 3500, true), ("shellHorn", 2500, true), ("driftCharm", 3200, true), ("bullets", 130, false)] },
     ShopDef { key: "mangroven", town: "Moorhain", name: "Kräuterhexe Mabel", goods: &[("bogTonic", 4000, true), ("voodooDoll", 5000, true), ("phial", 2800, false), ("bombs", 300, false)] },
 ];
 pub fn shop_def(k: &str) -> &'static ShopDef {
@@ -519,13 +513,12 @@ pub fn new_save(name: &str, look: LookIdx, origin: &str, gift: &str, now: f64) -
         kings: HashMap::new(),
         figureheads: HashMap::new(),
         mounted: HashMap::new(),
-        megalodon: false,
+        end_won: false,
         woke: false,
         ship_speed: 0,
         ship_def: 0,
         ship_atk: 0,
         sea_kings: HashMap::new(),
-        wrecks: HashMap::new(),
         end_naval: false,
         crew: vec![],
         ng: 0,
@@ -594,16 +587,15 @@ pub fn migrate(s: &mut Save) {
 
 pub struct Crew {
     pub el: &'static str,
-    pub id: &'static str,
     pub name: &'static str,
     pub song: &'static str,
     pub song_name: &'static str,
 }
 pub const CREW: [Crew; 4] = [
-    Crew { el: "fire", id: "crewFire", name: "Kanonierin Asra", song: "glut", song_name: "Glutwind" },
-    Crew { el: "ice", id: "crewIce", name: "Navigatorin Lene", song: "frost", song_name: "Eisige Leine" },
-    Crew { el: "wind", id: "crewWind", name: "Bootsmann Kalo", song: "sturm", song_name: "Rabensturm" },
-    Crew { el: "earth", id: "crewEarth", name: "Zimmermann Ode", song: "tiefe", song_name: "Tiefer Grund" },
+    Crew { el: "fire", name: "Kanonierin Asra", song: "glut", song_name: "Glutwind" },
+    Crew { el: "ice", name: "Navigatorin Lene", song: "frost", song_name: "Eisige Leine" },
+    Crew { el: "wind", name: "Bootsmann Kalo", song: "sturm", song_name: "Rabensturm" },
+    Crew { el: "earth", name: "Zimmermann Ode", song: "tiefe", song_name: "Tiefer Grund" },
 ];
 pub fn crew(el: &str) -> &'static Crew {
     CREW.iter().find(|c| c.el == el).unwrap_or(&CREW[0])
