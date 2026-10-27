@@ -11,7 +11,9 @@ use sw_art::atlas::Spr;
 
 pub const MAX_LIGHTS: usize = 48;
 pub const CHUNK: i32 = 256;
-pub const CHUNK_SLOTS: u32 = 40;
+/// Plätze im Chunk-Speicher: sichtbare Chunks plus ein vorausgebackener Ring.
+/// Nie ein Vielfaches von 6: WebGL-wgpu hält solche Texturfelder für Würfel-Felder (Boden schwarz).
+pub const CHUNK_SLOTS: u32 = 50;
 /// Kippung der Schrägsicht (HD-2D-Diorama): unten ist die Welt um den Faktor 1 + TILT näher.
 pub const TILT: f32 = 0.32;
 
@@ -427,7 +429,10 @@ fn push_q(v: &mut Vec<Vtx>, q: &Q) {
 }
 
 /// Am Ende des Frames: Weltliste sortieren und alles in Vertices packen.
-pub fn pack_frame(mut f: ResMut<Frame>, mut p: ResMut<Packed>, time: Res<Time>) {
+pub fn pack_frame(f: ResMut<Frame>, p: ResMut<Packed>, time: Res<Time>) {
+    crate::prof::time(crate::prof::PACK, || pack(f, p, time));
+}
+fn pack(mut f: ResMut<Frame>, mut p: ResMut<Packed>, time: Res<Time>) {
     let f = &mut *f;
     f.world.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal).then(a.1.cmp(&b.1)));
     p.verts.clear();
@@ -457,6 +462,7 @@ pub fn pack_frame(mut f: ResMut<Frame>, mut p: ResMut<Packed>, time: Res<Time>) 
         start += l.len() as u32;
     }
     p.ranges = r;
+    crate::prof::quads(start as usize);
     // Lichter: die nächsten zur Bildmitte zuerst
     let (vx, vy, vw, vh) = f.view();
     let (cx, cy) = (vx + vw * 0.5, vy + vh * 0.5);

@@ -366,7 +366,12 @@ fn prepare(mut gpu: ResMut<Gpu>, mut p: ResMut<Packed>, dev: Res<RenderDevice>, 
     let gpu = &mut *gpu;
     let mut scene_dirty = false;
     if let Some(init) = p.init.take() {
-        let layers = init.atlas_pages.max(2);
+        // nie ein Vielfaches von 6: WebGL-wgpu hält solche Texturfelder für Würfel-Felder
+        // (dann fehlen alle Sprites; früher als „6 Atlasseiten gehen nicht“ beobachtet)
+        let mut layers = init.atlas_pages.max(2);
+        if layers % 6 == 0 {
+            layers += 1;
+        }
         let ac = make_tex(d, "atlas_col", sw_art::atlas::PAGE as u32, sw_art::atlas::PAGE as u32, layers, ALB, false);
         let an = make_tex(d, "atlas_nrm", sw_art::atlas::PAGE as u32, sw_art::atlas::PAGE as u32, layers, NRM, false);
         gpu.atlas = Some((ac, an));
@@ -374,6 +379,7 @@ fn prepare(mut gpu: ResMut<Gpu>, mut p: ResMut<Packed>, dev: Res<RenderDevice>, 
         scene_dirty = true;
     }
     // Hochladen
+    let t_up = crate::prof::on().then(bevy::platform::time::Instant::now);
     for u in p.uploads.drain(..) {
         let tex = match u.tex {
             Tex::AtlasCol => gpu.atlas.as_ref().map(|a| &a.0),
@@ -473,6 +479,9 @@ fn prepare(mut gpu: ResMut<Gpu>, mut p: ResMut<Packed>, dev: Res<RenderDevice>, 
         queue.write_buffer(&gpu.vbuf, 0, bytes);
     }
     queue.write_buffer(&gpu.ubuf, 0, bytemuck::bytes_of(&p.g));
+    if let Some(t) = t_up {
+        crate::prof::add(crate::prof::UPLOAD, t.elapsed().as_secs_f64() * 1000.0);
+    }
     gpu.ranges = p.ranges;
     gpu.dof = p.g.hd[1] > 0.0;
     gpu.ready = gpu.bg_scene.is_some() && gpu.targets.is_some() && gpu.p_final.is_some();

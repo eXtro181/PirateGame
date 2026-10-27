@@ -5,6 +5,7 @@ mod art;
 mod audio;
 mod game;
 mod gfx;
+mod prof;
 mod save;
 mod synth;
 mod ui;
@@ -156,6 +157,9 @@ fn setup(world: &mut bevy::ecs::world::World) {
                     params.insert(a.to_string(), b.to_string());
                 }
             }
+        }
+        if params.contains_key("prof") {
+            prof::enable();
         }
         if let Some(el) = web_sys::window().and_then(|w| w.document()).and_then(|d| d.get_element_by_id("load")) {
             el.remove();
@@ -330,6 +334,7 @@ fn tick(
     f.g.hd3 = [if app.opt.hd { 1.0 } else { 0.0 }, f.rs as f32, 0.0, 0.0];
     let art = &mut *art;
     app.t += dt;
+    prof::frame();
     f.begin();
     let Ok(window) = win.single() else { return };
     let sf = window.scale_factor();
@@ -401,10 +406,10 @@ fn tick(
             }
             std::mem::swap(&mut app.input, &mut g.input);
             if !menu_open {
-                g.update(dt, art, f);
+                prof::time(prof::UPDATE, || g.update(dt, art, f));
             }
-            g.draw(art, f, dt);
-            g.draw_ui(f, art);
+            prof::time(prof::DRAW, || g.draw(art, f, dt));
+            prof::time(prof::UI, || g.draw_ui(f, art));
             app.touch.draw(f, art, g.sailing);
             std::mem::swap(&mut app.input, &mut g.input);
             if menu_open {
@@ -505,7 +510,7 @@ fn tick(
     for s in sfx {
         audio.sfx(s, 1.0);
     }
-    audio.update(dt, fire_dist);
+    prof::time(prof::AUDIO, || audio.update(dt, fire_dist));
     app.input.end_frame();
     app.input.mouse_moved = moved;
 }

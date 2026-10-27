@@ -2794,6 +2794,19 @@ impl TerrainMap for World {
     fn town(&self, tx: i32, ty: i32) -> bool {
         self.in_settlement((tx * TS + TS / 2) as f32, (ty * TS + TS / 2) as f32)
     }
+    fn open_water(&self, tx0: i32, ty0: i32, tx1: i32, ty1: i32) -> bool {
+        for ty in ty0..=ty1 {
+            for tx in tx0..=tx1 {
+                let (cx, cy) = (tx.clamp(0, MW - 1), ty.clamp(0, MH - 1));
+                let i = idx(cx, cy);
+                // Höhenfeld unter 0,55: auch mit Kantenrauschen (höchstens 0,4) bleibt die Ebene 0
+                if self.ground[i] != Mat::Water || self.lv(cx, cy) != 0 || self.cliff[i] || self.hb.get(i).is_some_and(|h| *h > 0.55) {
+                    return false;
+                }
+            }
+        }
+        true
+    }
     fn lpx(&self, px: i32, py: i32) -> u8 {
         let (tx, ty) = (px.div_euclid(TS), py.div_euclid(TS));
         if !inb(tx, ty) {

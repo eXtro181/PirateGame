@@ -178,7 +178,13 @@ pub fn encode_canvas(c: &Canvas, nk: f32) -> (Vec<u8>, Vec<u8>) {
     let n = (c.w * c.h * 4) as usize;
     let mut col = vec![0u8; n];
     let mut nrm = vec![0u8; n];
-    for y in 0..c.h {
+    encode_rows(c, nk, 0, c.h, &mut col, &mut nrm);
+    (col, nrm)
+}
+
+/// Zeilen y0..y1 einer Leinwand in fertige Puffer (Breite × Höhe × 4) kodieren.
+pub fn encode_rows(c: &Canvas, nk: f32, y0: i32, y1: i32, col: &mut [u8], nrm: &mut [u8]) {
+    for y in y0.max(0)..y1.min(c.h) {
         for x in 0..c.w {
             let (a, b) = encode_px(c, x, y, nk, None);
             let o = ((y * c.w + x) * 4) as usize;
@@ -186,5 +192,4 @@ pub fn encode_canvas(c: &Canvas, nk: f32) -> (Vec<u8>, Vec<u8>) {
             nrm[o..o + 4].copy_from_slice(&b);
         }
     }
-    (col, nrm)
 }

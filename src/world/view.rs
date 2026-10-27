@@ -4,7 +4,7 @@
 use super::*;
 use crate::art::Art;
 use crate::gfx::{flags, modes, Frame, LightDef, SprOpt, Tex, Upload, CHUNK, CHUNK_SLOTS};
-use sw_art::terrain::{bake_chunk, mat_at, EdgeNoise, Materials};
+use sw_art::terrain::{bake_chunk, mat_at, ChunkBake, EdgeNoise, Materials};
 
 pub struct ChunkCache {
     slots: Vec<Option<(i32, i32, u64)>>,
@@ -12,6 +12,23 @@ pub struct ChunkCache {
     tick: u64,
     mats: Materials,
     en: EdgeNoise,
+    /// gebackener Chunk der offenen See (Farbe, Normalen), für alle reinen Wasser-Chunks gleich
+    water: Option<(Vec<u8>, Vec<u8>)>,
+    /// Chunk, der gerade über mehrere Bilder vorausgebacken wird
+    job: Option<Job>,
+}
+
+struct Job {
+    cx: i32,
+    cy: i32,
+    phase: Phase,
+}
+
+/// Schritte eines Chunks: Raster vorberechnen, Zeilenbänder malen, Zeilenbänder kodieren.
+enum Phase {
+    Start,
+    Paint(Box<ChunkBake>),
+    Encode(Box<sw_art::canvas::Canvas>, Vec<u8>, Vec<u8>, i32),
 }
 
 pub struct WorldView {
@@ -32,7 +49,7 @@ fn bkey(x: f32, y: f32) -> i32 {
 impl WorldView {
     pub fn new(world: &World, frame: &mut Frame) -> Self {
         let mut v = WorldView {
-            cache: ChunkCache { slots: vec![None; CHUNK_SLOTS as usize], map: HashMap::new(), tick: 0, mats: Materials::new(), en: EdgeNoise::new() },
+            cache: ChunkCache { slots: vec![None; CHUNK_SLOTS as usize], map: HashMap::new(), tick: 0, mats: Materials::new(), en: EdgeNoise::new(), water: None, job: None },
             buckets: HashMap::new(),
             deco_b: HashMap::new(),
             deco_spr: HashMap::new(),
@@ -61,6 +78,7 @@ impl WorldView {
             *s = None;
         }
         self.cache.map.clear();
+        self.cache.job = None;
         self.rebuild_buckets(w);
         self.build_mask(w, frame);
     }
@@ -196,22 +214,31 @@ impl WorldView {
         frame.g.map = [(MW * TS) as f32, (MH * TS) as f32, 8.0, 1.0];
     }
 
-    /// Sichtbare Chunks sicherstellen (höchstens `budget` neue pro Frame).
-    pub fn ensure_chunks(&mut self, w: &World, frame: &mut Frame, budget: usize) -> Vec<(u32, f32, f32)> {
+    /// Sichtbare Chunks sicherstellen und einen Ring darum vorausbacken. Gebacken wird nach
+    /// Zeitbudget (`budget_ms` je Bild, mindestens ein sichtbarer Chunk), damit Laufen und Segeln
+    /// nicht ruckeln. Gibt die sichtbaren Chunks zurück (Platz, x, y).
+    pub fn ensure_chunks(&mut self, w: &World, frame: &mut Frame, budget_ms: f64) -> Vec<(u32, f32, f32)> {
         let (vx, vy, vw, vh) = frame.view();
         let c0x = ((vx - 32.0) / CHUNK as f32).floor() as i32;
         let c1x = ((vx + vw + 32.0) / CHUNK as f32).floor() as i32;
         let c0y = ((vy - 32.0) / CHUNK as f32).floor() as i32;
         let c1y = ((vy + vh + 96.0) / CHUNK as f32).floor() as i32;
+        let inside = |cx: i32, cy: i32| cx >= 0 && cy >= 0 && cx * CHUNK < MW * TS && cy * CHUNK < MH * TS;
         let mut out = vec![];
-        let mut baked = 0;
         self.cache.tick += 1;
         let tick = self.cache.tick;
-        // zuerst die vorhandenen markieren
+        let t0 = bevy::platform::time::Instant::now();
+        let (mx, my) = ((vx + vw / 2.0) / CHUNK as f32, (vy + vh / 2.0) / CHUNK as f32);
+        let by_dist = |a: &(i32, i32), b: &(i32, i32)| {
+            let da = (a.0 as f32 + 0.5 - mx).powi(2) + (a.1 as f32 + 0.5 - my).powi(2);
+            let db = (b.0 as f32 + 0.5 - mx).powi(2) + (b.1 as f32 + 0.5 - my).powi(2);
+            da.total_cmp(&db)
+        };
+        // 1. sichtbare: vorhandene markieren, fehlende backen (Mitte zuerst)
         let mut need = vec![];
         for cy in c0y..=c1y {
             for cx in c0x..=c1x {
-                if cx < 0 || cy < 0 || cx * CHUNK >= MW * TS || cy * CHUNK >= MH * TS {
+                if !inside(cx, cy) {
                     continue;
                 }
                 if let Some(&s) = self.cache.map.get(&(cx, cy)) {
@@ -222,50 +249,147 @@ impl WorldView {
                 }
             }
         }
-        // Mitte zuerst backen
-        let (mx, my) = ((vx + vw / 2.0) / CHUNK as f32, (vy + vh / 2.0) / CHUNK as f32);
-        need.sort_by(|a, b| {
-            let da = (a.0 as f32 + 0.5 - mx).powi(2) + (a.1 as f32 + 0.5 - my).powi(2);
-            let db = (b.0 as f32 + 0.5 - mx).powi(2) + (b.1 as f32 + 0.5 - my).powi(2);
-            da.partial_cmp(&db).unwrap()
-        });
-        for (cx, cy) in need {
-            if baked >= budget {
+        need.sort_by(by_dist);
+        // nach Reisen/Laden fehlt das halbe Bild: dann lieber kurz länger backen als Löcher zeigen
+        let budget_ms = if need.len() > 4 { budget_ms * 6.0 } else { budget_ms };
+        let mut baked = 0;
+        for &(cx, cy) in &need {
+            if baked > 0 && t0.elapsed().as_secs_f64() * 1000.0 >= budget_ms {
                 break;
             }
-            // freien oder ältesten Platz nehmen
-            let mut best = 0usize;
-            let mut bt = u64::MAX;
-            for (i, s) in self.cache.slots.iter().enumerate() {
-                match s {
-                    None => {
-                        best = i;
-                        bt = 0;
-                        break;
-                    }
-                    Some((_, _, t)) if *t < bt && *t != tick => {
-                        bt = *t;
-                        best = i;
-                    }
-                    _ => {}
-                }
-            }
-            if bt == u64::MAX {
-                break;
-            }
-            if let Some((ox, oy, _)) = self.cache.slots[best] {
-                self.cache.map.remove(&(ox, oy));
-            }
-            let cv = bake_chunk(w, &mut self.cache.mats, &self.cache.en, cx * CHUNK, cy * CHUNK, CHUNK);
-            let (col, nrm) = sw_art::atlas::encode_canvas(&cv, 0.55);
-            frame.uploads.push(Upload { tex: Tex::ChunkCol, layer: best as u32, x: 0, y: 0, w: CHUNK as u32, h: CHUNK as u32, data: col });
-            frame.uploads.push(Upload { tex: Tex::ChunkNrm, layer: best as u32, x: 0, y: 0, w: CHUNK as u32, h: CHUNK as u32, data: nrm });
-            self.cache.slots[best] = Some((cx, cy, tick));
-            self.cache.map.insert((cx, cy), best as u32);
-            out.push((best as u32, (cx * CHUNK) as f32, (cy * CHUNK) as f32));
+            let Some(s) = self.bake_into(w, frame, cx, cy, tick) else { break };
+            out.push((s, (cx * CHUNK) as f32, (cy * CHUNK) as f32));
             baked += 1;
         }
+        // 2. Ring um das Bild: behalten und, wenn Zeit übrig ist, einen fehlenden vorausbacken
+        if baked < need.len() {
+            return out;
+        }
+        let mut ring = vec![];
+        for cy in c0y - 1..=c1y + 1 {
+            for cx in c0x - 1..=c1x + 1 {
+                if (c0x..=c1x).contains(&cx) && (c0y..=c1y).contains(&cy) || !inside(cx, cy) {
+                    continue;
+                }
+                if let Some(&s) = self.cache.map.get(&(cx, cy)) {
+                    self.cache.slots[s as usize] = Some((cx, cy, tick));
+                } else {
+                    ring.push((cx, cy));
+                }
+            }
+        }
+        // angefangenen Chunk verwerfen, wenn er nicht mehr im Ring liegt
+        if self.cache.job.as_ref().is_some_and(|j| !ring.contains(&(j.cx, j.cy))) {
+            self.cache.job = None;
+        }
+        if self.cache.job.is_none() {
+            ring.sort_by(by_dist);
+            if let Some(&(cx, cy)) = ring.first() {
+                if sw_art::terrain::open_water_chunk(w, cx * CHUNK, cy * CHUNK, CHUNK) {
+                    self.bake_into(w, frame, cx, cy, tick);
+                } else {
+                    self.cache.job = Some(Job { cx, cy, phase: Phase::Start });
+                }
+            }
+        }
+        // im Rest des Zeitbudgets in kleinen Schritten weiterbacken
+        let left = budget_ms - t0.elapsed().as_secs_f64() * 1000.0;
+        if left > 0.5 {
+            if let Some((cx, cy, data)) = self.step_job(w, left) {
+                if let Some(slot) = self.free_slot(tick) {
+                    self.upload(frame, slot, cx, cy, tick, data);
+                }
+            }
+        }
         out
+    }
+
+    /// Freier oder am längsten ungenutzter Platz (nicht in diesem Bild gebraucht).
+    fn free_slot(&self, tick: u64) -> Option<usize> {
+        let mut best = None;
+        let mut bt = u64::MAX;
+        for (i, s) in self.cache.slots.iter().enumerate() {
+            match s {
+                None => return Some(i),
+                Some((_, _, t)) if *t < bt && *t != tick => {
+                    bt = *t;
+                    best = Some(i);
+                }
+                _ => {}
+            }
+        }
+        best
+    }
+
+    fn upload(&mut self, frame: &mut Frame, slot: usize, cx: i32, cy: i32, tick: u64, (col, nrm): (Vec<u8>, Vec<u8>)) {
+        if let Some((ox, oy, _)) = self.cache.slots[slot] {
+            self.cache.map.remove(&(ox, oy));
+        }
+        frame.uploads.push(Upload { tex: Tex::ChunkCol, layer: slot as u32, x: 0, y: 0, w: CHUNK as u32, h: CHUNK as u32, data: col });
+        frame.uploads.push(Upload { tex: Tex::ChunkNrm, layer: slot as u32, x: 0, y: 0, w: CHUNK as u32, h: CHUNK as u32, data: nrm });
+        self.cache.slots[slot] = Some((cx, cy, tick));
+        self.cache.map.insert((cx, cy), slot as u32);
+    }
+
+    /// Einen Chunk sofort backen (sichtbar und fehlend) und hochladen.
+    fn bake_into(&mut self, w: &World, frame: &mut Frame, cx: i32, cy: i32, tick: u64) -> Option<u32> {
+        let slot = self.free_slot(tick)?;
+        let (x0, y0) = (cx * CHUNK, cy * CHUNK);
+        let data = if sw_art::terrain::open_water_chunk(w, x0, y0, CHUNK) {
+            // offene See: immer derselbe leere Chunk, einmal gebacken
+            let cache = &mut self.cache;
+            let (mats, en) = (&mut cache.mats, &cache.en);
+            cache.water.get_or_insert_with(|| sw_art::atlas::encode_canvas(&bake_chunk(w, mats, en, x0, y0, CHUNK), 0.55)).clone()
+        } else {
+            // war er schon angefangen, dort weitermachen
+            if self.cache.job.as_ref().is_some_and(|j| (j.cx, j.cy) != (cx, cy)) {
+                self.cache.job = None;
+            }
+            if self.cache.job.is_none() {
+                self.cache.job = Some(Job { cx, cy, phase: Phase::Start });
+            }
+            self.step_job(w, f64::INFINITY).map(|(_, _, d)| d)?
+        };
+        self.upload(frame, slot, cx, cy, tick, data);
+        Some(slot as u32)
+    }
+
+    /// Den angefangenen Chunk höchstens `budget_ms` lang weiterbacken; fertig → (cx, cy, Puffer).
+    fn step_job(&mut self, w: &World, budget_ms: f64) -> Option<(i32, i32, (Vec<u8>, Vec<u8>))> {
+        let t0 = bevy::platform::time::Instant::now();
+        let cache = &mut self.cache;
+        let job = cache.job.as_mut()?;
+        let (x0, y0) = (job.cx * CHUNK, job.cy * CHUNK);
+        loop {
+            let phase = std::mem::replace(&mut job.phase, Phase::Start);
+            job.phase = crate::prof::time(crate::prof::BAKE, || match phase {
+                Phase::Start => Phase::Paint(Box::new(ChunkBake::new(w, &cache.en, x0, y0, CHUNK))),
+                Phase::Paint(mut b) => {
+                    b.rows(w, &mut cache.mats, &cache.en, 16);
+                    if b.done() {
+                        let n = (CHUNK * CHUNK * 4) as usize;
+                        Phase::Encode(Box::new(b.finish()), vec![0; n], vec![0; n], 0)
+                    } else {
+                        Phase::Paint(b)
+                    }
+                }
+                Phase::Encode(c, mut col, mut nrm, r) => {
+                    sw_art::atlas::encode_rows(&c, 0.55, r, r + 32, &mut col, &mut nrm);
+                    Phase::Encode(c, col, nrm, r + 32)
+                }
+            });
+            if let Phase::Encode(_, _, _, r) = &job.phase {
+                if *r >= CHUNK {
+                    let job = cache.job.take()?;
+                    crate::prof::baked(1);
+                    let Phase::Encode(_, col, nrm, _) = job.phase else { return None };
+                    return Some((job.cx, job.cy, (col, nrm)));
+                }
+            }
+            if t0.elapsed().as_secs_f64() * 1000.0 >= budget_ms {
+                return None;
+            }
+        }
     }
 
 
@@ -274,7 +398,7 @@ impl WorldView {
     pub fn draw(&mut self, w: &World, art: &Art, frame: &mut Frame, focus: (f32, f32), hover: Option<usize>, dt: f32) {
         self.time += dt;
         let t = self.time;
-        let chunks = self.ensure_chunks(w, frame, 3);
+        let chunks = self.ensure_chunks(w, frame, 5.0);
         let (vx, vy, vw, vh) = frame.view();
         frame.ground_rect(vx - 64.0, vy - 64.0, vw + 128.0, vh + 128.0, modes::WATER);
         for (s, x, y) in chunks {

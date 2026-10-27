@@ -566,10 +566,29 @@ fn render_full(rig: &Rig, yaw: f32, w: i32, h: i32, foot: i32, oblique: bool) ->
                     r[0].max(r[1]).max(r[2])
                 };
                 let (sx, sy, _) = proj(cmid);
-                let x0 = ((sx - ext - 1.0).floor() as i32).max(0);
-                let x1 = ((sx + ext + 1.0).ceil() as i32).min(w - 1);
-                let y0 = ((sy - ext - 1.0).floor() as i32).max(0);
-                let y1 = ((sy + ext + 1.0).ceil() as i32).min(h - 1);
+                // enge Bildschirmbox der projizierten Form (Ellipsoid exakt, Quader/Zylinder über die
+                // Quader-Hülle), geschnitten mit der alten Kugelbox: gleiche Treffer, weniger Pixel
+                let rr = if is_cyl { [r[0], r[1], r[2] * 0.5] } else { r };
+                let (mut hx, mut hy) = (0.0f32, 0.0f32);
+                for k in 0..3 {
+                    let (vx, vy) = (aw[k][0] * rr[k], aw[k][1] * rr[k] * sp - aw[k][2] * rr[k] * cp);
+                    if is_box || is_cyl {
+                        hx += vx.abs();
+                        hy += vy.abs();
+                    } else {
+                        hx += vx * vx;
+                        hy += vy * vy;
+                    }
+                }
+                if !(is_box || is_cyl) {
+                    hx = hx.sqrt();
+                    hy = hy.sqrt();
+                }
+                let (hx, hy) = (hx.min(ext), hy.min(ext));
+                let x0 = ((sx - hx - 1.0).floor() as i32).max(((sx - ext - 1.0).floor() as i32).max(0));
+                let x1 = ((sx + hx + 1.0).ceil() as i32).min(((sx + ext + 1.0).ceil() as i32).min(w - 1));
+                let y0 = ((sy - hy - 1.0).floor() as i32).max(((sy - ext - 1.0).floor() as i32).max(0));
+                let y1 = ((sy + hy + 1.0).ceil() as i32).min(((sy + ext + 1.0).ceil() as i32).min(h - 1));
                 // Strahlrichtung im lokalen Raum
                 let lb = [dot(b, aw[0]), dot(b, aw[1]), dot(b, aw[2])];
                 for y in y0..=y1 {

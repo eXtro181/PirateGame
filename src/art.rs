@@ -823,12 +823,15 @@ pub fn build(frame: &mut Frame) -> Art {
     info!("Grafik erzeugt in {:?} · {} Atlasseiten", t0.elapsed(), pages);
     info!("Atlas belegt: {:.2} Seiten", a.used());
     frame.init = Some(GfxInit { atlas_pages: pages, mask_w: (crate::world::MW * crate::world::TS / 8) as u32, mask_h: (crate::world::MH * crate::world::TS / 8) as u32 });
-    for (i, pg) in a.pages.iter().enumerate() {
-        frame.uploads.push(Upload { tex: Tex::AtlasCol, layer: i as u32, x: 0, y: 0, w: PAGE as u32, h: PAGE as u32, data: pg.col.clone() });
-        frame.uploads.push(Upload { tex: Tex::AtlasNrm, layer: i as u32, x: 0, y: 0, w: PAGE as u32, h: PAGE as u32, data: pg.nrm.clone() });
+    // Seiten in den Upload verschieben statt kopieren (spart beim Start 2 × 16 MB je Seite;
+    // Wasm-Speicher wächst nur und gibt nichts zurück)
+    let map = std::mem::take(&mut a.map);
+    for (i, pg) in a.pages.into_iter().enumerate() {
+        frame.uploads.push(Upload { tex: Tex::AtlasCol, layer: i as u32, x: 0, y: 0, w: PAGE as u32, h: PAGE as u32, data: pg.col });
+        frame.uploads.push(Upload { tex: Tex::AtlasNrm, layer: i as u32, x: 0, y: 0, w: PAGE as u32, h: PAGE as u32, data: pg.nrm });
     }
     let mut art = Art {
-        map: a.map.clone(),
+        map,
         props,
         chars: chs,
         glyphs,

@@ -7,7 +7,6 @@
 use crate::canvas::Canvas;
 use crate::color::*;
 use crate::noise::*;
-use std::collections::HashMap;
 
 pub const T: i32 = 32; // Kachelgröße
 pub const FACE_ROWS: i32 = 3; // Klippenwand = 3 Kachelreihen
@@ -146,7 +145,13 @@ pub struct BiomePal {
     pub crack_glow: Option<Rgba>,
 }
 
-pub fn biome_pal(b: Biome) -> BiomePal {
+/// Palette je Gebiet, einmal angelegt (wird beim Backen je Pixel gebraucht).
+pub fn biome_pal(b: Biome) -> &'static BiomePal {
+    static PALS: std::sync::OnceLock<Vec<BiomePal>> = std::sync::OnceLock::new();
+    &PALS.get_or_init(|| (0..7).map(|i| make_biome_pal(Biome::from_u8(i))).collect())[b as usize]
+}
+
+fn make_biome_pal(b: Biome) -> BiomePal {
     match b {
         // Galgenstrand: dürres, fahles Gras, schlammige Wege, grauer Sand, kalter Stein
         Biome::Coast => BiomePal {
@@ -741,8 +746,10 @@ fn tex_moss(bp: &BiomePal, seed: u32) -> Canvas {
     c
 }
 
+/// Bodentexturen je Material und Gebiet, beim ersten Gebrauch erzeugt (Feld statt Hash-Tabelle:
+/// wird je Pixel abgefragt).
 pub struct Materials {
-    cache: HashMap<(Mat, Biome), Canvas>,
+    cache: Vec<Option<Canvas>>,
 }
 impl Default for Materials {
     fn default() -> Self {
@@ -751,10 +758,10 @@ impl Default for Materials {
 }
 impl Materials {
     pub fn new() -> Self {
-        Materials { cache: HashMap::new() }
+        Materials { cache: (0..16 * 7).map(|_| None).collect() }
     }
     pub fn get(&mut self, m: Mat, b: Biome) -> &Canvas {
-        self.cache.entry((m, b)).or_insert_with(|| {
+        self.cache[m as usize * 7 + b as usize].get_or_insert_with(|| {
             let bp = biome_pal(b);
             let s = 100 + m as u32 * 17 + b as u32 * 131;
             let mut c = match m {
@@ -798,6 +805,20 @@ pub trait TerrainMap {
     fn lpx(&self, px: i32, py: i32) -> u8 {
         self.level(px.div_euclid(T), py.div_euclid(T))
     }
+    /// Nur Wasser auf Ebene 0 in diesem Kachelbereich (offene See: Chunk ohne Pixelarbeit)
+    fn open_water(&self, _tx0: i32, _ty0: i32, _tx1: i32, _ty1: i32) -> bool {
+        false
+    }
+}
+
+/// Liegt der Chunk samt allem, was sein Backen liest, auf offener See? Dann ist er leer
+/// (nur Wasser, das der Shader zeichnet) und braucht keine Pixelarbeit.
+pub fn open_water_chunk<M: TerrainMap>(m: &M, x0: i32, y0: i32, sz: i32) -> bool {
+    let tx0 = (x0 - BANK_PX - 8).div_euclid(T) - 1;
+    let ty0 = (y0 - RIM_PX - 20).div_euclid(T) - 1;
+    let tx1 = (x0 + sz + BANK_PX + 8).div_euclid(T) + 1;
+    let ty1 = (y0 + sz + SLOPE_PX + 6).div_euclid(T) + 1;
+    m.open_water(tx0, ty0, tx1, ty1)
 }
 
 /// Rauschtabelle für Materialgrenzen (schnell).
@@ -871,234 +892,396 @@ pub struct ChunkOut {
     pub c: Canvas,
 }
 
-/// Backt einen Boden-Chunk (x0,y0 in Weltpixeln, Größe sz). Ergebnis: flache Leinwand mit
-/// Farbe, Relief, Aufrecht-Anteil (Wände), Höhe über Grund und Leuchten.
-pub fn bake_chunk<M: TerrainMap>(m: &M, mats: &mut Materials, en: &EdgeNoise, x0: i32, y0: i32, sz: i32) -> Canvas {
-    let mut c = Canvas::flat(sz, sz);
-    let pad = 4;
-    let gw = sz + pad * 2;
-    // Materialraster mit Rand
-    let mut grid = vec![Mat::Water; (gw * gw) as usize];
-    for y in 0..gw {
-        for x in 0..gw {
-            grid[(y * gw + x) as usize] = mat_at(m, en, x0 + x - pad, y0 + y - pad);
+/// Rand der Vorberechnung: Materialraster, seitlich (Böschungen), oben (Ränder), unten (Hänge)
+const PAD: i32 = 4;
+const MX: i32 = BANK_PX + 4;
+const MN: i32 = RIM_PX + 16;
+const MS: i32 = SLOPE_PX + 2;
+
+/// Boden-Chunk in Schritten backen: `new` rechnet die Raster vor, `rows` malt Zeilenbänder.
+/// So kann ein Chunk über mehrere Bilder verteilt entstehen und Laufen/Segeln ruckelt nicht.
+pub struct ChunkBake {
+    x0: i32,
+    y0: i32,
+    sz: i32,
+    c: Canvas,
+    grid: Vec<Mat>,
+    wd: Vec<u8>,
+    lg: Vec<u8>,
+    down: Vec<(i32, u8)>,
+    lo_l: Vec<u8>,
+    lo_r: Vec<u8>,
+    lo_u: Vec<u8>,
+    hi_l: Vec<u8>,
+    hi_r: Vec<u8>,
+    hi_u: Vec<u8>,
+    row: i32,
+    /// Vorberechnung: 0 Materialraster, 1 Ebenenraster, 2 Abstand nach unten, 3 seitliche Abstände, 4 fertig
+    stage: u8,
+    prow: i32,
+}
+
+impl ChunkBake {
+    pub fn new<M: TerrainMap>(m: &M, en: &EdgeNoise, x0: i32, y0: i32, sz: i32) -> Self {
+        let _ = en;
+        let mut c = Canvas::flat(sz, sz);
+        let (gw, lw, lh) = (sz + PAD * 2, sz + MX * 2, sz + MN + MS);
+        let n = (sz * sz) as usize;
+        let mut b = ChunkBake {
+            x0,
+            y0,
+            sz,
+            c: Canvas::flat(0, 0),
+            grid: vec![Mat::Water; (gw * gw) as usize],
+            wd: vec![255u8; (gw * gw) as usize],
+            lg: vec![0u8; (lw * lh) as usize],
+            down: vec![(i32::MAX, 0u8); n],
+            lo_l: vec![u8::MAX; n],
+            lo_r: vec![u8::MAX; n],
+            lo_u: vec![u8::MAX; n],
+            hi_l: vec![u8::MAX; n],
+            hi_r: vec![u8::MAX; n],
+            hi_u: vec![u8::MAX; n],
+            row: 0,
+            stage: 0,
+            prow: 0,
+        };
+        if open_water_chunk(m, x0, y0, sz) {
+            // offene See: nichts zu rechnen
+            for y in 0..sz {
+                for x in 0..sz {
+                    c.set_ev(x, y, 0.0);
+                }
+            }
+            b.row = sz;
+            b.stage = 4;
         }
+        b.c = c;
+        b
     }
-    let g = |x: i32, y: i32| -> Mat { grid[((y + pad) * gw + x + pad) as usize] };
-    // Abstand zum Wasser (Chamfer), für Ufersteine und nasse Ränder
-    let mut wd = vec![255u8; (gw * gw) as usize];
-    for i in 0..wd.len() {
-        if grid[i] == Mat::Water {
-            wd[i] = 0;
-        }
-    }
-    for y in 0..gw {
-        for x in 0..gw {
-            let i = (y * gw + x) as usize;
-            let mut v = wd[i] as i32;
-            if x > 0 { v = v.min(wd[i - 1] as i32 + 2); }
-            if y > 0 { v = v.min(wd[i - gw as usize] as i32 + 2); }
-            if x > 0 && y > 0 { v = v.min(wd[i - gw as usize - 1] as i32 + 3); }
-            if x + 1 < gw && y > 0 { v = v.min(wd[i - gw as usize + 1] as i32 + 3); }
-            wd[i] = v.min(255) as u8;
-        }
-    }
-    for y in (0..gw).rev() {
-        for x in (0..gw).rev() {
-            let i = (y * gw + x) as usize;
-            let mut v = wd[i] as i32;
-            if x + 1 < gw { v = v.min(wd[i + 1] as i32 + 2); }
-            if y + 1 < gw { v = v.min(wd[i + gw as usize] as i32 + 2); }
-            if x + 1 < gw && y + 1 < gw { v = v.min(wd[i + gw as usize + 1] as i32 + 3); }
-            if x > 0 && y + 1 < gw { v = v.min(wd[i + gw as usize - 1] as i32 + 3); }
-            wd[i] = v.min(255) as u8;
-        }
-    }
-    let wdist = |x: i32, y: i32| -> f32 { wd[((y + pad) * gw + x + pad) as usize] as f32 * 0.5 };
-    // Ebenen je Pixel mit Rand: seitlich für Böschungen, oben für Ränder, unten für Wände
-    let (mx, mn, ms) = (BANK_PX + 4, RIM_PX + 16, SLOPE_PX + 2);
-    let lw = sz + mx * 2;
-    let lh = sz + mn + ms;
-    let mut lg = vec![0u8; (lw * lh) as usize];
-    for yy in 0..lh {
-        for xx in 0..lw {
-            lg[(yy * lw + xx) as usize] = m.lpx(x0 + xx - mx, y0 + yy - mn);
-        }
-    }
-    let lv = |x: i32, y: i32| -> u8 { lg[((y + mn).clamp(0, lh - 1) * lw + (x + mx).clamp(0, lw - 1)) as usize] };
-    // je Spalte: Abstand nach unten bis zu tieferem Boden (Wand der eigenen Ebene) und dessen Ebene
-    let mut down = vec![(i32::MAX, 0u8); (sz * sz) as usize];
-    for x in 0..sz {
-        let mut pos = [i32::MAX; 8];
-        for yy in (0..lh).rev() {
-            let y = yy - mn;
-            let l = lv(x, y);
-            if (0..sz).contains(&y) {
-                let mut best = (i32::MAX, 0u8);
-                for k in 0..(l as usize).min(8) {
-                    if pos[k] != i32::MAX && pos[k] - y < best.0 {
-                        best = (pos[k] - y, k as u8);
+
+    /// Vorberechnung in Bändern: Materialraster, Ebenenraster, dann Abstände. true = fertig.
+    fn prep<M: TerrainMap>(&mut self, m: &M, en: &EdgeNoise, n: i32) -> bool {
+        let (x0, y0, sz, pad, mx, mn) = (self.x0, self.y0, self.sz, PAD, MX, MN);
+        let (gw, lw, lh) = (sz + pad * 2, sz + mx * 2, sz + mn + MS);
+        match self.stage {
+            0 => {
+                // Materialraster mit Rand
+                let end = (self.prow + n).min(gw);
+                for y in self.prow..end {
+                    for x in 0..gw {
+                        self.grid[(y * gw + x) as usize] = mat_at(m, en, x0 + x - pad, y0 + y - pad);
                     }
                 }
-                down[(y * sz + x) as usize] = best;
+                self.prow = end;
+                if end < gw {
+                    return false;
+                }
+                // Abstand zum Wasser (Chamfer), für Ufersteine und nasse Ränder
+                let (grid, wd) = (&self.grid, &mut self.wd);
+                for i in 0..wd.len() {
+                    if grid[i] == Mat::Water {
+                        wd[i] = 0;
+                    }
+                }
+                for y in 0..gw {
+                    for x in 0..gw {
+                        let i = (y * gw + x) as usize;
+                        let mut v = wd[i] as i32;
+                        if x > 0 { v = v.min(wd[i - 1] as i32 + 2); }
+                        if y > 0 { v = v.min(wd[i - gw as usize] as i32 + 2); }
+                        if x > 0 && y > 0 { v = v.min(wd[i - gw as usize - 1] as i32 + 3); }
+                        if x + 1 < gw && y > 0 { v = v.min(wd[i - gw as usize + 1] as i32 + 3); }
+                        wd[i] = v.min(255) as u8;
+                    }
+                }
+                for y in (0..gw).rev() {
+                    for x in (0..gw).rev() {
+                        let i = (y * gw + x) as usize;
+                        let mut v = wd[i] as i32;
+                        if x + 1 < gw { v = v.min(wd[i + 1] as i32 + 2); }
+                        if y + 1 < gw { v = v.min(wd[i + gw as usize] as i32 + 2); }
+                        if x + 1 < gw && y + 1 < gw { v = v.min(wd[i + gw as usize + 1] as i32 + 3); }
+                        if x > 0 && y + 1 < gw { v = v.min(wd[i + gw as usize - 1] as i32 + 3); }
+                        wd[i] = v.min(255) as u8;
+                    }
+                }
+                self.stage = 1;
+                self.prow = 0;
+                false
             }
-            pos[(l as usize).min(7)] = y;
+            1 => {
+                // Ebenen je Pixel mit Rand: seitlich für Böschungen, oben für Ränder, unten für Wände
+                let end = (self.prow + n).min(lh);
+                for yy in self.prow..end {
+                    for xx in 0..lw {
+                        self.lg[(yy * lw + xx) as usize] = m.lpx(x0 + xx - mx, y0 + yy - mn);
+                    }
+                }
+                self.prow = end;
+                if end >= lh {
+                    self.stage = 2;
+                }
+                false
+            }
+            2 => {
+                let lg = &self.lg;
+                let lv = |x: i32, y: i32| -> u8 { lg[((y + mn).clamp(0, lh - 1) * lw + (x + mx).clamp(0, lw - 1)) as usize] };
+                // je Spalte: Abstand nach unten bis zu tieferem Boden (Wand der eigenen Ebene) und dessen Ebene
+                let down = &mut self.down;
+                for x in 0..sz {
+                    let mut pos = [i32::MAX; 8];
+                    for yy in (0..lh).rev() {
+                        let y = yy - mn;
+                        let l = lv(x, y);
+                        if (0..sz).contains(&y) {
+                            let mut best = (i32::MAX, 0u8);
+                            for k in 0..(l as usize).min(8) {
+                                if pos[k] != i32::MAX && pos[k] - y < best.0 {
+                                    best = (pos[k] - y, k as u8);
+                                }
+                            }
+                            down[(y * sz + x) as usize] = best;
+                        }
+                        pos[(l as usize).min(7)] = y;
+                    }
+                }
+                self.stage = 3;
+                false
+            }
+            3 => {
+                let lg = &self.lg;
+                // Abstände je Pixel zur nächsten tieferen/höheren Ebene links, rechts und oben, in einem
+                // Durchlauf je Zeile/Spalte vorberechnet (statt je Pixel bis zu ~140 Nachbarn abzusuchen)
+                let dist = |from: i32, to: i32| (from - to).unsigned_abs().min(255) as u8;
+                for y in 0..sz {
+                    let row = ((y + mn) * lw) as usize;
+                    for rev in [false, true] {
+                        // zuletzt gesehene Position mit Ebene < k bzw. > k
+                        let (mut lt, mut gt) = ([i32::MIN / 2; 9], [i32::MIN / 2; 9]);
+                        if rev {
+                            lt = [i32::MAX / 2; 9];
+                            gt = [i32::MAX / 2; 9];
+                        }
+                        for k in 0..lw {
+                            let xx = if rev { lw - 1 - k } else { k };
+                            let v = (lg[row + xx as usize] as usize).min(7);
+                            let x = xx - mx;
+                            if (0..sz).contains(&x) {
+                                let i = (y * sz + x) as usize;
+                                let (lo, hi) = if rev { (&mut self.lo_r, &mut self.hi_r) } else { (&mut self.lo_l, &mut self.hi_l) };
+                                lo[i] = dist(x, lt[v]);
+                                hi[i] = dist(x, gt[v]);
+                            }
+                            for e in lt.iter_mut().skip(v + 1) {
+                                *e = x;
+                            }
+                            for e in gt.iter_mut().take(v) {
+                                *e = x;
+                            }
+                        }
+                    }
+                }
+                for x in 0..sz {
+                    let (mut lt, mut gt) = ([i32::MIN / 2; 9], [i32::MIN / 2; 9]);
+                    for yy in 0..mn + sz {
+                        let v = (lg[(yy * lw + x + mx) as usize] as usize).min(7);
+                        let y = yy - mn;
+                        if y >= 0 {
+                            let i = (y * sz + x) as usize;
+                            self.lo_u[i] = dist(y, lt[v]);
+                            self.hi_u[i] = dist(y, gt[v]);
+                        }
+                        for e in lt.iter_mut().skip(v + 1) {
+                            *e = y;
+                        }
+                        for e in gt.iter_mut().take(v) {
+                            *e = y;
+                        }
+                    }
+                }
+                self.stage = 4;
+                true
+            }
+            _ => true,
         }
     }
-    for y in 0..sz {
-        for x in 0..sz {
-            let px = x0 + x;
-            let py = y0 + y;
-            let tx = px.div_euclid(T);
-            let ty = py.div_euclid(T);
-            let l = lv(x, y);
-            let (dd, lb) = down[(y * sz + x) as usize];
-            let fpx = face_px(m.biome(tx, ty));
-            if l > 0 && dd <= fpx {
-                // Hang (Natur) bzw. Mauer (Festung): vom Rand der Ebene nach unten
-                let fy = (fpx - dd).max(0);
-                let top_mat = mat_at(m, en, px, py - fy - 3);
-                let below = mat_at(m, en, px, py + dd);
-                face_pixel(m, mats, en, &mut c, x, y, px, py, fy, fpx, l, lb, top_mat, below);
-                continue;
-            }
-            let mt = g(x, y);
-            if mt.transparent() {
-                c.set_ev(x, y, 0.0);
-                continue;
-            }
-            let b = m.biome(tx, ty);
-            // Höhenkante nach Westen, Osten oder Norden: sichtbarer Hang statt unsichtbarer Wand
-            if mt != Mat::Water && l > 0 {
-                let mut best: Option<(f32, (f32, f32))> = None;
-                for d in 1..=BANK_PX {
-                    if lv(x - d, y) < l {
+
+    pub fn done(&self) -> bool {
+        self.row >= self.sz
+    }
+
+    /// Der nächste Schritt: erst die Vorberechnung in Bändern, dann je `n` Zeilen malen.
+    pub fn rows<M: TerrainMap>(&mut self, m: &M, mats: &mut Materials, en: &EdgeNoise, n: i32) {
+        if self.stage < 4 {
+            self.prep(m, en, n);
+            return;
+        }
+        let (x0, y0, sz, pad, mx, mn) = (self.x0, self.y0, self.sz, PAD, MX, MN);
+        let (gw, lw, lh) = (sz + pad * 2, sz + mx * 2, sz + mn + MS);
+        let (grid, wd, lg, down) = (&self.grid, &self.wd, &self.lg, &self.down);
+        let (lo_l, lo_r, lo_u, hi_l, hi_r, hi_u) = (&self.lo_l, &self.lo_r, &self.lo_u, &self.hi_l, &self.hi_r, &self.hi_u);
+        let c = &mut self.c;
+        let g = |x: i32, y: i32| -> Mat { grid[((y + pad) * gw + x + pad) as usize] };
+        let wdist = |x: i32, y: i32| -> f32 { wd[((y + pad) * gw + x + pad) as usize] as f32 * 0.5 };
+        let lv = |x: i32, y: i32| -> u8 { lg[((y + mn).clamp(0, lh - 1) * lw + (x + mx).clamp(0, lw - 1)) as usize] };
+        let (start, end) = (self.row, (self.row + n).min(sz));
+        for y in start..end {
+            for x in 0..sz {
+                let px = x0 + x;
+                let py = y0 + y;
+                let tx = px.div_euclid(T);
+                let ty = py.div_euclid(T);
+                let l = lv(x, y);
+                let pi = (y * sz + x) as usize;
+                let (dd, lb) = down[pi];
+                let fpx = face_px(m.biome(tx, ty));
+                if l > 0 && dd <= fpx {
+                    // Hang (Natur) bzw. Mauer (Festung): vom Rand der Ebene nach unten
+                    let fy = (fpx - dd).max(0);
+                    let top_mat = mat_at(m, en, px, py - fy - 3);
+                    let below = mat_at(m, en, px, py + dd);
+                    face_pixel(m, mats, en, c, x, y, px, py, fy, fpx, l, lb, top_mat, below);
+                    continue;
+                }
+                let mt = g(x, y);
+                if mt.transparent() {
+                    c.set_ev(x, y, 0.0);
+                    continue;
+                }
+                let b = m.biome(tx, ty);
+                // Höhenkante nach Westen, Osten oder Norden: sichtbarer Hang statt unsichtbarer Wand
+                if mt != Mat::Water && l > 0 {
+                    let mut best: Option<(f32, (f32, f32))> = None;
+                    let d = lo_l[pi] as i32;
+                    if d <= BANK_PX {
                         best = Some((d as f32, (-1.0, 0.0)));
-                        break;
                     }
-                }
-                for d in 1..=BANK_PX {
-                    if lv(x + d, y) < l {
-                        if best.map(|b| (d as f32) < b.0).unwrap_or(true) {
-                            best = Some((d as f32, (1.0, 0.0)));
+                    let d = lo_r[pi] as i32;
+                    if d <= BANK_PX && best.map(|b| (d as f32) < b.0).unwrap_or(true) {
+                        best = Some((d as f32, (1.0, 0.0)));
+                    }
+                    let d = lo_u[pi] as i32;
+                    if d <= RIM_PX && best.map(|b| (d as f32) * 1.4 < b.0).unwrap_or(true) {
+                        best = Some((d as f32 * 1.4, (0.0, -1.0)));
+                    }
+                    if let Some((d, dir)) = best {
+                        if slope_pixel(mats, en, c, x, y, px, py, mt, b, d, dir, m.stairs(tx, ty), m.town(tx, ty)) {
+                            continue;
                         }
-                        break;
                     }
                 }
-                for d in 1..=RIM_PX {
-                    if lv(x, y - d) < l {
-                        if best.map(|b| (d as f32) * 1.4 < b.0).unwrap_or(true) {
-                            best = Some((d as f32 * 1.4, (0.0, -1.0)));
-                        }
-                        break;
+                let tex = mats.get(mt, b);
+                let ti = tex.idx(px.rem_euclid(TEX), py.rem_euclid(TEX));
+                let mut col = tex.col[ti];
+                let mut rel = tex.rel[ti] + mt.raised();
+                let spec = tex.emi[ti][3];
+                let emi = tex.emi[ti];
+                // Kanten: ein höheres Nachbarmaterial in der Nähe?
+                let mut shadow = 0.0f32;
+                let mut edge_dark = false;
+                let my_r = mt.raised();
+                for (dx, dy, k) in [(0, -1, 1.0), (0, -2, 0.8), (0, -3, 0.5), (-1, -1, 0.6), (-1, 0, 0.7), (-2, -1, 0.4)] {
+                    let n = g(x + dx, y + dy);
+                    if n != mt && n.raised() > my_r && !n.transparent() {
+                        shadow = f32::max(shadow, k);
                     }
                 }
-                if let Some((d, dir)) = best {
-                    if slope_pixel(mats, en, &mut c, x, y, px, py, mt, b, d, dir, m.stairs(tx, ty), m.town(tx, ty)) {
-                        continue;
+                for (dx, dy) in [(1, 0), (0, 1), (-1, 0), (0, -1)] {
+                    let n = g(x + dx, y + dy);
+                    if n != mt && (n.raised() < my_r || n.transparent()) {
+                        edge_dark = true;
                     }
                 }
-            }
-            let tex = mats.get(mt, b);
-            let ti = tex.idx(px.rem_euclid(TEX), py.rem_euclid(TEX));
-            let mut col = tex.col[ti];
-            let mut rel = tex.rel[ti] + mt.raised();
-            let spec = tex.emi[ti][3];
-            let emi = tex.emi[ti];
-            // Kanten: ein höheres Nachbarmaterial in der Nähe?
-            let mut shadow = 0.0f32;
-            let mut edge_dark = false;
-            let my_r = mt.raised();
-            for (dx, dy, k) in [(0, -1, 1.0), (0, -2, 0.8), (0, -3, 0.5), (-1, -1, 0.6), (-1, 0, 0.7), (-2, -1, 0.4)] {
-                let n = g(x + dx, y + dy);
-                if n != mt && n.raised() > my_r && !n.transparent() {
-                    shadow = f32::max(shadow, k);
+                // Ufer: nasse Kante
+                let mut wet = 0.0f32;
+                for (dx, dy, k) in [(1, 0, 1.0), (-1, 0, 1.0), (0, 1, 1.0), (0, -1, 1.0), (2, 0, 0.6), (-2, 0, 0.6), (0, 2, 0.6), (0, -2, 0.6), (0, 3, 0.4), (3, 0, 0.3), (-3, 0, 0.3)] {
+                    if g(x + dx, y + dy) == Mat::Water {
+                        wet = f32::max(wet, k);
+                    }
                 }
-            }
-            for (dx, dy) in [(1, 0), (0, 1), (-1, 0), (0, -1)] {
-                let n = g(x + dx, y + dy);
-                if n != mt && (n.raised() < my_r || n.transparent()) {
-                    edge_dark = true;
+                if edge_dark {
+                    // dunkle Kante oben/seitlich etwas heller als unten
+                    let below = g(x, y + 1);
+                    let f = if below != mt { 0.62 } else { 0.74 };
+                    col = mix(col, outline_of(col), 1.0 - f + 0.25);
+                    rel -= 1.0;
+                } else if g(x, y - 1) != mt && g(x, y - 1).raised() < my_r && my_r > 0.0 {
+                    // Lichtkante oben
+                    let [h, s, l] = to_hsl(col);
+                    col = from_hsl([h, s, (l + 0.08).min(0.95)]);
                 }
-            }
-            // Ufer: nasse Kante
-            let mut wet = 0.0f32;
-            for (dx, dy, k) in [(1, 0, 1.0), (-1, 0, 1.0), (0, 1, 1.0), (0, -1, 1.0), (2, 0, 0.6), (-2, 0, 0.6), (0, 2, 0.6), (0, -2, 0.6), (0, 3, 0.4), (3, 0, 0.3), (-3, 0, 0.3)] {
-                if g(x + dx, y + dy) == Mat::Water {
-                    wet = f32::max(wet, k);
+                if shadow > 0.0 {
+                    col = shade(col, 1.0 - 0.28 * shadow);
+                    col = mix(col, hex(0x101830), 0.08 * shadow);
                 }
-            }
-            if edge_dark {
-                // dunkle Kante oben/seitlich etwas heller als unten
-                let below = g(x, y + 1);
-                let f = if below != mt { 0.62 } else { 0.74 };
-                col = mix(col, outline_of(col), 1.0 - f + 0.25);
-                rel -= 1.0;
-            } else if g(x, y - 1) != mt && g(x, y - 1).raised() < my_r && my_r > 0.0 {
-                // Lichtkante oben
-                let [h, s, l] = to_hsl(col);
-                col = from_hsl([h, s, (l + 0.08).min(0.95)]);
-            }
-            if shadow > 0.0 {
-                col = shade(col, 1.0 - 0.28 * shadow);
-                col = mix(col, hex(0x101830), 0.08 * shadow);
-            }
-            if wet > 0.0 {
-                col = mix(col, shade(col, 0.6), wet * 0.7);
-                col = mix(col, hex(0x203848), wet * 0.15);
-            }
-            // Ufersteine: runder grauer Steinsaum zwischen Gras/Erde und Wasser
-            let rim_mat = matches!(mt, Mat::Grass | Mat::Meadow | Mat::Dirt | Mat::Moss | Mat::Cobble | Mat::Snow);
-            let dw = wdist(x, y);
-            let rim_w = 5.5 + en.at(px * 3, py * 3) * 3.0;
-            if rim_mat && dw <= rim_w && dw > 0.0 {
-                let bpal = biome_pal(b);
-                let st = &bpal.stone;
-                let sc = 1.0 / 6.0;
-                let (d1, d2, id) = worley(px as f32 * sc, py as f32 * sc * 1.2, 0, 77);
-                let e = d2 - d1;
-                let (dx1, _, _) = worley((px + 1) as f32 * sc, py as f32 * sc * 1.2, 0, 77);
-                let (dy1, _, _) = worley(px as f32 * sc, (py + 1) as f32 * sc * 1.2, 0, 77);
-                let l = ((dx1 - d1) * 0.6 + (dy1 - d1) * 0.8) * 14.0;
-                let (col2, rel2) = if e < 0.07 {
-                    (shade(st[0], 0.8), -1.0)
-                } else {
-                    let v = 0.5 + (id % 3) as f32 * 0.06 - l * 0.4 - (1.0 - dw / rim_w) * 0.15 + (bayer(px, py) - 0.5) * 0.1;
-                    (pickf(&st[..5], v), 1.5 + (e * 4.0).min(1.5))
-                };
-                let col2 = if dw < 2.0 { mix(col2, hex(0x203848), 0.25) } else { col2 };
-                c.put(x, y, col2, rel2);
+                if wet > 0.0 {
+                    col = mix(col, shade(col, 0.6), wet * 0.7);
+                    col = mix(col, hex(0x203848), wet * 0.15);
+                }
+                // Ufersteine: runder grauer Steinsaum zwischen Gras/Erde und Wasser
+                let rim_mat = matches!(mt, Mat::Grass | Mat::Meadow | Mat::Dirt | Mat::Moss | Mat::Cobble | Mat::Snow);
+                let dw = wdist(x, y);
+                let rim_w = 5.5 + en.at(px * 3, py * 3) * 3.0;
+                if rim_mat && dw <= rim_w && dw > 0.0 {
+                    let bpal = biome_pal(b);
+                    let st = &bpal.stone;
+                    let sc = 1.0 / 6.0;
+                    let (d1, d2, id) = worley(px as f32 * sc, py as f32 * sc * 1.2, 0, 77);
+                    let e = d2 - d1;
+                    let (dx1, _, _) = worley((px + 1) as f32 * sc, py as f32 * sc * 1.2, 0, 77);
+                    let (dy1, _, _) = worley(px as f32 * sc, (py + 1) as f32 * sc * 1.2, 0, 77);
+                    let l = ((dx1 - d1) * 0.6 + (dy1 - d1) * 0.8) * 14.0;
+                    let (col2, rel2) = if e < 0.07 {
+                        (shade(st[0], 0.8), -1.0)
+                    } else {
+                        let v = 0.5 + (id % 3) as f32 * 0.06 - l * 0.4 - (1.0 - dw / rim_w) * 0.15 + (bayer(px, py) - 0.5) * 0.1;
+                        (pickf(&st[..5], v), 1.5 + (e * 4.0).min(1.5))
+                    };
+                    let col2 = if dw < 2.0 { mix(col2, hex(0x203848), 0.25) } else { col2 };
+                    c.put(x, y, col2, rel2);
+                    let i = c.idx(x, y);
+                    c.emi[i] = [0, 0, 0, if dw < 2.5 { 120 } else { 20 }];
+                    c.up[i] = 0;
+                    c.ev[i] = 0.0;
+                    continue;
+                }
+                // Fuß der Klippe darüber und seitlicher Böschungen: Umgebungsverdeckung
+                let mut ao = 0.0f32;
+                let d = hi_u[pi];
+                if d < 14 {
+                    ao = (1.0 - d as f32 / 14.0).powf(1.5);
+                }
+                let d = hi_l[pi].min(hi_r[pi]);
+                if d < 9 {
+                    ao = ao.max((1.0 - d as f32 / 9.0) * 0.8);
+                }
+                if ao > 0.0 {
+                    col = shade(col, 1.0 - ao * 0.45);
+                }
+                c.put(x, y, col, rel);
                 let i = c.idx(x, y);
-                c.emi[i] = [0, 0, 0, if dw < 2.5 { 120 } else { 20 }];
+                c.emi[i] = [emi[0], emi[1], emi[2], if wet > 0.0 { spec.max((wet * 160.0) as u8) } else { spec }];
                 c.up[i] = 0;
                 c.ev[i] = 0.0;
-                continue;
             }
-            // Fuß der Klippe darüber und seitlicher Böschungen: Umgebungsverdeckung
-            let mut ao = 0.0f32;
-            for d in 1..14 {
-                if lv(x, y - d) > l {
-                    ao = (1.0 - d as f32 / 14.0).powf(1.5);
-                    break;
-                }
-            }
-            for d in 1..9 {
-                if lv(x - d, y) > l || lv(x + d, y) > l {
-                    ao = ao.max((1.0 - d as f32 / 9.0) * 0.8);
-                    break;
-                }
-            }
-            if ao > 0.0 {
-                col = shade(col, 1.0 - ao * 0.45);
-            }
-            c.put(x, y, col, rel);
-            let i = c.idx(x, y);
-            c.emi[i] = [emi[0], emi[1], emi[2], if wet > 0.0 { spec.max((wet * 160.0) as u8) } else { spec }];
-            c.up[i] = 0;
-            c.ev[i] = 0.0;
         }
+        self.row = end;
     }
-    c
+
+    pub fn finish(self) -> Canvas {
+        self.c
+    }
+}
+
+/// Backt einen Boden-Chunk (x0,y0 in Weltpixeln, Größe sz) in einem Zug. Ergebnis: flache Leinwand
+/// mit Farbe, Relief, Aufrecht-Anteil (Wände), Höhe über Grund und Leuchten.
+pub fn bake_chunk<M: TerrainMap>(m: &M, mats: &mut Materials, en: &EdgeNoise, x0: i32, y0: i32, sz: i32) -> Canvas {
+    let mut b = ChunkBake::new(m, en, x0, y0, sz);
+    while !b.done() {
+        b.rows(m, mats, en, sz * 2);
+    }
+    b.finish()
 }
 
 /// Hang an einer Ebenenkante (West/Ost/Nord): auf der höheren Ebene fällt ein Böschungsstreifen
@@ -1456,7 +1639,8 @@ fn path_pixel(c: &mut Canvas, x: i32, y: i32, px: i32, py: i32, en: &EdgeNoise, 
 /// (manchmal glühend), Schießscharten und Wasserlinie am Seeufer.
 #[allow(clippy::too_many_arguments)]
 fn masonry_pixel(c: &mut Canvas, x: i32, y: i32, px: i32, fy: i32, hgt: i32, bp: &BiomePal, ev: f32, water: bool) {
-    let st = pal(&[0x2A262C, 0x3C3640, 0x524A56, 0x6A6070, 0x847A88, 0xA0969E]);
+    static ST: std::sync::OnceLock<Vec<Rgba>> = std::sync::OnceLock::new();
+    let st = ST.get_or_init(|| pal(&[0x2A262C, 0x3C3640, 0x524A56, 0x6A6070, 0x847A88, 0xA0969E]));
     let mut v: f32;
     let mut rel: f32;
     let mut up = 255u8;

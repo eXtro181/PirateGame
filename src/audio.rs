@@ -134,7 +134,6 @@ pub struct Audio {
     songs: HashMap<&'static str, Vec<f32>>,
     render: Option<SongRender>,
     queue: Vec<&'static str>,
-    sfx_cache: HashMap<&'static str, Vec<f32>>,
     crackle_t: f32,
     #[cfg(target_arch = "wasm32")]
     g: Option<web::Graph>,
@@ -160,7 +159,6 @@ impl Audio {
             songs: HashMap::new(),
             render: None,
             queue: synth::SONGS.to_vec(),
-            sfx_cache: HashMap::new(),
             crackle_t: 0.0,
             #[cfg(target_arch = "wasm32")]
             g: None,
@@ -223,8 +221,8 @@ impl Audio {
         {
             let Some(g) = self.g.as_mut() else { return };
             if !g.bufs.contains_key(name) {
-                let d = self.sfx_cache.entry(name).or_insert_with(|| synth::sfx(name));
-                if let Some(b) = web::buffer(&g.ctx, d, synth::SR) {
+                // einmal erzeugen, danach liegt der Klang nur noch im Browser-Puffer
+                if let Some(b) = web::buffer(&g.ctx, &synth::sfx(name), synth::SR) {
                     g.bufs.insert(name.to_string(), b);
                 }
             }
@@ -256,8 +254,16 @@ impl Audio {
                 }
             }
         }
+        // nach Zeitbudget, damit das Vorberechnen der Musik kein Bild ausbremst
+        // (im Titel und in Menüs darf es mehr sein)
         if let Some(r) = self.render.as_mut() {
-            if r.step(18) {
+            let t0 = bevy::platform::time::Instant::now();
+            let budget = if self.mood == "title" { 8.0 } else { 2.0 };
+            let mut done = false;
+            while !done && t0.elapsed().as_secs_f64() * 1000.0 < budget {
+                done = r.step(1);
+            }
+            if done {
                 let r = self.render.take().unwrap();
                 self.songs.insert(r.name, r.music);
             }
@@ -287,6 +293,16 @@ impl Audio {
             }
             let Some(g) = self.g.as_mut() else { return };
             g.master.gain().set_value(self.volume);
+            // fertige Lieder in Browser-Puffer umziehen (eins je Bild) und die eigene Kopie freigeben
+            if let Some((&n, v)) = self.songs.iter_mut().find(|(_, v)| !v.is_empty()) {
+                let key = format!("{n}:m");
+                if g.bufs.contains_key(&key) {
+                    *v = Vec::new();
+                } else if let Some(b) = web::buffer(&g.ctx, v, synth::SR) {
+                    g.bufs.insert(key, b);
+                    *v = Vec::new();
+                }
+            }
             self.swap_t -= dt;
             if self.swap_t <= 0.0 && self.playing != self.target {
                 let ready = self.target.map(|t| self.songs.contains_key(t)).unwrap_or(true);
@@ -296,11 +312,14 @@ impl Audio {
                     }
                     self.playing = self.target;
                     if let Some(t) = self.target {
-                        let m = &self.songs[t];
                         let key_m = format!("{t}:m");
                         if !g.bufs.contains_key(&key_m) {
-                            if let Some(b) = web::buffer(&g.ctx, m, synth::SR) {
+                            if let Some(b) = web::buffer(&g.ctx, &self.songs[t], synth::SR) {
                                 g.bufs.insert(key_m.clone(), b);
+                                // der Browser hat jetzt seine eigene Kopie
+                                if let Some(v) = self.songs.get_mut(t) {
+                                    *v = Vec::new();
+                                }
                             }
                         }
                         let now = g.ctx.current_time() + 0.05;

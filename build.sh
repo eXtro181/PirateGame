@@ -10,6 +10,5 @@ if [ -n "$WASM_OPT" ] && [ "$PROFILE" = "release" ]; then
   $WASM_OPT -Os --enable-bulk-memory --enable-nontrapping-float-to-int --enable-sign-ext --enable-mutable-globals -o dist/schwarzwasser_bg.wasm dist/schwarzwasser_bg.wasm
 fi
 cp web/index.html dist/
-cp -r assets dist/ 2>/dev/null || true
 cp public/* dist/ 2>/dev/null || true
 ls -la dist
