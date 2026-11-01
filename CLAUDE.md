@@ -1,6 +1,6 @@
 # CLAUDE.md – Kontext für Throne of the Drowned
 
-Stand 27.10. Kurzreferenz, damit neue Sitzungen sofort weiterarbeiten können. Das ausführliche Gesamtkonzept (Idee, Welt, Figuren, Systeme, Grafik, Klang, Technik) steht in `docs/SPIELKONZEPT.md` – bei inhaltlichen Änderungen dort mitpflegen. Bei Änderungen an Architektur, Systemen oder Entscheidungen hier nachtragen (nicht anhängen, sondern den passenden Abschnitt aktualisieren).
+Stand 27.10. Kurzreferenz, damit neue Sitzungen sofort weiterarbeiten können. Das ausführliche Gesamtkonzept (Idee, Welt, Figuren, Systeme, Grafik, Klang, Technik) steht in `docs/SPIELKONZEPT.md`, die komplette Grafik-Analyse mit allen Formeln, Werten und einer Nachbau-Anleitung in `docs/GRAFIK_ANLEITUNG.md` – bei inhaltlichen bzw. grafischen Änderungen dort mitpflegen. Bei Änderungen an Architektur, Systemen oder Entscheidungen hier nachtragen (nicht anhängen, sondern den passenden Abschnitt aktualisieren).
 
 ## Projekt und Vorgaben
 - **Throne of the Drowned**: Soulslike-Piratenspiel im Browser, HD-Pixelart im HD-2D-Look, **Rust/Bevy 0.16** mit eigenem wgpu-Renderer (WebGL2/wasm). Paket heißt weiter `schwarzwasser` (alter Name, Wasm-Dateien `schwarzwasser*`).

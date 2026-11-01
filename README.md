@@ -10,7 +10,7 @@ Live: https://extro181.github.io/PirateGame/
 - Galionsfiguren der Könige auf die Throne, alle Seeungeheuer versenkt – dann öffnet sich der **Strudel**, Krakenarme ziehen dein Schiff hinab ans **Ende der Welt**: Seeschlacht gegen den Fliegenden Holländer und seinen roten Kraken, das Meer läuft über den Rand, und am Grund wartet **Malakor, der Ertrunkene König**. Danach Neues Spiel+.
 - Siedlungen mit begehbaren Läden, Crew mit eigenen Geschützen, Schiffsausbauten, Höhenebenen mit Hängen und Naturwegen, Profile mit verschlüsselten Spielständen (PBKDF2 + AES-GCM).
 
-Das vollständige Spielkonzept (Idee, Welt, Systeme, Grafik, Klang, Technik) steht in [`docs/SPIELKONZEPT.md`](docs/SPIELKONZEPT.md).
+Das vollständige Spielkonzept (Idee, Welt, Systeme, Grafik, Klang, Technik) steht in [`docs/SPIELKONZEPT.md`](docs/SPIELKONZEPT.md), die Grafik bis ins Detail mit Nachbau-Anleitung in [`docs/GRAFIK_ANLEITUNG.md`](docs/GRAFIK_ANLEITUNG.md).
 
 ## Steuerung
 

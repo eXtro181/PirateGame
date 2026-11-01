@@ -224,6 +224,8 @@ Gegenstände am Boden schweben mit einem Schimmer in ihrer Seltenheitsfarbe. Mit
 
 ## 7. Grafik
 
+Die vollständige Analyse mit allen Formeln, Farbwerten, Shadern und einer Schritt-für-Schritt-Anleitung zum Nachbau steht in [`GRAFIK_ANLEITUNG.md`](GRAFIK_ANLEITUNG.md).
+
 ### 7.1 Vorgaben
 - **HD-Pixelart** mit dem Detailgrad der Beispielbilder: Blütenbäume mit Glyzinien, Basaltklippen, türkises Wasser, Fachwerkhäuser, eine Rotnebel-Zone.
 - **Dark Fantasy**: gedämpftes Licht, Lichtinseln, Nebel, eigene Stimmung je Zone.
