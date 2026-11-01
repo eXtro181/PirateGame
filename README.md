@@ -10,6 +10,8 @@ Live: https://extro181.github.io/PirateGame/
 - Galionsfiguren der Könige auf die Throne, alle Seeungeheuer versenkt – dann öffnet sich der **Strudel**, Krakenarme ziehen dein Schiff hinab ans **Ende der Welt**: Seeschlacht gegen den Fliegenden Holländer und seinen roten Kraken, das Meer läuft über den Rand, und am Grund wartet **Malakor, der Ertrunkene König**. Danach Neues Spiel+.
 - Siedlungen mit begehbaren Läden, Crew mit eigenen Geschützen, Schiffsausbauten, Höhenebenen mit Hängen und Naturwegen, Profile mit verschlüsselten Spielständen (PBKDF2 + AES-GCM).
 
+Das vollständige Spielkonzept (Idee, Welt, Systeme, Grafik, Klang, Technik) steht in [`docs/SPIELKONZEPT.md`](docs/SPIELKONZEPT.md).
+
 ## Steuerung
 
 | Taste | Aktion |
@@ -27,7 +29,7 @@ Live: https://extro181.github.io/PirateGame/
 | Alt | Namen aller Gegenstände |
 | M · H · I · Esc | Seekarte · Steuerung · Fortschritt · Menü |
 
-iPhone: Touch-Steuerung (Stick links, Knöpfe rechts). Gamepad wird unterstützt.
+iPhone: Touch-Steuerung (Stick links, Knöpfe rechts).
 
 ## Bauen
 
