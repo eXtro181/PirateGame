@@ -57,6 +57,10 @@ pub struct Ui {
     map_cache: Vec<[u8; 4]>,
     /// hochgeladener Stand der Seekarte
     map_ver: u64,
+    /// Seekarte: Zoomstufe (0 ganze Welt, 1 Umgebung, 2 nah), Verschiebung (Kartenanteile), Fläche
+    pub map_zoom: usize,
+    pub map_pan: (f32, f32),
+    map_rect: [f32; 4],
 }
 
 /// Seekarte: zwei Kacheln je Bildpunkt
@@ -104,8 +108,22 @@ impl Ui {
             return (None, true);
         }
         if self.map_open {
-            if inp.pressed(Act::Map) || inp.pressed(Act::Menu) || inp.pressed(Act::Interact) || click {
+            // Zoom: Enter/J/Leertaste oder Tippen auf die Karte; schieben mit den Richtungstasten
+            let zoom = inp.pressed(Act::Confirm) || inp.pressed(Act::Attack) || inp.pressed(Act::Roll) || (click && inside(&self.map_rect, mx, my));
+            if inp.pressed(Act::Map) || inp.pressed(Act::Menu) || inp.pressed(Act::Interact) || (click && !inside(&self.map_rect, mx, my)) {
                 self.map_open = false;
+                self.map_zoom = 0;
+                self.map_pan = (0.0, 0.0);
+            } else if zoom {
+                self.map_zoom = (self.map_zoom + 1) % 3;
+                self.map_pan = (0.0, 0.0);
+                self.sfx.push("click");
+            }
+            if self.map_zoom > 0 {
+                let a = inp.axis();
+                let k = dt * 0.35 / [1.0, 2.5, 5.0][self.map_zoom];
+                self.map_pan.0 += a.x * k;
+                self.map_pan.1 += a.y * k;
             }
             return (None, true);
         }
@@ -316,16 +334,31 @@ impl Ui {
         let l = self.list.as_ref().unwrap();
         let lw = (w - 16.0).min(if l.wide { 400.0 } else { 300.0 });
         let ih = 14.0;
-        let lh = l.items.len() as f32 * ih + 32.0 + if l.desc { 24.0 } else { 0.0 };
+        // lange Listen (z. B. die Feuer der großen Welt) rollen mit der Auswahl mit
+        let extra = 32.0 + if l.desc { 24.0 } else { 0.0 };
+        let rows = (((h - 24.0 - extra) / ih).floor() as usize).max(3).min(l.items.len().max(1));
+        let first = l.sel.saturating_sub(rows / 2).min(l.items.len().saturating_sub(rows));
+        let lh = rows as f32 * ih + extra;
         let lx = (w / 2.0 - lw / 2.0).round();
         let ly = (h / 2.0 - lh / 2.0).max(8.0).round();
         self.list_box = Some([lx, ly, lw, lh]);
         Self::panel(f, art, lx, ly, lw, lh);
-        text::t(f, art, &l.title, lx + 8.0, ly + 7.0, col::GOLD);
+        text::display(f, art, &l.title, lx + 8.0, ly + 6.0, col::GOLD, Al::L, 8.0);
         Self::rect(f, lx + 6.0, ly + 19.0, lw - 12.0, 1.0, [232, 164, 67, 90]);
         self.list_rects.clear();
+        if first > 0 {
+            text::tc(f, art, "↑", lx + lw - 10.0, ly + 7.0, col::BONE_DIM);
+        }
+        if first + rows < l.items.len() {
+            text::tc(f, art, "↓", lx + lw - 10.0, ly + 24.0 + rows as f32 * ih - 4.0, col::BONE_DIM);
+        }
         for (i, it) in l.items.iter().enumerate() {
-            let y = ly + 24.0 + i as f32 * ih;
+            if i < first || i >= first + rows {
+                // unsichtbare Zeilen: leere Fläche, damit die Indizes zur Liste passen
+                self.list_rects.push([-1000.0, -1000.0, 0.0, 0.0]);
+                continue;
+            }
+            let y = ly + 24.0 + (i - first) as f32 * ih;
             self.list_rects.push([lx, y - 2.0, lw, ih]);
             if i == l.sel {
                 Self::rect(f, lx + 2.0, y - 3.0, lw - 4.0, ih, [232, 164, 67, 26]);
@@ -781,26 +814,49 @@ impl Game {
         let (mw, mh) = (cw * sc, chh * sc);
         let mx = (w / 2.0 - mw / 2.0).round();
         let my = (h / 2.0 - mh / 2.0).round() + 6.0;
+        self.ui.map_rect = [mx, my, mw, mh];
         Ui::rect(f, 0.0, 0.0, w, h, [5, 8, 12, 220]);
         Ui::panel(f, art, mx - 4.0, my - 4.0, mw + 8.0, mh + 8.0);
-        f.ui_map(mx, my, mw, mh, [0.0, 0.0, 1.0, 1.0], [255, 255, 255, 255]);
+        // Ausschnitt: ganze Welt oder um die eigene Position (Anteile 0..1 der Karte)
+        let zf = [1.0f32, 2.5, 5.0][self.ui.map_zoom.min(2)];
+        let (px, py) = if self.sailing { (self.ship.hull.x, self.ship.hull.y) } else { (self.player.a.x, self.player.a.y) };
+        let (ww, wh) = ((MW * TS) as f32, (MH * TS) as f32);
+        let half = (0.5 / zf, 0.5 / zf);
+        let mut cxu = (px / ww + self.ui.map_pan.0).clamp(half.0, 1.0 - half.0);
+        let mut cyu = (py / wh + self.ui.map_pan.1).clamp(half.1, 1.0 - half.1);
+        if zf <= 1.0 {
+            cxu = 0.5;
+            cyu = 0.5;
+        }
+        self.ui.map_pan = (cxu - px / ww, cyu - py / wh);
+        let (u0, v0) = (cxu - half.0, cyu - half.1);
+        f.ui_map(mx, my, mw, mh, [u0, v0, u0 + half.0 * 2.0, v0 + half.1 * 2.0], [255, 255, 255, 255]);
+        // Welt-Pixel → Bildschirm (UI) im Ausschnitt; außerhalb: None
+        let to_ui = |x: f32, y: f32| -> Option<(f32, f32)> {
+            let (u, v) = ((x / ww - u0) * zf, (y / wh - v0) * zf);
+            (u >= 0.0 && v >= 0.0 && u <= 1.0 && v <= 1.0).then(|| (mx + u * mw, my + v * mh))
+        };
         let k = sc / (2.0 * TS as f32);
+        let _ = k;
         let seen_px = |s: &Self, x: f32, y: f32| chart_has(&s.save.chart, (x / TS as f32) as i32 / CHART_CELL, (y / TS as f32) as i32 / CHART_CELL);
         for z in ZONES {
             let d = z.def();
             let key = d.key.to_string();
-            let (zx, zy, ry) = (d.cx as f32 * 0.5 * sc, d.cy as f32 * 0.5 * sc, d.ry as f32 * 0.5 * sc);
             if self.save.explored.contains(&key) {
-                text::tc(f, art, d.name, mx + zx, my + zy - ry - 12.0, col::BONE);
+                let (x, y) = (((d.cx * TS) as f32), ((d.cy - d.ry) * TS) as f32);
+                if let Some((ux, uy)) = to_ui(x, y) {
+                    text::tc(f, art, d.name, ux, uy - 12.0, col::BONE);
+                }
             }
         }
         // wilde Inseln: Namen, sobald man dort war; sonst nur ein Fragezeichen, wenn aufgedeckt
         for wi in &self.world.wild {
-            let (zx, zy) = (wi.r.cx as f32 * 0.5 * sc, wi.r.cy as f32 * 0.5 * sc);
+            let (x, y) = (((wi.r.cx * TS) as f32), ((wi.r.cy * TS) as f32));
+            let Some((ux, uy)) = to_ui(x, y) else { continue };
             if self.save.explored.contains(&wi.key) {
-                text::tc(f, art, wi.name, mx + zx, my + zy - wi.r.ry as f32 * 0.5 * sc - 10.0, col::BONE_DIM);
-            } else if seen_px(self, (wi.r.cx * TS) as f32, (wi.r.cy * TS) as f32) {
-                text::tc(f, art, "?", mx + zx, my + zy - 3.0, col::BONE_DIM);
+                text::tc(f, art, wi.name, ux, uy - wi.r.ry as f32 * TS as f32 / wh * mh * zf - 10.0, col::BONE_DIM);
+            } else if seen_px(self, x, y) {
+                text::tc(f, art, "?", ux, uy - 3.0, col::BONE_DIM);
             }
         }
         // Seegebiete der Seebosse
@@ -809,6 +865,7 @@ impl Game {
             if !seen_px(self, cx, cy) {
                 continue;
             }
+            let Some((ux, uy)) = to_ui(cx, cy) else { continue };
             let done = self.save.sea_kings.get(sr.el).copied().unwrap_or(false);
             let c = match sr.el {
                 "fire" => [220, 110, 60, 255],
@@ -816,24 +873,31 @@ impl Game {
                 "wind" => [180, 190, 220, 255],
                 _ => [120, 210, 120, 255],
             };
-            text::tc(f, art, sr.name, mx + cx * k, my + cy * k - 12.0, if done { col::BONE_DIM } else { c });
+            text::tc(f, art, sr.name, ux, uy - 12.0, if done { col::BONE_DIM } else { c });
             if !done {
-                Ui::rect(f, mx + cx * k - 2.0, my + cy * k - 2.0, 4.0, 4.0, c);
+                Ui::rect(f, ux - 2.0, uy - 2.0, 4.0, 4.0, c);
             }
         }
         for fi in &self.world.fires {
             if self.save.lit_fires.contains(&fi.id) {
-                Ui::rect(f, mx + fi.x * k - 1.5, my + fi.y * k - 1.5, 3.0, 3.0, col::SOUL);
+                if let Some((ux, uy)) = to_ui(fi.x, fi.y) {
+                    Ui::rect(f, ux - 1.5, uy - 1.5, 3.0, 3.0, col::SOUL);
+                }
             }
         }
-        let (px, py) = if self.sailing { (self.ship.hull.x, self.ship.hull.y) } else { (self.player.a.x, self.player.a.y) };
         let blink = (self.ui.t * 3.0) as i32 % 2 == 0;
-        Ui::rect(f, mx + px * k - 2.5, my + py * k - 2.5, 5.0, 5.0, if blink { col::GOLD } else { col::BLOOD_L });
+        if let Some((ux, uy)) = to_ui(px, py) {
+            Ui::rect(f, ux - 2.5, uy - 2.5, 5.0, 5.0, if blink { col::GOLD } else { col::BLOOD_L });
+        }
         if self.whirlpool_open {
             let (wx, wy) = self.world.whirlpool;
-            Ui::rect(f, mx + wx * k - 2.5, my + wy * k - 2.5, 5.0, 5.0, col::SOUL);
+            if let Some((ux, uy)) = to_ui(wx, wy) {
+                Ui::rect(f, ux - 2.5, uy - 2.5, 5.0, 5.0, col::SOUL);
+            }
         }
+        let zl = ["Ganze Welt", "Umgebung", "Nah"][self.ui.map_zoom.min(2)];
+        text::tr(f, art, zl, mx + mw - 4.0, my + mh + 6.0, col::BONE_DIM);
         text::display(f, art, "Seekarte", w / 2.0, 5.0, col::GOLD, Al::C, 10.0);
-        text::tc(f, art, if self.input.using_touch { "Tippen zum Schließen" } else { "M schließen" }, w / 2.0, h - 12.0, col::BONE_DIM);
+        text::tc(f, art, if self.input.using_touch { "Karte antippen: Zoom · außerhalb: schließen" } else { "Enter/J Zoom · Pfeile schieben · M schließen" }, w / 2.0, h - 12.0, col::BONE_DIM);
     }
 }

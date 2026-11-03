@@ -2798,6 +2798,19 @@ impl World {
                     if g == Mat::Sand && rng.chance(0.4) {
                         dk = *rng.pick(&["shell", "pebbles", "seaweed", "driftwood", "shell"]);
                     }
+                    // auffällige Stücke selten (sonst ein Feld aus Schädeln und Laternen)
+                    let keep = match dk {
+                        "skull" => 0.25,
+                        "bones" => 0.35,
+                        "lanternStalk" => 0.5,
+                        "crystalS" => 0.6,
+                        "shell" | "driftwood" => 0.6,
+                        "mushroomR" | "mushroomB" => 0.7,
+                        _ => 1.0,
+                    };
+                    if keep < 1.0 && !rng.chance(keep) {
+                        continue;
+                    }
                     let (x, y) = ((tx * TS) as f32 + rng.int(2, 30) as f32, (ty * TS) as f32 + rng.int(4, 30) as f32);
                     if !self.px_walk(x as i32, y as i32).1 {
                         continue;

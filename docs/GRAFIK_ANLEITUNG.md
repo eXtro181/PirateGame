@@ -255,6 +255,14 @@ Eine Krone besteht aus Randbüscheln (45 %) und Füllbüscheln. Sie werden **von
 
 **Requisiten (`PropArt`)**: Bild + Anker + Bodenschatten (rx, ry) + Kollision (Kreis oder Kasten) + Licht (dx, dy, Höhe, Radius, Farbe, Flackern) + Wind (`sway`) + `overhead` (ab dieser Zeile blendet die Krone aus, wenn der Spieler dahinter steht) + Animationsbilder (Flammen, Gehängte).
 
+**Boden-Deko** (kleine Sprites ohne Kollision): Gras- und Schneebüschel, Blumen, Klee, kleiner Farn (schwingen im Wind), dazu flach liegend Steinchen, Steine, Zweige, Laub, Tang, Treibholz, Wurzeln, Muscheln, Knochen, Glut, Seerosen; Pilze, Leuchtkristalle, Laternenstängel. Sie entsteht **je 256-px-Eimer erst beim Zeichnen** (`World::deco_bucket`, Zufall je Kachel aus den Kachelkoordinaten, also jedes Mal gleich): Dichte `dens·4 + rnd·1,2` (bis 6 je Kachel), Arten aus der Tabelle des Bioms, auf Wegen meist nichts, auf Wiesen Blumen, am Sand Muscheln und Treibholz; auffällige Stücke selten (Schädel 25 %, Knochen 35 %, Laternen 50 %). Nur jeder zweite Laternenstängel und jede dritte Glut werfen Licht.
+
+**Seeungeheuer-Teile** (klein, zur Laufzeit zusammengesetzt und je Seegebiet getönt): Schlangenkopf (zu/offen, Schuppen, Stachelkamm, Leuchtauge) und Körperbuckel (Halbkuppel mit Stacheln) – eine Seeschlange sind ein Kopf und vier Buckel auf einer Sinuswelle, jeder Buckel mit eigenem `cut_bottom` (taucht auf und ab). Riesenkalmar: Mantel mit Leuchtflecken und acht Fangarmen aus je zehn dicht gesetzten Tentakelgliedern (Bogen `sin(u·π)·58` aus dem Wasser). Qualle (zwei Pulse, leuchtend), Rochen von oben (drei Flügelschläge, Glutflecken, nach Kurs gedreht). Kanonen-Angler, Skelett-Kraken, Panzerkröte und Riesenhai sind die vorhandenen Kreaturen-Bögen, bis zur Hüfte im Wasser; die Wyvern fliegt mit Bodenschatten. Tönung: Glut (255, 168, 136), Frost (190, 224, 255), Sturm (196, 204, 222), Tiefe (160, 224, 170).
+
+**Zierschrift** (`font::display_glyph`): Antiqua-Versalien aus Linienzügen in einem Raster (Versalhöhe 14, Akzente bis −4). Strichbreite wie mit einer um −20° gekippten Breitfeder: `dünn + (dick − dünn)·|sin(Winkel + 0,35)|` mit dick 2,05·k, dünn 0,55·k – senkrecht und „\“ kräftig, waagrecht und „/“ fein. Stämme bekommen an Ober- und Unterkante **Keilserifen** (Länge 1,9, zur Mitte gekehlt). Kantenglättung über die Deckung, dann Fase (oben links +0,12, unten rechts −0,28) und ein Verlauf nach unten (−0,22), dunkler Umriss. Graustufen, damit sie beim Zeichnen eingefärbt wird; im Atlas mit k = 2,4, gezeichnet weich gefiltert in jeder Größe. Der Titel-Schriftzug setzt THRONE/DROWNED mit k = 4,4 und „OF THE“ mit 2,9 auf eine gemeinsame Grundlinie, färbt mit einem Goldverlauf (FFF0C0 → E0AC52 → 7A4A1C) und bekommt eine Zierlinie mit Rauten und einer Krone mit Seelenstein.
+
+**Titelmotiv** (`throne.rs`, in voller Größe gemalt und mit einem Kastenfilter auf 55 % verkleinert, damit Details beim Kameraschwenk nicht flimmern): Thron 540 × 680 – Spitzbogen-Lehne (`145·(1 − ((250 − y)/214)^1,7)`), vertiefte, kannelierte Innenfläche, Bronzeband mit Grünspan, Rosette (Radius 56) mit zwölf Speichen und grün leuchtendem Seelenstein, Schädelfries, Armlehnen aus Quadern mit Schädeln, drei Spitzbogennischen mit Seelenlichtern, Spitzen, Korallen (verzweigte Röhren), Seepocken, Tang, Risse, Wasserspuren, nasse Wasserlinie. Dazu kannelierte, gebrochene Säulen, eine Korallenkrone mit Steinen und Kettenglieder.
+
 ---
 
 ## 10. Gelände: Materialien, Paletten, Chunk-Backen
@@ -286,13 +294,13 @@ Glutfugen: Festung D8542A, Glut D8442E, Ende E85A2E.
 **Materialgrenzen** (`mat_at`): An jedem Weltpixel werden die 4 umliegenden Kacheln bilinear gewichtet. Jedes Material bekommt `Gewicht + Rauschen(px + k·37, py + k·53)·0,42 + feines Rauschen(5×)·0,1 + Priorität·0,012`; das höchste gewinnt. So entstehen natürliche, ausgefranste Übergänge statt Kachelkanten.
 
 **Chunk backen** (256 × 256 Weltpixel, `ChunkBake`):
-1. Materialraster mit 4 px Rand, **Wasserabstand** per Chamfer (2/3-Gewichte).
+1. Materialraster mit 4 px Rand, **Wasserabstand** per Chamfer (2/3-Gewichte). Dazu das **Ufer-Abstandsfeld** für die Wasserpixel: Zellen à 4 px mit 64 px Rand (96 × 96 Zellen, `mat_at` je Zellmitte), Chamfer-Abstand zum Land (4 / 5,66 px), je Wasserpixel bilinear gelesen.
 2. **Ebenen je Pixel** mit Rand (seitlich 56, oben 32, unten 138 px) aus dem geglätteten Höhenfeld plus Kantenrauschen.
 3. Je Spalte der Abstand nach unten zur tieferen Ebene (Hang/Mauer); je Zeile und Spalte die Abstände zur nächsten tieferen oder höheren Ebene.
 4. Je Pixel, in dieser Reihenfolge:
-   - **Hang nach Süden** (Tiefe 136 px, Festung: 96-px-Mauer aus Quadern): Bodentextur läuft geneigt weiter, nach unten bis 28 % dunkler. Oben ein heller Saum (3–7 px), in der Mitte Felsausbisse aus der Klippenpalette und Erde, Grasbüschel, einzelne Steine. Am Fuß bis 22 % dunkler, am Wasser nass (1A3846, 35 %). Relief `(1 − t)·26`, `up = 35`.
-   - Wasser/Abgrund: transparent (der Shader zeichnet das Wasser).
-   - **Seitliche Böschung** (bis 52 px) und **oberer Rand** (16 px × 1,4): eigener Hangstreifen. Auf Treppenkacheln: in Siedlungen Holzstufen, in der Natur ein Weg im Gebietsstil.
+   - **Hang nach Süden** (Tiefe 168 px, Festung: 96-px-Mauer aus Quadern): sanft – die Bodentextur läuft geneigt weiter, zum Fuß nur `0,99 − 0,07t − 0,08t²` dunkler. Oben ein heller Saum (2–5 px, ×1,05), darunter **flache, gewellte Grasstufen** alle 42 px (2 px Lichtsaum ×1,05, dann 4 px Hauch Schatten ×0,93…0,99, Welle aus Rauschen ±16 px), seltene Felsausbisse aus der Klippenpalette (Schwelle 0,56 − 0,08·Mitte), offene Erde (0,45), Halme (1/23), einzelne Steine (1/71). Am Fuß (t > 0,85) bis 12 % dunkler, am Wasser nass (1A3846, 30 %). Relief `(1 − t)·18`, `up = 22`.
+   - Wasser/Abgrund: transparent; in `emi` stehen **Uferabstand** (0..255 ≙ 0..64 px) und **Art** (255 Wasser, 64 Abgrund) – `encode_px` schreibt sie für durchsichtige Pixel in Blau und Alpha der Normalen-Textur.
+   - **Seitliche Böschung** (bis 64 px) und **oberer Rand** (20 px × 1,4): eigener Hangstreifen, ebenfalls sanft (`0,99 − e²·0,15`, Fels ab 0,52, Erde ab 0,4, `up = 20`). Auf Treppenkacheln: in Siedlungen Holzstufen, in der Natur ein Weg im Gebietsstil (Wegkacheln reichen drei Reihen über die Wandkacheln, weil der Hang tiefer ist als drei Kacheln).
    - Sonst: Materialtextur mit **Kantenschatten** unter erhabenen Nachbarn (bis 28 % dunkler + 8 % 101830), **dunkle Kante** zu tieferen Nachbarn (Umrissfarbe), **Lichtkante** oben (+0,08 Helligkeit), **nasse Ufer** (bis 3 px: 60 % dunkler gemischt + 15 % 203848), **Ufersteine** (Worley-Steine 5,5–8,5 px breit zwischen Gras/Erde und Wasser, Glanz 120 direkt am Wasser) und **Umgebungsverdeckung** am Fuß höherer Ebenen (oben bis 14 px, seitlich bis 9 px, bis 45 % dunkler).
 5. Kodieren (`encode_px` mit Normalenstärke 0,55) und als eine Ebene des Chunk-Texturfelds hochladen.
 
@@ -314,7 +322,7 @@ Das Spiel füllt jedes Bild eine Sofortmodus-Struktur `Frame` mit **Vierecken**:
 
 **Vertex** (32 Byte): `pos f32×2` (Welt- bzw. UI-Pixel), `uv f32×2`, `col unorm8×4` (Tönung, a = Deckkraft), `ext u8×4` = (Atlasseite bzw. Chunk-Platz, **Modus**, **Wind**, **Flags**), `prm f32×2` = (Grundhöhe über Boden, Parameter). Ein Indexpuffer mit dem festen Muster `b, b+1, b+2, b, b+2, b+3` reicht für alle Vierecke.
 
-**Modi**: 0 Atlas-Sprite, 1 Boden-Chunk, 2 einfarbige Fläche, 3 Wasser (Abgrund laut Maske), 4 Abgrund, 5 Nebelbank, 6 weicher Fleck (Schatten, Glühen).
+**Modi**: 0 Atlas-Sprite, 1 Boden-Chunk (durchsichtige Pixel: Wasser bzw. Abgrund aus der Normalen-Textur), 2 einfarbige Fläche, 3 Ersatz-Wasser (wo kein Chunk liegt; Abgrund laut Maske), 4 Abgrund, 5 Nebelbank, 6 weicher Fleck (Schatten, Glühen), 7 Seekarte (UI), 8 Zierschrift/weiche Bilder (UI, eigene bilineare Mischung aus vier Texeln, vormultipliziert).
 **Flags**: 1 Aufblitzen (Treffer), 2 Umriss (Fokus), 4 Leuchten, 8 geisterhaft, 16 grau (UI), 32 Krone ausblenden, 64 Spiegelung.
 
 **Sprite-Viereck** (`quad_spr`): links oben = Fuß − Anker (gespiegelt: Anker von rechts), optional skaliert, gedreht (um den Fuß) und unten abgeschnitten (`cut_bottom`, z. B. bis zur Hüfte im Wasser; die Grundhöhe wird dann auf die sichtbare Unterkante bezogen).
@@ -325,7 +333,8 @@ Das Spiel füllt jedes Bild eine Sofortmodus-Struktur `Frame` mit **Vierecken**:
 
 **Zusatztexturen**:
 - **Rauschen** 256² (RGBA8): R = periodisches fBm (/64, 4 Oktaven), G = Worley-Netz `1 − clamp((d2−d1)/0,12)` (Kaustik), B = fBm (/32, 3 Oktaven), A = Hash.
-- **Wassermaske**, 8 Weltpixel je Texel über die ganze Karte: R = Uferabstand (0..64 px), G = Abgrund, B = Tiefe (0..320 px), A = Wasser.
+- **Wassermaske**, grob: **eine Kachel (32 px) je Texel** über die ganze Karte (1776 × 1328): R = Uferabstand (0..64 px), G = Abgrund, B = Tiefe (0..320 px), A = Wasser. Sie liefert Tiefe, Abgrund, Spiegelungen und Ersatz-Wasser; den **feinen Uferabstand** (Schaum) tragen die Chunks selbst. So bleibt die Maske auch bei der zehnfachen Welt klein (9,4 MB statt 150 MB).
+- **Seekarte** (RGBA8 sRGB, halbe Kachelauflösung 888 × 664): Papierbild aus Tiefe, Biom, Höhe, Wegen und Küstenlinien; unentdeckte Felder als dunkles, fleckiges Papier (neu hochgeladen, wenn sich die aufgedeckten Felder ändern).
 
 ---
 
@@ -385,17 +394,18 @@ Pro Pixel aus dem G-Puffer: Albedo, Normale (z rekonstruiert), Höhe `elev = b·
 
 1. **Bodenzeile** `ground = (y_pixel + 0,5 + elev·rs) / höhe` (0 oben/fern … 1 unten/nah) für Nebel und Tiefenschärfe.
 2. **Umgebungsverdeckung** (nur auf ebenen Flächen): 12 Proben auf einer Spirale (Winkel 2,39996·k, Radius 2 + 1,1·k). Ein Verdecker zählt, wenn er > 2 px höher ist **und am selben Bodenort steht**. `ao = 1 − clamp(occ/12·1,6, 0, 0,6)·Stärke`.
-3. **Umgebung**: `ambient · mix(0,75, 1, n.z·Himmelsanteil + (1 − Himmelsanteil)) · ao`.
-4. **Randlicht** (Höhe > 3 px): `(ambient·1,6 + sonne·0,5) · (1 − n.z)² · clamp(−n.y·0,8 + |n.x|·0,35) · 0,55`.
-5. **Sonne/Mond**: `max(n·sonne, 0)`, Schatten per Strahl durch das Höhenfeld (12 Schritte à 5 px mit Pixelversatz gegen Streifen). Verdecker = höher als der Strahl + 3 px und am selben Bodenort (±22 px); weicher zum Ende hin. Beitrag `sonne · nd · schatten · (0,5 + 0,5·ao)`.
-6. **Glanz**: Blinn-Phong mit Blickrichtung `(0, 0,55, 0,85)`. FullHD: Exponent `mix(12, 220, glanz²)` mit Normierung `(exp + 8)/48`, Pixel-Modus 40.
-7. **Punktlichter** (bis 48): `ndl = max(n·l, 0)·0,85 + 0,15`. Abfall FullHD `(1 − x²)² / (1 + 7x²)` (natürlich mit langem Ausläufer), Pixel-Modus `(1 − x)²`. In FullHD werfen die **8 nächsten Lichter Schlagschatten** (10 Schritte zum Licht durch das Höhenfeld, Schatten 0,25–1). Flackern `1 + (sin(11t + 1,7i)·0,5 + sin(17t + i)·0,5)·flackern`. Beitrag `farbe · ndl · abfall · flackern · (0,6 + 0,4·ao) · schatten`.
-8. Pixel-Modus: Licht in 12 Stufen mit leichtem Dithering (Pixelkunst-Look).
-9. `c = albedo · licht + glanz + leuchten`.
-10. FullHD: **Lichthöfe im Dunst** um jede Lichtquelle (`exp(−5·d)`, × (0,04 + Nebeldichte·0,3)).
-11. **Blitz**: `+ albedo · blitz · (0,8, 0,85, 1)`.
-12. **Tiefennebel**: `fogk = dichte·(1 − ground·0,6) + Tiefenschärfe·0,03·(1 − smoothstep(0, 0,4, ground))`, `c = mix(c, nebelfarbe, min(fogk, 0,85))`.
-13. Ausgabe `rgb = c · belichtung`, **alpha = ground · 0,5**.
+3. **Wolkenschatten** (nur bei hohen Effekten): am Bodenort `(x, y + elev)` zwei Rauschlagen `r(q)·0,72 + b(2,7q + (0,37, 0,11))·0,34` mit `q = pos·0,00042 + (t·0,0062, t·0,0024)`, `cloud = 1 − smoothstep(0,5, 0,74, …)·0,4`. Dämpft Sonne (×cloud), Glanz (×cloud²) und Himmelslicht (×mix(1, cloud, 0,35)). Das Rauschen ist die vierte Textur des Lichtdurchgangs.
+4. **Umgebung**: `ambient · mix(0,75, 1, n.z·Himmelsanteil + (1 − Himmelsanteil)) · ao · mix(1, cloud, 0,35)`.
+5. **Randlicht** (Höhe > 3 px): `(ambient·1,6 + sonne·0,5) · (1 − n.z)² · clamp(−n.y·0,8 + |n.x|·0,35) · 0,55`.
+6. **Sonne/Mond**: `max(n·sonne, 0)`, Schatten per Strahl durch das Höhenfeld (12 Schritte à 5 px mit Pixelversatz gegen Streifen). Verdecker = höher als der Strahl + 3 px und am selben Bodenort (±22 px); weicher zum Ende hin. Beitrag `sonne · nd · schatten · (0,5 + 0,5·ao) · cloud`.
+7. **Glanz**: Blinn-Phong mit Blickrichtung `(0, 0,55, 0,85)`. FullHD: Exponent `mix(12, 220, glanz²)` mit Normierung `(exp + 8)/48`, Pixel-Modus 40.
+8. **Punktlichter** (bis 48): `ndl = max(n·l, 0)·0,85 + 0,15`. Abfall FullHD `(1 − x²)² / (1 + 7x²)` (natürlich mit langem Ausläufer), Pixel-Modus `(1 − x)²`. In FullHD werfen die **8 nächsten Lichter Schlagschatten** (10 Schritte zum Licht durch das Höhenfeld, Schatten 0,25–1). Flackern `1 + (sin(11t + 1,7i)·0,5 + sin(17t + i)·0,5)·flackern`. Beitrag `farbe · ndl · abfall · flackern · (0,6 + 0,4·ao) · schatten`.
+9. Pixel-Modus: Licht in 12 Stufen mit leichtem Dithering (Pixelkunst-Look).
+10. `c = albedo · licht + glanz + leuchten`.
+11. FullHD: **Lichthöfe im Dunst** um jede Lichtquelle (`exp(−5·d)`, × (0,04 + Nebeldichte·0,3)).
+12. **Blitz**: `+ albedo · blitz · (0,8, 0,85, 1)`.
+13. **Tiefennebel**: `fogk = dichte·(1 − ground·0,6) + Tiefenschärfe·0,03·(1 − smoothstep(0, 0,4, ground))`, `c = mix(c, nebelfarbe, min(fogk, 0,85))`.
+14. Ausgabe `rgb = c · belichtung`, **alpha = ground · 0,5**.
 
 ---
 
@@ -554,7 +564,8 @@ Die Option **„Sparsam“** schaltet Tiefenschärfe, Verdeckung, Strahlen, Boke
 ## 21. Fallstricke
 
 - **Texturfelder nie mit einer durch 6 teilbaren Ebenenzahl** (WebGL-wgpu hält sie für Würfel-Felder; dann fehlen alle Sprites oder der Boden ist schwarz). Atlasseiten aufrunden, Chunk-Plätze z. B. 50.
-- WebGL: **ein Sampler je Textur**. Weiche Normalen deshalb von Hand mischen statt einen zweiten (linearen) Sampler zu nehmen.
+- WebGL: **ein Sampler je Textur** (innerhalb eines Shader-Einstiegspunkts). Weiche Normalen und die weich gefilterte Zierschrift deshalb von Hand aus vier Texeln mischen statt einen zweiten (linearen) Sampler zu nehmen – sonst bricht die Shader-Übersetzung ab („A image was used with multiple samplers“) und das Spiel stürzt beim Start ab.
+- Große Welten: keine Textur über die ganze Karte in feiner Auflösung (WebGL-Grenzen, Speicher). Feine Daten gehören in die gestreamten Chunks, global reicht eine Kachel je Texel.
 - Überlagerungen dürfen **kein Alpha schreiben**, das Alpha der beleuchteten Szene trägt die Bodenzeile für die Tiefenschärfe.
 - Schatten-Abziehbilder schreiben **nur Farbe** in die Albedo, sonst zerstören sie Normalen und Höhen.
 - Höhe im Normalen-Texel ist Höhe/2 (bis 510 px); größere Wesen brauchen Grundhöhe über `prm.x`.
@@ -629,6 +640,7 @@ fn tilt_src(uv: vec2<f32>) -> vec2<f32> {
 @group(1) @binding(3) var t_cnrm: texture_2d_array<f32>;
 @group(1) @binding(4) var t_mask: texture_2d<f32>;
 @group(1) @binding(5) var t_noise: texture_2d<f32>;
+@group(1) @binding(6) var t_map: texture_2d<f32>;
 
 struct VIn {
     @location(0) pos: vec2<f32>,
@@ -694,6 +706,11 @@ fn wave_h(p: vec2<f32>, t: f32) -> f32 {
 }
 
 fn water(p_in: vec2<f32>) -> GOut {
+    return water_s(p_in, -1.0);
+}
+
+// Wasser; `shore_in` ≥ 0: pixelgenauer Uferabstand aus dem Boden-Chunk, sonst aus der groben Maske
+fn water_s(p_in: vec2<f32>, shore_in: f32) -> GOut {
     var o: GOut;
     let hd = G.hd3.x > 0.5;
     // Pixelraster: in FullHD halbe Weltpixel, sonst ganze
@@ -701,11 +718,16 @@ fn water(p_in: vec2<f32>) -> GOut {
     if (hd) { p = floor(p_in * 2.0) * 0.5 + 0.25; }
     let t = G.screen.z;
     let m = mask_at(p);
-    let shore = m.r;          // 0 am Ufer → 1 weit weg (über ~64 px)
+    var shore = m.r;          // 0 am Ufer → 1 weit weg (über ~64 px)
+    if (shore_in >= 0.0) { shore = shore_in; }
     let depth = m.b;          // 0 flach → 1 tief
     // Grundfarbe mit Tiefe: im Flachen schimmert der Grund durch, in der Tiefe wird es dunkel
     let dd = smoothstep(0.0, 1.0, max(depth, shore * 0.85));
     var c = mix(G.water_a.rgb, G.water_b.rgb, dd);
+    // weite See: großflächig tiefere und hellere Stellen, langsam ziehende Strömungsbänder
+    let big = noise_at(p * 0.011 + vec2<f32>(t * 0.21, t * 0.08)).r;
+    let band = noise_at(vec2<f32>(p.x * 0.004 + p.y * 0.002, p.y * 0.017) + vec2<f32>(t * 0.05, 0.0)).b;
+    c *= 0.9 + big * 0.18 * dd + (band - 0.5) * 0.08 * dd;
     let h0 = wave_h(p, t);
     // Wellentäler dunkler, Kämme heller und grüner (Licht dringt durch die dünne Wasserhaut)
     c *= 0.86 + h0 * 0.3;
@@ -855,6 +877,17 @@ fn fs_gbuf(v: VOut) -> GOut {
         if (((q.x + q.y) & 1) == 0 || (q.y & 1) == 0) { discard; }
     }
     var c = sample_sprite(v.uv, v.ext.x, chunk);
+    if (chunk && c.a < 0.45) {
+        // Wasser und Abgrund im Boden-Chunk: Art und Uferabstand stehen in der Normalen-Textur
+        let wn = nrm_texel(v.uv, v.ext.x, true);
+        if (wn.a > 0.75) {
+            return water_s(v.world, wn.b);
+        }
+        if (wn.a > 0.1) {
+            return abyss(v.world);
+        }
+        discard;
+    }
     if (c.a < 0.45) {
         // Umriss beim Fokus: Nachbarpixel prüfen
         if ((flags & 2u) != 0u) {
@@ -997,6 +1030,32 @@ fn fs_ui(v: VOut) -> @location(0) vec4<f32> {
         let a = (1.0 - smoothstep(0.2, 1.0, d)) * v.col.a;
         return vec4<f32>(v.col.rgb * a, a);
     }
+    if (mode == 8u) {
+        // Zierschrift: eigene bilineare Mischung (WebGL erlaubt nur einen Sampler je Textur),
+        // vormultipliziert gemischt, damit die Kanten nicht dunkel ausfransen
+        let dim = vec2<f32>(textureDimensions(t_acol).xy);
+        let px = v.uv * dim - 0.5;
+        let fr = fract(px);
+        let b = (floor(px) + 0.5) / dim;
+        let d = 1.0 / dim;
+        let l = i32(v.ext.x);
+        let c00 = textureSampleLevel(t_acol, s_near, b, l, 0.0);
+        let c10 = textureSampleLevel(t_acol, s_near, b + vec2<f32>(d.x, 0.0), l, 0.0);
+        let c01 = textureSampleLevel(t_acol, s_near, b + vec2<f32>(0.0, d.y), l, 0.0);
+        let c11 = textureSampleLevel(t_acol, s_near, b + d, l, 0.0);
+        let p00 = vec4<f32>(c00.rgb * c00.a, c00.a);
+        let p10 = vec4<f32>(c10.rgb * c10.a, c10.a);
+        let p01 = vec4<f32>(c01.rgb * c01.a, c01.a);
+        let p11 = vec4<f32>(c11.rgb * c11.a, c11.a);
+        let m = mix(mix(p00, p10, fr.x), mix(p01, p11, fr.x), fr.y);
+        if (m.a < 0.01) { discard; }
+        return vec4<f32>(m.rgb * v.col.rgb * v.col.a, m.a * v.col.a);
+    }
+    if (mode == 7u) {
+        // Seekarte: Papierbild, leicht weich gefiltert
+        let m = textureSampleLevel(t_map, s_lin, v.uv, 0.0);
+        return vec4<f32>(m.rgb * v.col.rgb * v.col.a, v.col.a);
+    }
     let c = textureSampleLevel(t_acol, s_near, v.uv, i32(v.ext.x), 0.0);
     if (c.a < 0.45) { discard; }
     var rgb = c.rgb * v.col.rgb;
@@ -1035,6 +1094,10 @@ fn vs_full(@builtin(vertex_index) i: u32) -> FOut {
 
 fn gpos(uv: vec2<f32>) -> vec2<f32> {
     return G.view.xy + uv * G.view.zw;
+}
+
+fn t_now() -> f32 {
+    return G.screen.z;
 }
 
 // ---------------------------------------------------------------- Beleuchtung
@@ -1082,9 +1145,18 @@ fn fs_light(f: FOut) -> @location(0) vec4<f32> {
         ao = 1.0 - clamp(occ / 12.0 * 1.6, 0.0, 0.6) * G.hd2.x * flat;
     }
 
+    // Wolkenschatten: große, weiche Flecken ziehen langsam über Land und See (am Bodenort des
+    // Pixels, damit Bäume und Wände mit ihrem Fuß im selben Schatten stehen)
+    var cloud = 1.0;
+    if (G.hd2.x > 0.0) {
+        let wq = vec2<f32>(sp.x, sp.y + elev) * 0.00042 + vec2<f32>(t_now() * 0.0062, t_now() * 0.0024);
+        let c1 = textureSampleLevel(t_d, s_lin, wq, 0.0).r;
+        let c2 = textureSampleLevel(t_d, s_lin, wq * 2.7 + vec2<f32>(0.37, 0.11), 0.0).b;
+        cloud = 1.0 - smoothstep(0.5, 0.74, c1 * 0.72 + c2 * 0.34) * 0.4;
+    }
     // Umgebung: Himmel von oben, Boden reflektiert etwas
     let hemi = mix(0.75, 1.0, n.z * G.ambient.w + (1.0 - G.ambient.w));
-    var li = G.ambient.rgb * hemi * ao;
+    var li = G.ambient.rgb * hemi * ao * mix(1.0, cloud, 0.35);
     // Randlicht: erhöhte Kanten (Figuren, Kronen, Klippenkanten) fangen kühles Himmelslicht von hinten
     if (elev > 3.0) {
         let edge = pow(clamp(1.0 - n.z, 0.0, 1.0), 2.0);
@@ -1118,7 +1190,7 @@ fn fs_light(f: FOut) -> @location(0) vec4<f32> {
         }
         sh = 1.0 - occl * G.sun_dir.w;
     }
-    li += G.sun_col.rgb * nd * sh * (0.5 + 0.5 * ao);
+    li += G.sun_col.rgb * nd * sh * (0.5 + 0.5 * ao) * cloud;
     let hv = normalize(sd + view_dir);
     let hd = G.hd3.x > 0.5;
     // Glanz: glatte Flächen (Wasser, Metall) mit scharfen, hellen Spitzlichtern
@@ -1128,7 +1200,7 @@ fn fs_light(f: FOut) -> @location(0) vec4<f32> {
         sexp = mix(12.0, 220.0, spec_k * spec_k);
         spnorm = (sexp + 8.0) / 48.0;
     }
-    spec += G.sun_col.rgb * pow(max(dot(n, hv), 0.0), sexp) * spec_k * sh * G.sun_col.w * spnorm;
+    spec += G.sun_col.rgb * pow(max(dot(n, hv), 0.0), sexp) * spec_k * sh * G.sun_col.w * spnorm * cloud * cloud;
 
     // Punktlichter in 3D
     let nl = i32(G.counts.x);

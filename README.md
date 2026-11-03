@@ -6,9 +6,10 @@ Live: https://extro181.github.io/PirateGame/
 
 ## Das Spiel
 
-- Du erwachst in einem Sarg auf dem **Galgenstrand**, einem Piratenfriedhof. Von der Festung **Glutwacht** aus segelst du zu vier Inseln mit je einem Geisterkönig (zwei Gestalten) und durch vier elementare Seegebiete mit je einem Seeungeheuer, das bei halber Kraft zum Piratenschiff wird.
+- Du erwachst in einem Sarg auf dem **Galgenstrand**, einem Piratenfriedhof. Von der Festung **Glutwacht** aus segelst du zu vier Inseln mit je einem Geisterkönig (zwei Gestalten) und weit hinaus in vier elementare Seegebiete mit je einem Seeboss, der bei halber Kraft zum Piratenschiff wird.
+- Ein riesiger Ozean (zehnmal die frühere Fläche) mit 72 wilden Inseln – Piratenlager, Ruinen, Friedhöfe, Wrackstrände, wilde Haine, Schatzinseln – und über 400 Seeungeheuern in zehn Arten. Die Seekarte deckt sich beim Erkunden auf.
 - Galionsfiguren der Könige auf die Throne, alle Seeungeheuer versenkt – dann öffnet sich der **Strudel**, Krakenarme ziehen dein Schiff hinab ans **Ende der Welt**: Seeschlacht gegen den Fliegenden Holländer und seinen roten Kraken, das Meer läuft über den Rand, und am Grund wartet **Malakor, der Ertrunkene König**. Danach Neues Spiel+.
-- Siedlungen mit begehbaren Läden, Crew mit eigenen Geschützen, Schiffsausbauten, Höhenebenen mit Hängen und Naturwegen, Profile mit verschlüsselten Spielständen (PBKDF2 + AES-GCM).
+- Siedlungen mit begehbaren Läden, Crew mit eigenen Geschützen, Schiffsausbauten, Höhenebenen mit sanften Hängen und Naturwegen, Profile ohne Passwort (Spielstände im Browser).
 
 Das vollständige Spielkonzept (Idee, Welt, Systeme, Grafik, Klang, Technik) steht in [`docs/SPIELKONZEPT.md`](docs/SPIELKONZEPT.md), die Grafik bis ins Detail mit Nachbau-Anleitung in [`docs/GRAFIK_ANLEITUNG.md`](docs/GRAFIK_ANLEITUNG.md).
 
@@ -27,7 +28,7 @@ Das vollständige Spielkonzept (Idee, Welt, Systeme, Grafik, Klang, Technik) ste
 | E | Interagieren, rasten, an Bord, anlegen |
 | F | Shanty auf See |
 | Alt | Namen aller Gegenstände |
-| M · H · I · Esc | Seekarte · Steuerung · Fortschritt · Menü |
+| M · H · I · Esc | Seekarte (Enter/J: Zoom, Pfeile: schieben) · Steuerung · Fortschritt · Menü |
 
 iPhone: Touch-Steuerung (Stick links, Knöpfe rechts).
 

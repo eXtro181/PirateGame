@@ -237,7 +237,8 @@ impl Game {
             let ax = self.input.axis();
             h.h = wrap(h.h + ax.x * dt * (0.7 + h.v / 120.0) * (1.0 + self.save.ship_speed as f32 * 0.04));
         }
-        let target = self.ship.sail as f32 * 60.0 * if self.shanty_t > 0.0 { 1.35 } else { 1.0 } * (1.0 + self.save.ship_speed as f32 * 0.06);
+        // je Segelstufe 74 px/s (die Welt ist zehnmal so groß wie früher)
+        let target = self.ship.sail as f32 * 74.0 * if self.shanty_t > 0.0 { 1.35 } else { 1.0 } * (1.0 + self.save.ship_speed as f32 * 0.06);
         h.v += (target - h.v) * (dt * 0.8).min(1.0);
         let (fx, fy) = (h.h.sin(), -h.h.cos());
         let (nx, ny) = (h.x + fx * h.v * dt, h.y + fy * h.v * dt);

@@ -44,9 +44,9 @@ Stand: 1. November 2026 (Version 0.6, Zweig `perf`). Technische Kurzreferenz fü
 ## 3. Die Welt
 
 ### 3.1 Karte
-- 560 × 420 Kacheln à 32 Pixel (17 920 × 13 440 Weltpixel), Inseln in einem durchgehenden Meer.
+- 1776 × 1328 Kacheln à 32 Pixel (56 832 × 42 496 Weltpixel) – zehnmal die Fläche der ersten Karte. Der Archipel der sechs Hauptinseln liegt in der Mitte, das Ende der Welt in der Südost-Ecke, die vier Seegebiete weit draußen in den Himmelsrichtungen, dazwischen 72 wilde Inseln im weiten Ozean.
 - Jede Insel hat Höhenstufen (Ebenen 0–4): Inselmitte und ein bis zwei Bergkuppen höher, Strände flach.
-- Außerhalb der Festung sind Ebenenkanten **flache Naturhänge** (nach Süden 136 px tief, seitlich 52 px). Bodentextur läuft geneigt weiter, mit Ausbissen und Steinen.
+- Außerhalb der Festung sind Ebenenkanten **flache, sanfte Naturhänge** (nach Süden 168 px tief, seitlich 64 px, oben 20 px). Die Bodentextur läuft geneigt weiter, in flachen, gewellten Grasstufen, mit seltenen Felsausbissen, offener Erde, Halmen und Steinen; zum Fuß hin nur leicht im Schatten.
 - **Treppen** gibt es nur in Siedlungen und in der Festung. In der Natur führen Wege im Gebietsstil über die Hänge (Schneepfad, Bohlen im Moor …).
 - Herunterspringen geht genau eine Ebene tief.
 - **Wasserfälle** sitzen an echten Hangkanten: Bach oben, Becken unten, Gischt.
@@ -65,6 +65,16 @@ Stand: 1. November 2026 (Version 0.6, Zweig `perf`). Technische Kurzreferenz fü
 
 Jede Siedlung hat Dorfbewohner, Hühner und Katzen, Rauch aus den Schornsteinen und einen Laden mit **begehbarem Innenraum**. Gegner halten sich von Siedlungen fern.
 
+**Wilde Inseln**: 72 Eilande (klein, mittel, wenige große) mit Namen wie „Reifholm“, „Glutzahn“, „Moderwerder“, „Sturmklippe“ oder „Schädelriff“. Ihr Biom richtet sich nach der Himmelsrichtung (Frost im Norden, Glut im Osten, Sturm im Westen, Moder im Süden, dazwischen Galgeninseln). Jede hat einen Anleger zur Kartenmitte, einen Landeplatz und ein Herzstück:
+- **Piratenlager**: Zelte, Tafel, Kanonen, Fässer, Flagge, Truhe.
+- **Ruine**: Marmorplatz, Säulenring, Bogen, Wächterstatue, Kerzen, Schwertgrab, Truhe.
+- **Friedhof**: Galgen, Gräberreihen, Särge, Käfig, Fackeln, manchmal eine lebende Truhe.
+- **Wrackstrand**: gestrandetes Schiff, Fracht, Anker, Netze, Ruderboot, Haiskelette, manchmal ein Mimic.
+- **Wilder Hain**: dichter Wald, Leuchtblumen bzw. Kristalle, Seelenblume.
+- **Schatzinsel**: zwei Truhen (Rumflasche, Seelenphiole oder Gezeitensplitter) mit starkem Wächter.
+
+Je weiter draußen, desto höher die **Gefahrenstufe** (0–3): Gegner haben mehr Leben (+35 % je Stufe), mehr Schaden (+12 %) und geben mehr Perlen (+40 %). Auf jeder vierten Insel brennt ein Säbelfeuer (Schnellreise).
+
 ### 3.3 Glutwacht im Detail
 Kompakt wie ein Schrein: in der Mitte ein See mit Steg zum Strudel, darum der Ring der brennenden Bossschiffe. Darüber die Feuerterrasse (Ebene 1) mit Säbelfeuer, vier Thronen, Schmied und Händlerin, dann der Schrein mit Bergfried (Ebene 2) und Wachplattformen (Ebene 3). Im Osten ein Seetor-Kanal, im Süden der Anleger. Dort liegt die **Werft** von Schiffsmeister Brack: Plankenkai, Helling mit Rumpf, Kran, Taue, Fässer, Kanone, Laternen, Flagge und Wegweiser. Die Mauern bestehen aus Quadern, Ebenen sind hier echte Mauern mit Treppen.
 
@@ -76,7 +86,24 @@ Kompakt wie ein Schrein: in der Mitte ein See mit Steg zum Strudel, darum der Ri
 | Sturmsee | Sturm | Sturmzunge, die Seeschlange → Die Rabenbraut |
 | Tiefengrund | Tiefe | Der Abgrundangler → Die Tiefenlaterne |
 
-Jedes Seegebiet hat eigene Stimmung, eigenes Licht und eigene Requisiten: Lavaspitzen und brennende Wracks, Eisberge, Felsnadeln, Korallen und Tang. Auf hoher See springen Fische, Wale tauchen auf, Geisterschiffe patrouillieren, Knochenhaie rammen den Rumpf.
+Die Seegebiete liegen weit draußen: Eismeer im Norden, Glutsee im Osten, Sturmsee im Westen, Tiefengrund im Süden (Radius 72 Kacheln, das Kampfrevier des Seebosses 40). Jedes hat eigene Stimmung, eigenes Licht und eigene Requisiten: Lavaspitzen und brennende Wracks, Eisberge, Felsnadeln, Korallen und Tang. Auf hoher See springen Fische, Wale tauchen auf, 19 Geisterschiffe patrouillieren, 60 Knochenhaie rammen den Rumpf.
+
+**Seeungeheuer** (über 400, je Seegebiet andere Arten): Sie lauern als Schatten unter der Oberfläche, tauchen auf, wenn ein Schiff nahe kommt, und greifen nach ihrer Art an.
+
+| Ungeheuer | Angriff | Häufig im |
+|---|---|---|
+| Seeschlange | taucht in Buckeln, rammt den Bug | überall, Eismeer |
+| Muräne (zu dritt) | schnelle Bisse | überall, Tiefengrund |
+| Riesenkalmar | acht Fangarme, angesagte Tentakelschläge | Sturmsee, Tiefengrund |
+| Geisterqualle (im Schwarm) | leuchtet, sticht bei Berührung | Eismeer, Tiefengrund |
+| Glutrochen | gleitet, spuckt Feuerbälle | Glutsee |
+| Kanonen-Angler | Lockleuchte, Kanonenkugeln | Tiefengrund |
+| Skelett-Kraken | vier Tentakelschläge | Tiefengrund, Eismeer |
+| Panzerkröte | Salven aus drei Kugeln | Glutsee |
+| Sturm-Wyvern | kreist, Sturzflug aufs Deck | Sturmsee |
+| Riesenhai | rammt | überall, Sturmsee |
+
+Ungeheuer zeigen eine Lebensleiste, sobald sie verwundet sind; die Crew zielt mit ihren Geschützen auch auf sie.
 
 ---
 
@@ -211,7 +238,8 @@ Gegenstände am Boden schweben mit einem Schimmer in ihrer Seltenheitsfarbe. Mit
 
 ### 6.6 Seefahrt
 - Das Schiff steigt an jedem Steg aus der Tiefe, wenn man es ruft. An Bord gehen und anlegen mit E.
-- **Steuerung**: links/rechts wenden, hoch/runter Segelstufen. J/L feuern Breitseiten nach Backbord bzw. Steuerbord, C setzt das Crew-Geschütz ein, F stimmt das Shanty der Crew an (das Schiff wird schneller).
+- **Steuerung**: links/rechts wenden, hoch/runter Segelstufen (je Stufe 74 px/s). J/L feuern Breitseiten nach Backbord bzw. Steuerbord, C setzt das Crew-Geschütz ein, F stimmt das Shanty der Crew an (das Schiff wird schneller).
+- **Seekarte** (M): gezeichnet wie auf vergilbtem Papier, deckt sich beim Erkunden auf (Felder à 16 × 16 Kacheln). Drei Zoomstufen (Ganze Welt, Umgebung, Nah), schieben mit den Richtungstasten. Namen der wilden Inseln erscheinen, sobald man dort war.
 - **Ausbauten** beim Schiffsmeister, je bis Stufe 10: Tempo (+6 % Fahrt), Verteidigung (+24 Rumpf, −4 % Schaden), Angriff (+12 % Schaden, mehr Kugeln). Jede Stufe ist am Schiff sichtbar (Segel, Eisenbänder, Kanonen).
 - Kapitän und Crew stehen an Deck und drehen sich mit dem Kurs.
 
@@ -238,7 +266,8 @@ Die vollständige Analyse mit allen Formeln, Farbwerten, Shadern und einer Schri
 - **Diorama-Kippung**: Das Endbild ist leicht gekippt. Unten ist die Welt näher und größer, oben ferner.
 - **Tilt-Shift-Tiefenschärfe** um den Fuß des Spielers, Bokeh-Staub.
 - **Licht**: 3D-Punktlichter mit Höhe, Schlagschatten der acht nächsten Lichter, Sonnenschatten, Randlicht, Lichtstrahlen je Zone, Umgebungsverdeckung aus dem Höhenpuffer, Bloom, Farbkorrektur, Farbsaum.
-- **Wasser** (Fotolook): Fresnel-Himmelsspiegelung, Wellenkämme, scharfer Sonnenglanz, Uferschaum, Spiegelbilder von Schiffen und Figuren.
+- **Wasser** (Fotolook): Fresnel-Himmelsspiegelung, Wellenkämme, scharfer Sonnenglanz, pixelgenauer Uferschaum, großflächige Tiefen und Strömungsbänder auf hoher See, Spiegelbilder von Schiffen und Figuren.
+- **Wolkenschatten** ziehen langsam über Land und See.
 - **Nebel** in Bänken, Funken, Glühwürmchen, Asche, Schnee, Regen und Blitze je Gebiet.
 - Option „Sparsam“ lässt nur die Kippung an (für schwache Geräte).
 
@@ -247,17 +276,18 @@ Jedes Bild ist eine **Leinwand mit vier Kanälen**: Farbe, Normale, Höhe über 
 
 - **Figuren-Maler** (`chars.rs`): Figuren 64 × 72 Pixel, drei Richtungen (vorn, Seite gespiegelt, hinten), alle Animationen. Über 40 Vorlagen: Gegner, NPCs, Crew, Dorfbewohner, Könige, Malakor (vier Arme, Tentakelbart, Korallenkrone). Bausteine wie Hüte, Mäntel, Bärte, Flügel, Schlangenhaar, Uhrwerk, Leuchtaugen, Auren.
 - **Kreaturen-Rig** (`rig.rs`, `beasts.rs`): Wesen bestehen aus Ellipsoiden, Quadern, Röhren, Häuten und Dreiecken im Raum. Ein Strahlenwerfer rendert sie aus der 3/4-Kamera (Neigung 0,55) mit Mustern (Schuppen, Fell, Nieten …), Innenkonturen und Umriss. Er schreibt die Höhe je Pixel, damit Schatten der Grundfläche folgen.
-- **Schiffe** (`ships.rs`): ebenfalls als Rig. 16 Kurse (9 gerendert, der Rest gespiegelt), das eigene Schiff mit sichtbaren Ausbauten, vier Bossschiffe mit eigenem Entwurf, der Fliegende Holländer (Maßstab 6,9) und das brennende Titelschiff.
+- **Schiffe** (`ships.rs`): ebenfalls als Rig. 16 Kurse (9 gerendert, der Rest gespiegelt), das eigene Schiff mit sichtbaren Ausbauten, vier Bossschiffe mit eigenem Entwurf und der Fliegende Holländer (Maßstab 6,9).
 - **Gelände** (`terrain.rs`): Der Boden wird in 256-Pixel-Stücken gebacken. Materialien wie Gras, Wiese, Sand, Erde, Pflaster, Marmor, Planken, Basalt, Asche, Schnee, Eis, Schlamm, Fels und Moos haben je Gebiet eigene Paletten. Dazu weiche Materialgrenzen, nasse Uferkanten, Ufersteine, Hänge, Festungsmauern aus Quadern und Naturwege.
 - **Requisiten** (`props.rs`, `flora.rs`, `buildings.rs`, `structures.rs`, `grave.rs`): Bäume mit Kronen, die durchsichtig werden, wenn man dahinter steht, Büsche, Fachwerkhäuser, Festung, Werft, Galgen mit schwingenden Gehängten, Särge, Wracks, Eisberge, Korallen.
 - **Atlas**: alles auf Seiten à 2048² (aktuell 5). Feste Streifen für Spieler, eigenes Schiff und den gerade aktiven Boss werden bei Bedarf neu gezeichnet.
-- **Schrift und UI**: eigene Pixelschrift mit Umlauten und Sonderzeichen, Rahmen, Symbole.
+- **Schrift und UI**: eigene Pixelschrift mit Umlauten und Sonderzeichen für Fließtext, dazu eine **Zierschrift** (Antiqua-Versalien wie gemeißelt, aus Breitfeder-Strichen mit Keilserifen) für Titel, Banner, Ortsnamen, Fenstertitel und Knöpfe. Rahmen, Symbole.
+- **Boden-Deko** (Gras, Blumen, Klee, Farn, Steinchen, Zweige, Laub, Tang, Treibholz, Wurzeln, Pilze, Kristalle, Knochen, Glut) entsteht je 256-px-Eimer erst beim Zeichnen – mehrfach so dicht wie früher, ohne Speicher und Ladezeit.
 
 ### 7.4 Zonenstimmung
 Jede Zone hat eine eigene Licht- und Farbstimmung (`env.rs`), die weich eingeblendet wird: Grundlicht, Sonne, Nebelfarbe, Wasserfarben, Belichtung, Lichtstrahlen. Stimmungen gibt es für Galgenstrand, Glutwacht, Aschebucht, Frostgrotte, Rabenwacht, Fluchmangroven, Ende der Welt, Innenräume, die Stille vor dem Endkampf, das Gewitter beim Holländer, den Meeresgrund und jedes Seegebiet.
 
 ### 7.5 Titelbild
-Ein brennendes schwarzes Schiff, umschlungen von acht Krakenarmen, über der lebenden Welt.
+**„Der Thron der Ertrunkenen“**: In der nächtlichen See ragt ein riesiger Thron aus schwarzem Basalt auf – Spitzbogen-Lehne mit Bronzeband und Rosette, in der ein grüner Seelenstein glüht, Schädelfries, Armlehnen mit Schädeln, drei Nischen mit Seelenlichtern, Korallen, Seepocken, Tang und Wasserspuren. Über dem leeren Sitz schwebt die Korallenkrone, Ketten hängen von den Armlehnen ins Wasser, gebrochene Säulen der versunkenen Halle stehen ringsum, grüne Seelenlichter steigen auf, und hinter dem Thron winden sich Krakenarme aus der Tiefe. Oben der Schriftzug „THRONE of the DROWNED“ in Gold mit Zierlinie und Krone, links das Menü.
 
 ---
 
@@ -303,12 +333,13 @@ Eingabe → Spiel-Update (nur Gegner und NPCs in Kameranähe) → Welt zeichnen 
 - **Streaming**: Nur Boden-Chunks im Bild und in einem Ring darum liegen auf der GPU (50 Plätze). Fehlende sichtbare Chunks werden sofort gebacken. Der Ring entsteht vorab in kleinen Schritten mit höchstens 5 ms je Bild, damit Laufen und Segeln nicht ruckeln. Offene See braucht keine Pixelarbeit.
 - **Nahbereich**: Gegner, NPCs und Interaktionen werden nur um Kamera bzw. Spieler herum berechnet.
 - **Musik** wird nach Zeitbudget vorberechnet und danach an den Browser übergeben.
-- **Speicher**: Atlasseiten werden beim Start in den Upload verschoben statt kopiert (Wasm-Speicher etwa 240 MB).
+- **Speicher**: Atlasseiten werden beim Start in den Upload verschoben statt kopiert (Wasm-Speicher etwa 270 MB mit der großen Welt).
+- **Große Welt**: Die Wassermaske hat nur eine Kachel je Texel; die feinen Ufer stecken in den Boden-Chunks. Die Boden-Deko entsteht je Eimer beim Zeichnen. Seeungeheuer, Haie und Gegner rechnen nur nahe am Schiff bzw. an der Kamera. Die Welt entsteht in rund 0,6 s.
 - **Messung**: `?debug&start=…&prof` gibt jede Sekunde Bildzeit und Anteile in die Konsole aus.
 - Startzeit: rund 3–4 Sekunden für Grafik und Welt.
 
 ### 9.4 Spielstände
-Profile mit Name und Passwort, gespeichert im Browser (localStorage). Verschlüsselt mit PBKDF2-SHA256 (150 000 Runden) und AES-256-GCM. Automatisches Speichern an Feuern. Neue Felder bleiben abwärtskompatibel, alte Spielstände laden weiter.
+Profile nur mit Namen (kein Passwort), gespeichert im Browser (localStorage) als JSON. Alte, noch verschlüsselte Profile (PBKDF2-SHA256 + AES-256-GCM) öffnet man ein einziges Mal mit dem früheren Passwort; danach werden sie unverschlüsselt gespeichert. Automatisches Speichern an Feuern. Neue Felder bleiben abwärtskompatibel, alte Spielstände laden weiter: Version 5 verschiebt Perlenfleck und aufgehobene Gegenstände in die große Karte.
 
 ### 9.5 Steuerung
 | Taste | Aktion |
@@ -342,6 +373,7 @@ iPhone: Touch-Stick links, Knöpfe rechts, hochkant und quer. Am Computer Tastat
 ---
 
 ## 10. Offene Punkte und Ideen
-- Feinabstimmung auf echter GPU und iPhone (Helligkeit, Bloom, Leistung), Balancing der Bosse und Gegner.
+- Feinabstimmung auf echter GPU und iPhone (Helligkeit, Bloom, Leistung), Balancing der Bosse, Gegner und Seeungeheuer.
+- Eigene NPCs, Geschichten und Nebenaufgaben für die wilden Inseln.
 - Startzeit weiter senken (Figuren- und Kreaturen-Erzeugung machen den Großteil aus).
 - Alte Profile der früheren JS-Version werden nicht übernommen.
