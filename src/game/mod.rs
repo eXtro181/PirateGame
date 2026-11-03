@@ -17,7 +17,7 @@ pub mod ship;
 pub use crate::art::{anim_index, Art, CharSheet};
 pub use crate::gfx::{flags, modes, Frame, LightDef, SprOpt};
 pub use crate::world::view::WorldView;
-pub use crate::world::{NpcDef, Spawn, World, Zone, TS};
+pub use crate::world::{NpcDef, Spawn, World, Zone, TS, ZONES};
 pub use sw_art::terrain::Mat;
 
 use crate::ui::hud::Ui;
@@ -161,6 +161,11 @@ pub struct Game {
     pub pearl_gain_t: f32,
     pub zone_key: Zone,
     pub zone_t: f32,
+    /// wilde Insel, auf der man gerade ist, und ihr Name (Banner)
+    pub wild_cur: Option<usize>,
+    pub zone_name: &'static str,
+    /// Seekarte: Stand der aufgedeckten Felder (bei Änderung neu zeichnen)
+    pub chart_ver: u64,
     /// Schrittzähler für Fußspuren und Staub, letzte Spielerposition
     pub step_t: f32,
     pub last_pos: (f32, f32),
@@ -209,7 +214,7 @@ impl Game {
     pub fn new(world: World, view: WorldView, mut save: Save, art: &mut Art, frame: &mut Frame, opt: Options) -> Game {
         migrate(&mut save);
         let player = Player::new(&save);
-        let dock = world.docks.iter().find(|d| d.zone.def().key == save.ship_dock).or(world.docks.first()).cloned();
+        let dock = world.docks.iter().find(|d| d.key == save.ship_dock).or(world.docks.first()).cloned();
         let ship = match &dock {
             Some(d) => Ship::new(d.x, d.y, d.heading),
             None => Ship::new(0.0, 0.0, 0.0),
@@ -243,7 +248,7 @@ impl Game {
             ship,
             ghosts: vec![],
             sharks: vec![],
-            kraken: Kraken::new(294.0 * TS as f32, 126.0 * TS as f32),
+            kraken: Kraken::new(KRAKEN_HOME.0 * TS as f32, KRAKEN_HOME.1 * TS as f32),
             sea_bosses: vec![],
             sea_boss: None,
             crew_guns: CrewGuns::default(),
@@ -264,6 +269,9 @@ impl Game {
             pearl_gain_t: 0.0,
             zone_key: Zone::Kueste,
             zone_t: 0.0,
+            wild_cur: None,
+            zone_name: "Galgenstrand",
+            chart_ver: 1,
             step_t: 0.0,
             last_pos: (0.0, 0.0),
             env_cur: env::env("kueste", false),
@@ -364,8 +372,53 @@ impl Game {
             g.timers.push((0.6, Timed::Banner(z.def().name.to_string(), "Die See hat dich zurückgegeben.".into())));
         }
         g.zone_key = g.world.zone_at(g.player.a.x, g.player.a.y);
-        g.env_cur = env::env(g.zone_key.def().key, false);
+        g.wild_cur = g.world.wild_at(g.player.a.x, g.player.a.y);
+        g.zone_name = g.place_name();
+        g.env_cur = env::env(g.env_key(), false);
+        // alte Spielstände: die Seekarte um die schon erkundeten Inseln aufdecken
+        if g.save.chart.is_empty() {
+            for k in g.save.explored.clone() {
+                if let Some(z) = ZONES.iter().find(|z| z.def().key == k) {
+                    let d = z.def();
+                    chart_reveal(&mut g.save.chart, d.cx, d.cy, 4);
+                }
+            }
+        }
         g
+    }
+
+    /// Name des Ortes, an dem man ist (Gebiet oder wilde Insel)
+    pub fn place_name(&self) -> &'static str {
+        match (self.zone_key, self.wild_cur) {
+            (Zone::Wild, Some(i)) => self.world.wild[i].name,
+            (z, _) => z.def().name,
+        }
+    }
+    /// Schlüssel der Lichtstimmung: wilde Inseln nach ihrem Biom
+    pub fn env_key(&self) -> &'static str {
+        match (self.zone_key, self.wild_cur) {
+            (Zone::Wild, Some(i)) => match self.world.wild[i].r.biome {
+                sw_art::terrain::Biome::Fire => "asche",
+                sw_art::terrain::Biome::Frost => "frost",
+                sw_art::terrain::Biome::Earth => "mangroven",
+                sw_art::terrain::Biome::Coast => "kueste",
+                _ => "wild",
+            },
+            (Zone::Wild, None) => "wild",
+            (z, _) => z.def().key,
+        }
+    }
+    /// Musik eines Ortes
+    fn place_music(&self) -> &'static str {
+        match (self.zone_key, self.wild_cur) {
+            (Zone::Wild, Some(i)) => match self.world.wild[i].r.biome {
+                sw_art::terrain::Biome::Fire => "glut",
+                sw_art::terrain::Biome::Frost => "frost",
+                sw_art::terrain::Biome::Earth => "tiefe",
+                _ => "salz",
+            },
+            (z, _) => z.def().music,
+        }
     }
 
     // ---------------------------------------------------------------- Hilfen für die Akteure
@@ -713,7 +766,10 @@ impl Game {
                 _ => 0,
             }
         } else {
-            self.zone_key.def().biome as u8
+            match self.wild_cur {
+                Some(i) if self.zone_key == Zone::Wild => self.world.wild[i].r.biome as u8,
+                _ => self.zone_key.def().biome as u8,
+            }
         };
         if self.sailing || self.world.interior_at(self.player.a.x, self.player.a.y).is_none() {
             self.fx.ambient(dt, frame.view(), biome, self.sailing);
@@ -884,23 +940,36 @@ impl Game {
     fn update_zone(&mut self, dt: f32) {
         let (x, y) = if self.sailing { (self.ship.hull.x, self.ship.hull.y) } else { (self.player.a.x, self.player.a.y) };
         let z = self.world.zone_at(x, y);
+        let wild = if z == Zone::Wild { self.world.wild_at(x, y) } else { None };
         let tx = ((x / TS as f32) as i32).clamp(0, crate::world::MW - 1);
         let ty = ((y / TS as f32) as i32).clamp(0, crate::world::MH - 1);
         let ti = crate::world::idx(tx, ty);
-        let on_island = !self.sailing || (self.world.zone[ti].is_some() && self.world.shore[ti] < 12.0);
-        if z != self.zone_key {
+        let on_island = !self.sailing || (self.world.zone[ti].is_some() && self.world.shore[ti] < 12);
+        if z != self.zone_key || wild != self.wild_cur {
             self.zone_key = z;
+            self.wild_cur = wild;
+            self.zone_name = self.place_name();
             if !self.sailing || on_island {
                 self.zone_t = 4.0;
             }
-            let k = z.def().key.to_string();
+        }
+        // erkundet ist eine Insel erst, wenn man an ihr ist (nicht schon beim Vorbeisegeln weit draußen)
+        if on_island {
+            let k = match wild {
+                Some(i) => self.world.wild[i].key.clone(),
+                None => z.def().key.to_string(),
+            };
             if !self.save.explored.contains(&k) {
                 self.save.explored.push(k);
             }
         }
+        // Seekarte: was man sieht, wird aufgedeckt
+        if chart_reveal(&mut self.save.chart, tx, ty, if self.sailing { 3 } else { 2 }) {
+            self.chart_ver += 1;
+        }
         self.zone_t = (self.zone_t - dt).max(0.0);
         let inside = !self.sailing && self.world.interior_at(x, y).is_some();
-        let mut target = if inside { env::env("innen", false) } else if z == Zone::Ende { env::env(self.end.env_key(), false) } else { env::env(z.def().key, self.sailing && !on_island) };
+        let mut target = if inside { env::env("innen", false) } else if z == Zone::Ende { env::env(self.end.env_key(), false) } else { env::env(self.env_key(), self.sailing && !on_island) };
         // elementare Seegebiete: Stimmung zum Rand hin weich einblenden
         let mut sea = (0.0f32, "");
         if self.sailing && !on_island {
@@ -922,7 +991,7 @@ impl Game {
             self.sfx("crash");
         }
         self.env_cur = env::mix(&self.env_cur, &target, (dt * 1.5).min(1.0));
-        let mut mood = if self.sailing { "sea" } else { z.def().music };
+        let mut mood = if self.sailing { "sea" } else { self.place_music() };
         if self.sea_boss.is_some() {
             mood = "boss";
         }
@@ -1153,7 +1222,7 @@ impl Game {
         }
         self.spawn_all(art);
         self.ship.hp = self.ship.max_hp;
-        if let Some(d) = self.world.docks.iter().find(|d| d.zone.def().key == self.save.ship_dock).or(self.world.docks.first()).cloned() {
+        if let Some(d) = self.world.docks.iter().find(|d| d.key == self.save.ship_dock).or(self.world.docks.first()).cloned() {
             self.ship.hull.x = d.x;
             self.ship.hull.y = d.y;
             self.ship.hull.h = d.heading;
@@ -1221,7 +1290,7 @@ impl Game {
             .iter()
             .enumerate()
             .filter(|(_, f)| self.save.lit_fires.contains(&f.id))
-            .map(|(i, f)| entry(f.name, if i == from { "hier" } else { f.zone.def().name.split(' ').next().unwrap_or("") }, f.zone.def().name, i == from, Cmd::TravelTo(i)))
+            .map(|(i, f)| entry(f.name, if i == from { "hier" } else { f.isle.split(' ').next().unwrap_or("") }, f.isle, i == from, Cmd::TravelTo(i)))
             .collect();
         self.ui.open_list("Reisen", items, Cmd::RestMenu(from), true, false);
     }
@@ -1565,7 +1634,7 @@ impl Game {
         if let Some(m) = mimic {
             // die Truhe beißt zurück
             let kind: &'static str = self.edefs.iter().find(|d| d.key == m).map(|d| d.key).unwrap_or("mimicChest");
-            let sp = Spawn { kind, x, y: y + 4.0, elite: false };
+            let sp = Spawn { kind, x, y: y + 4.0, elite: false, lvl: 0 };
             let mut e = self.make_enemy(&sp, art);
             e.state = ES::Chase;
             self.enemies.push(e);
@@ -1729,7 +1798,7 @@ impl Game {
         self.ship.hull.alpha = 0.0;
         self.sfx("rise");
         self.shake(5.0);
-        self.save.ship_dock = d.zone.def().key.into();
+        self.save.ship_dock = d.key.clone();
     }
     /// Testlauf: mit dem Schiff am Ende der Welt ankommen (Seeschlacht gegen die Letzte Fahrt).
     pub fn debug_end(&mut self) {
@@ -1781,7 +1850,7 @@ impl Game {
             // Raster um den Spieler; die Mitte bleibt frei
             let cell = if i >= 14 { i + 1 } else { i };
             let (cx, cy) = ((cell % 6) as f32 - 2.5, (cell / 6) as f32 - 2.0);
-            let sp = Spawn { kind: k, x: px + cx * 130.0, y: py + cy * 105.0 + 30.0, elite: false };
+            let sp = Spawn { kind: k, x: px + cx * 130.0, y: py + cy * 105.0 + 30.0, elite: false, lvl: 0 };
             let mut e = self.make_enemy(&sp, art);
             e.state = ES::Lurk;
             e.a.fy = 1.0;
@@ -1842,7 +1911,7 @@ impl Game {
         self.ship.hull.h = d.heading;
         self.ship.hull.v = 0.0;
         self.ship.sail = 0;
-        self.save.ship_dock = d.zone.def().key.into();
+        self.save.ship_dock = d.key.clone();
         self.sfx("board");
         self.persist(true);
     }

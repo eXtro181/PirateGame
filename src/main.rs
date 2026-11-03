@@ -214,6 +214,14 @@ fn setup(world: &mut bevy::ecs::world::World) {
                 }
                 s.pearls = 50000;
             }
+            if app.params.contains_key("chart") {
+                // ganze Seekarte aufgedeckt
+                for y in 0..game::data::CHART_H {
+                    for x in 0..game::data::CHART_W {
+                        game::data::chart_set(&mut s.chart, x, y);
+                    }
+                }
+            }
             start_game(&mut app, None, s, &mut art, &mut f);
             if let Some(t) = app.params.get("wake").and_then(|v| v.parse::<f32>().ok()) {
                 // Testlauf: das Erwachen ab Sekunde t ansehen
@@ -231,6 +239,16 @@ fn setup(world: &mut bevy::ecs::world::World) {
                 if let Scene::Play(g) = &mut app.scene {
                     let p = if pos == "whirl" {
                         Some((g.world.pier_end.0, g.world.pier_end.1 + 20.0))
+                    } else if let Some(n) = pos.strip_prefix("isle").and_then(|n| n.parse::<usize>().ok()) {
+                        // Testlauf: am Anleger der n-ten wilden Insel (pos=isle12)
+                        let key = format!("w{n}");
+                        g.world.docks.iter().find(|d| d.key == key).map(|d| (d.px, d.py))
+                    } else if let Some(n) = pos.strip_prefix("mid").and_then(|n| n.parse::<usize>().ok()) {
+                        // Testlauf: mitten auf der n-ten wilden Insel (pos=mid12)
+                        g.world.wild.get(n).map(|w| {
+                            let (x, y) = crate::world::tpos(w.r.cx, w.r.cy);
+                            g.world.near_land(x, y)
+                        })
                     } else {
                         let v: Vec<f32> = pos.split(',').filter_map(|x| x.parse().ok()).collect();
                         (v.len() == 2).then(|| (v[0], v[1]))

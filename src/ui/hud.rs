@@ -11,7 +11,7 @@ use crate::game::dialog::{Choice, Cmd, Entry};
 use crate::game::input::{Act, Input};
 use crate::game::{Game, Hover};
 use crate::gfx::{Frame, SprOpt};
-use crate::world::{Zone, MH, MW, TS, ZONES};
+use crate::world::{MH, MW, TS, ZONES};
 use sw_art::terrain::Mat;
 
 pub struct Banner {
@@ -55,7 +55,13 @@ pub struct Ui {
     list_rects: Vec<[f32; 4]>,
     list_box: Option<[f32; 4]>,
     map_cache: Vec<[u8; 4]>,
+    /// hochgeladener Stand der Seekarte
+    map_ver: u64,
 }
+
+/// Seekarte: zwei Kacheln je Bildpunkt
+pub const MAP_W: i32 = MW / 2;
+pub const MAP_H: i32 = MH / 2;
 
 fn inside(r: &[f32; 4], x: f32, y: f32) -> bool {
     x >= r[0] && x <= r[0] + r[2] && y >= r[1] && y <= r[1] + r[3]
@@ -391,7 +397,7 @@ impl Game {
         }
         if self.zone_t > 0.0 && self.ui.banners.is_empty() {
             let a = self.zone_t.min(4.0 - self.zone_t).min(1.0);
-            text::draw(f, art, self.zone_key.def().name, w / 2.0, 14.0, text::a(col::BONE, a), Al::C, 2.0, true);
+            text::draw(f, art, self.zone_name, w / 2.0, 14.0, text::a(col::BONE, a), Al::C, 2.0, true);
         }
         self.ui.draw_overlays(f, art);
         if self.ui.map_open {
@@ -671,39 +677,62 @@ impl Game {
         }
     }
 
+    /// Grundbild der Seekarte (zwei Kacheln je Bildpunkt): Wasser nach Tiefe, Land nach Biom
+    /// wie auf vergilbtem Papier, Küstenlinien in Tinte.
     fn build_map(&mut self) {
-        let (cw, chh) = (MW / 2, MH / 2);
+        let (cw, chh) = (MAP_W, MAP_H);
         let mut v = vec![[0u8; 4]; (cw * chh) as usize];
+        let w = &self.world;
+        let land = |tx: i32, ty: i32| !matches!(w.g(tx, ty), Mat::Water | Mat::Abyss);
         for y in 0..chh {
             for x in 0..cw {
                 let (tx, ty) = (x * 2, y * 2);
                 let i = crate::world::idx(tx, ty);
-                let g = self.world.g(tx, ty);
-                let mut c: [u8; 4] = match g {
-                    Mat::Water => [14, 33, 64, 255],
-                    Mat::Abyss => [8, 4, 8, 255],
-                    _ => match self.world.biome[i] {
-                        sw_art::terrain::Biome::Frost => [164, 180, 186, 255],
-                        sw_art::terrain::Biome::Fire => [96, 60, 60, 255],
-                        sw_art::terrain::Biome::Earth => [46, 60, 40, 255],
-                        sw_art::terrain::Biome::End => [70, 20, 30, 255],
-                        sw_art::terrain::Biome::Wind => [70, 78, 82, 255],
-                        _ => [70, 96, 64, 255],
+                let g = w.g(tx, ty);
+                let n = sw_art::noise::h01(x, y, 17) * 10.0;
+                let mut c: [f32; 3] = match g {
+                    Mat::Water => {
+                        // Tiefe: am Ufer hell türkis, draußen tiefes Tintenblau
+                        let d = (w.shore[i] as f32 / 14.0).min(1.0);
+                        let (a, b) = ([78.0, 120.0, 128.0], [22.0, 40.0, 62.0]);
+                        [a[0] + (b[0] - a[0]) * d, a[1] + (b[1] - a[1]) * d, a[2] + (b[2] - a[2]) * d]
+                    }
+                    Mat::Abyss => [10.0, 6.0, 10.0],
+                    _ => match w.biome[i] {
+                        sw_art::terrain::Biome::Frost => [196.0, 196.0, 184.0],
+                        sw_art::terrain::Biome::Fire => [150.0, 104.0, 82.0],
+                        sw_art::terrain::Biome::Earth => [112.0, 120.0, 82.0],
+                        sw_art::terrain::Biome::End => [120.0, 54.0, 58.0],
+                        sw_art::terrain::Biome::Wind => [150.0, 146.0, 118.0],
+                        sw_art::terrain::Biome::Hub => [140.0, 112.0, 92.0],
+                        _ => [134.0, 136.0, 104.0],
                     },
                 };
-                if g == Mat::Sand {
-                    c = [140, 126, 96, 255];
+                if g != Mat::Water && g != Mat::Abyss {
+                    // Höhe dunkelt das Papier ab, Wege und Klippen in Tinte
+                    let l = w.lv(tx, ty) as f32;
+                    c = [c[0] - l * 9.0, c[1] - l * 9.0, c[2] - l * 7.0];
+                    if g == Mat::Sand {
+                        c = [176.0, 160.0, 120.0];
+                    }
+                    if w.path[i] {
+                        c = [112.0, 86.0, 62.0];
+                    }
+                    if w.cliff[i] {
+                        c = [58.0, 50.0, 44.0];
+                    }
+                    // Küstenlinie
+                    if [(2, 0), (-2, 0), (0, 2), (0, -2)].iter().any(|&(dx, dy)| !land(tx + dx, ty + dy)) {
+                        c = [40.0, 34.0, 30.0];
+                    }
+                } else if g == Mat::Water && w.shore[i] < 2 && [(2, 0), (-2, 0), (0, 2), (0, -2)].iter().any(|&(dx, dy)| land(tx + dx, ty + dy)) {
+                    c = [150.0, 186.0, 182.0];
                 }
-                if self.world.path[i] {
-                    c = [120, 100, 76, 255];
+                // Wellenschraffur auf hoher See
+                if g == Mat::Water && w.shore[i] > 8 && (x + y * 3) % 23 == 0 && (y / 6) % 3 == 0 {
+                    c = [c[0] + 14.0, c[1] + 18.0, c[2] + 22.0];
                 }
-                if self.world.cliff[i] {
-                    c = [32, 34, 40, 255];
-                }
-                if g == Mat::Water && self.world.shore[i] < 3.0 {
-                    c = [34, 80, 138, 255];
-                }
-                v[(y * cw + x) as usize] = c;
+                v[(y * cw + x) as usize] = [(c[0] + n).clamp(0.0, 255.0) as u8, (c[1] + n).clamp(0.0, 255.0) as u8, (c[2] + n * 0.8).clamp(0.0, 255.0) as u8, 255];
             }
         }
         self.ui.map_cache = v;
@@ -713,44 +742,66 @@ impl Game {
         if self.ui.map_cache.is_empty() {
             self.build_map();
         }
+        // Bild hochladen, wenn sich die aufgedeckten Felder geändert haben (Nebel über dem Rest)
+        if self.ui.map_ver != self.chart_ver {
+            self.ui.map_ver = self.chart_ver;
+            let (cw, chh) = (MAP_W, MAP_H);
+            let cell = CHART_CELL / 2;
+            let mut data = vec![0u8; (cw * chh * 4) as usize];
+            for y in 0..chh {
+                for x in 0..cw {
+                    let o = ((y * cw + x) * 4) as usize;
+                    let c = self.ui.map_cache[(y * cw + x) as usize];
+                    let seen = chart_has(&self.save.chart, x / cell, y / cell);
+                    let px = if seen {
+                        c
+                    } else {
+                        // Nebel: dunkles, fleckiges Papier, an den Rändern zu bekannten Feldern weich
+                        let near = [(-1, 0), (1, 0), (0, -1), (0, 1)].iter().any(|&(dx, dy)| chart_has(&self.save.chart, x / cell + dx, y / cell + dy));
+                        let n = sw_art::noise::h01(x / 2, y / 2, 5);
+                        let k = if near { 0.32 + n * 0.12 } else { 0.12 + n * 0.06 };
+                        let base = [52.0, 44.0, 36.0];
+                        [(base[0] * k * 2.0 + c[0] as f32 * k * 0.5) as u8, (base[1] * k * 2.0 + c[1] as f32 * k * 0.5) as u8, (base[2] * k * 2.0 + c[2] as f32 * k * 0.5) as u8, 255]
+                    };
+                    data[o..o + 4].copy_from_slice(&px);
+                }
+            }
+            f.uploads.push(crate::gfx::Upload { tex: crate::gfx::Tex::Map, layer: 0, x: 0, y: 0, w: cw as u32, h: chh as u32, data });
+        }
         let (w, h) = f.ui_size();
-        let (cw, chh) = ((MW / 2) as f32, (MH / 2) as f32);
-        let sc = ((w - 24.0) / cw).min((h - 44.0) / chh).max(0.5);
+        let (cw, chh) = (MAP_W as f32, MAP_H as f32);
+        let sc = ((w - 24.0) / cw).min((h - 44.0) / chh).max(0.2);
         let (mw, mh) = (cw * sc, chh * sc);
         let mx = (w / 2.0 - mw / 2.0).round();
         let my = (h / 2.0 - mh / 2.0).round() + 6.0;
         Ui::rect(f, 0.0, 0.0, w, h, [5, 8, 12, 220]);
         Ui::panel(f, art, mx - 4.0, my - 4.0, mw + 8.0, mh + 8.0);
-        // Zeilenweise zusammenhängende Läufe zeichnen
-        for y in 0..chh as usize {
-            let mut x0 = 0usize;
-            while x0 < cw as usize {
-                let c = self.ui.map_cache[y * cw as usize + x0];
-                let mut x1 = x0 + 1;
-                while x1 < cw as usize && self.ui.map_cache[y * cw as usize + x1] == c {
-                    x1 += 1;
-                }
-                f.ui_rect(mx + x0 as f32 * sc, my + y as f32 * sc, (x1 - x0) as f32 * sc + 0.3, sc + 0.3, c);
-                x0 = x1;
-            }
-        }
+        f.ui_map(mx, my, mw, mh, [0.0, 0.0, 1.0, 1.0], [255, 255, 255, 255]);
         let k = sc / (2.0 * TS as f32);
+        let seen_px = |s: &Self, x: f32, y: f32| chart_has(&s.save.chart, (x / TS as f32) as i32 / CHART_CELL, (y / TS as f32) as i32 / CHART_CELL);
         for z in ZONES {
             let d = z.def();
             let key = d.key.to_string();
-            let (zx, zy, rx, ry) = (d.cx as f32 * 0.5 * sc, d.cy as f32 * 0.5 * sc, d.rx as f32 * 0.5 * sc, d.ry as f32 * 0.5 * sc);
+            let (zx, zy, ry) = (d.cx as f32 * 0.5 * sc, d.cy as f32 * 0.5 * sc, d.ry as f32 * 0.5 * sc);
             if self.save.explored.contains(&key) {
                 text::tc(f, art, d.name, mx + zx, my + zy - ry - 12.0, col::BONE);
-            } else if d.sealed {
-                Ui::rect(f, mx + zx - rx - 6.0, my + zy - ry - 6.0, rx * 2.0 + 12.0, ry * 2.0 + 12.0, [5, 8, 12, 255]);
-            } else {
-                Ui::rect(f, mx + zx - rx - 3.0, my + zy - ry - 3.0, rx * 2.0 + 6.0, ry * 2.0 + 6.0, [26, 30, 38, 235]);
+            }
+        }
+        // wilde Inseln: Namen, sobald man dort war; sonst nur ein Fragezeichen, wenn aufgedeckt
+        for wi in &self.world.wild {
+            let (zx, zy) = (wi.r.cx as f32 * 0.5 * sc, wi.r.cy as f32 * 0.5 * sc);
+            if self.save.explored.contains(&wi.key) {
+                text::tc(f, art, wi.name, mx + zx, my + zy - wi.r.ry as f32 * 0.5 * sc - 10.0, col::BONE_DIM);
+            } else if seen_px(self, (wi.r.cx * TS) as f32, (wi.r.cy * TS) as f32) {
                 text::tc(f, art, "?", mx + zx, my + zy - 3.0, col::BONE_DIM);
             }
         }
         // Seegebiete der Seebosse
         for sr in crate::world::SEAS.iter() {
             let (cx, cy) = sr.center();
+            if !seen_px(self, cx, cy) {
+                continue;
+            }
             let done = self.save.sea_kings.get(sr.el).copied().unwrap_or(false);
             let c = match sr.el {
                 "fire" => [220, 110, 60, 255],
@@ -777,6 +828,5 @@ impl Game {
         }
         text::tc(f, art, "Seekarte", w / 2.0, 6.0, col::GOLD);
         text::tc(f, art, if self.input.using_touch { "Tippen zum Schließen" } else { "M schließen" }, w / 2.0, h - 12.0, col::BONE_DIM);
-        let _ = Zone::Kueste;
     }
 }

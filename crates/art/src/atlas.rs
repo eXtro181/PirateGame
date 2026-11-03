@@ -146,7 +146,9 @@ pub fn encode_px(c: &Canvas, x: i32, y: i32, nk: f32, anchor_y: Option<i32>) -> 
     let i = c.idx(x, y);
     let col = c.col[i];
     if col[3] == 0 {
-        return ([0, 0, 0, 0], [128, 128, 0, 0]);
+        // durchsichtig: Boden-Chunks tragen hier Uferabstand und Wasserart (sonst 0)
+        let e = c.emi[i];
+        return ([0, 0, 0, 0], [128, 128, e[0], e[1]]);
     }
     let n = c.normal_at(x, y, nk);
     let elev = if c.ev[i] >= 0.0 {

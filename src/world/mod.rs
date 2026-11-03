@@ -1,10 +1,14 @@
-//! Die Welt: eine Kachelkarte (32 px) mit sieben Inseln – Strand der Ertränkten, Glutwacht,
-//! die vier Königsgebiete und das Ende der Welt (nur durch den Strudel im See der Glutwacht
-//! erreichbar) – und vier Seegebiete der Seebosse (Glutsee, Eismeer, Sturmsee, Tiefengrund).
+//! Die Welt: eine Kachelkarte (32 px) mit dem Archipel in der Mitte – Galgenstrand, Glutwacht,
+//! die vier Königsgebiete –, dem Ende der Welt in der Südost-Ecke (nur durch den Strudel im See
+//! der Glutwacht erreichbar), vier Seegebieten der Seebosse weit draußen (Glutsee, Eismeer,
+//! Sturmsee, Tiefengrund) und rund siebzig wilden Inseln im weiten Ozean.
 //! Höhenebenen: Plateaus sind begehbar, ihre unteren zwei Reihen sind Basaltwände, Wege über
 //! Wände werden Treppen. Die Erzeugung ist deterministisch; Positionen sind Welt-Pixel.
 
 pub mod view;
+mod wild;
+
+pub use wild::WildIsle;
 
 use std::collections::HashMap;
 use sw_art::noise::{Noise, Rng};
@@ -12,8 +16,18 @@ use crate::game::data::shop_def;
 use sw_art::terrain::{face_px, Biome, EdgeNoise, Mat, TerrainMap, BANK_PX, FACE_ROWS, RIM_PX};
 
 pub const TS: i32 = 32;
-pub const MW: i32 = 560;
-pub const MH: i32 = 420;
+/// Kartengröße in Kacheln: zehnmal die Fläche der früheren 560 × 420
+pub const MW: i32 = 1776;
+pub const MH: i32 = 1328;
+/// Verschiebung des Archipels der früheren Karte in die Mitte der großen Karte (Kacheln)
+pub const CORE: (i32, i32) = (648, 480);
+const CX: i32 = CORE.0;
+const CY: i32 = CORE.1;
+/// Ende der Welt: 156 × 120 Kacheln in der Südost-Ecke
+pub const END_X0: i32 = MW - 156;
+pub const END_Y0: i32 = MH - 120;
+/// Verschiebung des Endes der Welt gegenüber der früheren Karte (für alte Spielstände)
+pub const END_OFF: (i32, i32) = (END_X0 - 404, END_Y0 - 300);
 const FH: i32 = FACE_ROWS;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
@@ -25,7 +39,10 @@ pub enum Zone {
     Raben,
     Mangroven,
     Ende,
+    /// eine der wilden Inseln (welche: `World::wild_at`)
+    Wild,
 }
+/// Die festen Gebiete (ohne die wilden Inseln)
 pub const ZONES: [Zone; 7] = [Zone::Kueste, Zone::Hain, Zone::Asche, Zone::Frost, Zone::Raben, Zone::Mangroven, Zone::Ende];
 
 pub struct ZoneDef {
@@ -38,22 +55,48 @@ pub struct ZoneDef {
     pub rx: i32,
     pub ry: i32,
     pub seed: u32,
-    pub sealed: bool,
 }
 impl Zone {
     pub fn def(self) -> &'static ZoneDef {
         &ZONE_DEFS[self as usize]
     }
 }
-pub static ZONE_DEFS: [ZoneDef; 7] = [
-    ZoneDef { key: "kueste", name: "Galgenstrand", biome: Biome::Coast, music: "salz", cx: 240, cy: 260, rx: 46, ry: 26, seed: 1, sealed: false },
-    ZoneDef { key: "hain", name: "Glutwacht", biome: Biome::Hub, music: "hain", cx: 240, cy: 172, rx: 36, ry: 33, seed: 2, sealed: false },
-    ZoneDef { key: "asche", name: "Aschebucht", biome: Biome::Fire, music: "glut", cx: 348, cy: 160, rx: 42, ry: 30, seed: 3, sealed: false },
-    ZoneDef { key: "frost", name: "Frostgrotte", biome: Biome::Frost, music: "frost", cx: 136, cy: 118, rx: 44, ry: 32, seed: 4, sealed: false },
-    ZoneDef { key: "raben", name: "Hafen Rabenwacht", biome: Biome::Wind, music: "sturm", cx: 136, cy: 236, rx: 44, ry: 32, seed: 5, sealed: false },
-    ZoneDef { key: "mangroven", name: "Fluchmangroven", biome: Biome::Earth, music: "tiefe", cx: 348, cy: 256, rx: 42, ry: 30, seed: 6, sealed: false },
-    ZoneDef { key: "ende", name: "Ende der Welt", biome: Biome::End, music: "ende", cx: 482, cy: 362, rx: 60, ry: 45, seed: 7, sealed: true },
+pub static ZONE_DEFS: [ZoneDef; 8] = [
+    ZoneDef { key: "kueste", name: "Galgenstrand", biome: Biome::Coast, music: "salz", cx: 240 + CX, cy: 260 + CY, rx: 46, ry: 26, seed: 1 },
+    ZoneDef { key: "hain", name: "Glutwacht", biome: Biome::Hub, music: "hain", cx: 240 + CX, cy: 172 + CY, rx: 36, ry: 33, seed: 2 },
+    ZoneDef { key: "asche", name: "Aschebucht", biome: Biome::Fire, music: "glut", cx: 348 + CX, cy: 160 + CY, rx: 42, ry: 30, seed: 3 },
+    ZoneDef { key: "frost", name: "Frostgrotte", biome: Biome::Frost, music: "frost", cx: 136 + CX, cy: 118 + CY, rx: 44, ry: 32, seed: 4 },
+    ZoneDef { key: "raben", name: "Hafen Rabenwacht", biome: Biome::Wind, music: "sturm", cx: 136 + CX, cy: 236 + CY, rx: 44, ry: 32, seed: 5 },
+    ZoneDef { key: "mangroven", name: "Fluchmangroven", biome: Biome::Earth, music: "tiefe", cx: 348 + CX, cy: 256 + CY, rx: 42, ry: 30, seed: 6 },
+    ZoneDef { key: "ende", name: "Ende der Welt", biome: Biome::End, music: "ende", cx: END_X0 + 78, cy: END_Y0 + 62, rx: 60, ry: 45, seed: 7 },
+    ZoneDef { key: "wild", name: "Wilde Inseln", biome: Biome::Wind, music: "salz", cx: MW / 2, cy: MH / 2, rx: 1, ry: 1, seed: 8 },
 ];
+
+/// Ein Landgebiet für die Erzeugung (Inselform, Hochland, Bewuchs): Kerninsel oder wilde Insel.
+#[derive(Clone, Copy, Debug)]
+pub struct Region {
+    pub zone: Zone,
+    pub biome: Biome,
+    pub cx: i32,
+    pub cy: i32,
+    pub rx: i32,
+    pub ry: i32,
+    pub seed: u32,
+    /// wie kräftig das Hochland ansteigt (Startstrand sanft)
+    pub steep: f32,
+}
+impl Zone {
+    pub fn region(self) -> Region {
+        let d = self.def();
+        Region { zone: self, biome: d.biome, cx: d.cx, cy: d.cy, rx: d.rx, ry: d.ry, seed: d.seed, steep: if self == Zone::Kueste { 0.6 } else { 1.0 } }
+    }
+}
+impl Region {
+    /// Kachelrahmen samt Uferstreifen
+    pub fn bbox(&self) -> (i32, i32, i32, i32) {
+        (self.cx - self.rx - 8, self.cy - self.ry - 8, self.cx + self.rx + 8, self.cy + self.ry + 8)
+    }
+}
 
 pub fn fire_name(id: &str) -> &'static str {
     match id {
@@ -80,12 +123,16 @@ pub struct SeaRegion {
     pub cy: i32,
     pub r: i32,
 }
+/// Weit draußen in den vier Himmelsrichtungen: Eismeer im Norden, Glutsee im Osten,
+/// Sturmsee im Westen, Tiefengrund im Süden.
 pub static SEAS: [SeaRegion; 4] = [
-    SeaRegion { el: "fire", name: "Glutsee", cx: 478, cy: 196, r: 36 },
-    SeaRegion { el: "ice", name: "Eismeer", cx: 236, cy: 36, r: 30 },
-    SeaRegion { el: "wind", name: "Sturmsee", cx: 46, cy: 352, r: 38 },
-    SeaRegion { el: "earth", name: "Tiefengrund", cx: 50, cy: 52, r: 38 },
+    SeaRegion { el: "fire", name: "Glutsee", cx: 1508, cy: 640, r: 72 },
+    SeaRegion { el: "ice", name: "Eismeer", cx: 888, cy: 176, r: 72 },
+    SeaRegion { el: "wind", name: "Sturmsee", cx: 268, cy: 690, r: 72 },
+    SeaRegion { el: "earth", name: "Tiefengrund", cx: 872, cy: 1150, r: 72 },
 ];
+/// Kampfradius der Seebosse (Kacheln): das Seegebiet ist größer als ihr Revier.
+pub const SEA_ARENA: i32 = 40;
 impl SeaRegion {
     pub fn center(&self) -> (f32, f32) {
         ((self.cx * TS + TS / 2) as f32, (self.cy * TS + TS / 2) as f32)
@@ -104,34 +151,34 @@ fn flora(b: Biome) -> Flora {
         Biome::Coast => Flora {
             grove: &[("deadTree", 1)],
             bush: &["bushSwamp", "reedClump", "bushSwamp"],
-            deco: &["tuftDark", "tuftDark", "bones", "skull", "pebbles", "shell", "tallgrass", "bones"],
+            deco: &["tuftDark", "tuftDark", "tuftDark", "tuftDark", "tuftDark", "tallgrass", "tallgrass", "tallgrass", "pebbles", "stones", "twigs", "roots", "bones", "skull"],
         },
         Biome::Hub => Flora {
             grove: &[("deadTree", 4), ("emberTree0", 2)],
             bush: &["lanternPole", "bushRed", "rock1"],
-            deco: &["ember", "ember", "skull", "bones", "pebbles", "tuftDark", "tuftDark", "lanternStalk"],
+            deco: &["tuftDark", "tuftDark", "tuftDark", "pebbles", "pebbles", "stones", "stones", "twigs", "ember", "ember", "skull", "bones", "lanternStalk"],
         },
         Biome::Fire => Flora {
             grove: &[("berryTree0", 3), ("berryTree1", 1), ("emberTree0", 1), ("deadTree", 2)],
             bush: &["bushViolet", "bushRed", "lanternPole", "lanternPole"],
-            deco: &["lanternStalk", "lanternStalk", "lanternStalk", "ember", "skull", "pebbles", "flowersR"],
+            deco: &["tuftDark", "tuftDark", "pebbles", "pebbles", "stones", "stones", "twigs", "ember", "ember", "flowersR", "skull", "lanternStalk"],
         },
         Biome::Frost => Flora {
             grove: &[("snowTree0", 3), ("snowTree1", 1), ("tealTree0", 1), ("deadTree", 1)],
             bush: &["bushSnow", "bushTeal", "crystalBlue", "crystalBlue"],
-            deco: &["snowtuft", "snowtuft", "pebbles", "flowersB", "bones"],
+            deco: &["snowtuft", "snowtuft", "snowtuft", "snowtuft", "snowtuft", "snowtuft", "pebbles", "stones", "flowersB", "crystalS", "twigs"],
         },
         Biome::Wind => Flora {
             grove: &[("greenTree0", 2), ("tealTree0", 2), ("blueTree0", 1), ("violetTree0", 1)],
             bush: &["bushGreen", "bushTeal", "bushBlue", "fern"],
-            deco: &["flowersW", "tuft", "tuftDark", "pebbles", "tallgrass"],
+            deco: &["tuft", "tuft", "tuft", "tuftDark", "tuftDark", "tallgrass", "tallgrass", "flowersW", "flowersY", "clover", "fernS", "leaves", "stones", "pebbles"],
         },
         Biome::Earth => Flora {
             grove: &[("swampTree", 4), ("greenTree0", 1), ("tealTree1", 1)],
             bush: &["bigLeaf", "banana", "bushSwamp", "fern", "reedClump", "cattail"],
-            deco: &["tuftDark", "tuftDark", "reeds", "lily", "mushroomR", "flowersR"],
+            deco: &["tuftDark", "tuftDark", "tuftDark", "fernS", "fernS", "mushroomR", "mushroomB", "roots", "leaves", "leaves", "reeds", "flowersR"],
         },
-        Biome::End => Flora { grove: &[("deadTree", 2), ("emberTree0", 1)], bush: &["lanternPole", "bushRed"], deco: &["ember", "skull", "lanternStalk"] },
+        Biome::End => Flora { grove: &[("deadTree", 2), ("emberTree0", 1)], bush: &["lanternPole", "bushRed"], deco: &["ember", "skull", "bones", "stones", "pebbles", "pebbles", "lanternStalk"] },
     }
 }
 
@@ -164,6 +211,8 @@ pub struct Fire {
     pub prop: usize,
     pub zone: Zone,
     pub name: &'static str,
+    /// Name der Insel (für die Reiseliste)
+    pub isle: &'static str,
 }
 #[derive(Clone, Debug)]
 pub struct Spawn {
@@ -171,6 +220,8 @@ pub struct Spawn {
     pub x: f32,
     pub y: f32,
     pub elite: bool,
+    /// Gefahrenstufe (wilde Inseln weit draußen): mehr Leben, Schaden und Perlen
+    pub lvl: u8,
 }
 #[derive(Clone, Debug)]
 pub struct NpcDef {
@@ -204,6 +255,8 @@ pub struct Door {
 #[derive(Clone, Debug)]
 pub struct Dock {
     pub zone: Zone,
+    /// Schlüssel für den Liegeplatz im Spielstand (Gebiet bzw. „w12“ für wilde Inseln)
+    pub key: String,
     pub x: f32,
     pub y: f32,
     pub px: f32,
@@ -288,7 +341,10 @@ pub struct World {
     pub face: Vec<i8>,
     pub stairs: Vec<bool>,
     pub path: Vec<bool>,
-    pub shore: Vec<f32>,
+    /// Abstand zum Land in Kacheln (Wasser; 0 = Land, höchstens 31)
+    pub shore: Vec<u8>,
+    /// die wilden Inseln im weiten Ozean
+    pub wild: Vec<WildIsle>,
     pub props: Vec<PropInst>,
     pub deco: Vec<Deco>,
     pub fires: Vec<Fire>,
@@ -332,6 +388,8 @@ pub struct World {
     /// Häuser mit rauchendem Schornstein (Indizes in `props`)
     pub chimneys: Vec<usize>,
     cur: Zone,
+    /// Biom des gerade erzeugten Gebiets (Pflanzentabellen)
+    cur_biome: Biome,
     nz: Noise,
     info: Box<dyn Fn(&str) -> Option<PropInfo> + Send + Sync>,
 }
@@ -358,7 +416,8 @@ impl World {
             face: vec![-1; n],
             stairs: vec![false; n],
             path: vec![false; n],
-            shore: vec![99.0; n],
+            shore: vec![31; n],
+            wild: vec![],
             props: vec![],
             deco: vec![],
             fires: vec![],
@@ -391,6 +450,7 @@ impl World {
             wake_coffin: (0.0, 0.0),
             chimneys: vec![],
             cur: Zone::Kueste,
+            cur_biome: Biome::Coast,
             nz: Noise::new(4242),
             info,
         };
@@ -416,12 +476,28 @@ impl World {
             0
         }
     }
+    /// Gebiet an einem Weltpunkt: das Ende der Welt nur in seinem Meer, sonst die Insel, der die
+    /// Kachel gehört, auf offener See das nächste Kerngebiet.
     pub fn zone_at(&self, x: f32, y: f32) -> Zone {
+        if self.end_rect.2 > self.end_rect.0 && self.in_end(x, y) {
+            return Zone::Ende;
+        }
+        let (ttx, tty) = ((x / TS as f32).floor() as i32, (y / TS as f32).floor() as i32);
+        if inb(ttx, tty) {
+            if let Some(z) = self.zone[idx(ttx, tty)] {
+                if z != Zone::Ende {
+                    return z;
+                }
+            }
+        }
         let tx = x / TS as f32;
         let ty = y / TS as f32;
         let mut best = Zone::Kueste;
         let mut bd = f32::MAX;
         for z in ZONES {
+            if z == Zone::Ende {
+                continue;
+            }
             let d = z.def();
             let v = (((tx - d.cx as f32) / d.rx as f32).powi(2) + ((ty - d.cy as f32) / d.ry as f32).powi(2)).sqrt();
             if v < bd {
@@ -431,19 +507,33 @@ impl World {
         }
         best
     }
-    /// Geglättetes Höhenfeld aus den Kachelebenen (3×3 weichgezeichnet).
+    /// Die wilde Insel an einem Weltpunkt (samt Uferstreifen).
+    pub fn wild_at(&self, x: f32, y: f32) -> Option<usize> {
+        let (tx, ty) = ((x / TS as f32).floor() as i32, (y / TS as f32).floor() as i32);
+        if !inb(tx, ty) || self.zone[idx(tx, ty)] != Some(Zone::Wild) {
+            return None;
+        }
+        self.wild.iter().position(|w| {
+            let (x0, y0, x1, y1) = w.r.bbox();
+            tx >= x0 && tx <= x1 && ty >= y0 && ty <= y1
+        })
+    }
+    /// Geglättetes Höhenfeld aus den Kachelebenen (3×3 weichgezeichnet, getrennt in x und y).
     fn compute_field(&mut self) {
-        let mut hb = vec![0.5f32; (MW * MH) as usize];
+        let n = (MW * MH) as usize;
+        let mut hx = vec![0.0f32; n];
         for y in 0..MH {
+            let row = (y * MW) as usize;
             for x in 0..MW {
-                let mut s = 0.0;
-                let mut wsum = 0.0;
-                for (ox, oy, w) in [(0, 0, 4.0f32), (1, 0, 2.0), (-1, 0, 2.0), (0, 1, 2.0), (0, -1, 2.0), (1, 1, 1.0), (-1, 1, 1.0), (1, -1, 1.0), (-1, -1, 1.0)] {
-                    let (nx, ny) = ((x + ox).clamp(0, MW - 1), (y + oy).clamp(0, MH - 1));
-                    s += (self.level[idx(nx, ny)] as f32 + 0.5) * w;
-                    wsum += w;
-                }
-                hb[idx(x, y)] = s / wsum;
+                let l = |xx: i32| self.level[row + xx.clamp(0, MW - 1) as usize] as f32 + 0.5;
+                hx[row + x as usize] = (l(x - 1) + l(x) * 2.0 + l(x + 1)) * 0.25;
+            }
+        }
+        let mut hb = vec![0.5f32; n];
+        for y in 0..MH {
+            let (ra, rb, rc) = (((y - 1).max(0) * MW) as usize, (y * MW) as usize, ((y + 1).min(MH - 1) * MW) as usize);
+            for x in 0..MW as usize {
+                hb[rb + x] = (hx[ra + x] + hx[rb + x] * 2.0 + hx[rc + x]) * 0.25;
             }
         }
         self.hb = hb;
@@ -489,13 +579,26 @@ impl World {
 
     // ------------------------------------------------------------ Erzeugung
     fn generate(&mut self) {
+        let t0 = bevy::platform::time::Instant::now();
+        let lap = |what: &str, t: &mut bevy::platform::time::Instant| {
+            bevy::log::info!("Welt: {what} {:.0} ms", t.elapsed().as_secs_f64() * 1000.0);
+            *t = bevy::platform::time::Instant::now();
+        };
+        let mut t = t0;
         for z in ZONES {
             if z != Zone::Ende {
-                self.island(z);
+                self.island(z.region());
             }
         }
+        self.plan_wild();
+        for k in 0..self.wild.len() {
+            let r = self.wild[k].r;
+            self.island(r);
+        }
+        lap("Inseln", &mut t);
         for z in ZONES {
             self.cur = z;
+            self.cur_biome = z.def().biome;
             let mut rng = Rng::new(z.def().seed as u64 * 977);
             match z {
                 Zone::Kueste => self.layout_coast(&mut rng),
@@ -505,22 +608,44 @@ impl World {
                 Zone::Raben => self.layout_wind(&mut rng),
                 Zone::Mangroven => self.layout_earth(&mut rng),
                 Zone::Ende => self.layout_end(&mut rng),
+                Zone::Wild => {}
             }
         }
-        for z in [Zone::Kueste, Zone::Asche, Zone::Frost, Zone::Raben, Zone::Mangroven] {
-            self.highlands(z);
+        for k in 0..self.wild.len() {
+            self.cur = Zone::Wild;
+            self.cur_biome = self.wild[k].r.biome;
+            self.layout_wild(k);
         }
+        lap("Gebiete", &mut t);
+        for z in [Zone::Kueste, Zone::Asche, Zone::Frost, Zone::Raben, Zone::Mangroven] {
+            self.highlands(z.region());
+        }
+        for k in 0..self.wild.len() {
+            let r = self.wild[k].r;
+            self.highlands(r);
+        }
+        lap("Hochland", &mut t);
         self.compute_faces();
         self.auto_stairs();
         self.compute_field();
         self.place_waterfalls();
         self.compute_field();
         self.compute_shore();
+        lap("Hänge und Ufer", &mut t);
         for z in ZONES {
             self.cur = z;
+            self.cur_biome = z.def().biome;
             let mut rng = Rng::new(z.def().seed as u64 * 131);
-            self.scatter(z, &mut rng);
+            self.scatter(z.region(), &mut rng);
         }
+        for k in 0..self.wild.len() {
+            self.cur = Zone::Wild;
+            let r = self.wild[k].r;
+            self.cur_biome = r.biome;
+            let mut rng = Rng::new(r.seed as u64 * 131 + 5);
+            self.scatter(r, &mut rng);
+        }
+        lap("Bewuchs", &mut t);
         self.settle_on_cliffs();
         self.chimneys = (0..self.props.len()).filter(|&i| {
             let k = &self.props[i].kind;
@@ -528,7 +653,8 @@ impl World {
         }).collect();
         let mut rng = Rng::new(9191);
         self.sea_props(&mut rng);
-        let rt = |v: &[(i32, i32)]| v.iter().map(|&(x, y)| ((x * TS) as f32, (y * TS) as f32)).collect::<Vec<_>>();
+        lap("See", &mut t);
+        let rt = |v: &[(i32, i32)]| v.iter().map(|&(x, y)| (((x + CX) * TS) as f32, ((y + CY) * TS) as f32)).collect::<Vec<_>>();
         self.ghost_routes = vec![
             rt(&[(294, 210), (306, 220), (286, 228), (276, 210)]),
             rt(&[(184, 156), (192, 140), (198, 200)]),
@@ -536,11 +662,14 @@ impl World {
             rt(&[(188, 270), (204, 286), (176, 284)]),
             rt(&[(180, 180), (172, 200), (192, 212)]),
         ];
+        self.ghost_routes.extend(self.outer_routes());
+        bevy::log::info!("Welt: {} wilde Inseln, gesamt {:.0} ms", self.wild.len(), t0.elapsed().as_secs_f64() * 1000.0);
     }
 
-    fn island(&mut self, z: Zone) {
-        let d = z.def();
-        let (x0, y0, x1, y1) = (d.cx - d.rx - 8, d.cy - d.ry - 8, d.cx + d.rx + 8, d.cy + d.ry + 8);
+    fn island(&mut self, r: Region) {
+        let z = r.zone;
+        let d = r;
+        let (x0, y0, x1, y1) = r.bbox();
         let base = match d.biome {
             Biome::Frost => Mat::Snow,
             Biome::Fire | Biome::End => Mat::Hex,
@@ -606,10 +735,14 @@ impl World {
         let mut q: std::collections::VecDeque<usize> = std::collections::VecDeque::new();
         for i in 0..n {
             if self.ground[i] != Mat::Water {
-                self.shore[i] = 0.0;
-                q.push_back(i);
+                self.shore[i] = 0;
+                // nur Ufer brauchen die Breitensuche (Inneres der Inseln hat nur Land als Nachbarn)
+                let (x, y) = ((i as i32) % MW, (i as i32) / MW);
+                if [(1, 0), (-1, 0), (0, 1), (0, -1)].iter().any(|&(dx, dy)| inb(x + dx, y + dy) && self.ground[idx(x + dx, y + dy)] == Mat::Water) {
+                    q.push_back(i);
+                }
             } else {
-                self.shore[i] = 99.0;
+                self.shore[i] = 31;
             }
         }
         while let Some(i) = q.pop_front() {
@@ -620,11 +753,11 @@ impl World {
                     continue;
                 }
                 let j = idx(nx, ny);
-                if self.shore[j] <= self.shore[i] + 1.0 {
+                if self.shore[j] <= self.shore[i] + 1 {
                     continue;
                 }
-                self.shore[j] = self.shore[i] + 1.0;
-                if self.shore[j] < 30.0 {
+                self.shore[j] = self.shore[i] + 1;
+                if self.shore[j] < 30 {
                     q.push_back(j);
                 }
             }
@@ -849,6 +982,10 @@ impl World {
         !self.blocked(x, y, (r * 18 + 6) as f32, false, None)
     }
     fn fire(&mut self, id: &str, tx: i32, ty: i32) {
+        let zone = self.zone_at(tpos(tx, ty).0, tpos(tx, ty).1);
+        self.fire_named(id, tx, ty, fire_name(id), zone.def().name);
+    }
+    fn fire_named(&mut self, id: &str, tx: i32, ty: i32, name: &'static str, isle: &'static str) {
         let (x, y) = tpos(tx, ty);
         let pi = self.prop_x("saberfire", x, y, |p| {
             p.fire_id = Some(id.to_string());
@@ -858,11 +995,11 @@ impl World {
         let mat = if cur == Zone::Hain { Mat::Marble } else { Mat::Cobble };
         self.paint(tx as f32, ty as f32 + 1.0, mat, 1, true);
         let zone = self.zone_at(x, y);
-        self.fires.push(Fire { id: id.into(), x, y, prop: pi, zone, name: fire_name(id) });
+        self.fires.push(Fire { id: id.into(), x, y, prop: pi, zone, name, isle });
     }
     fn spawn(&mut self, kind: &'static str, tx: i32, ty: i32, elite: bool) {
         let (x, y) = tpos(tx, ty);
-        self.spawns.push(Spawn { kind, x, y, elite });
+        self.spawns.push(Spawn { kind, x, y, elite, lvl: 0 });
     }
     #[allow(clippy::too_many_arguments)]
     fn npc(&mut self, id: &'static str, tx: i32, ty: i32, preset: &'static str, name: &'static str, dialog: &'static str, sit: bool, crew: Option<&'static str>) {
@@ -888,6 +1025,11 @@ impl World {
         self.chests.push(pi);
     }
     fn dock(&mut self, zone: Zone, tx: i32, ty: i32, dx: i32, dy: i32) {
+        let _ = self.dock_k(zone, zone.def().key.to_string(), tx, ty, dx, dy);
+    }
+    /// Anleger: von (tx, ty) in Richtung (dx, dy) bis zum Wasser, dort Steg und Liegeplatz.
+    /// Gibt die erste Wasserkachel zurück (Anfang des Stegs).
+    fn dock_k(&mut self, zone: Zone, key: String, tx: i32, ty: i32, dx: i32, dy: i32) -> (i32, i32) {
         let (mut x, mut y, mut n) = (tx, ty, 0);
         while self.g(x, y) != Mat::Water && n < 40 {
             x += dx;
@@ -916,12 +1058,14 @@ impl World {
         let (ex, ey) = (x + dx * 6, y + dy * 6);
         self.docks.push(Dock {
             zone,
+            key,
             x: ((ex + dx * 2) * TS + TS / 2) as f32,
             y: ((ey + dy * 2) * TS + TS / 2) as f32,
             px: ((x + dx * 5) * TS + TS / 2) as f32,
             py: ((y + dy * 5) * TS + TS / 2) as f32,
             heading: (dx as f32).atan2(-dy as f32),
         });
+        (x, y)
     }
     fn arena(&mut self, key: &'static str, cx: i32, cy: i32, r: i32, g: Mat, dir: (i32, i32)) {
         self.plaza(cx, cy, r, (r as f32 * 0.75).round() as i32, g, Some(0));
@@ -966,7 +1110,7 @@ impl World {
     fn grove(&mut self, cx: i32, cy: i32, r: f32, rng: &mut Rng, mut n: i32, table: Option<&[(&'static str, u32)]>) {
         let tbl: Vec<(&'static str, u32)> = match table {
             Some(t) => t.to_vec(),
-            None => flora(self.cur.def().biome).grove.to_vec(),
+            None => flora(self.cur_biome).grove.to_vec(),
         };
         let sum: u32 = tbl.iter().map(|t| t.1).sum();
         let mut i = 0;
@@ -1159,7 +1303,7 @@ impl World {
         // Laden: Tür vor der Taverne, Innenraum weit draußen im Nordosten
         let (dx, dy) = tpos(sx, sy);
         let (door_x, door_y) = (dx, dy + 14.0);
-        let (ix0, iy0) = (476 + k as i32 * 16, 6);
+        let (ix0, iy0) = (MW - 84 + k as i32 * 16, 6);
         self.interior(key, k, ix0, iy0, merchant);
         let (ex, ey) = tpos(ix0 + 6, iy0 + 9);
         let d = shop_def(key);
@@ -1182,7 +1326,7 @@ impl World {
     fn town_shop(&mut self, key: &'static str, k: usize, hx: i32, hy: i32, merchant: &'static str) {
         let (dx, dy) = tpos(hx, hy);
         let (door_x, door_y) = (dx, dy + 14.0);
-        let (ix0, iy0) = (476 + k as i32 * 16, 6);
+        let (ix0, iy0) = (MW - 84 + k as i32 * 16, 6);
         self.interior(key, k, ix0, iy0, merchant);
         let (ex, ey) = tpos(ix0 + 6, iy0 + 9);
         let d = shop_def(key);
@@ -1590,9 +1734,10 @@ impl World {
     /// Die Formen sind groß und rund (Öffnen und Schließen je Ebene), Siedlungen, Feuer, Figuren,
     /// Arenen und Tore liegen auf ebenen Flächen in ihrer Umgebungshöhe, Anleger auf Meereshöhe.
     /// Nachbarn unterscheiden sich höchstens um eine Ebene.
-    fn highlands(&mut self, z: Zone) {
-        let d = z.def();
-        let (x0, y0, x1, y1) = (d.cx - d.rx - 8, d.cy - d.ry - 8, d.cx + d.rx + 8, d.cy + d.ry + 8);
+    fn highlands(&mut self, r: Region) {
+        let z = r.zone;
+        let d = r;
+        let (x0, y0, x1, y1) = r.bbox();
         let (w, h) = (x1 - x0 + 1, y1 - y0 + 1);
         let n = (w * h) as usize;
         let id = |x: i32, y: i32| ((y - y0) * w + (x - x0)) as usize;
@@ -1705,7 +1850,7 @@ impl World {
                 let core = (1.0 - (dx * dx + dy * dy).sqrt()).max(0.0);
                 let nz = self.nz.fbm(x as f32 * 0.03 + d.seed as f32 * 3.1, y as f32 * 0.03 + 9.0, 3);
                 // der Startstrand bleibt sanft, die anderen Inseln steigen kräftiger an
-                let zk = if z == Zone::Kueste { 0.6 } else { 1.0 };
+                let zk = d.steep;
                 let mut hgt = (core * 2.4 + nz * 1.9 - 0.2) * zk;
                 for &(px, py, r) in &peaks {
                     let dd = (x as f32 - px).powi(2) + (y as f32 - py).powi(2);
@@ -1944,9 +2089,9 @@ impl World {
                 if !self.stairs[i] || !self.cliff[i] {
                     continue;
                 }
-                // Naturhänge sind tiefer als die Mauern: Weg reicht zwei Reihen höher
-                let up = if self.biome[i] == Biome::Hub { -1 } else { -2 };
-                for oy in [up, -1, 1] {
+                // Naturhänge sind tiefer als die Mauern (168 px): der Weg reicht drei Reihen höher
+                let up = if self.biome[i] == Biome::Hub { -1 } else { -3 };
+                for oy in (up..=-1).chain([1]) {
                     if !inb(x, y + oy) {
                         continue;
                     }
@@ -2039,6 +2184,10 @@ impl World {
         }
         self.px_walk(x as i32, y as i32).1
     }
+    /// Nächster Platz, an dem eine Figur stehen kann (für Testläufe)
+    pub fn near_land(&self, x: f32, y: f32) -> (f32, f32) {
+        self.land_spot(x, y).unwrap_or((x, y))
+    }
     /// None, wenn der Platz passt; sonst der nächste passende Platz (Spirale, bis ~9 Kacheln).
     fn land_spot(&self, x: f32, y: f32) -> Option<(f32, f32)> {
         if self.stand_ok(x, y) {
@@ -2091,7 +2240,7 @@ impl World {
     fn sea_props(&mut self, rng: &mut Rng) {
         let docks: Vec<(f32, f32)> = self.docks.iter().map(|d| (d.x, d.y)).collect();
         let near_dock = |x: f32, y: f32| docks.iter().any(|d| (d.0 - x).hypot(d.1 - y) < 12.0 * TS as f32);
-        let open = |w: &World, tx: i32, ty: i32, m: f32| -> bool { inb(tx, ty) && w.g(tx, ty) == Mat::Water && w.shore[idx(tx, ty)] >= m };
+        let open = |w: &World, tx: i32, ty: i32, m: f32| -> bool { inb(tx, ty) && w.g(tx, ty) == Mat::Water && w.shore[idx(tx, ty)] as f32 >= m };
         let place = |w: &mut World, kind: &str, x: f32, y: f32, collide: bool, flip: bool| {
             w.prop_x(kind, x, y, |p| {
                 p.sea = true;
@@ -2110,7 +2259,9 @@ impl World {
             let sum: u32 = table.iter().map(|t| t.1).sum();
             let mut placed = 0;
             let mut tries = 0;
-            while placed < 30 && tries < 600 {
+            // so dicht wie früher, auf die größere Fläche gerechnet
+            let want = (30.0 * (sr.r as f32 / 34.0).powi(2)) as usize;
+            while placed < want && tries < want * 20 {
                 tries += 1;
                 let a = rng.f() * std::f32::consts::TAU;
                 let d = (0.32 + rng.f() * 0.68) * sr.r as f32;
@@ -2151,7 +2302,7 @@ impl World {
                     tx += 3;
                     continue;
                 }
-                let sh = self.shore[idx(tx, ty)];
+                let sh = self.shore[idx(tx, ty)] as f32;
                 let r = rng.f();
                 let flip = rng.chance(0.5);
                 if r < 0.012 && sh < 14.0 {
@@ -2381,7 +2532,7 @@ impl World {
     /// Basaltsäulen es vom übrigen Meer (man erreicht es nur durch den Strudel). In der Mitte liegt
     /// die versunkene Insel, die nach der Seeschlacht gegen den Geisterkapitän aufsteigt.
     fn layout_end(&mut self, rng: &mut Rng) {
-        let (x0, y0, x1, y1) = (404, 300, MW - 1, MH - 1);
+        let (x0, y0, x1, y1) = (END_X0, END_Y0, MW - 1, MH - 1);
         self.end_rect = (x0, y0, x1, y1);
         let edge = 6;
         for y in y0..=y1 {
@@ -2411,7 +2562,7 @@ impl World {
             k += 1;
         }
         // Kampfplatz am Meeresgrund (Malakor), Säbelfeuer erscheint nach dem Sieg
-        let (cx, cy) = (486, 360);
+        let (cx, cy) = (END_X0 + 82, END_Y0 + 60);
         let p0 = self.props.len();
         self.fire("ende", cx - 12, cy + 4);
         let mut a = 0.0f32;
@@ -2545,51 +2696,34 @@ impl World {
         tx >= x0 && tx <= x1 && ty >= y0 && ty <= y1
     }
 
-    fn scatter(&mut self, z: Zone, rng: &mut Rng) {
-        let d = z.def();
+    /// Bewuchs eines Gebiets: Bäume, Büsche und Felsen (mit Kollision). Die kleine Boden-Deko
+    /// entsteht erst beim Zeichnen je 256-px-Eimer (`deco_bucket`), damit die große Welt weder
+    /// Speicher noch Ladezeit dafür braucht.
+    fn scatter(&mut self, r: Region, rng: &mut Rng) {
+        let z = r.zone;
+        let d = r;
         let fl = flora(d.biome);
-        for ty in d.cy - d.ry - 8..=d.cy + d.ry + 8 {
-            for tx in d.cx - d.rx - 8..=d.cx + d.rx + 8 {
+        let (x0, y0, x1, y1) = r.bbox();
+        // nur Feuer, Figuren und Gegner dieses Gebiets prüfen (nicht die ganze Welt je Kachel)
+        let (bx0, by0, bx1, by1) = ((x0 * TS) as f32 - 120.0, (y0 * TS) as f32 - 120.0, ((x1 + 1) * TS) as f32 + 120.0, ((y1 + 1) * TS) as f32 + 120.0);
+        let inr = |x: f32, y: f32| x >= bx0 && x <= bx1 && y >= by0 && y <= by1;
+        let fires: Vec<(f32, f32)> = self.fires.iter().filter(|f| inr(f.x, f.y)).map(|f| (f.x, f.y)).collect();
+        let npcs: Vec<(f32, f32)> = self.npcs.iter().filter(|n| inr(n.x, n.y)).map(|n| (n.x, n.y)).collect();
+        let spawns: Vec<(f32, f32)> = self.spawns.iter().filter(|s| inr(s.x, s.y)).map(|s| (s.x, s.y)).collect();
+        for ty in y0..=y1 {
+            for tx in x0..=x1 {
                 if !inb(tx, ty) || self.zone[idx(tx, ty)] != Some(z) {
                     continue;
                 }
                 let g = self.g(tx, ty);
                 let i = idx(tx, ty);
-                if g == Mat::Water {
-                    if self.shore[i] <= 1.0 && rng.chance(if d.biome == Biome::Earth { 0.25 } else { 0.05 }) {
-                        let k = *rng.pick(&["lily", "reeds"]);
-                        self.deco.push(Deco { k, x: (tx * TS) as f32 + rng.int(4, 28) as f32, y: (ty * TS) as f32 + rng.int(6, 26) as f32, flip: rng.chance(0.5) });
-                    }
-                    continue;
-                }
-                if self.cliff[i] || g == Mat::Abyss {
-                    continue;
-                }
-                let dens = 0.3 + self.nz.fbm(tx as f32 * 0.15 + d.seed as f32, ty as f32 * 0.15, 2).max(0.0) * 0.6 + if g == Mat::Meadow { 0.35 } else { 0.0 };
-                let nd = if rng.f() < dens { if rng.f() < 0.4 { 2 } else { 1 } } else { 0 };
-                for _ in 0..nd {
-                    let mut dk = *rng.pick(fl.deco);
-                    if self.path[i] && g != Mat::Meadow {
-                        if rng.f() < 0.8 {
-                            continue;
-                        }
-                        dk = *rng.pick(&["pebbles", "tuft"]);
-                    }
-                    if g == Mat::Meadow && rng.chance(0.5) {
-                        dk = *rng.pick(&["flowersW", "flowersY", "flowersP", "flowersB"]);
-                    }
-                    if matches!(g, Mat::Marble | Mat::Plank | Mat::Cobble) && !dk.starts_with("pebbles") {
-                        continue;
-                    }
-                    self.deco.push(Deco { k: dk, x: (tx * TS) as f32 + rng.int(2, 30) as f32, y: (ty * TS) as f32 + rng.int(4, 30) as f32, flip: rng.chance(0.5) });
-                }
-                if self.path[i] || g == Mat::Plank {
+                if g == Mat::Water || self.cliff[i] || g == Mat::Abyss || self.path[i] || g == Mat::Plank {
                     continue;
                 }
                 let (x, y) = tpos(tx, ty);
-                let near_fire = self.fires.iter().any(|f| (f.x - x).hypot(f.y - y) < 96.0);
-                let near_npc = self.npcs.iter().any(|n| (n.x - x).hypot(n.y - y) < 80.0);
-                let near_spawn = self.spawns.iter().any(|s| (s.x - x).hypot(s.y - y) < 40.0);
+                let near_fire = fires.iter().any(|f| (f.0 - x).hypot(f.1 - y) < 96.0);
+                let near_npc = npcs.iter().any(|n| (n.0 - x).hypot(n.1 - y) < 80.0);
+                let near_spawn = spawns.iter().any(|s| (s.0 - x).hypot(s.1 - y) < 40.0);
                 if near_fire || near_npc || near_spawn {
                     continue;
                 }
@@ -2599,18 +2733,80 @@ impl World {
                     self.grove(tx, ty, 0.1, rng, 1, Some(fl.grove));
                     continue;
                 }
-                if rng.chance((0.05 + forest.max(0.0) * 0.1) * dense) && self.free_t(tx, ty, 0) {
+                // doppelt so viel Unterholz und Geröll wie früher
+                if rng.chance((0.1 + forest.max(0.0) * 0.2) * dense) && self.free_t(tx, ty, 0) {
                     let kind = *rng.pick(fl.bush);
                     let flip = rng.chance(0.5);
                     let jx = rng.int(-6, 6) as f32;
                     self.prop_x(kind, x + jx, y, |p| p.flip = flip);
-                } else if d.biome != Biome::Coast && rng.chance(0.014) && self.free_t(tx, ty, 0) {
-                    let kind = *rng.pick(&["rock0", "rock1"]);
+                } else if d.biome != Biome::Coast && rng.chance(0.028) && self.free_t(tx, ty, 0) {
+                    let kind = *rng.pick(&["rock0", "rock1", "rock2"]);
                     let flip = rng.chance(0.5);
                     self.prop_x(kind, x, y, |p| p.flip = flip);
                 }
             }
         }
+    }
+
+    /// Boden-Deko eines 256-px-Eimers, aus der Karte abgeleitet (gleiches Ergebnis bei jedem
+    /// Aufruf): Gras, Blumen, Steinchen, Knochen, Glut, Schnee, Seerosen am Ufer.
+    pub fn deco_bucket(&self, bx: i32, by: i32) -> Vec<Deco> {
+        let mut out = vec![];
+        let k = (view::BK as i32) / TS;
+        for ty in by * k..(by + 1) * k {
+            for tx in bx * k..(bx + 1) * k {
+                if !inb(tx, ty) {
+                    continue;
+                }
+                let i = idx(tx, ty);
+                let Some(z) = self.zone[i] else { continue };
+                if z == Zone::Ende && !self.drained {
+                    continue;
+                }
+                let biome = self.biome[i];
+                let g = self.ground[i];
+                let mut rng = Rng::new(((tx as u64) << 21) ^ (ty as u64).wrapping_mul(0x9E37_79B9) ^ 0x5EED);
+                if g == Mat::Water {
+                    if self.shore[i] <= 1 && rng.chance(if biome == Biome::Earth { 0.4 } else { 0.1 }) {
+                        let k = *rng.pick(&["lily", "reeds", "lily"]);
+                        out.push(Deco { k, x: (tx * TS) as f32 + rng.int(4, 28) as f32, y: (ty * TS) as f32 + rng.int(6, 26) as f32, flip: rng.chance(0.5) });
+                    }
+                    continue;
+                }
+                if self.cliff[i] || g == Mat::Abyss {
+                    continue;
+                }
+                let fl = flora(biome);
+                let seed = (z as u32 + 1) * 7;
+                let dens = 0.3 + self.nz.fbm(tx as f32 * 0.15 + seed as f32, ty as f32 * 0.15, 2).max(0.0) * 0.6 + if g == Mat::Meadow { 0.35 } else { 0.0 };
+                // ein Vielfaches der früheren Dichte: bis zu sechs Stück je Kachel
+                let nd = (dens * 4.0 + rng.f() * 1.2) as i32;
+                for _ in 0..nd.min(6) {
+                    let mut dk = *rng.pick(fl.deco);
+                    if self.path[i] && g != Mat::Meadow {
+                        if rng.f() < 0.8 {
+                            continue;
+                        }
+                        dk = *rng.pick(&["pebbles", "tuft", "stones"]);
+                    }
+                    if g == Mat::Meadow && rng.chance(0.5) {
+                        dk = *rng.pick(&["flowersW", "flowersY", "flowersP", "flowersB", "clover"]);
+                    }
+                    if matches!(g, Mat::Marble | Mat::Plank | Mat::Cobble) && !matches!(dk, "pebbles" | "stones" | "leaves") {
+                        continue;
+                    }
+                    if g == Mat::Sand && rng.chance(0.4) {
+                        dk = *rng.pick(&["shell", "pebbles", "seaweed", "driftwood", "shell"]);
+                    }
+                    let (x, y) = ((tx * TS) as f32 + rng.int(2, 30) as f32, (ty * TS) as f32 + rng.int(4, 30) as f32);
+                    if !self.px_walk(x as i32, y as i32).1 {
+                        continue;
+                    }
+                    out.push(Deco { k: dk, x, y, flip: rng.chance(0.5) });
+                }
+            }
+        }
+        out
     }
 
     // ------------------------------------------------------------ Kollision mit Höhenebenen
@@ -2635,10 +2831,10 @@ impl World {
         let g = self.ground[i];
         if sailing {
             // die Ladenräume liegen weit draußen im Nordosten: dorthin fährt kein Schiff
-            if tx >= 460 && ty <= 30 {
+            if tx >= MW - 100 && ty <= 30 {
                 return true;
             }
-            return g != Mat::Water || self.shore[i] < 2.0;
+            return g != Mat::Water || self.shore[i] < 2;
         }
         g == Mat::Water || g == Mat::Abyss
     }

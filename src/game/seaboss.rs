@@ -85,7 +85,7 @@ impl SeaBoss {
             x: home.0,
             y: home.1,
             home,
-            range: (sr.r * TS) as f32,
+            range: (sr.r.min(crate::world::SEA_ARENA) * TS) as f32,
             hp: SEA_KINGS[k].hp,
             max_hp: SEA_KINGS[k].hp,
             t: 0.0,

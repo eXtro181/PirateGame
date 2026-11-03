@@ -329,7 +329,7 @@ impl Game {
         self.fx.draw(f);
         self.fx.lights(f);
         // Nebelschichten je Zone
-        let z = self.zone_key.def().key;
+        let z = self.env_key();
         let (fc, fa, sp) = match z {
             "asche" => ([200, 70, 80], 42, 14.0),
             "ende" => ([140, 20, 40], 60, 10.0),

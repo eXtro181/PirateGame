@@ -202,6 +202,25 @@ pub fn env(zone: &str, sailing_open_sea: bool) -> Env {
             abyss: 1.4,
             ..base
         },
+        // wilde Inseln: Zwielicht über dem Ozean, Seenebel, kühles Grün und Bernstein
+        "wild" => Env {
+            rays: 0.6,
+            ambient: l(0x7A8CA0, 0.5),
+            sky: 0.5,
+            sun: l(0xE8C890, 0.5),
+            sun_dir: n3([-0.45, -0.3, 0.75]),
+            shadow: 0.5,
+            fog: l(0x46585E, 1.0),
+            fog_k: 0.1,
+            lift: [0.012, 0.02, 0.026],
+            gain: [1.0, 1.0, 0.97],
+            sat: 0.85,
+            water_a: l(0x3E8A8E, 1.0),
+            water_b: l(0x14405A, 1.0),
+            water_c: l(0xD0E8E4, 1.0),
+            light_k: 1.15,
+            ..base
+        },
         // Ladenräume: warmes Kerzen- und Fackellicht, kein Nebel
         "innen" => Env {
             rays: 0.0,

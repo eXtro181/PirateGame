@@ -417,6 +417,9 @@ pub struct Save {
     pub ship_dock: String,
     #[serde(default)]
     pub explored: Vec<String>,
+    /// Seekarte: aufgedeckte Felder (je CHART_CELL × CHART_CELL Kacheln) als Bits
+    #[serde(default)]
+    pub chart: Vec<u8>,
     #[serde(default)]
     pub deaths: i32,
     #[serde(default)]
@@ -494,7 +497,7 @@ pub fn upgrade_cost(lvl: i32) -> (i64, i32) {
 pub fn new_save(name: &str, look: LookIdx, origin: &str, gift: &str, now: f64) -> Save {
     let o = ORIGINS.iter().find(|x| x.id == origin).unwrap_or(&ORIGINS[0]);
     Save {
-        version: 4,
+        version: 5,
         name: name.to_string(),
         look,
         origin: o.id.into(),
@@ -535,6 +538,7 @@ pub fn new_save(name: &str, look: LookIdx, origin: &str, gift: &str, now: f64) -
         talked: HashMap::new(),
         ship_dock: "kueste".into(),
         explored: if gift == "chart" { ["kueste", "hain", "asche", "frost", "raben", "mangroven"].iter().map(|s| s.to_string()).collect() } else { vec!["kueste".into()] },
+        chart: vec![],
         deaths: 0,
         play_time: 0.0,
         created_at: now,
@@ -542,15 +546,87 @@ pub fn new_save(name: &str, look: LookIdx, origin: &str, gift: &str, now: f64) -
 }
 
 const FIRES: [&str; 11] = ["kueste", "hain", "asche", "asche2", "frost", "frost2", "raben", "raben2", "mangroven", "mangroven2", "ende"];
+/// Gültige Feuer: die festen und die der wilden Inseln („w12“)
+fn fire_ok(f: &str) -> bool {
+    FIRES.contains(&f) || (f.len() > 1 && f.starts_with('w') && f[1..].chars().all(|c| c.is_ascii_digit()))
+}
+
+/// Seekarte: Feldgröße in Kacheln und Felder je Zeile/Spalte
+pub const CHART_CELL: i32 = 16;
+pub const CHART_W: i32 = (crate::world::MW + CHART_CELL - 1) / CHART_CELL;
+pub const CHART_H: i32 = (crate::world::MH + CHART_CELL - 1) / CHART_CELL;
+pub fn chart_has(c: &[u8], x: i32, y: i32) -> bool {
+    if x < 0 || y < 0 || x >= CHART_W || y >= CHART_H {
+        return false;
+    }
+    let i = (y * CHART_W + x) as usize;
+    c.get(i / 8).is_some_and(|b| b & (1 << (i % 8)) != 0)
+}
+/// Feld aufdecken; true, wenn es neu ist
+pub fn chart_set(c: &mut Vec<u8>, x: i32, y: i32) -> bool {
+    if x < 0 || y < 0 || x >= CHART_W || y >= CHART_H {
+        return false;
+    }
+    let n = ((CHART_W * CHART_H) as usize).div_ceil(8);
+    if c.len() < n {
+        c.resize(n, 0);
+    }
+    let i = (y * CHART_W + x) as usize;
+    let fresh = c[i / 8] & (1 << (i % 8)) == 0;
+    c[i / 8] |= 1 << (i % 8);
+    fresh
+}
+/// Alle Felder um einen Kachelpunkt (Radius in Feldern) aufdecken; true, wenn eines neu ist
+pub fn chart_reveal(c: &mut Vec<u8>, tx: i32, ty: i32, r: i32) -> bool {
+    let (cx, cy) = (tx.div_euclid(CHART_CELL), ty.div_euclid(CHART_CELL));
+    let mut any = false;
+    for y in -r..=r {
+        for x in -r..=r {
+            if x * x + y * y <= r * r + r {
+                any |= chart_set(c, cx + x, cy + y);
+            }
+        }
+    }
+    any
+}
+
 /// Ältere/fehlerhafte Spielstände reparieren.
 pub fn migrate(s: &mut Save) {
     let old = s.version;
-    s.version = 4;
+    s.version = 5;
     if old < 4 {
         // v4: Karte vergrößert, alles um (80, 60) Kacheln verschoben
         if let Some(st) = s.stain.as_mut() {
             st.x += (80 * crate::world::TS) as f32;
             st.y += (60 * crate::world::TS) as f32;
+        }
+    }
+    if old < 5 {
+        // v5: Welt verzehnfacht. Der Archipel liegt jetzt in der Mitte, das Ende der Welt in der
+        // neuen Südost-Ecke: Perlenfleck und aufgehobene Gegenstände („id@x,y“) mitverschieben.
+        let shift = |tx: i32, ty: i32| -> (i32, i32) {
+            if tx >= 404 && ty >= 300 {
+                (tx + crate::world::END_OFF.0, ty + crate::world::END_OFF.1)
+            } else {
+                (tx + crate::world::CORE.0, ty + crate::world::CORE.1)
+            }
+        };
+        let ts = crate::world::TS as f32;
+        if let Some(st) = s.stain.as_mut() {
+            let (tx, ty) = ((st.x / ts).floor() as i32, (st.y / ts).floor() as i32);
+            let (nx, ny) = shift(tx, ty);
+            st.x += (nx - tx) as f32 * ts;
+            st.y += (ny - ty) as f32 * ts;
+        }
+        for p in s.picked.iter_mut() {
+            if let Some((id, pos)) = p.split_once('@') {
+                if let Some((a, b)) = pos.split_once(',') {
+                    if let (Ok(tx), Ok(ty)) = (a.parse::<i32>(), b.parse::<i32>()) {
+                        let (nx, ny) = shift(tx, ty);
+                        *p = format!("{id}@{nx},{ny}");
+                    }
+                }
+            }
         }
     }
     if s.weapon.is_empty() {
@@ -577,10 +653,10 @@ pub fn migrate(s: &mut Save) {
     if s.ship_dock.is_empty() {
         s.ship_dock = "kueste".into();
     }
-    if !FIRES.contains(&s.last_fire.as_str()) {
+    if !fire_ok(&s.last_fire) {
         s.last_fire = "kueste".into();
     }
-    s.lit_fires.retain(|f| FIRES.contains(&f.as_str()));
+    s.lit_fires.retain(|f| fire_ok(f));
     if s.explored.is_empty() {
         s.explored = vec!["kueste".into()];
     }

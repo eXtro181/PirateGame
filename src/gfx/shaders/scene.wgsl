@@ -6,6 +6,7 @@
 @group(1) @binding(3) var t_cnrm: texture_2d_array<f32>;
 @group(1) @binding(4) var t_mask: texture_2d<f32>;
 @group(1) @binding(5) var t_noise: texture_2d<f32>;
+@group(1) @binding(6) var t_map: texture_2d<f32>;
 
 struct VIn {
     @location(0) pos: vec2<f32>,
@@ -71,6 +72,11 @@ fn wave_h(p: vec2<f32>, t: f32) -> f32 {
 }
 
 fn water(p_in: vec2<f32>) -> GOut {
+    return water_s(p_in, -1.0);
+}
+
+// Wasser; `shore_in` ≥ 0: pixelgenauer Uferabstand aus dem Boden-Chunk, sonst aus der groben Maske
+fn water_s(p_in: vec2<f32>, shore_in: f32) -> GOut {
     var o: GOut;
     let hd = G.hd3.x > 0.5;
     // Pixelraster: in FullHD halbe Weltpixel, sonst ganze
@@ -78,7 +84,8 @@ fn water(p_in: vec2<f32>) -> GOut {
     if (hd) { p = floor(p_in * 2.0) * 0.5 + 0.25; }
     let t = G.screen.z;
     let m = mask_at(p);
-    let shore = m.r;          // 0 am Ufer → 1 weit weg (über ~64 px)
+    var shore = m.r;          // 0 am Ufer → 1 weit weg (über ~64 px)
+    if (shore_in >= 0.0) { shore = shore_in; }
     let depth = m.b;          // 0 flach → 1 tief
     // Grundfarbe mit Tiefe: im Flachen schimmert der Grund durch, in der Tiefe wird es dunkel
     let dd = smoothstep(0.0, 1.0, max(depth, shore * 0.85));
@@ -232,6 +239,17 @@ fn fs_gbuf(v: VOut) -> GOut {
         if (((q.x + q.y) & 1) == 0 || (q.y & 1) == 0) { discard; }
     }
     var c = sample_sprite(v.uv, v.ext.x, chunk);
+    if (chunk && c.a < 0.45) {
+        // Wasser und Abgrund im Boden-Chunk: Art und Uferabstand stehen in der Normalen-Textur
+        let wn = nrm_texel(v.uv, v.ext.x, true);
+        if (wn.a > 0.75) {
+            return water_s(v.world, wn.b);
+        }
+        if (wn.a > 0.1) {
+            return abyss(v.world);
+        }
+        discard;
+    }
     if (c.a < 0.45) {
         // Umriss beim Fokus: Nachbarpixel prüfen
         if ((flags & 2u) != 0u) {
@@ -373,6 +391,11 @@ fn fs_ui(v: VOut) -> @location(0) vec4<f32> {
         let d = length(v.uv * 2.0 - 1.0);
         let a = (1.0 - smoothstep(0.2, 1.0, d)) * v.col.a;
         return vec4<f32>(v.col.rgb * a, a);
+    }
+    if (mode == 7u) {
+        // Seekarte: Papierbild, leicht weich gefiltert
+        let m = textureSampleLevel(t_map, s_lin, v.uv, 0.0);
+        return vec4<f32>(m.rgb * v.col.rgb * v.col.a, v.col.a);
     }
     let c = textureSampleLevel(t_acol, s_near, v.uv, i32(v.ext.x), 0.0);
     if (c.a < 0.45) { discard; }

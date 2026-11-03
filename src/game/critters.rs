@@ -57,13 +57,13 @@ impl Game {
             let base = Critter { k: CK::Butterfly, x, y, hx: x, hy: y, vx: 0.0, vy: 0.0, a: rnd() * 6.28, t: rnd() * 10.0, life: 30.0, h: 12.0 + rnd() * 20.0, col: BUTTER[(rnd() * 5.0) as usize % 5], hop: 0.0 };
             let g = w.g(tx, ty);
             if g == Mat::Water {
-                if w.shore[i] < 6.0 && rnd() < 0.6 {
+                if w.shore[i] < 6 && rnd() < 0.6 {
                     if rnd() < 0.25 {
                         self.critters.push(Critter { k: CK::Leap, life: 1.2, h: 0.0, a: rnd() * 6.28, ..base });
                     } else {
                         self.critters.push(Critter { k: CK::Fish, life: 20.0 + rnd() * 20.0, ..base });
                     }
-                } else if w.shore[i] > 14.0 && self.sailing && rnd() < 0.06 && !self.critters.iter().any(|c| c.k == CK::Whale) {
+                } else if w.shore[i] > 14 && self.sailing && rnd() < 0.06 && !self.critters.iter().any(|c| c.k == CK::Whale) {
                     self.critters.push(Critter { k: CK::Whale, life: 9.0, vx: if rnd() < 0.5 { -26.0 } else { 26.0 }, ..base });
                 } else if rnd() < 0.3 {
                     let d = if rnd() < 0.5 { -1.0 } else { 1.0 };

@@ -93,6 +93,8 @@ pub enum Tex {
     ChunkNrm,
     Mask,
     Noise,
+    /// Seekarte (UI)
+    Map,
 }
 
 pub struct Upload {
@@ -111,6 +113,8 @@ pub struct GfxInit {
     pub atlas_pages: u32,
     pub mask_w: u32,
     pub mask_h: u32,
+    pub map_w: u32,
+    pub map_h: u32,
 }
 
 /// Ein Viereck für die Zeichenlisten.
@@ -132,6 +136,8 @@ pub mod modes {
     pub const WATER: u8 = 3;
     pub const FOG: u8 = 5;
     pub const SOFT: u8 = 6;
+    /// UI: Bild der Seekarte
+    pub const MAP: u8 = 7;
 }
 pub mod flags {
     pub const FLASH: u8 = 1;
@@ -399,6 +405,12 @@ impl Frame {
     }
     pub fn ui_soft(&mut self, x: f32, y: f32, w: f32, h: f32, col: [u8; 4]) {
         self.ui.push(Self::quad_rect(x, y, w, h, col, modes::SOFT, 0));
+    }
+    /// Ausschnitt (u0, v0, u1, v1) der Seekarten-Textur als UI-Rechteck
+    pub fn ui_map(&mut self, x: f32, y: f32, w: f32, h: f32, uv: [f32; 4], col: [u8; 4]) {
+        let mut q = Self::quad_rect(x, y, w, h, col, modes::MAP, 0);
+        q.uv = [[uv[0], uv[1]], [uv[2], uv[1]], [uv[2], uv[3]], [uv[0], uv[3]]];
+        self.ui.push(q);
     }
     /// UI-Größe in UI-Pixeln
     pub fn ui_size(&self) -> (f32, f32) {

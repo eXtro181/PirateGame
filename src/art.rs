@@ -786,6 +786,107 @@ pub fn build(frame: &mut Frame) -> Art {
             c.lit(x, y, hex(0xF07A3A), 1.2);
         }
         a.add_trim("d:ember", &c, 4, 6);
+        // ---- feine Boden-Deko (fünffache Dichte): Steinchen, Zweige, Laub, Tang, Treibholz, Wurzeln
+        let mut c = Canvas::new(22, 12);
+        c.standing = false;
+        for (x, y, rx, ry, k) in [(5.0, 7.0, 3.6, 2.6, 0.9), (11.0, 5.0, 2.6, 2.0, 1.0), (16.0, 8.0, 3.0, 2.2, 0.8), (9.0, 9.0, 1.8, 1.4, 1.1)] {
+            let p = ramp_n(shade(hex(0x8A8478), k), 5, 1.0);
+            c.dome(x, y, rx, ry, &p, 1.6, 0.0, 0.4, 0.15);
+        }
+        c.outline(true, 0.6);
+        a.add_trim("d:stones", &c, 11, 10);
+        let mut c = Canvas::new(26, 12);
+        c.standing = false;
+        let bark = ramp_n(hex(0x6A4E36), 5, 1.0);
+        c.tube(&[(3.0, 8.0), (12.0, 6.0), (22.0, 7.0)], 1.3, 0.8, &bark, 0.6, 0.5);
+        c.tube(&[(8.0, 3.0), (14.0, 9.0)], 1.0, 0.7, &bark, 0.6, 0.5);
+        c.tube(&[(16.0, 4.0), (19.0, 6.5)], 0.8, 0.6, &bark, 0.5, 0.5);
+        c.outline(true, 0.6);
+        a.add_trim("d:twigs", &c, 13, 10);
+        let mut c = Canvas::new(24, 14);
+        c.standing = false;
+        for (i, col) in [0xA0522D, 0xC8862E, 0x8E2E22, 0xB8A040, 0x7A5A2A, 0xD49A3A].iter().enumerate() {
+            let (x, y) = (4.0 + (i as f32 * 3.4) % 17.0, 4.0 + ((i * 5) % 7) as f32);
+            let p = ramp_n(hex(*col), 4, 1.0);
+            c.dome(x, y, 2.6, 1.6, &p, 0.8, 0.0, 0.3, 0.2);
+            c.set(x as i32, y as i32, shade(hex(*col), 0.6));
+        }
+        c.outline(true, 0.5);
+        a.add_trim("d:leaves", &c, 12, 12);
+        let mut c = Canvas::new(26, 12);
+        c.standing = false;
+        let weed = ramp_n(hex(0x3E5A2A), 5, 1.0);
+        for k in 0..4 {
+            let y = 3.0 + k as f32 * 2.0;
+            c.tube(&[(2.0 + k as f32 * 2.0, y), (9.0, y + 2.0), (16.0, y - 0.5), (23.0 - k as f32, y + 1.5)], 1.1, 0.5, &weed, 0.4, 0.2);
+        }
+        c.outline(true, 0.5);
+        a.add_trim("d:seaweed", &c, 13, 10);
+        let mut c = Canvas::new(34, 12);
+        c.standing = false;
+        let drift = ramp_n(hex(0xB8A890), 5, 1.0);
+        c.tube(&[(3.0, 7.0), (16.0, 5.5), (30.0, 6.5)], 2.6, 1.8, &drift, 1.6, 0.6);
+        c.tube(&[(20.0, 6.0), (26.0, 2.5)], 1.0, 0.6, &drift, 0.8, 1.0);
+        for x in (6..28).step_by(5) {
+            c.set(x, 6, shade(hex(0xB8A890), 0.7));
+        }
+        c.outline(true, 0.7);
+        a.add_trim("d:driftwood", &c, 17, 10);
+        let mut c = Canvas::new(30, 14);
+        c.standing = false;
+        let root = ramp_n(hex(0x4E3A2A), 5, 1.0);
+        c.tube(&[(2.0, 10.0), (9.0, 7.0), (15.0, 8.0), (22.0, 5.0), (28.0, 7.0)], 2.0, 1.0, &root, 1.2, 0.4);
+        c.tube(&[(10.0, 7.5), (13.0, 12.0)], 1.2, 0.7, &root, 0.8, 0.3);
+        c.tube(&[(18.0, 7.0), (21.0, 2.5)], 1.0, 0.6, &root, 0.8, 0.3);
+        c.outline(true, 0.7);
+        a.add_trim("d:roots", &c, 15, 11);
+        // Klee mit weißen Blüten, kleiner Farn, braune Pilze, kleiner Leuchtkristall
+        let mut c = Canvas::new(20, 12);
+        let clov = FPal::get("leaf");
+        for i in 0..7 {
+            let (x, y) = (3.0 + (i as f32 * 2.9) % 14.0, 5.0 + ((i * 3) % 5) as f32);
+            c.dome(x, y, 1.8, 1.4, &clov, 1.5, 0.5, 0.3, 0.1);
+        }
+        for (x, y) in [(6, 3), (13, 4)] {
+            c.put(x, y, hex(0xF4F0E6), 2.5);
+            c.put(x, y - 1, hex(0xFFFFFF), 2.5);
+        }
+        c.outline(true, 0.6);
+        a.add_trim("d:clover", &c, 10, 10);
+        let mut c = Canvas::new(28, 20);
+        let fp = FPal::get("green");
+        for i in 0..5 {
+            let ang = -std::f32::consts::PI * (0.15 + 0.7 * i as f32 / 4.0);
+            let len = 9.0 + (i % 2) as f32 * 3.0;
+            for t in 0..len as i32 {
+                let tf = t as f32;
+                let (x, y) = (14.0 + ang.cos() * tf, 18.0 + ang.sin() * tf * 0.8 + tf * tf * 0.03);
+                c.put(x as i32, y as i32, sw_art::color::pick(&fp, 0.5 - tf / len * 0.2), 2.0);
+                if t % 2 == 1 {
+                    c.put((x - ang.sin() * 1.5) as i32, (y + 1.0) as i32, sw_art::color::pick(&fp, 0.7), 2.0);
+                    c.put((x + ang.sin() * 1.5) as i32, (y + 0.5) as i32, sw_art::color::pick(&fp, 0.35), 1.6);
+                }
+            }
+        }
+        c.outline(true, 0.7);
+        a.add_trim("d:fernS", &c, 14, 18);
+        a.add_trim("d:mushroomB", &flora::mushrooms(4, hex(0x8A5A3A)), 11, 16);
+        let mut c = Canvas::new(14, 18);
+        let cp = ramp_n(hex(0x6AD0F4), 5, 1.2);
+        for (bx, ht, lean) in [(4.0f32, 9.0f32, -1.0f32), (7.0, 14.0, 0.0), (10.0, 8.0, 1.5)] {
+            for y in 0..ht as i32 {
+                let t = y as f32 / ht;
+                let w = (2.2 * (1.0 - t)).max(0.6);
+                for dx in -(w as i32)..=(w as i32) {
+                    let v = if dx < 0 { 0.8 } else { 0.4 };
+                    let (x, yy) = ((bx + lean * t) as i32 + dx, 16 - y);
+                    c.put(x, yy, sw_art::color::pick(&cp, v + t * 0.15), 3.0);
+                    c.glow(x, yy, sw_art::color::pick(&cp, v), 0.3);
+                }
+            }
+        }
+        c.outline(true, 0.7);
+        a.add_trim("d:crystalS", &c, 7, 16);
     }
 
     // ---------------------------------------------------------------- Figuren
@@ -822,7 +923,7 @@ pub fn build(frame: &mut Frame) -> Art {
 
     info!("Grafik erzeugt in {:?} · {} Atlasseiten", t0.elapsed(), pages);
     info!("Atlas belegt: {:.2} Seiten", a.used());
-    frame.init = Some(GfxInit { atlas_pages: pages, mask_w: (crate::world::MW * crate::world::TS / 8) as u32, mask_h: (crate::world::MH * crate::world::TS / 8) as u32 });
+    frame.init = Some(GfxInit { atlas_pages: pages, mask_w: crate::world::MW as u32, mask_h: crate::world::MH as u32, map_w: crate::ui::hud::MAP_W as u32, map_h: crate::ui::hud::MAP_H as u32 });
     // Seiten in den Upload verschieben statt kopieren (spart beim Start 2 × 16 MB je Seite;
     // Wasm-Speicher wächst nur und gibt nichts zurück)
     let map = std::mem::take(&mut a.map);

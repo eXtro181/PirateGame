@@ -4,7 +4,7 @@
 use super::*;
 use crate::art::Art;
 use crate::gfx::{flags, modes, Frame, LightDef, SprOpt, Tex, Upload, CHUNK, CHUNK_SLOTS};
-use sw_art::terrain::{bake_chunk, mat_at, ChunkBake, EdgeNoise, Materials};
+use sw_art::terrain::{bake_chunk, ChunkBake, EdgeNoise, Materials};
 
 pub struct ChunkCache {
     slots: Vec<Option<(i32, i32, u64)>>,
@@ -35,12 +35,16 @@ pub struct WorldView {
     pub cache: ChunkCache,
     pub buckets: HashMap<i32, Vec<usize>>,
     pub deco_b: HashMap<i32, Vec<usize>>,
+    /// Boden-Deko je Eimer, erst beim Zeichnen aus der Karte abgeleitet (mit letzter Nutzung)
+    deco_gen: HashMap<i32, (Vec<Deco>, u64)>,
     /// Bild je Deko-Art (einmal nachgeschlagen statt Name je Bild)
     deco_spr: HashMap<&'static str, Option<sw_art::atlas::Spr>>,
     pub time: f32,
 }
 
-const BK: f32 = 256.0;
+pub const BK: f32 = 256.0;
+/// so viele Deko-Eimer bleiben zwischengespeichert
+const DECO_KEEP: usize = 900;
 
 fn bkey(x: f32, y: f32) -> i32 {
     (y / BK).floor() as i32 * 1000 + (x / BK).floor() as i32
@@ -52,6 +56,7 @@ impl WorldView {
             cache: ChunkCache { slots: vec![None; CHUNK_SLOTS as usize], map: HashMap::new(), tick: 0, mats: Materials::new(), en: EdgeNoise::new(), water: None, job: None },
             buckets: HashMap::new(),
             deco_b: HashMap::new(),
+            deco_gen: HashMap::new(),
             deco_spr: HashMap::new(),
             time: 0.0,
         };
@@ -79,6 +84,7 @@ impl WorldView {
         }
         self.cache.map.clear();
         self.cache.job = None;
+        self.deco_gen.clear();
         self.rebuild_buckets(w);
         self.build_mask(w, frame);
     }
@@ -144,24 +150,16 @@ impl WorldView {
         let _ = (x0, y0);
     }
 
-    /// Maske (8 px je Texel): r = Uferabstand (0..64 px), g = Abgrund, b = Tiefe, a = Wasser.
+    /// Grobe Maske je Kachel: r = Uferabstand (0..64 px), g = Abgrund, b = Tiefe (0..320 px),
+    /// a = Wasser. Die feinen Ufer (Schaum) tragen die Boden-Chunks selbst; die Maske liefert die
+    /// Tiefe, den Abgrund, Spiegelungen und Wasser, wo noch kein Chunk liegt.
     fn build_mask(&mut self, w: &World, frame: &mut Frame) {
-        let (mw, mh) = ((MW * TS / 8) as usize, (MH * TS / 8) as usize);
-        let mut water = vec![0u8; mw * mh];
-        let mut abyss = vec![false; mw * mh];
-        for y in 0..mh {
-            for x in 0..mw {
-                let (px, py) = (x as i32 * 8 + 4, y as i32 * 8 + 4);
-                let (tx, ty) = (px / TS, py / TS);
-                let m = if w.face(tx, ty).is_some() { Mat::Rock } else { mat_at(w, &self.cache.en, px, py) };
-                water[y * mw + x] = (m == Mat::Water) as u8;
-                abyss[y * mw + x] = m == Mat::Abyss;
-            }
-        }
-        // Abstand zum Land (Chamfer, in Texeln)
-        let mut d = vec![255.0f32; mw * mh];
-        for i in 0..d.len() {
-            if water[i] == 0 && !abyss[i] {
+        let (mw, mh) = (MW as usize, MH as usize);
+        let n = mw * mh;
+        // Abstand zum Land in Kacheln (Chamfer); Land = weder Wasser noch Abgrund
+        let mut d = vec![255.0f32; n];
+        for i in 0..n {
+            if !matches!(w.ground[i], Mat::Water | Mat::Abyss) || w.cliff[i] {
                 d[i] = 0.0;
             }
         }
@@ -203,15 +201,17 @@ impl WorldView {
                 d[i] = v;
             }
         }
-        let mut data = vec![0u8; mw * mh * 4];
-        for i in 0..mw * mh {
-            data[i * 4] = ((d[i] / 8.0).min(1.0) * 255.0) as u8;
-            data[i * 4 + 1] = if abyss[i] { 255 } else { 0 };
-            data[i * 4 + 2] = ((d[i] / 40.0).min(1.0) * 255.0) as u8;
-            data[i * 4 + 3] = water[i] * 255;
+        let mut data = vec![0u8; n * 4];
+        let ts = TS as f32;
+        for i in 0..n {
+            let px = d[i] * ts;
+            data[i * 4] = ((px / 64.0).min(1.0) * 255.0) as u8;
+            data[i * 4 + 1] = if w.ground[i] == Mat::Abyss { 255 } else { 0 };
+            data[i * 4 + 2] = ((px / 320.0).min(1.0) * 255.0) as u8;
+            data[i * 4 + 3] = if w.ground[i] == Mat::Water { 255 } else { 0 };
         }
         frame.uploads.push(Upload { tex: Tex::Mask, layer: 0, x: 0, y: 0, w: mw as u32, h: mh as u32, data });
-        frame.g.map = [(MW * TS) as f32, (MH * TS) as f32, 8.0, 1.0];
+        frame.g.map = [(MW * TS) as f32, (MH * TS) as f32, TS as f32, frame.g.map[3]];
     }
 
     /// Sichtbare Chunks sicherstellen und einen Ring darum vorausbacken. Gebacken wird nach
@@ -400,9 +400,46 @@ impl WorldView {
         let t = self.time;
         let chunks = self.ensure_chunks(w, frame, 5.0);
         let (vx, vy, vw, vh) = frame.view();
-        frame.ground_rect(vx - 64.0, vy - 64.0, vw + 128.0, vh + 128.0, modes::WATER);
+        // Wasser zeichnen die Chunks selbst; Ersatz-Wasser nur, wo (noch) keiner liegt
+        let cs = CHUNK as f32;
+        let (c0x, c1x) = (((vx - 64.0) / cs).floor() as i32, ((vx + vw + 64.0) / cs).floor() as i32);
+        let (c0y, c1y) = (((vy - 64.0) / cs).floor() as i32, ((vy + vh + 128.0) / cs).floor() as i32);
+        for cy in c0y..=c1y {
+            for cx in c0x..=c1x {
+                let (x, y) = ((cx * CHUNK) as f32, (cy * CHUNK) as f32);
+                if !chunks.iter().any(|c| c.1 == x && c.2 == y) {
+                    frame.ground_rect(x, y, cs, cs, modes::WATER);
+                }
+            }
+        }
         for (s, x, y) in chunks {
             frame.chunk(s, x, y);
+        }
+        // Boden-Deko der sichtbaren Eimer bei Bedarf ableiten (höchstens einige je Bild)
+        let tick = self.cache.tick;
+        let mut made = 0;
+        let d0x = ((vx - 40.0) / BK).floor() as i32;
+        let d1x = ((vx + vw + 40.0) / BK).floor() as i32;
+        let d0y = ((vy - 20.0) / BK).floor() as i32;
+        let d1y = ((vy + vh + 60.0) / BK).floor() as i32;
+        let t_deco = bevy::platform::time::Instant::now();
+        for by in d0y..=d1y {
+            for bx in d0x..=d1x {
+                let key = by * 1000 + bx;
+                if let Some(e) = self.deco_gen.get_mut(&key) {
+                    e.1 = tick;
+                } else if made < 3 || t_deco.elapsed().as_secs_f64() < 0.002 {
+                    let list = crate::prof::time(crate::prof::BAKE, || w.deco_bucket(bx, by));
+                    self.deco_gen.insert(key, (list, tick));
+                    made += 1;
+                }
+            }
+        }
+        if self.deco_gen.len() > DECO_KEEP {
+            let mut ticks: Vec<u64> = self.deco_gen.values().map(|e| e.1).collect();
+            ticks.sort_unstable();
+            let cut = ticks[ticks.len() - DECO_KEEP * 2 / 3];
+            self.deco_gen.retain(|_, e| e.1 >= cut);
         }
         // Requisiten in den sichtbaren Eimern (großzügig wegen großer Kronen)
         let b0x = ((vx - 400.0) / BK).floor() as i32;
@@ -416,29 +453,34 @@ impl WorldView {
                         self.draw_prop(w, art, frame, pi, focus, hover == Some(pi), t);
                     }
                 }
-                if let Some(list) = self.deco_b.get(&(by * 1000 + bx)) {
-                    for &di in list {
-                        let d = &w.deco[di];
-                        if d.x < vx - 40.0 || d.x > vx + vw + 40.0 || d.y < vy - 20.0 || d.y > vy + vh + 60.0 {
-                            continue;
+                let key = by * 1000 + bx;
+                let fixed = self.deco_b.get(&key).map(|l| l.iter().map(|&di| &w.deco[di]).collect::<Vec<_>>()).unwrap_or_default();
+                let gen = self.deco_gen.get(&key).map(|e| e.0.iter().collect::<Vec<_>>()).unwrap_or_default();
+                for d in fixed.into_iter().chain(gen) {
+                    if d.x < vx - 40.0 || d.x > vx + vw + 40.0 || d.y < vy - 20.0 || d.y > vy + vh + 60.0 {
+                        continue;
+                    }
+                    let s = *self.deco_spr.entry(d.k).or_insert_with(|| art.map.get(&format!("d:{}", d.k)).copied());
+                    if let Some(s) = s.as_ref() {
+                        let lvl = 0.0;
+                        let sway = if matches!(d.k, "tuft" | "tuftDark" | "tallgrass" | "snowtuft" | "reeds" | "flowersW" | "flowersY" | "flowersP" | "flowersB" | "flowersR" | "fernS" | "clover") { 22 } else { 0 };
+                        let flat = matches!(d.k, "lily" | "pebbles" | "shell" | "ember" | "bones" | "stones" | "leaves" | "twigs" | "seaweed" | "driftwood" | "roots");
+                        if flat {
+                            // flache Deko: vor allen Figuren (Boden)
+                            frame.sprite_z(s, d.x, d.y, d.y - 100.0, SprOpt { flip: d.flip, ev: lvl, ..Default::default() });
+                        } else {
+                            frame.sprite(s, d.x, d.y, SprOpt { flip: d.flip, sway, ev: lvl, ..Default::default() });
                         }
-                        let s = *self.deco_spr.entry(d.k).or_insert_with(|| art.map.get(&format!("d:{}", d.k)).copied());
-                        if let Some(s) = s.as_ref() {
-                            let lvl = 0.0;
-                            let sway = if matches!(d.k, "tuft" | "tuftDark" | "tallgrass" | "snowtuft" | "reeds" | "flowersW" | "flowersY" | "flowersP" | "flowersB" | "flowersR") { 22 } else { 0 };
-                            let flat = matches!(d.k, "lily" | "pebbles" | "shell" | "ember" | "bones");
-                            if flat {
-                                // flache Deko: vor allen Figuren (Boden)
-                                frame.sprite_z(s, d.x, d.y, d.y - 100.0, SprOpt { flip: d.flip, ev: lvl, ..Default::default() });
-                            } else {
-                                frame.sprite(s, d.x, d.y, SprOpt { flip: d.flip, sway, ev: lvl, ..Default::default() });
-                            }
-                            if d.k == "lanternStalk" {
-                                frame.light(LightDef { x: d.x, y: d.y, z: 12.0 + lvl, r: 60.0, col: [1.2, 0.3, 0.15], flicker: 0.1 });
-                            }
-                            if d.k == "ember" {
-                                frame.light(LightDef { x: d.x, y: d.y, z: 4.0 + lvl, r: 30.0, col: [0.8, 0.3, 0.1], flicker: 0.3 });
-                            }
+                        // nur jeder zweite Laternenstängel leuchtet (bei fünffacher Dichte sonst ein Lichtermeer)
+                        if d.k == "lanternStalk" && (d.x as i32 + d.y as i32 * 3) % 2 == 0 {
+                            frame.light(LightDef { x: d.x, y: d.y, z: 12.0 + lvl, r: 60.0, col: [1.2, 0.3, 0.15], flicker: 0.1 });
+                        }
+                        // nur jede dritte Glut leuchtet (sonst verdrängen sie die Laternen)
+                        if d.k == "ember" && (d.x as i32 + d.y as i32) % 3 == 0 {
+                            frame.light(LightDef { x: d.x, y: d.y, z: 4.0 + lvl, r: 30.0, col: [0.8, 0.3, 0.1], flicker: 0.3 });
+                        }
+                        if d.k == "crystalS" && (d.x as i32 * 7 + d.y as i32) % 4 == 0 {
+                            frame.light(LightDef { x: d.x, y: d.y, z: 6.0, r: 34.0, col: [0.3, 0.7, 1.1], flicker: 0.0 });
                         }
                     }
                 }

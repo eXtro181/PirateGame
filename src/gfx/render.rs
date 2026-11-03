@@ -88,6 +88,7 @@ pub struct Gpu {
     atlas: Option<(wgpu::Texture, wgpu::Texture)>,
     chunks: (wgpu::Texture, wgpu::Texture),
     mask: Option<wgpu::Texture>,
+    map: Option<wgpu::Texture>,
     noise: wgpu::Texture,
     bg_scene: Option<wgpu::BindGroup>,
     targets: Option<Targets>,
@@ -239,7 +240,7 @@ impl Gpu {
         use wgpu::TextureViewDimension as Dm;
         let bgl_scene = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("bgl_scene"),
-            entries: &[tex_entry(0, Dm::D2Array, true), tex_entry(1, Dm::D2Array, true), tex_entry(2, Dm::D2Array, true), tex_entry(3, Dm::D2Array, true), tex_entry(4, Dm::D2, true), tex_entry(5, Dm::D2, true)],
+            entries: &[tex_entry(0, Dm::D2Array, true), tex_entry(1, Dm::D2Array, true), tex_entry(2, Dm::D2Array, true), tex_entry(3, Dm::D2Array, true), tex_entry(4, Dm::D2, true), tex_entry(5, Dm::D2, true), tex_entry(6, Dm::D2, true)],
         });
         let bgl_post = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("bgl_post"),
@@ -317,6 +318,7 @@ impl Gpu {
             atlas: None,
             chunks,
             mask: None,
+            map: None,
             noise,
             bg_scene: None,
             targets: None,
@@ -376,6 +378,7 @@ fn prepare(mut gpu: ResMut<Gpu>, mut p: ResMut<Packed>, dev: Res<RenderDevice>, 
         let an = make_tex(d, "atlas_nrm", sw_art::atlas::PAGE as u32, sw_art::atlas::PAGE as u32, layers, NRM, false);
         gpu.atlas = Some((ac, an));
         gpu.mask = Some(make_tex(d, "mask", init.mask_w.max(1), init.mask_h.max(1), 1, NRM, false));
+        gpu.map = Some(make_tex(d, "seekarte", init.map_w.max(1), init.map_h.max(1), 1, ALB, false));
         scene_dirty = true;
     }
     // Hochladen
@@ -387,6 +390,7 @@ fn prepare(mut gpu: ResMut<Gpu>, mut p: ResMut<Packed>, dev: Res<RenderDevice>, 
             Tex::ChunkCol => Some(&gpu.chunks.0),
             Tex::ChunkNrm => Some(&gpu.chunks.1),
             Tex::Mask => gpu.mask.as_ref(),
+            Tex::Map => gpu.map.as_ref(),
             Tex::Noise => Some(&gpu.noise),
         };
         let Some(tex) = tex else { continue };
@@ -398,8 +402,8 @@ fn prepare(mut gpu: ResMut<Gpu>, mut p: ResMut<Packed>, dev: Res<RenderDevice>, 
         );
     }
     if scene_dirty {
-        if let (Some(a), Some(m)) = (&gpu.atlas, &gpu.mask) {
-            let v = [view_arr(&a.0), view_arr(&a.1), view_arr(&gpu.chunks.0), view_arr(&gpu.chunks.1), view2(m), view2(&gpu.noise)];
+        if let (Some(a), Some(m), Some(mp)) = (&gpu.atlas, &gpu.mask, &gpu.map) {
+            let v = [view_arr(&a.0), view_arr(&a.1), view_arr(&gpu.chunks.0), view_arr(&gpu.chunks.1), view2(m), view2(&gpu.noise), view2(mp)];
             gpu.bg_scene = Some(d.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("bg_scene"),
                 layout: &gpu.bgl_scene,
@@ -410,6 +414,7 @@ fn prepare(mut gpu: ResMut<Gpu>, mut p: ResMut<Packed>, dev: Res<RenderDevice>, 
                     wgpu::BindGroupEntry { binding: 3, resource: wgpu::BindingResource::TextureView(&v[3]) },
                     wgpu::BindGroupEntry { binding: 4, resource: wgpu::BindingResource::TextureView(&v[4]) },
                     wgpu::BindGroupEntry { binding: 5, resource: wgpu::BindingResource::TextureView(&v[5]) },
+                    wgpu::BindGroupEntry { binding: 6, resource: wgpu::BindingResource::TextureView(&v[6]) },
                 ],
             }));
         }

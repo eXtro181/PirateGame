@@ -7,7 +7,7 @@ use crate::gfx::{flags, Frame, LightDef, SprOpt};
 use std::f32::consts::PI;
 
 /// Weltpunkt, um den das Titelbild aufgebaut wird (offenes Meer zwischen Eismeer und Aschebucht).
-pub const TITLE_SEA: (f32, f32) = (330.0 * 32.0, 52.0 * 32.0);
+pub const TITLE_SEA: (f32, f32) = ((330 + crate::world::CORE.0) as f32 * 32.0, (52 + crate::world::CORE.1) as f32 * 32.0);
 
 /// Flammenpunkte auf dem Schiff (relativ zum Fußpunkt, Bildschirm-Pixel) mit Größe.
 const FLAMES: [(f32, f32, f32); 16] = [

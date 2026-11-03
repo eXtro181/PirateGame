@@ -142,6 +142,8 @@ pub struct Enemy {
     pub cool: f32,
     pub poise: f32,
     pub elite: bool,
+    /// Gefahrenstufe (wilde Inseln)
+    pub lvl: u8,
     pub hit_done: bool,
     pub dead_t: f32,
     pub body_y: f32,
@@ -921,12 +923,13 @@ impl Game {
             def: di,
             state: if d.mimic { ES::Lurk } else { ES::Idle },
             st_t: rnd(),
-            hp: d.hp * ng_hp(&self.save),
-            max_hp: d.hp * ng_hp(&self.save),
+            hp: d.hp * ng_hp(&self.save) * (1.0 + 0.35 * sp.lvl as f32),
+            max_hp: d.hp * ng_hp(&self.save) * (1.0 + 0.35 * sp.lvl as f32),
             home: (sp.x, sp.y),
             cool: 0.0,
             poise: d.poise,
             elite: sp.elite,
+            lvl: sp.lvl,
             hit_done: false,
             dead_t: 0.0,
             body_y: if matches!(d.body, Body::Beast(_)) { h * 0.45 } else { 22.0 * sc },
@@ -945,7 +948,7 @@ impl Game {
         let (px, py) = (self.player.a.x, self.player.a.y);
         let pstate = self.player.state;
         let d = &self.edefs[e.def];
-        let (speed, aggro, reach, windup, recover, dmg, ranged, aoe, charge, burn, chill, shot, volley) = (d.speed, d.aggro, d.reach, d.windup, d.recover, d.dmg, d.ranged, d.aoe, d.charge, d.burn, d.chill, d.shot, d.volley);
+        let (speed, aggro, reach, windup, recover, dmg, ranged, aoe, charge, burn, chill, shot, volley) = (d.speed, d.aggro, d.reach, d.windup, d.recover, d.dmg * (1.0 + 0.12 * e.lvl as f32), d.ranged, d.aoe, d.charge, d.burn, d.chill, d.shot, d.volley);
         let is_beast = !matches!(d.body, Body::Sheet(_));
         e.st_t += dt;
         e.a.at += dt;
@@ -1187,7 +1190,7 @@ impl Game {
             e.hp = 0.0;
             e.a.anim = "dead";
             let d = &self.edefs[e.def];
-            (e.a.x, e.a.y, d.pearls, matches!(d.body, Body::Sheet(s) if s.contains("kel")))
+            (e.a.x, e.a.y, d.pearls * (1.0 + 0.4 * e.lvl as f32), matches!(d.body, Body::Sheet(s) if s.contains("kel")))
         };
         self.sfx(if skel { "bones" } else { "crush" });
         let k = if self.save.origin == "schmuggler" { 1.2 } else { 1.0 } * if self.save.gift == "coin" { 1.15 } else { 1.0 };

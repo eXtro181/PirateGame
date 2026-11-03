@@ -97,6 +97,9 @@ impl Kraken {
     }
 }
 
+/// Heimat des Kraken nördlich der Glutwacht (Kacheln)
+pub const KRAKEN_HOME: (f32, f32) = (294.0 + crate::world::CORE.0 as f32, 126.0 + crate::world::CORE.1 as f32);
+
 impl Ship {
     pub fn new(x: f32, y: f32, h: f32) -> Self {
         Ship { hull: Hull::new(x, y, h), sail: 0, hp: 120.0, max_hp: 120.0, cool: [0.0; 2], rise: None }
@@ -123,14 +126,31 @@ impl Game {
             .collect();
         self.spawn_sea_bosses();
         if !self.kraken.dead() {
-            self.kraken = Kraken::new(294.0 * TS as f32, 126.0 * TS as f32);
+            self.kraken = Kraken::new(KRAKEN_HOME.0 * TS as f32, KRAKEN_HOME.1 * TS as f32);
         }
-        self.sharks = [(290, 200), (190, 140), (300, 120), (180, 210), (280, 230), (190, 260), (230, 90), (140, 180)]
+        let (cx, cy) = crate::world::CORE;
+        let mut homes: Vec<(f32, f32)> = [(290, 200), (190, 140), (300, 120), (180, 210), (280, 230), (190, 260), (230, 90), (140, 180)]
             .iter()
-            .map(|&(x, y)| {
-                let (x, y) = ((x * TS) as f32, (y * TS) as f32);
-                Shark { x, y, home: (x, y), a: rnd() * TAU, hp: 60.0, fx: 1.0, cool: 0.0, flash: 0.0, t: 0.0 }
-            })
+            .map(|&(x, y)| (((x + cx) * TS) as f32, ((y + cy) * TS) as f32))
+            .collect();
+        // Haie auch im weiten Ozean: auf freiem Wasser verstreut (fest, damit sie jedes Mal gleich liegen)
+        let mut rng = sw_art::noise::Rng::new(4242);
+        let mut tries = 0;
+        while homes.len() < 60 && tries < 4000 {
+            tries += 1;
+            let (tx, ty) = (rng.int(40, crate::world::MW - 40), rng.int(40, crate::world::MH - 40));
+            if !crate::world::inb(tx, ty) || self.world.g(tx, ty) != Mat::Water || self.world.shore[crate::world::idx(tx, ty)] < 6 || self.world.in_end((tx * TS) as f32, (ty * TS) as f32) {
+                continue;
+            }
+            let p = ((tx * TS) as f32, (ty * TS) as f32);
+            if homes.iter().any(|h| (h.0 - p.0).hypot(h.1 - p.1) < 2400.0) {
+                continue;
+            }
+            homes.push(p);
+        }
+        self.sharks = homes
+            .into_iter()
+            .map(|(x, y)| Shark { x, y, home: (x, y), a: rnd() * TAU, hp: 60.0, fx: 1.0, cool: 0.0, flash: 0.0, t: 0.0 })
             .collect();
     }
 

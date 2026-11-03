@@ -13,11 +13,11 @@ pub const FACE_ROWS: i32 = 3; // Klippenwand = 3 Kachelreihen
 pub const LEVEL_H: f32 = 96.0; // Höhe einer Ebene in px
 /// Höhe einer Klippenwand im Bild (px)
 pub const FACE_PX: i32 = FACE_ROWS * T;
-/// Tiefe eines Hangs in der Natur (px): flacher als die Festungsmauern
-pub const SLOPE_PX: i32 = 136;
+/// Tiefe eines Hangs in der Natur (px): viel flacher als die Festungsmauern
+pub const SLOPE_PX: i32 = 168;
 /// Breite der seitlichen Böschung und des Randes oben (px)
-pub const BANK_PX: i32 = 52;
-pub const RIM_PX: i32 = 16;
+pub const BANK_PX: i32 = 64;
+pub const RIM_PX: i32 = 20;
 /// Tiefe der Kante nach Süden: Festungsmauer steil, Naturhang flach
 pub fn face_px(b: Biome) -> i32 {
     if b == Biome::Hub {
@@ -814,12 +814,18 @@ pub trait TerrainMap {
 /// Liegt der Chunk samt allem, was sein Backen liest, auf offener See? Dann ist er leer
 /// (nur Wasser, das der Shader zeichnet) und braucht keine Pixelarbeit.
 pub fn open_water_chunk<M: TerrainMap>(m: &M, x0: i32, y0: i32, sz: i32) -> bool {
-    let tx0 = (x0 - BANK_PX - 8).div_euclid(T) - 1;
-    let ty0 = (y0 - RIM_PX - 20).div_euclid(T) - 1;
-    let tx1 = (x0 + sz + BANK_PX + 8).div_euclid(T) + 1;
-    let ty1 = (y0 + sz + SLOPE_PX + 6).div_euclid(T) + 1;
+    // auch das Ufer-Abstandsfeld (SHORE_M) muss leer sein, sonst stimmt der Schaum nicht
+    let tx0 = (x0 - (BANK_PX + 8).max(SHORE_M + 16)).div_euclid(T) - 1;
+    let ty0 = (y0 - (RIM_PX + 20).max(SHORE_M + 16)).div_euclid(T) - 1;
+    let tx1 = (x0 + sz + (BANK_PX + 8).max(SHORE_M + 16)).div_euclid(T) + 1;
+    let ty1 = (y0 + sz + (SLOPE_PX + 6).max(SHORE_M + 16)).div_euclid(T) + 1;
     m.open_water(tx0, ty0, tx1, ty1)
 }
+
+/// Ufer-Abstandsfeld eines Chunks: Zellen zu SHORE_C px, Rand SHORE_M px. Wasserpixel tragen den
+/// Abstand zum Land (für Schaum und Farbe des Wassers) in ihrer Normalen-Textur.
+pub const SHORE_C: i32 = 4;
+pub const SHORE_M: i32 = 64;
 
 /// Rauschtabelle für Materialgrenzen (schnell).
 pub struct EdgeNoise {
@@ -915,6 +921,8 @@ pub struct ChunkBake {
     hi_l: Vec<u8>,
     hi_r: Vec<u8>,
     hi_u: Vec<u8>,
+    /// Abstand zum Land je Zelle (px), für die Wasserpixel
+    sh: Vec<f32>,
     row: i32,
     /// Vorberechnung: 0 Materialraster, 1 Ebenenraster, 2 Abstand nach unten, 3 seitliche Abstände, 4 fertig
     stage: u8,
@@ -942,15 +950,18 @@ impl ChunkBake {
             hi_l: vec![u8::MAX; n],
             hi_r: vec![u8::MAX; n],
             hi_u: vec![u8::MAX; n],
+            sh: vec![],
             row: 0,
             stage: 0,
             prow: 0,
         };
         if open_water_chunk(m, x0, y0, sz) {
-            // offene See: nichts zu rechnen
+            // offene See: nichts zu rechnen (weit vom Ufer)
             for y in 0..sz {
                 for x in 0..sz {
                     c.set_ev(x, y, 0.0);
+                    let i = c.idx(x, y);
+                    c.emi[i] = [255, 255, 0, 0];
                 }
             }
             b.row = sz;
@@ -1006,6 +1017,7 @@ impl ChunkBake {
                         wd[i] = v.min(255) as u8;
                     }
                 }
+                self.shore_field(m, en);
                 self.stage = 1;
                 self.prow = 0;
                 false
@@ -1107,6 +1119,51 @@ impl ChunkBake {
         }
     }
 
+    /// Abstand zum Land für die Wasserpixel: grobes Zellraster mit breitem Rand, Chamfer-Abstand.
+    fn shore_field<M: TerrainMap>(&mut self, m: &M, en: &EdgeNoise) {
+        let sw = (self.sz + SHORE_M * 2) / SHORE_C;
+        let n = (sw * sw) as usize;
+        let mut d = vec![1.0e4f32; n];
+        for cy in 0..sw {
+            for cx in 0..sw {
+                let px = self.x0 - SHORE_M + cx * SHORE_C + SHORE_C / 2;
+                let py = self.y0 - SHORE_M + cy * SHORE_C + SHORE_C / 2;
+                if !mat_at(m, en, px, py).transparent() {
+                    d[(cy * sw + cx) as usize] = 0.0;
+                }
+            }
+        }
+        let (a, b) = (SHORE_C as f32, SHORE_C as f32 * 1.414);
+        let w = sw as usize;
+        for y in 0..w {
+            for x in 0..w {
+                let i = y * w + x;
+                let mut v = d[i];
+                if x > 0 { v = v.min(d[i - 1] + a); }
+                if y > 0 {
+                    v = v.min(d[i - w] + a);
+                    if x > 0 { v = v.min(d[i - w - 1] + b); }
+                    if x + 1 < w { v = v.min(d[i - w + 1] + b); }
+                }
+                d[i] = v;
+            }
+        }
+        for y in (0..w).rev() {
+            for x in (0..w).rev() {
+                let i = y * w + x;
+                let mut v = d[i];
+                if x + 1 < w { v = v.min(d[i + 1] + a); }
+                if y + 1 < w {
+                    v = v.min(d[i + w] + a);
+                    if x + 1 < w { v = v.min(d[i + w + 1] + b); }
+                    if x > 0 { v = v.min(d[i + w - 1] + b); }
+                }
+                d[i] = v;
+            }
+        }
+        self.sh = d;
+    }
+
     pub fn done(&self) -> bool {
         self.row >= self.sz
     }
@@ -1119,7 +1176,7 @@ impl ChunkBake {
         }
         let (x0, y0, sz, pad, mx, mn) = (self.x0, self.y0, self.sz, PAD, MX, MN);
         let (gw, lw, lh) = (sz + pad * 2, sz + mx * 2, sz + mn + MS);
-        let (grid, wd, lg, down) = (&self.grid, &self.wd, &self.lg, &self.down);
+        let (grid, wd, lg, down, sh) = (&self.grid, &self.wd, &self.lg, &self.down, &self.sh);
         let (lo_l, lo_r, lo_u, hi_l, hi_r, hi_u) = (&self.lo_l, &self.lo_r, &self.lo_u, &self.hi_l, &self.hi_r, &self.hi_u);
         let c = &mut self.c;
         let g = |x: i32, y: i32| -> Mat { grid[((y + pad) * gw + x + pad) as usize] };
@@ -1146,7 +1203,10 @@ impl ChunkBake {
                 }
                 let mt = g(x, y);
                 if mt.transparent() {
+                    // Wasser/Abgrund: der Shader zeichnet es; Uferabstand und Art in die Normale
                     c.set_ev(x, y, 0.0);
+                    let i = c.idx(x, y);
+                    c.emi[i] = [shore_lookup(sh, sz, x, y), if mt == Mat::Water { 255 } else { 64 }, 0, 0];
                     continue;
                 }
                 let b = m.biome(tx, ty);
@@ -1274,6 +1334,23 @@ impl ChunkBake {
     }
 }
 
+/// Uferabstand eines Pixels (0..255 ≙ 0..64 px), bilinear aus dem Zellraster des Chunks.
+fn shore_lookup(sh: &[f32], sz: i32, x: i32, y: i32) -> u8 {
+    let sw = (sz + SHORE_M * 2) / SHORE_C;
+    if sh.is_empty() {
+        return 255;
+    }
+    let fx = ((x + SHORE_M) as f32 + 0.5) / SHORE_C as f32 - 0.5;
+    let fy = ((y + SHORE_M) as f32 + 0.5) / SHORE_C as f32 - 0.5;
+    let (ix, iy) = (fx.floor() as i32, fy.floor() as i32);
+    let (u, v) = (fx - ix as f32, fy - iy as f32);
+    let g = |a: i32, b: i32| sh[(b.clamp(0, sw - 1) * sw + a.clamp(0, sw - 1)) as usize];
+    let top = g(ix, iy) + (g(ix + 1, iy) - g(ix, iy)) * u;
+    let bot = g(ix, iy + 1) + (g(ix + 1, iy + 1) - g(ix, iy + 1)) * u;
+    let dd = top + (bot - top) * v;
+    (dd * 4.0).clamp(0.0, 255.0) as u8
+}
+
 /// Backt einen Boden-Chunk (x0,y0 in Weltpixeln, Größe sz) in einem Zug. Ergebnis: flache Leinwand
 /// mit Farbe, Relief, Aufrecht-Anteil (Wände), Höhe über Grund und Leuchten.
 pub fn bake_chunk<M: TerrainMap>(m: &M, mats: &mut Materials, en: &EdgeNoise, x0: i32, y0: i32, sz: i32) -> Canvas {
@@ -1335,28 +1412,29 @@ fn slope_pixel(mats: &mut Materials, en: &EdgeNoise, c: &mut Canvas, x: i32, y: 
     let si = stex.idx(px.rem_euclid(TEX), py.rem_euclid(TEX));
     let n = en.at(px * 3 + 17, py * 3 + 3);
     let n2 = en.at(px * 7 + 5, py * 7);
-    let side = if dir.0 < 0.0 { -0.07 } else if dir.0 > 0.0 { 0.05 } else { 0.04 };
+    let side = if dir.0 < 0.0 { -0.05 } else if dir.0 > 0.0 { 0.04 } else { 0.03 };
     let e = 1.0 - d;
-    let mut col = shade(stex.col[si], 0.97 - e * e * 0.26 + side + n2 * 0.04);
-    let mut rel = d * 16.0;
+    // sanfte Böschung: kaum dunkler zum Fuß, selten Fels, eher offene Erde
+    let mut col = shade(stex.col[si], 0.99 - e * e * 0.15 + side + n2 * 0.04);
+    let mut rel = d * 13.0;
     if d > 0.9 {
-        col = shade(stex.col[si], 1.05);
-    } else if n > 0.4 - (1.0 - (d - 0.5).abs() * 2.0) * 0.1 {
-        col = pickf(&bp.cliff, (0.45 + n * 0.4 + n2 * 0.2 + side).clamp(0.0, 1.0));
-        rel += 2.5;
-    } else if n > 0.3 {
-        col = mix(col, pickf(&bp.path[0..4], 0.4 + n2 * 0.3), 0.5);
+        col = shade(stex.col[si], 1.04);
+    } else if n > 0.52 - (1.0 - (d - 0.5).abs() * 2.0) * 0.08 {
+        col = pickf(&bp.cliff, (0.5 + n * 0.3 + n2 * 0.2 + side).clamp(0.0, 1.0));
+        rel += 2.0;
+    } else if n > 0.4 {
+        col = mix(col, pickf(&bp.path[0..4], 0.4 + n2 * 0.3), 0.4);
     }
     if (!grassy && hash(px / 3, py / 3, 91) % 37 == 0) || hash(px / 4, py / 4, 93) % 71 == 0 {
         col = pickf(&bp.stone, 0.65);
         rel += 1.5;
     }
     if d < 0.1 {
-        col = shade(col, 0.82 + d * 1.8);
+        col = shade(col, 0.9 + d);
     }
     c.put(x, y, col, rel);
     let i = c.idx(x, y);
-    c.up[i] = 35;
+    c.up[i] = 20;
     c.ev[i] = 0.0;
     true
 }
@@ -1545,9 +1623,9 @@ fn face_pixel<M: TerrainMap>(m: &M, mats: &mut Materials, en: &EdgeNoise, c: &mu
     }
 }
 
-/// Naturhang: der Boden der oberen Ebene läuft sanft geneigt hinab (gleiche Textur, nach unten
-/// dunkler, Normalen zeigen hangabwärts), mit Erd- und Felsausbissen, Grasbüscheln, Steinen
-/// und einer weichen Abbruchkante oben.
+/// Naturhang: der Boden der oberen Ebene läuft sanft geneigt hinab (gleiche Textur, zum Fuß nur
+/// wenig dunkler, Normalen leicht hangabwärts), in flachen, gewellten Grasstufen, mit seltenen
+/// Felsausbissen, offener Erde, Halmen und Steinen und einer weichen, hellen Kante oben.
 #[allow(clippy::too_many_arguments)]
 fn hill_pixel(mats: &mut Materials, en: &EdgeNoise, c: &mut Canvas, x: i32, y: i32, px: i32, py: i32, fy: i32, hgt: i32, bp: &BiomePal, b: Biome, top: Mat, ev: f32, water: bool) {
     let t = fy as f32 / hgt as f32;
@@ -1559,25 +1637,34 @@ fn hill_pixel(mats: &mut Materials, en: &EdgeNoise, c: &mut Canvas, x: i32, y: i
     let ti = tex.idx(px.rem_euclid(TEX), py.rem_euclid(TEX));
     let n = en.at(px * 3 + 31, py * 3 + 5);
     let n2 = en.at(px * 7, py * 7 + 7);
-    // sanfter Verlauf: oben fast Bodenhelligkeit, unten im Schatten der Kante
-    let mut col = shade(tex.col[ti], 0.97 - t * t * 0.28 + n2 * 0.04);
-    let mut rel = (1.0 - t) * 26.0;
-    let lip = 3.0 + (n * 0.5 + 0.5) * 4.0;
+    let n3 = en.at(px / 2 + 913, py + 77);
+    // sanfter Verlauf: der Boden läuft weiter, zum Fuß hin nur leicht im Schatten
+    let mut col = shade(tex.col[ti], 0.99 - t * 0.07 - t * t * 0.08 + n2 * 0.04);
+    let mut rel = (1.0 - t) * 18.0;
+    let lip = 2.0 + (n * 0.5 + 0.5) * 3.0;
     if (fy as f32) < lip {
-        // weiche Kante: erst heller Saum, dann ein wenig Erde
-        let k = fy as f32 / lip;
-        col = if k < 0.4 { shade(tex.col[ti], 1.06) } else { mix(col, pickf(&bp.path[0..4], 0.4), 0.45) };
+        // weiche Kante: heller Saum
+        col = shade(tex.col[ti], 1.05);
     } else {
-        let mid = 1.0 - ((t - 0.45) * 2.2).abs().min(1.0);
-        // Felsausbisse in der Hangmitte, Erde drumherum
-        if n > 0.42 - mid * 0.12 {
-            col = pickf(&bp.cliff, (0.45 + n * 0.4 + n2 * 0.2 - t * 0.2).clamp(0.0, 1.0));
-            rel += 3.0 + n2 * 2.0;
-        } else if n > 0.3 - mid * 0.1 {
-            col = mix(col, pickf(&bp.path[0..4], 0.4 + n2 * 0.3), 0.55);
+        let mid = 1.0 - ((t - 0.5) * 2.0).abs().min(1.0);
+        // flache Grasstufen quer zum Hang, gewellt: oben ein Lichtsaum, darunter ein Hauch Schatten
+        let tw = (fy as f32 + n3 * 16.0 + 40.0).rem_euclid(42.0);
+        if tw < 2.0 {
+            col = shade(col, 1.05);
+            rel += 0.8;
+        } else if tw < 6.0 {
+            col = shade(col, 0.93 + (tw - 2.0) * 0.015);
+            rel -= 0.4;
         }
-        // Grasbüschel/Halme quer zum Hang
-        if b != Biome::Fire && hash(px / 2, py / 3, 61) % 29 == 0 {
+        // seltene Felsausbisse in der Hangmitte, offene Erde drumherum
+        if n > 0.56 - mid * 0.08 {
+            col = pickf(&bp.cliff, (0.52 + n * 0.3 + n2 * 0.2 - t * 0.12).clamp(0.0, 1.0));
+            rel += 2.5 + n2 * 2.0;
+        } else if n > 0.45 - mid * 0.08 {
+            col = mix(col, pickf(&bp.path[0..4], 0.45 + n2 * 0.3), 0.45);
+        }
+        // Halme quer zum Hang
+        if b != Biome::Fire && hash(px / 2, py / 3, 61) % 23 == 0 {
             col = shade(col, 1.12);
             rel += 1.0;
         }
@@ -1587,17 +1674,17 @@ fn hill_pixel(mats: &mut Materials, en: &EdgeNoise, c: &mut Canvas, x: i32, y: i
             rel += 2.0;
         }
     }
-    // Fuß des Hangs: leichte Verdeckung, am Wasser nass
-    if t > 0.8 {
-        let k = (t - 0.8) / 0.2;
-        col = shade(col, 1.0 - k * 0.22);
+    // Fuß des Hangs: weiche Verdeckung, am Wasser nass
+    if t > 0.85 {
+        let k = (t - 0.85) / 0.15;
+        col = shade(col, 1.0 - k * 0.12);
         if water {
-            col = mix(col, hex(0x1A3846), k * 0.35);
+            col = mix(col, hex(0x1A3846), k * 0.3);
         }
     }
     c.put(x, y, col, rel);
     let i = c.idx(x, y);
-    c.up[i] = 35;
+    c.up[i] = 22;
     c.ev[i] = ev;
 }
 
