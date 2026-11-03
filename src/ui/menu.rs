@@ -1,5 +1,5 @@
-//! Titelbildschirm (über der lebenden Welt), Charakter-Editor mit Live-Vorschau, Anmeldung mit
-//! Name und Passwort, Optionen und Credits – alles im Canvas gezeichnet.
+//! Titelbildschirm (über der lebenden Welt), Charakter-Editor mit Live-Vorschau, Profilwahl
+//! (nur Name, alte verschlüsselte Profile einmal mit Passwort), Optionen und Credits – alles im Canvas.
 
 use super::hud::Ui;
 use super::text::{self, col, Al};
@@ -9,7 +9,7 @@ use crate::game::data::*;
 use crate::game::input::{Act, Input};
 use crate::game::Options;
 use crate::gfx::{Frame, SprOpt};
-use crate::save::{self, Profile, Row};
+use crate::save::{self, LoginErr, Profile, Row};
 use sw_art::chars::LOOK_OPTS;
 
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -49,8 +49,6 @@ pub struct Menu {
     origin: usize,
     gift: usize,
     name: String,
-    pw1: String,
-    pw2: String,
     err: String,
     page: usize,
     // Anmeldung
@@ -77,8 +75,6 @@ impl Menu {
             origin: 0,
             gift: 0,
             name: "Finn Rabenfeder".into(),
-            pw1: String::new(),
-            pw2: String::new(),
             err: String::new(),
             page: 0,
             profiles: save::list(),
@@ -101,10 +97,6 @@ impl Menu {
             self.picked = None;
             self.pw.clear();
             self.del_armed = false;
-        }
-        if s == Screen::Creator {
-            self.pw1.clear();
-            self.pw2.clear();
         }
         textinput::clear_all();
         textinput::set(1, &self.name);
@@ -259,7 +251,7 @@ impl Menu {
                 match p {
                     Pending::Create => {
                         let s = new_save(self.name.trim(), self.look, ORIGINS[self.origin].id, GIFTS[self.gift].id, crate::game::now_ms());
-                        match save::create(self.name.trim(), &self.pw1, &s) {
+                        match save::create(self.name.trim(), &s) {
                             Ok(prof) => {
                                 textinput::clear_all();
                                 out = MenuOut::Start(Some(prof), Box::new(s));
@@ -269,18 +261,22 @@ impl Menu {
                     }
                     Pending::Login => {
                         if let Some(r) = self.picked.and_then(|i| self.profiles.get(i)) {
-                            match save::login(&r.name, &self.pw) {
+                            match save::login(&r.name, Some(self.pw.as_str())) {
                                 Ok((p, s)) => {
                                     textinput::clear_all();
                                     out = MenuOut::Start(Some(p), Box::new(s));
                                 }
-                                Err(e) => self.err = e,
+                                Err(LoginErr::NeedsPassword) => {
+                                    self.err = "Altes Profil: einmal das frühere Passwort eingeben, danach geht es ohne.".into();
+                                    textinput::focus(4);
+                                }
+                                Err(LoginErr::Msg(e)) => self.err = e,
                             }
                         }
                     }
                     Pending::Delete => {
                         if let Some(r) = self.picked.and_then(|i| self.profiles.get(i)).cloned() {
-                            match save::remove(&r.name, &self.pw) {
+                            match save::remove(&r.name) {
                                 Ok(()) => self.go(Screen::Login),
                                 Err(e) => self.err = e,
                             }
@@ -301,7 +297,11 @@ impl Menu {
             out = r;
         }
         if self.pending != Pending::None {
-            let msg = if self.pending == Pending::Create { "Die Flut nimmt dich …" } else { "Prüfe …" };
+            let msg = match self.pending {
+                Pending::Create => "Die Flut nimmt dich …",
+                Pending::Login => "Die See gibt dich zurück …",
+                _ => "Einen Moment …",
+            };
             Ui::rect(f, w / 2.0 - 80.0, h / 2.0 - 12.0, 160.0, 24.0, [8, 12, 16, 240]);
             text::tc(f, art, msg, w / 2.0, h / 2.0 - 3.0, col::GOLD);
         }
@@ -413,18 +413,10 @@ impl Menu {
             self.field(f, art, inp, 1, rx, y, colw, "Name", &mut name, false);
             self.name = name;
             y += 30.0;
-            let half = (colw - 8.0) / 2.0;
-            let mut p1 = std::mem::take(&mut self.pw1);
-            self.field(f, art, inp, 2, rx, y, half, "Passwort", &mut p1, true);
-            self.pw1 = p1;
-            let mut p2 = std::mem::take(&mut self.pw2);
-            self.field(f, art, inp, 3, rx + half + 8.0, y, half, "Wiederholen", &mut p2, true);
-            self.pw2 = p2;
-            y += 30.0;
-            for (i, l) in text::wrap(art, "Das Passwort verschlüsselt deinen Spielstand in diesem Browser. Nimm keins, das du anderswo nutzt.", colw).iter().enumerate() {
+            for (i, l) in text::wrap(art, "Dein Spielstand bleibt unter diesem Namen in diesem Browser.", colw).iter().enumerate() {
                 text::t(f, art, l, rx, y + i as f32 * 10.0, [143, 163, 168, 200]);
             }
-            y += 26.0;
+            y += 56.0;
             text::t(f, art, "Herkunft", rx, y, col::GOLD);
             y += 11.0;
             let bw = (colw - 8.0) / 3.0;
@@ -477,10 +469,6 @@ impl Menu {
             let n = self.name.trim().to_string();
             if n.chars().count() < 2 {
                 self.err = "Der Name braucht mindestens 2 Zeichen.".into();
-            } else if self.pw1.chars().count() < 4 {
-                self.err = "Das Passwort braucht mindestens 4 Zeichen.".into();
-            } else if self.pw1 != self.pw2 {
-                self.err = "Die Passwörter stimmen nicht überein.".into();
             } else {
                 self.pending = Pending::Create;
                 self.pending_t = 0;
@@ -509,23 +497,33 @@ impl Menu {
             let t = if mins >= 60 { format!("{} Std {} Min", mins / 60, mins % 60) } else { format!("{mins} Min") };
             let label = format!("{} · Stufe {} · {} · {}× ertrunken", r.name, r.summary.level, t, r.summary.deaths);
             if self.button(f, art, inp, px + 12.0, y, pw - 24.0, 18.0, &label, picked, true) {
+                // zweiter Klick auf dasselbe Profil (ohne Passwort) spielt gleich weiter
+                let again = picked && !r.locked();
                 self.picked = Some(i);
                 self.pw.clear();
                 textinput::set(4, "");
                 self.err.clear();
                 self.del_armed = false;
                 sfx.push("click");
-                textinput::focus(4);
+                if r.locked() {
+                    textinput::focus(4);
+                } else if again && self.pending == Pending::None {
+                    self.pending = Pending::Login;
+                    self.pending_t = 0;
+                }
             }
             y += 21.0;
         }
         y += 6.0;
         if let Some(i) = self.picked {
             let name = self.profiles[i].name.clone();
-            let mut p = std::mem::take(&mut self.pw);
-            self.field(f, art, inp, 4, px + 12.0, y, pw - 24.0, &format!("{name} – Passwort eingeben"), &mut p, true);
-            self.pw = p;
-            y += 32.0;
+            if self.profiles[i].locked() {
+                // altes verschlüsseltes Profil: einmal entsperren, danach ohne Passwort
+                let mut p = std::mem::take(&mut self.pw);
+                self.field(f, art, inp, 4, px + 12.0, y, pw - 24.0, &format!("{name} – altes Passwort (nur dieses eine Mal)"), &mut p, true);
+                self.pw = p;
+                y += 32.0;
+            }
             let go = self.button(f, art, inp, px + 12.0, y, 130.0, 17.0, "Weiterspielen", true, self.pending == Pending::None);
             let enter = self.focused && self.activate;
             if (go || enter) && self.pending == Pending::None {
@@ -536,7 +534,7 @@ impl Menu {
             if self.button(f, art, inp, px + 150.0, y, 120.0, 17.0, if self.del_armed { "Wirklich löschen?" } else { "Löschen" }, false, true) {
                 if !self.del_armed {
                     self.del_armed = true;
-                    self.err = "Löschen kann nicht rückgängig gemacht werden. Passwort eingeben und erneut klicken.".into();
+                    self.err = "Löschen kann nicht rückgängig gemacht werden. Zum Bestätigen erneut klicken.".into();
                 } else {
                     self.pending = Pending::Delete;
                     self.pending_t = 0;
@@ -550,7 +548,7 @@ impl Menu {
             }
         }
         let by = py + ph - 24.0;
-        text::t(f, art, "Spielstände liegen verschlüsselt in diesem Browser.", px + 12.0, by + 5.0, [143, 163, 168, 200]);
+        text::t(f, art, "Spielstände liegen in diesem Browser.", px + 12.0, by + 5.0, [143, 163, 168, 200]);
         if self.button(f, art, inp, px + pw - 102.0, by, 90.0, 17.0, "Zurück", false, true) {
             sfx.push("click");
             self.go(Screen::Main);

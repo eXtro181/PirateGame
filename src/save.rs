@@ -1,6 +1,7 @@
-//! Spielerprofile mit Name und Passwort. Passwörter werden nie gespeichert: PBKDF2-SHA256
-//! leitet einen Prüfwert und einen AES-256-GCM-Schlüssel ab, der den Spielstand verschlüsselt.
-//! Alles liegt im localStorage dieses Browsers (nativ: Datei neben dem Spiel).
+//! Spielerprofile: nur ein Name, der Spielstand liegt als JSON im localStorage dieses Browsers
+//! (nativ: Datei neben dem Spiel). Ältere Profile waren mit einem Passwort verschlüsselt
+//! (PBKDF2-SHA256 + AES-256-GCM); sie werden beim ersten Laden einmal mit dem alten Passwort
+//! entschlüsselt und danach ohne Passwort gespeichert.
 
 use crate::game::data::{LookIdx, Save};
 use aes_gcm::aead::Aead;
@@ -29,21 +30,39 @@ pub struct Summary {
 pub struct Row {
     pub id: String,
     pub name: String,
+    /// Spielstand als JSON (Profile ohne Passwort)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plain: Option<String>,
+    /// alte, verschlüsselte Profile: Salz, Prüfwert, IV und verschlüsselter Spielstand
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub salt: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub verifier: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub iv: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub data: String,
     pub updated_at: f64,
     pub summary: Summary,
+}
+impl Row {
+    /// Altes, noch verschlüsseltes Profil (braucht einmal das alte Passwort)
+    pub fn locked(&self) -> bool {
+        self.plain.is_none() && !self.data.is_empty()
+    }
 }
 
 #[derive(Clone)]
 pub struct Profile {
     pub id: String,
     pub name: String,
-    pub salt: String,
-    pub verifier: String,
-    key: [u8; 32],
+}
+
+/// Warum ein Profil nicht geladen werden konnte
+pub enum LoginErr {
+    /// altes verschlüsseltes Profil: einmal das alte Passwort eingeben
+    NeedsPassword,
+    Msg(String),
 }
 
 pub fn profile_id(name: &str) -> String {
@@ -79,6 +98,7 @@ fn save_all(m: &BTreeMap<String, Row>) -> Result<(), String> {
     store_set(&serde_json::to_string(m).map_err(|e| e.to_string())?)
 }
 
+/// Nur noch zum Entschlüsseln alter Profile.
 fn derive(password: &str, salt: &[u8]) -> (String, [u8; 32]) {
     let mut out = [0u8; 64];
     pbkdf2::pbkdf2_hmac::<sha2::Sha256>(password.as_bytes(), salt, ITER, &mut out);
@@ -88,61 +108,62 @@ fn derive(password: &str, salt: &[u8]) -> (String, [u8; 32]) {
     (verifier, key)
 }
 
-fn random<const N: usize>() -> [u8; N] {
-    let mut b = [0u8; N];
-    let _ = getrandom::fill(&mut b);
-    b
-}
-
 pub fn list() -> Vec<Row> {
     let mut v: Vec<Row> = load_all().into_values().collect();
     v.sort_by(|a, b| b.updated_at.partial_cmp(&a.updated_at).unwrap_or(std::cmp::Ordering::Equal));
     v
 }
 
-pub fn create(name: &str, password: &str, save: &Save) -> Result<Profile, String> {
+pub fn create(name: &str, save: &Save) -> Result<Profile, String> {
     let id = profile_id(name);
     if load_all().contains_key(&id) {
         return Err("Diesen Namen gibt es auf diesem Gerät schon.".into());
     }
-    let salt = random::<16>();
-    let (verifier, key) = derive(password, &salt);
-    let p = Profile { id, name: name.trim().into(), salt: B64.encode(salt), verifier, key };
+    let p = Profile { id, name: name.trim().into() };
     write(&p, save)?;
     Ok(p)
 }
 
-pub fn login(name: &str, password: &str) -> Result<(Profile, Save), String> {
+/// Profil laden. Alte verschlüsselte Profile brauchen einmal `old_password`; danach werden sie
+/// ohne Passwort gespeichert.
+pub fn login(name: &str, old_password: Option<&str>) -> Result<(Profile, Save), LoginErr> {
     let all = load_all();
-    let row = all.get(&profile_id(name)).ok_or("Kein Profil mit diesem Namen.")?;
-    let salt = B64.decode(&row.salt).map_err(|_| "Profil beschädigt.")?;
-    let (verifier, key) = derive(password, &salt);
-    if verifier != row.verifier {
-        return Err("Falsches Passwort.".into());
+    let row = all.get(&profile_id(name)).ok_or(LoginErr::Msg("Kein Profil mit diesem Namen.".into()))?;
+    let p = Profile { id: row.id.clone(), name: row.name.clone() };
+    if let Some(j) = &row.plain {
+        let save: Save = serde_json::from_str(j).map_err(|e| LoginErr::Msg(format!("Spielstand unlesbar: {e}")))?;
+        return Ok((p, save));
     }
-    let iv = B64.decode(&row.iv).map_err(|_| "Profil beschädigt.")?;
-    let data = B64.decode(&row.data).map_err(|_| "Profil beschädigt.")?;
-    let cipher = Aes256Gcm::new_from_slice(&key).map_err(|_| "Schlüsselfehler.")?;
-    let plain = cipher.decrypt(Nonce::from_slice(&iv), data.as_ref()).map_err(|_| "Entschlüsseln fehlgeschlagen.")?;
-    let save: Save = serde_json::from_slice(&plain).map_err(|e| format!("Spielstand unlesbar: {e}"))?;
-    Ok((Profile { id: row.id.clone(), name: row.name.clone(), salt: row.salt.clone(), verifier, key }, save))
+    let Some(pw) = old_password.filter(|s| !s.is_empty()) else { return Err(LoginErr::NeedsPassword) };
+    let bad = |m: &str| LoginErr::Msg(m.into());
+    let salt = B64.decode(&row.salt).map_err(|_| bad("Profil beschädigt."))?;
+    let (verifier, key) = derive(pw, &salt);
+    if verifier != row.verifier {
+        return Err(bad("Falsches Passwort."));
+    }
+    let iv = B64.decode(&row.iv).map_err(|_| bad("Profil beschädigt."))?;
+    let data = B64.decode(&row.data).map_err(|_| bad("Profil beschädigt."))?;
+    let cipher = Aes256Gcm::new_from_slice(&key).map_err(|_| bad("Schlüsselfehler."))?;
+    let plain = cipher.decrypt(Nonce::from_slice(&iv), data.as_ref()).map_err(|_| bad("Entschlüsseln fehlgeschlagen."))?;
+    let save: Save = serde_json::from_slice(&plain).map_err(|e| LoginErr::Msg(format!("Spielstand unlesbar: {e}")))?;
+    // ab jetzt ohne Passwort
+    write(&p, &save).map_err(LoginErr::Msg)?;
+    Ok((p, save))
 }
 
 pub fn write(p: &Profile, save: &Save) -> Result<(), String> {
-    let iv = random::<12>();
-    let cipher = Aes256Gcm::new_from_slice(&p.key).map_err(|_| "Schlüsselfehler.")?;
-    let json = serde_json::to_vec(save).map_err(|e| e.to_string())?;
-    let data = cipher.encrypt(Nonce::from_slice(&iv), json.as_ref()).map_err(|_| "Verschlüsseln fehlgeschlagen.")?;
+    let json = serde_json::to_string(save).map_err(|e| e.to_string())?;
     let mut all = load_all();
     all.insert(
         p.id.clone(),
         Row {
             id: p.id.clone(),
             name: p.name.clone(),
-            salt: p.salt.clone(),
-            verifier: p.verifier.clone(),
-            iv: B64.encode(iv),
-            data: B64.encode(data),
+            plain: Some(json),
+            salt: String::new(),
+            verifier: String::new(),
+            iv: String::new(),
+            data: String::new(),
             updated_at: crate::game::now_ms(),
             summary: Summary { level: save.level, play_time: save.play_time.round(), last_fire: save.last_fire.clone(), look: Some(save.look.clone()), weapon: save.weapon.clone(), deaths: save.deaths },
         },
@@ -150,8 +171,7 @@ pub fn write(p: &Profile, save: &Save) -> Result<(), String> {
     save_all(&all)
 }
 
-pub fn remove(name: &str, password: &str) -> Result<(), String> {
-    login(name, password)?;
+pub fn remove(name: &str) -> Result<(), String> {
     let mut all = load_all();
     all.remove(&profile_id(name));
     save_all(&all)
