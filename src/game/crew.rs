@@ -34,6 +34,7 @@ pub const KRAKEN_COOL: f32 = 45.0;
 impl Game {
     /// Ziel für die Crew: der aktive Seeboss (später auch der Endboss auf See).
     fn crew_target(&self) -> Option<(Target, f32, f32)> {
+        let mut near: Option<(Target, f32, f32, f32)> = None;
         for t in self.hittables() {
             if matches!(t, Target::SeaBoss(_) | Target::EndShip) {
                 if let Some((x, y, _, _)) = self.target_pos(t) {
@@ -42,8 +43,17 @@ impl Game {
                     }
                 }
             }
+            // sonst das nächste Seeungeheuer
+            if matches!(t, Target::SeaMon(_)) {
+                if let Some((x, y, _, _)) = self.target_pos(t) {
+                    let d = (x - self.ship.hull.x).hypot(y - self.ship.hull.y);
+                    if d < 520.0 && near.as_ref().is_none_or(|n| d < n.3) {
+                        near = Some((t, x, y, d));
+                    }
+                }
+            }
         }
-        None
+        near.map(|n| (n.0, n.1, n.2))
     }
 
     pub fn update_crew(&mut self, dt: f32) {

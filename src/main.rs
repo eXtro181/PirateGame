@@ -484,10 +484,10 @@ fn tick(
             art::build_title(art, f);
             if let Some((w, v)) = app.title.as_mut() {
                 let t = app.t * 0.05;
-                let (cx, cy) = (ui::title::TITLE_SEA.0 + t.sin() * 40.0, ui::title::TITLE_SEA.1 - 150.0 + (t * 0.7).cos() * 20.0);
+                let (cx, cy) = (ui::title::TITLE_SEA.0 + t.sin() * 30.0, ui::title::TITLE_SEA.1 + (t * 0.7).cos() * 12.0);
                 f.set_camera(cx, cy);
                 game::env::apply(&app.env, &mut f.g, app.opt.dark, app.opt.exposure * 0.9, app.opt.fx_high);
-                v.draw(w, art, f, (cx, cy + 120.0), None, dt);
+                v.draw(w, art, f, (cx, cy + 240.0), None, dt);
                 ui::title::draw(art, f, &mut app.fx, app.t, dt);
                 app.fx.ambient(dt, f.view(), 6, true);
                 app.fx.update(dt);

@@ -12,6 +12,7 @@ pub mod env;
 pub mod fx;
 pub mod input;
 pub mod seaboss;
+pub mod seamon;
 pub mod ship;
 
 pub use crate::art::{anim_index, Art, CharSheet};
@@ -32,6 +33,7 @@ use env::Env;
 use fx::*;
 use input::{Act, Input};
 use seaboss::*;
+use seamon::*;
 use ship::*;
 
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -138,6 +140,10 @@ pub struct Game {
     pub ship: Ship,
     pub ghosts: Vec<GhostShip>,
     pub sharks: Vec<Shark>,
+    /// Seeungeheuer im weiten Ozean
+    pub seamons: Vec<SeaMon>,
+    /// angesagte Tentakelschläge (x, y, Restzeit, Schaden)
+    pub sea_slams: Vec<(f32, f32, f32, f32)>,
     pub kraken: Kraken,
     pub sea_bosses: Vec<SeaBoss>,
     pub sea_boss: Option<usize>,
@@ -248,6 +254,8 @@ impl Game {
             ship,
             ghosts: vec![],
             sharks: vec![],
+            seamons: vec![],
+            sea_slams: vec![],
             kraken: Kraken::new(KRAKEN_HOME.0 * TS as f32, KRAKEN_HOME.1 * TS as f32),
             sea_bosses: vec![],
             sea_boss: None,
@@ -448,9 +456,16 @@ impl Game {
                     out.push(Target::Ghost(i));
                 }
             }
+            // nur was in Reichweite des Schiffs ist (die Welt ist groß)
+            let (sx, sy) = (self.ship.hull.x, self.ship.hull.y);
             for (i, s) in self.sharks.iter().enumerate() {
-                if !s.dead() {
+                if !s.dead() && (s.x - sx).abs() < 1100.0 && (s.y - sy).abs() < 900.0 {
                     out.push(Target::Shark(i));
+                }
+            }
+            for (i, m) in self.seamons.iter().enumerate() {
+                if m.hittable() && (m.x - sx).abs() < 1100.0 && (m.y - sy).abs() < 900.0 {
+                    out.push(Target::SeaMon(i));
                 }
             }
             if !self.kraken.dead() && !self.kraken.hidden() {
@@ -474,6 +489,7 @@ impl Game {
             Target::Boss(i) => self.bosses.get(i).filter(|b| !b.dead() && !b.hidden).map(|b| (b.a.x, b.a.y, b.a.hurt_r, b.body_y)),
             Target::Ghost(i) => self.ghosts.get(i).filter(|g| !g.dead()).map(|g| (g.hull.x, g.hull.y, 56.0, 56.0)),
             Target::Shark(i) => self.sharks.get(i).filter(|s| !s.dead()).map(|s| (s.x, s.y, 22.0, 8.0)),
+            Target::SeaMon(i) => self.seamon_pos(i),
             Target::Kraken => (!self.kraken.dead() && !self.kraken.hidden()).then_some((self.kraken.x, self.kraken.y, 60.0, 50.0)),
             Target::SeaBoss(i) => self.sea_bosses.get(i).filter(|b| b.hittable()).map(|b| {
                 let (x, y) = b.pos();
@@ -501,6 +517,7 @@ impl Game {
             Target::Boss(i) => self.hurt_boss(i, dmg),
             Target::Ghost(i) => self.hurt_ghost(i, dmg),
             Target::Shark(i) => self.hurt_shark(i, dmg),
+            Target::SeaMon(i) => self.hurt_seamon(i, dmg),
             Target::Kraken => self.hurt_kraken(dmg),
             Target::SeaBoss(i) => self.hurt_sea_boss(i, dmg),
             Target::EndShip => self.hurt_end(dmg),
@@ -732,6 +749,7 @@ impl Game {
             let steer = self.sailing && !modal && self.cutscene.is_none();
             self.update_ship(dt, steer);
             self.update_sea(dt);
+            self.update_sea_monsters(dt);
             self.update_sea_bosses(dt);
             self.update_crew(dt);
             self.update_end(dt, art);
@@ -1871,6 +1889,17 @@ impl Game {
             g.hull.y = sy - 40.0;
         }
         self.kraken.home = (sx, sy - 160.0);
+        // je ein Seeungeheuer jeder Art im Kreis ums Schiff
+        let kinds = [SK::Serpent, SK::Eel, SK::Squid, SK::Jelly, SK::Ray, SK::Angler, SK::Bones, SK::Turtle, SK::Wyvern, SK::BigShark];
+        for (j, k) in kinds.iter().enumerate() {
+            if let Some(m) = self.seamons.iter_mut().find(|m| m.k == *k && !m.dead()) {
+                let a = j as f32 / kinds.len() as f32 * std::f32::consts::TAU;
+                m.x = sx + a.cos() * 360.0;
+                m.y = sy + a.sin() * 260.0;
+                m.home = (m.x, m.y);
+                m.st = MS::Rise;
+            }
+        }
     }
     pub fn debug_board(&mut self) {
         let (px, py) = (self.player.a.x, self.player.a.y);

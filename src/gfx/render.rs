@@ -447,7 +447,9 @@ fn prepare(mut gpu: ResMut<Gpu>, mut p: ResMut<Packed>, dev: Res<RenderDevice>, 
             dof_b: view2(&t_db),
             _tex: vec![t_alb, t_nrm, t_emi, t_lit, t_br, t_ba, t_bb, t_da, t_db],
         };
-        gpu.bg_light = Some(post_bg(d, &gpu.bgl_post, [&t.alb, &t.nrm, &t.emi, &t.alb]));
+        // vierte Textur im Lichtdurchgang: Rauschen für die ziehenden Wolkenschatten
+        let noise_l = view2(&gpu.noise);
+        gpu.bg_light = Some(post_bg(d, &gpu.bgl_post, [&t.alb, &t.nrm, &t.emi, &noise_l]));
         gpu.bg_bright = Some(post_bg(d, &gpu.bgl_post, [&t.lit, &t.lit, &t.lit, &t.lit]));
         gpu.bg_blur_h = Some(post_bg(d, &gpu.bgl_post, [&t.bright, &t.bright, &t.bright, &t.bright]));
         gpu.bg_blur_v = Some(post_bg(d, &gpu.bgl_post, [&t.blur_a, &t.blur_a, &t.blur_a, &t.blur_a]));

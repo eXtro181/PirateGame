@@ -17,4 +17,5 @@ pub mod grave;
 pub mod malakor;
 pub mod structures;
 pub mod font;
+pub mod throne;
 pub mod ui;

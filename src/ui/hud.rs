@@ -224,8 +224,15 @@ impl Ui {
             f.ui_spr(c, x + w - s + 2.0, y + h - s + 2.0, SprOpt { flip: true, ..Default::default() });
         }
     }
+    /// große Zeile in der Zierschrift (Versalhöhe 7·scale), zu breite Zeilen werden kleiner gesetzt
     fn big(f: &mut Frame, art: &Art, s: &str, x: f32, y: f32, c: [u8; 4], scale: f32) {
-        text::draw(f, art, s, x, y, c, Al::C, scale, true);
+        let (w, _) = f.ui_size();
+        let mut size = 7.0 * scale;
+        let tw = text::display_width(art, s, size);
+        if tw > w - 24.0 {
+            size *= (w - 24.0) / tw;
+        }
+        text::display(f, art, s, x, y, c, Al::C, size);
     }
 
     pub fn draw_overlays(&mut self, f: &mut Frame, art: &Art) {
@@ -243,8 +250,7 @@ impl Ui {
                     Self::rect(f, 0.0, h * 0.3 - 14.0, w, bh, [10, 15, 22, (150.0 * a) as u8]);
                     Self::rect(f, w * 0.2, h * 0.3 - 14.0, w * 0.6, 1.0, [232, 164, 67, (128.0 * a) as u8]);
                     let c = if b.kind == "boss" { [220, 90, 72, 255] } else { [232, 192, 115, 255] };
-                    let sc = if b.title.chars().count() > 30 { 1.0 } else { 2.0 };
-                    Self::big(f, art, &b.title, w / 2.0, h * 0.3 - 6.0, text::a(c, a), sc);
+                    Self::big(f, art, &b.title, w / 2.0, h * 0.3 - 7.0, text::a(c, a), 2.1);
                     if !b.sub.is_empty() {
                         text::tc(f, art, &b.sub, w / 2.0, h * 0.3 + 16.0, text::a(col::BONE, a * 0.9));
                     }
@@ -397,7 +403,7 @@ impl Game {
         }
         if self.zone_t > 0.0 && self.ui.banners.is_empty() {
             let a = self.zone_t.min(4.0 - self.zone_t).min(1.0);
-            text::draw(f, art, self.zone_name, w / 2.0, 14.0, text::a(col::BONE, a), Al::C, 2.0, true);
+            text::display(f, art, self.zone_name, w / 2.0, 14.0, text::a(col::BONE, a), Al::C, 13.0);
         }
         self.ui.draw_overlays(f, art);
         if self.ui.map_open {
@@ -469,6 +475,7 @@ impl Game {
                 Target::Enemy(i) => self.enemies.get(i).map(|e| self.edefs[e.def].name.to_string()),
                 Target::Ghost(i) => self.ghosts.get(i).map(|g| g.name.to_string()),
                 Target::Shark(_) => Some("Knochenhai".into()),
+                Target::SeaMon(i) => self.seamons.get(i).map(|m| crate::game::seamon::species(m.k).name.to_string()),
                 Target::Kraken => Some("Kraken".into()),
                 Target::SeaBoss(_) => None,
                 _ => None,
@@ -826,7 +833,7 @@ impl Game {
             let (wx, wy) = self.world.whirlpool;
             Ui::rect(f, mx + wx * k - 2.5, my + wy * k - 2.5, 5.0, 5.0, col::SOUL);
         }
-        text::tc(f, art, "Seekarte", w / 2.0, 6.0, col::GOLD);
+        text::display(f, art, "Seekarte", w / 2.0, 5.0, col::GOLD, Al::C, 10.0);
         text::tc(f, art, if self.input.using_touch { "Tippen zum Schließen" } else { "M schließen" }, w / 2.0, h - 12.0, col::BONE_DIM);
     }
 }

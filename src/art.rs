@@ -51,6 +51,19 @@ impl CharSheet {
     }
 }
 
+/// Maßstab der Zierschrift im Atlas (Versalhöhe 14·DK px)
+pub const DK: f32 = 2.4;
+#[derive(Clone, Copy)]
+pub struct DGlyph {
+    pub spr: Spr,
+    /// Vorschub in Atlas-Pixeln
+    pub adv: f32,
+    /// Oberkante der Versalien in der Glyphe
+    pub top: f32,
+    /// linker Rand der Glyphe
+    pub pad: f32,
+}
+
 pub fn anim_index(name: &str) -> usize {
     chars::ANIMS.iter().position(|a| a.0 == name).unwrap_or(0)
 }
@@ -61,6 +74,8 @@ pub struct Art {
     pub props: HashMap<String, PropDef>,
     pub chars: HashMap<String, CharSheet>,
     pub glyphs: HashMap<char, (Spr, i32)>,
+    /// Zierschrift (Versalien, Graustufen, weich gefiltert gezeichnet)
+    pub dglyphs: HashMap<char, DGlyph>,
     /// Schiffe je Stil (player, fire, ice, wind, earth): Kurse 0..=8, Rest gespiegelt (`ships::ship_dir`)
     pub ships: HashMap<String, Vec<Spr>>,
     pub player: CharSheet,
@@ -158,26 +173,43 @@ pub fn build_malakor(art: &mut Art, frame: &mut Frame) {
     info!("Malakor gezeichnet in {:.2}s", t0.elapsed().as_secs_f32());
 }
 
-/// Titelbild: großes brennendes Schiff und ein Krakenarm-Glied (im Boss-Bereich).
+/// Titelbild „Der Thron der Ertrunkenen“ (im Boss-Bereich): Thron, gebrochene Säulen, schwebende
+/// Krone, Kettenglieder, Krakenarm-Glied und der Schriftzug in der Zierschrift.
 pub fn build_title(art: &mut Art, frame: &mut Frame) {
     if art.boss_loaded.as_deref() == Some("title") {
         return;
     }
     let slot = art.boss_slot;
     let mut a = slot.atlas();
-    let c = sw_art::ships::title_ship(2.7, 660, 600, 130);
-    let mut ship = a.add_trim("t:ship", &c, c.w / 2, c.h - 130);
+    use sw_art::throne as th;
+    // gemalt in voller Größe, verkleinert in den Atlas (ruhige Details beim Kameraschwenk)
+    let throne = th::downscale(&th::throne(), 0.55);
+    let p0 = th::downscale(&th::pillar(0), 0.56);
+    let p1 = th::downscale(&th::pillar(1), 0.56);
+    let p2 = th::downscale(&th::pillar(2), 0.5);
+    let crown = th::downscale(&th::crown(), 0.62);
+    let logo = th::title_logo();
     // Krakenarm-Glied: dunkle, glänzende Haut mit hellen Saugnäpfen auf der Unterseite
     let n = 40;
     let seg = tentacle_seg(0x3A2236, 0x6A4450, 0xC8A8A0);
-    let mut sg = a.add("t:seg", &seg, n / 2, n / 2);
+    let mut v: Vec<(String, Spr)> = vec![
+        ("t:throne".into(), a.add_trim("t:throne", &throne, throne.w / 2, throne.h - 4)),
+        ("t:pillar0".into(), a.add_trim("t:pillar0", &p0, p0.w / 2, p0.h - 3)),
+        ("t:pillar1".into(), a.add_trim("t:pillar1", &p1, p1.w / 2, p1.h - 3)),
+        ("t:pillar2".into(), a.add_trim("t:pillar2", &p2, p2.w / 2, p2.h - 3)),
+        ("t:crown".into(), a.add_trim("t:crown", &crown, crown.w / 2, crown.h)),
+        ("t:link0".into(), a.add("t:link0", &th::link(false), 7, 8)),
+        ("t:link1".into(), a.add("t:link1", &th::link(true), 4, 8)),
+        ("t:seg".into(), a.add("t:seg", &seg, n / 2, n / 2)),
+        ("t:logo".into(), a.add("t:logo", &logo, 0, 0)),
+    ];
     if !slot.upload(frame, &a) {
         return;
     }
-    slot.fix(&mut ship);
-    slot.fix(&mut sg);
-    art.map.insert("t:ship".into(), ship);
-    art.map.insert("t:seg".into(), sg);
+    for (k, s) in v.iter_mut() {
+        slot.fix(s);
+        art.map.insert(k.clone(), *s);
+    }
     if let Some(old) = art.boss_loaded.take() {
         art.ships.remove(&old);
     }
@@ -211,6 +243,243 @@ fn tentacle_seg(skin: u32, cup_in: u32, cup: u32) -> Canvas {
     }
     seg.outline(true, 0.7);
     seg
+}
+
+/// Bildteile der Seeungeheuer (klein, werden zur Laufzeit zusammengesetzt und je Seegebiet getönt):
+/// Schlangenkopf (zu, offen), Körperbuckel, Kalmar-Mantel, Tentakelglied, Qualle (zwei Pulse),
+/// Rochen von oben (drei Flügelschläge).
+fn sea_monster_sprites(a: &mut Atlas) {
+    let lit = |dx: f32, dy: f32, d2: f32| (-dx * 0.5 - dy * 0.7 + (1.0 - d2).max(0.0).sqrt() * 0.6).clamp(0.0, 1.0);
+    // ---- Kopf der Seeschlange (Seitenansicht, schaut nach rechts)
+    let skin = ramp_n(hex(0x6E8E86), 6, 1.1);
+    for open in 0..2 {
+        let (w, h) = (56, 44);
+        let mut c = Canvas::new(w, h);
+        let jaw = if open == 1 { 0.42f32 } else { 0.0 };
+        for y in 0..h {
+            for x in 0..w {
+                let (fx, fy) = (x as f32 + 0.5, y as f32 + 0.5);
+                // Schädel und Schnauze
+                let e1 = ((fx - 20.0) / 18.0).powi(2) + ((fy - 20.0) / 11.5).powi(2);
+                let e2 = ((fx - 37.0) / 15.0).powi(2) + ((fy - 21.0) / 6.5).powi(2);
+                // Unterkiefer um (20, 26) gedreht
+                let (jx, jy) = (fx - 20.0, fy - 26.0);
+                let (rx, ry) = (jx * jaw.cos() + jy * jaw.sin(), -jx * jaw.sin() + jy * jaw.cos());
+                let e3 = ((rx - 13.0) / 15.0).powi(2) + (ry / 4.2).powi(2);
+                let d2 = e1.min(e2);
+                if d2 <= 1.0 {
+                    let (dx, dy) = if e1 < e2 { ((fx - 20.0) / 18.0, (fy - 20.0) / 11.5) } else { ((fx - 37.0) / 15.0, (fy - 21.0) / 6.5) };
+                    let mut col = pick(&skin, lit(dx, dy, d2) * 0.9 + 0.05);
+                    // Schuppenmuster
+                    if (x / 3 + y / 3) % 3 == 0 && dy < 0.3 {
+                        col = shade(col, 0.86);
+                    }
+                    // helle Kehle
+                    if dy > 0.55 {
+                        col = mix(col, hex(0xC8C4A0), 0.45);
+                    }
+                    c.put(x, y, col, (1.0 - d2).max(0.0).sqrt() * 8.0);
+                    if lit(dx, dy, d2) > 0.8 {
+                        c.spec(x, y, 120);
+                    }
+                } else if e3 <= 1.0 {
+                    let col = mix(pick(&skin, 0.35 - ry / 10.0), hex(0xB8B490), 0.35);
+                    c.put(x, y, col, 4.0);
+                }
+            }
+        }
+        if open == 1 {
+            // Zähne oben und unten, Rachen dunkel
+            for k in 0..6 {
+                let x = 26 + k * 4;
+                c.set(x, 26, hex(0xF2EEDC));
+                c.set(x, 27, hex(0xD8D4C0));
+                let (jx, jy) = ((x - 20) as f32, 4.0f32);
+                let (tx, ty) = (20.0 + jx * jaw.cos() - jy * jaw.sin(), 26.0 + jx * jaw.sin() + jy * jaw.cos());
+                c.set(tx as i32, ty as i32 - 1, hex(0xF2EEDC));
+            }
+            for x in 22..44 {
+                for y in 27..36 {
+                    if c.a(x, y) == 0 && ((x - 22) as f32 * 0.4) > (y - 27) as f32 - 1.0 {
+                        c.set(x, y, hex(0x2A0A12));
+                    }
+                }
+            }
+        }
+        // Stachelkamm auf dem Kopf
+        for k in 0..5 {
+            let bx = 6 + k * 4;
+            let ht = 7 - (k as i32 - 2).abs();
+            for t in 0..ht {
+                c.put(bx + t / 3, 10 - t + (k as i32 - 2).abs(), shade(hex(0x2E4440), 1.0 - t as f32 * 0.05), 5.0);
+            }
+        }
+        // glühendes Auge
+        for (dx, dy) in [(0, 0), (1, 0), (0, 1), (1, 1), (2, 0)] {
+            c.lit(33 + dx, 15 + dy, hex(0xE8F070), 1.4);
+        }
+        c.outline(true, 0.8);
+        a.add(&format!("sm:head{open}"), &c, 20, 30);
+    }
+    // ---- Körperbuckel (taucht als Bogen aus dem Wasser)
+    let mut c = Canvas::new(40, 30);
+    for y in 0..30 {
+        for x in 0..40 {
+            let (dx, dy) = ((x as f32 + 0.5 - 20.0) / 18.0, (y as f32 + 0.5 - 28.0) / 20.0);
+            let d2 = dx * dx + dy * dy;
+            if d2 > 1.0 || dy > 0.0 {
+                continue;
+            }
+            let mut col = pick(&skin, lit(dx, dy, d2) * 0.9 + 0.05);
+            if ((x + 1) / 3 + y / 2) % 4 == 0 {
+                col = shade(col, 0.84);
+            }
+            if dy > -0.25 {
+                col = mix(col, hex(0xC8C4A0), 0.3);
+            }
+            c.put(x, y, col, (1.0 - d2).sqrt() * 7.0);
+        }
+    }
+    for k in 0..4 {
+        let bx = 9 + k * 7;
+        for t in 0..5 {
+            c.put(bx + t / 2, 9 - t - (k % 2), hex(0x2E4440), 5.0);
+        }
+    }
+    c.outline(true, 0.8);
+    a.add("sm:hump", &c, 20, 28);
+    // ---- Mantel des Riesenkalmars (aufrecht, Augen an der Wasserlinie)
+    let mant = ramp_n(hex(0xA04A5E), 6, 1.1);
+    let mut c = Canvas::new(60, 74);
+    for y in 0..74 {
+        for x in 0..60 {
+            let (fx, fy) = (x as f32 + 0.5, y as f32 + 0.5);
+            let t = ((fy - 4.0) / 66.0).clamp(0.0, 1.0);
+            let half = 6.0 + t.powf(0.7) * 20.0;
+            let dx = (fx - 30.0) / half;
+            if dx.abs() > 1.0 || fy < 4.0 || fy > 72.0 {
+                continue;
+            }
+            let dy = -0.3 + t * 0.2;
+            let d2 = dx * dx;
+            let mut col = pick(&mant, lit(dx, dy, d2) * 0.85 + 0.1);
+            if sw_art::noise::hash(x / 3, y / 3, 7) % 5 == 0 {
+                col = mix(col, hex(0xE88A9A), 0.35);
+            }
+            c.put(x, y, col, (1.0 - d2).sqrt() * 9.0);
+        }
+    }
+    // leuchtende Flecken (in der Tiefe sieht man ihn sonst nicht)
+    for (sx, sy) in [(24, 20), (36, 28), (20, 40), (40, 44), (30, 34), (26, 52), (35, 14)] {
+        for (dx, dy) in [(0, 0), (1, 0), (0, 1)] {
+            c.lit(sx + dx, sy + dy, hex(0xFF8AB8), 1.0);
+        }
+    }
+    // Flossen oben
+    for k in 0..14 {
+        for s in [-1i32, 1] {
+            c.put(30 + s * (6 + k), 8 + k / 2, pick(&mant, 0.5 - k as f32 * 0.02), 3.0);
+            c.put(30 + s * (6 + k), 9 + k / 2, pick(&mant, 0.3), 3.0);
+        }
+    }
+    for s in [-1i32, 1] {
+        let (ex, ey) = (30 + s * 12, 58);
+        for dy in -3..=3 {
+            for dx in -3..=3 {
+                if dx * dx + dy * dy <= 9 {
+                    c.set(ex + dx, ey + dy, if dx * dx + dy * dy <= 2 { hex(0x101010) } else { hex(0xE8D070) });
+                }
+            }
+        }
+        c.lit(ex - 1, ey - 1, hex(0xFFF4C0), 0.8);
+    }
+    c.outline(true, 0.8);
+    a.add("sm:mantle", &c, 30, 70);
+    a.add("sm:tseg", &tentacle_seg(0x7A2E44, 0x3A1020, 0xF0C0C8), 20, 20);
+    // ---- Qualle: Glocke und Fäden, leuchtend (zwei Pulse)
+    for k in 0..2 {
+        let (w, h) = (36, 48);
+        let mut c = Canvas::new(w, h);
+        let sq = if k == 0 { 1.0 } else { 0.82 };
+        let jp = ramp_n(hex(0x9AD8E8), 5, 1.2);
+        for y in 0..20 {
+            for x in 0..w {
+                let (dx, dy) = ((x as f32 + 0.5 - 18.0) / (15.0 * sq), (y as f32 + 0.5 - 18.0) / (14.0 / sq));
+                let d2 = dx * dx + dy * dy;
+                if d2 > 1.0 || dy > 0.05 {
+                    continue;
+                }
+                let col = pick(&jp, lit(dx, dy, d2) * 0.6 + 0.3);
+                c.put(x, y, col, (1.0 - d2).sqrt() * 5.0);
+                c.glow(x, y, col, 0.25 + (1.0 - d2) * 0.2);
+            }
+        }
+        for f in 0..6 {
+            let bx = 18.0 + (f as f32 - 2.5) * 4.2 * sq;
+            for t in 0..26 {
+                let tf = t as f32;
+                let x = bx + (tf * 0.35 + f as f32 + k as f32).sin() * 1.6;
+                let col = pick(&jp, 0.7 - tf / 40.0);
+                c.put(x as i32, 19 + t, col, 1.0);
+                if t % 3 == 0 {
+                    c.glow(x as i32, 19 + t, col, 0.5);
+                }
+            }
+        }
+        c.outline(true, 0.5);
+        a.add(&format!("sm:jelly{k}"), &c, 18, 44);
+    }
+    // ---- Rochen von oben: Flügel heben und senken sich (drei Bilder)
+    let rp = ramp_n(hex(0x8A5A4A), 6, 1.1);
+    for k in 0..3 {
+        let (w, h) = (92, 64);
+        let mut c = Canvas::new(w, h);
+        let lift = [-0.35f32, 0.0, 0.35][k];
+        for y in 0..h {
+            for x in 0..w {
+                let (fx, fy) = (x as f32 + 0.5 - 46.0, y as f32 + 0.5 - 26.0);
+                // Rautenform mit gerundeten Flügelspitzen; Spannweite nach Schlag
+                let span = 42.0 * (1.0 - lift.abs() * 0.25);
+                let ax = fx.abs() / span;
+                if ax > 1.0 {
+                    continue;
+                }
+                let top = -10.0 - (1.0 - ax) * 8.0 + ax * ax * 6.0 * lift.signum() * lift.abs() * 3.0;
+                let bot = 14.0 - ax * 10.0;
+                if fy < top || fy > bot {
+                    continue;
+                }
+                let v = (fy - top) / (bot - top);
+                let dx = fx / span;
+                let dy = (v - 0.4) * 1.4;
+                let d2 = (dx * dx * 0.6 + dy * dy * 0.4).min(1.0);
+                let wing_l = 0.55 - ax * lift * 0.6 * fx.signum();
+                let mut col = pick(&rp, (lit(dx * 0.5, dy * 0.5, d2) * 0.5 + wing_l * 0.5).clamp(0.0, 1.0));
+                // Glutflecken und Mittelkamm
+                if sw_art::noise::hash(x / 4, y / 4, 9) % 11 == 0 && ax > 0.2 {
+                    col = hex(0xF0904A);
+                    c.put(x, y, col, 2.0);
+                    c.glow(x, y, col, 0.7);
+                    continue;
+                }
+                if fx.abs() < 3.0 {
+                    col = shade(col, 0.8);
+                }
+                c.put(x, y, col, (1.0 - d2).sqrt() * 5.0 - ax * 2.0);
+            }
+        }
+        // Schwanz
+        for t in 0..24 {
+            let x = 46.0 + (t as f32 * 0.3).sin() * 1.5;
+            c.put(x as i32, 38 + t, pick(&rp, 0.3), 1.0);
+        }
+        for (ex, ey) in [(42, 10), (50, 10)] {
+            c.lit(ex, ey, hex(0xFFD070), 1.2);
+        }
+        c.outline(true, 0.7);
+        c.standing = false;
+        a.add(&format!("sm:ray{k}"), &c, 46, 40);
+    }
 }
 
 /// Eigenes Schiff mit den Ausbauten neu zeichnen (9 Kurse).
@@ -514,6 +783,15 @@ pub fn build(frame: &mut Frame) -> Art {
     let boss_slot = DynSlot { page: bp as u32, x: bx, y: by, w: PAGE - 8, h: BOSS_STRIP };
 
     // ---------------------------------------------------------------- Schrift und UI
+    // Zierschrift für Titel, Banner und Überschriften
+    let mut dglyphs = HashMap::new();
+    for ch in sw_art::font::DISPLAY_CHARS.chars() {
+        if let Some((g, adv, top)) = sw_art::font::display_glyph(ch, DK) {
+            let s = a.add(&format!("fd:{}", ch as u32), &g, 0, 0);
+            let pad = (2.0 * DK).ceil() + 2.0;
+            dglyphs.insert(ch, DGlyph { spr: s, adv: adv as f32, top: top as f32, pad });
+        }
+    }
     let mut glyphs = HashMap::new();
     for (ch, _) in sw_art::font::GLYPHS {
         if let Some((g, w)) = sw_art::font::glyph(*ch) {
@@ -905,6 +1183,7 @@ pub fn build(frame: &mut Frame) -> Art {
         let sh = beast_sheet(&mut a, k.key);
         chs.insert(k.key.to_string(), sh);
     }
+    sea_monster_sprites(&mut a);
     let ships = HashMap::new();
     let wp = cr::whirlpool();
     a.add("fx:whirl", &wp, wp.w / 2, wp.h / 2);
@@ -936,6 +1215,7 @@ pub fn build(frame: &mut Frame) -> Art {
         props,
         chars: chs,
         glyphs,
+        dglyphs,
         ships,
         player: CharSheet::default(),
         player_slot,

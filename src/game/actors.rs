@@ -218,6 +218,8 @@ pub enum Target {
     Boss(usize),
     Ghost(usize),
     Shark(usize),
+    /// Seeungeheuer im weiten Ozean
+    SeaMon(usize),
     Kraken,
     SeaBoss(usize),
     /// Endboss auf See: der Fliegende Holländer (bzw. sein roter Kraken)

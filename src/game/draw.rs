@@ -307,6 +307,7 @@ impl Game {
             self.flash_light = None;
         }
         self.draw_sea(art, f);
+        self.draw_sea_monsters(art, f);
         self.draw_sea_bosses(art, f);
         self.draw_crew(art, f);
         self.draw_end(art, f);

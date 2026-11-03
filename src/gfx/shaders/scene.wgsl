@@ -90,6 +90,10 @@ fn water_s(p_in: vec2<f32>, shore_in: f32) -> GOut {
     // Grundfarbe mit Tiefe: im Flachen schimmert der Grund durch, in der Tiefe wird es dunkel
     let dd = smoothstep(0.0, 1.0, max(depth, shore * 0.85));
     var c = mix(G.water_a.rgb, G.water_b.rgb, dd);
+    // weite See: großflächig tiefere und hellere Stellen, langsam ziehende Strömungsbänder
+    let big = noise_at(p * 0.011 + vec2<f32>(t * 0.21, t * 0.08)).r;
+    let band = noise_at(vec2<f32>(p.x * 0.004 + p.y * 0.002, p.y * 0.017) + vec2<f32>(t * 0.05, 0.0)).b;
+    c *= 0.9 + big * 0.18 * dd + (band - 0.5) * 0.08 * dd;
     let h0 = wave_h(p, t);
     // Wellentäler dunkler, Kämme heller und grüner (Licht dringt durch die dünne Wasserhaut)
     c *= 0.86 + h0 * 0.3;
@@ -391,6 +395,27 @@ fn fs_ui(v: VOut) -> @location(0) vec4<f32> {
         let d = length(v.uv * 2.0 - 1.0);
         let a = (1.0 - smoothstep(0.2, 1.0, d)) * v.col.a;
         return vec4<f32>(v.col.rgb * a, a);
+    }
+    if (mode == 8u) {
+        // Zierschrift: eigene bilineare Mischung (WebGL erlaubt nur einen Sampler je Textur),
+        // vormultipliziert gemischt, damit die Kanten nicht dunkel ausfransen
+        let dim = vec2<f32>(textureDimensions(t_acol).xy);
+        let px = v.uv * dim - 0.5;
+        let fr = fract(px);
+        let b = (floor(px) + 0.5) / dim;
+        let d = 1.0 / dim;
+        let l = i32(v.ext.x);
+        let c00 = textureSampleLevel(t_acol, s_near, b, l, 0.0);
+        let c10 = textureSampleLevel(t_acol, s_near, b + vec2<f32>(d.x, 0.0), l, 0.0);
+        let c01 = textureSampleLevel(t_acol, s_near, b + vec2<f32>(0.0, d.y), l, 0.0);
+        let c11 = textureSampleLevel(t_acol, s_near, b + d, l, 0.0);
+        let p00 = vec4<f32>(c00.rgb * c00.a, c00.a);
+        let p10 = vec4<f32>(c10.rgb * c10.a, c10.a);
+        let p01 = vec4<f32>(c01.rgb * c01.a, c01.a);
+        let p11 = vec4<f32>(c11.rgb * c11.a, c11.a);
+        let m = mix(mix(p00, p10, fr.x), mix(p01, p11, fr.x), fr.y);
+        if (m.a < 0.01) { discard; }
+        return vec4<f32>(m.rgb * v.col.rgb * v.col.a, m.a * v.col.a);
     }
     if (mode == 7u) {
         // Seekarte: Papierbild, leicht weich gefiltert

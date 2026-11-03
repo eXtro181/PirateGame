@@ -10,7 +10,7 @@ use std::f32::consts::{PI, TAU};
 pub fn wrap(a: f32) -> f32 {
     a.rem_euclid(TAU)
 }
-fn turn_to(h: f32, want: f32, max: f32) -> f32 {
+pub fn turn_to(h: f32, want: f32, max: f32) -> f32 {
     let d = (want - h + PI * 3.0).rem_euclid(TAU) - PI;
     wrap(h + d.clamp(-max, max))
 }
@@ -125,6 +125,7 @@ impl Game {
             })
             .collect();
         self.spawn_sea_bosses();
+        self.spawn_sea_monsters();
         if !self.kraken.dead() {
             self.kraken = Kraken::new(KRAKEN_HOME.0 * TS as f32, KRAKEN_HOME.1 * TS as f32);
         }

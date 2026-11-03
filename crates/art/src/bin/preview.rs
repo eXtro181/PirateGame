@@ -339,6 +339,42 @@ fn main() {
             bg.place(&c, 400, 640, c.w / 2, c.h - 150);
             save_lit(&bg, &format!("{out}/title.png"), 1);
         }
+        "throne" => {
+            let t = std::time::Instant::now();
+            let th = sw_art::throne::throne();
+            let cr = sw_art::throne::crown();
+            let p0 = sw_art::throne::pillar(0);
+            let p1 = sw_art::throne::pillar(1);
+            eprintln!("Thron: {:?}", t.elapsed());
+            let mut bg = Canvas::new(1280, 720);
+            let water = sw_art::color::ramp_n(sw_art::color::hex(0x1E3A4A), 6, 1.0);
+            for y in 0..bg.h { for x in 0..bg.w { let i = bg.idx(x, y); bg.col[i] = water[2]; } }
+            bg.place(&p0, 200, 600, p0.w / 2, p0.h - 4);
+            bg.place(&p1, 1080, 640, p1.w / 2, p1.h - 4);
+            bg.place(&th, 640, 700, th.w / 2, th.h - 6);
+            bg.place(&cr, 640, 360, cr.w / 2, cr.h);
+            save_lit(&bg, &format!("{out}/throne.png"), 1);
+        }
+        "dfont" => {
+            // Zierschrift: alle Zeichen in zwei Größen, gold eingefärbt auf dunklem Grund
+            let mut bg = Canvas::new(1280, 360);
+            for y in 0..bg.h { for x in 0..bg.w { let i = bg.idx(x, y); bg.col[i] = [14, 18, 24, 255]; } }
+            for (row, (k, text)) in [(2.0f32, "ABCDEFGHIJKLMNOPQRSTUVWXYZ"), (2.0, "ÄÖÜ 0123456789 .,·:-'!?()"), (3.4, "THRONE OF THE DROWNED"), (2.0, "GLUTWACHT · HAFEN RABENWACHT")].iter().enumerate() {
+                let mut x = 20;
+                let y = 30 + row as i32 * 80;
+                for ch in text.chars() {
+                    if ch == ' ' { x += (5.0 * k) as i32; continue; }
+                    if let Some((g, adv, top)) = sw_art::font::display_glyph(ch, *k) {
+                        let mut gc = g.clone();
+                        for yy in 0..gc.h { for xx in 0..gc.w { let i = gc.idx(xx, yy); if gc.col[i][3] > 0 { let l = gc.col[i][0] as f32 / 255.0; gc.col[i] = [(242.0 * l) as u8, (196.0 * l) as u8, (110.0 * l) as u8, 255]; } } }
+                        bg.blit(&gc, x - (2.0 * k).ceil() as i32 - 2, y - top, false);
+                        x += adv;
+                    }
+                }
+            }
+            let (w, h) = (bg.w as u32, bg.h as u32);
+            png::save(&format!("{out}/dfont.png"), w, h, &bg.col.iter().flat_map(|c| c.iter().copied()).collect::<Vec<u8>>());
+        }
         "heads" => {
             use sw_art::buildings::*;
             let mut bg = bake_chunk(&Flat(Biome::Fire, Mat::Ash), &mut mats, &en, 0, 0, 1280).crop(0, 0, 640, 220);

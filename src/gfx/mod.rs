@@ -138,6 +138,8 @@ pub mod modes {
     pub const SOFT: u8 = 6;
     /// UI: Bild der Seekarte
     pub const MAP: u8 = 7;
+    /// UI: Zierschrift, weich gefiltert
+    pub const TEXT: u8 = 8;
 }
 pub mod flags {
     pub const FLASH: u8 = 1;

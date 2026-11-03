@@ -24,6 +24,10 @@ fn gpos(uv: vec2<f32>) -> vec2<f32> {
     return G.view.xy + uv * G.view.zw;
 }
 
+fn t_now() -> f32 {
+    return G.screen.z;
+}
+
 // ---------------------------------------------------------------- Beleuchtung
 // t_a = Farbe, t_b = Normale (xy, Höhe/510, Glanz), t_c = Leuchten
 @fragment
@@ -69,9 +73,18 @@ fn fs_light(f: FOut) -> @location(0) vec4<f32> {
         ao = 1.0 - clamp(occ / 12.0 * 1.6, 0.0, 0.6) * G.hd2.x * flat;
     }
 
+    // Wolkenschatten: große, weiche Flecken ziehen langsam über Land und See (am Bodenort des
+    // Pixels, damit Bäume und Wände mit ihrem Fuß im selben Schatten stehen)
+    var cloud = 1.0;
+    if (G.hd2.x > 0.0) {
+        let wq = vec2<f32>(sp.x, sp.y + elev) * 0.00042 + vec2<f32>(t_now() * 0.0062, t_now() * 0.0024);
+        let c1 = textureSampleLevel(t_d, s_lin, wq, 0.0).r;
+        let c2 = textureSampleLevel(t_d, s_lin, wq * 2.7 + vec2<f32>(0.37, 0.11), 0.0).b;
+        cloud = 1.0 - smoothstep(0.5, 0.74, c1 * 0.72 + c2 * 0.34) * 0.4;
+    }
     // Umgebung: Himmel von oben, Boden reflektiert etwas
     let hemi = mix(0.75, 1.0, n.z * G.ambient.w + (1.0 - G.ambient.w));
-    var li = G.ambient.rgb * hemi * ao;
+    var li = G.ambient.rgb * hemi * ao * mix(1.0, cloud, 0.35);
     // Randlicht: erhöhte Kanten (Figuren, Kronen, Klippenkanten) fangen kühles Himmelslicht von hinten
     if (elev > 3.0) {
         let edge = pow(clamp(1.0 - n.z, 0.0, 1.0), 2.0);
@@ -105,7 +118,7 @@ fn fs_light(f: FOut) -> @location(0) vec4<f32> {
         }
         sh = 1.0 - occl * G.sun_dir.w;
     }
-    li += G.sun_col.rgb * nd * sh * (0.5 + 0.5 * ao);
+    li += G.sun_col.rgb * nd * sh * (0.5 + 0.5 * ao) * cloud;
     let hv = normalize(sd + view_dir);
     let hd = G.hd3.x > 0.5;
     // Glanz: glatte Flächen (Wasser, Metall) mit scharfen, hellen Spitzlichtern
@@ -115,7 +128,7 @@ fn fs_light(f: FOut) -> @location(0) vec4<f32> {
         sexp = mix(12.0, 220.0, spec_k * spec_k);
         spnorm = (sexp + 8.0) / 48.0;
     }
-    spec += G.sun_col.rgb * pow(max(dot(n, hv), 0.0), sexp) * spec_k * sh * G.sun_col.w * spnorm;
+    spec += G.sun_col.rgb * pow(max(dot(n, hv), 0.0), sexp) * spec_k * sh * G.sun_col.w * spnorm * cloud * cloud;
 
     // Punktlichter in 3D
     let nl = i32(G.counts.x);

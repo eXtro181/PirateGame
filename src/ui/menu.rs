@@ -132,7 +132,9 @@ impl Menu {
         Ui::rect(f, x, y, 1.0, h, edge);
         Ui::rect(f, x + w - 1.0, y, 1.0, h, edge);
         let c = if !enabled { col::GREY } else if sel { col::GOLD } else { col::BONE };
-        text::tc(f, art, label, x + w / 2.0, y + (h - 7.0) / 2.0, c);
+        // Knöpfe in der Zierschrift (Versalien)
+        let size = (h * 0.44).clamp(6.0, 9.0);
+        text::display(f, art, label, x + w / 2.0, y + (h - size) / 2.0, c, Al::C, size);
         enabled && ((inp.click && over) || (sel && self.activate))
     }
     /// ‹ Wert › – gibt −1/0/+1 zurück
@@ -325,15 +327,22 @@ impl Menu {
 
     fn main(&mut self, f: &mut Frame, art: &Art, inp: &Input, sfx: &mut Vec<&'static str>) -> MenuOut {
         let (w, h) = f.ui_size();
-        // Logo mit Seelenschimmer
-        if let Some(l) = art.map.get("ui:logo") {
+        // Schriftzug in der Zierschrift (weich gefiltert), mit dunklem Hof für die Lesbarkeit
+        if let Some(l) = art.map.get("t:logo").copied() {
+            let lw = (w * 0.78).min(l.w as f32 * 0.9);
+            let sc = lw / l.w as f32;
+            let lh = l.h as f32 * sc;
+            let (lx, ly) = ((w / 2.0 - lw / 2.0).round(), (h * 0.04).round());
+            f.ui_soft(lx - 60.0, ly - 40.0, lw + 120.0, lh + 70.0, [0, 0, 0, 170]);
+            let k = 0.5 + 0.5 * (self.t * 0.9).sin();
+            text::smooth_spr(f, &l, lx, ly, lw, lh, [255, 255, 255, 255]);
+            // Seelenschimmer über dem Schriftzug
+            f.ui_soft(lx + lw * (0.1 + 0.8 * ((self.t * 0.13) % 1.0)) - 30.0, ly + lh * 0.2, 60.0, lh * 0.5, [120, 255, 210, (40.0 * k) as u8]);
+            text::draw(f, art, "Ein Soulslike über Ertrunkene, Geisterkönige und das Ende der Welt", w / 2.0, ly + lh + 2.0, text::a(col::BONE, 0.7 + 0.25 * k), Al::C, 1.0, true);
+        } else if let Some(l) = art.map.get("ui:logo") {
             let sc = ((w * 0.8) / l.w as f32).clamp(1.0, 3.0).floor();
             let lx = (w / 2.0 - l.w as f32 * sc / 2.0).round();
-            let ly = (h * 0.16).round();
-            f.ui_soft(lx - 40.0, ly - 30.0, l.w as f32 * sc + 80.0, l.h as f32 * sc + 60.0, [0, 0, 0, 150]);
-            f.ui_spr(l, lx, ly, SprOpt { scale: sc, ..Default::default() });
-            let k = 0.5 + 0.5 * (self.t * 1.3).sin();
-            text::draw(f, art, "Ein Soulslike über Ertrunkene, Geisterkönige und das Ende der Welt", w / 2.0, ly + l.h as f32 * sc + 8.0, text::a(col::BONE, 0.75 + 0.25 * k), Al::C, 1.0, true);
+            f.ui_spr(l, lx, (h * 0.16).round(), SprOpt { scale: sc, ..Default::default() });
         }
         let has = !self.profiles.is_empty();
         let mut items: Vec<(&str, Screen)> = vec![];
@@ -343,21 +352,24 @@ impl Menu {
         items.push(("Neues Spiel", Screen::Creator));
         items.push(("Optionen", Screen::Options));
         items.push(("Credits", Screen::Credits));
+        // Menü links, der Thron steht rechts im Bild
         let bw = 150.0;
+        let bx = if w > 520.0 { (w * 0.26 - bw / 2.0).round() } else { (w / 2.0 - bw / 2.0).round() };
         let y0 = (h * 0.5).round();
+        f.ui_soft(bx - 40.0, y0 - 24.0, bw + 80.0, items.len() as f32 * 24.0 + 44.0, [0, 0, 0, 120]);
         for (i, (label, s)) in items.iter().enumerate() {
-            if self.button(f, art, inp, w / 2.0 - bw / 2.0, y0 + i as f32 * 22.0, bw, 18.0, label, i == 0, true) {
+            if self.button(f, art, inp, bx, y0 + i as f32 * 24.0, bw, 19.0, label, i == 0, true) {
                 sfx.push("click");
                 self.go(*s);
             }
         }
-        text::tr(f, art, "v0.6 · Rust/Bevy", w - 6.0, h - 12.0, [143, 163, 168, 160]);
+        text::tr(f, art, "v0.7 · Rust/Bevy", w - 6.0, h - 12.0, [143, 163, 168, 160]);
         MenuOut::None
     }
 
     fn panel_title(f: &mut Frame, art: &Art, x: f32, y: f32, w: f32, h: f32, title: &str) {
         Ui::panel(f, art, x, y, w, h);
-        text::draw(f, art, title, x + w / 2.0, y + 8.0, col::GOLD, Al::C, 2.0, true);
+        text::display(f, art, title, x + w / 2.0, y + 8.0, col::GOLD, Al::C, 12.0);
         Ui::rect(f, x + 10.0, y + 28.0, w - 20.0, 1.0, [232, 164, 67, 80]);
     }
 

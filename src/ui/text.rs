@@ -61,6 +61,88 @@ pub fn draw(f: &mut Frame, art: &Art, s: &str, x: f32, y: f32, col: [u8; 4], al:
     }
 }
 
+// ---------------------------------------------------------------- Zierschrift
+fn dkey(ch: char) -> char {
+    match ch {
+        'ä' => 'Ä',
+        'ö' => 'Ö',
+        'ü' => 'Ü',
+        '’' | '‘' => '\'',
+        '–' | '—' => '-',
+        c => c.to_uppercase().next().unwrap_or(c),
+    }
+}
+fn dtext(s: &str) -> String {
+    s.replace('ß', "SS")
+}
+/// Breite in UI-Pixeln bei Versalhöhe `size`
+pub fn display_width(art: &Art, s: &str, size: f32) -> f32 {
+    let k = size / (14.0 * crate::art::DK);
+    let mut w = 0.0;
+    for ch in dtext(s).chars() {
+        w += match art.dglyphs.get(&dkey(ch)) {
+            Some(g) if ch != ' ' => g.adv,
+            _ => 5.2 * crate::art::DK,
+        };
+    }
+    (w - 2.4 * crate::art::DK).max(0.0) * k
+}
+/// Zierschrift zeichnen: Versalien, `y` = Oberkante der Versalien, `size` = Versalhöhe (UI-Pixel).
+/// Mit dunklem, weichem Schatten.
+pub fn display(f: &mut Frame, art: &Art, s: &str, x: f32, y: f32, col: [u8; 4], al: Al, size: f32) {
+    let k = size / (14.0 * crate::art::DK);
+    let w = display_width(art, s, size);
+    let mut cx = match al {
+        Al::L => x,
+        Al::C => x - w / 2.0,
+        Al::R => x - w,
+    };
+    let page = sw_art::atlas::PAGE as f32;
+    for ch in dtext(s).chars() {
+        let Some(g) = art.dglyphs.get(&dkey(ch)) else {
+            cx += 5.2 * crate::art::DK * k;
+            continue;
+        };
+        if ch == ' ' {
+            cx += 5.2 * crate::art::DK * k;
+            continue;
+        }
+        let sp = g.spr;
+        let (gw, gh) = (sp.w as f32 * k, sp.h as f32 * k);
+        let (gx, gy) = (cx - g.pad * k, y - g.top * k);
+        // halber Texel Abstand zum Rand: die weiche Filterung greift nicht auf Nachbarbilder
+        let (u0, v0) = ((sp.x as f32 + 0.5) / page, (sp.y as f32 + 0.5) / page);
+        let (u1, v1) = ((sp.x as f32 + sp.w as f32 - 0.5) / page, (sp.y as f32 + sp.h as f32 - 0.5) / page);
+        let (ix0, iy0, ix1, iy1) = (gx + 0.5 * k, gy + 0.5 * k, gx + gw - 0.5 * k, gy + gh - 0.5 * k);
+        for (dx, dy, c) in [(size * 0.07, size * 0.09, [0, 0, 0, (col[3] as f32 * 0.7) as u8]), (0.0, 0.0, col)] {
+            f.ui.push(crate::gfx::Q {
+                p: [[ix0 + dx, iy0 + dy], [ix1 + dx, iy0 + dy], [ix1 + dx, iy1 + dy], [ix0 + dx, iy1 + dy]],
+                uv: [[u0, v0], [u1, v0], [u1, v1], [u0, v1]],
+                col: c,
+                ext: [sp.page as u8, crate::gfx::modes::TEXT, 0, 0],
+                prm: [0.0, 0.0],
+                sway: 0,
+            });
+        }
+        cx += g.adv * k;
+    }
+}
+
+/// Bild weich gefiltert (frei skaliert) als UI-Rechteck zeichnen, z. B. den Schriftzug im Titel
+pub fn smooth_spr(f: &mut Frame, sp: &sw_art::atlas::Spr, x: f32, y: f32, w: f32, h: f32, col: [u8; 4]) {
+    let page = sw_art::atlas::PAGE as f32;
+    let (u0, v0) = ((sp.x as f32 + 0.5) / page, (sp.y as f32 + 0.5) / page);
+    let (u1, v1) = ((sp.x as f32 + sp.w as f32 - 0.5) / page, (sp.y as f32 + sp.h as f32 - 0.5) / page);
+    f.ui.push(crate::gfx::Q {
+        p: [[x, y], [x + w, y], [x + w, y + h], [x, y + h]],
+        uv: [[u0, v0], [u1, v0], [u1, v1], [u0, v1]],
+        col,
+        ext: [sp.page as u8, crate::gfx::modes::TEXT, 0, 0],
+        prm: [0.0, 0.0],
+        sway: 0,
+    });
+}
+
 pub fn t(f: &mut Frame, art: &Art, s: &str, x: f32, y: f32, col: [u8; 4]) {
     draw(f, art, s, x, y, col, Al::L, 1.0, true)
 }
