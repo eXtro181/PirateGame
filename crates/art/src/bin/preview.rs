@@ -453,6 +453,23 @@ fn main() {
             }
             save_lit(&bg, &format!("{out}/fort.png"), 1);
         }
+        "spider" => {
+            // Riesige Meeresspinne: vorn, Seite, Lauf, Angriff und die drei Kletterbilder
+            use sw_art::beasts::*;
+            let kd = kind("seaSpider");
+            let list: Vec<(&str, &str, usize)> = vec![("down", "idle", 0), ("side", "walk", 2), ("up", "idle", 0), ("down", "atk", 1), ("down", "cast", 0), ("down", "cast", 1), ("down", "cast", 2)];
+            let mut bg = Canvas::new(2600, 440);
+            for y in 0..bg.h { for x in 0..bg.w { let i = bg.idx(x, y); bg.col[i] = [58, 66, 64, 255]; } }
+            let mut x = 10;
+            for (d, a, f) in list {
+                let c = beast_frame("seaSpider", d, a, f);
+                if let Some((x0, _, x1, _)) = c.bounds() {
+                    bg.place(&c, x - x0 + c.w / 2 - c.w / 2, 430, 0, c.h - kd.foot);
+                    x += x1 - x0 + 14;
+                }
+            }
+            save_lit(&bg, &format!("{out}/spider.png"), 1);
+        }
         "monsters" => {
             // alle Wesen: je Zeile vorn/Seite/hinten stehend, Lauf, Angriff, Treffer, Tod
             use sw_art::beasts::*;
@@ -469,7 +486,7 @@ fn main() {
                 let kd = kind(key);
                 let y = ri as i32 * rh + rh - 4;
                 let mut x = 10;
-                let list: Vec<(&str, &str, usize)> = vec![("down", "idle", 0), ("side", "idle", 1), ("up", "idle", 2), ("side", "walk", 0), ("side", "walk", 2), ("down", "walk", 3), ("side", "atk", 1), ("side", "atk", 3), ("down", "atk", 1), ("down", "atk", 3), ("down", "hurt", 0), ("down", "dead", 0), ("down", "shoot", 1)];
+                let list: Vec<(&str, &str, usize)> = vec![("down", "idle", 0), ("side", "idle", 1), ("up", "idle", 2), ("side", "walk", 0), ("side", "walk", 2), ("down", "walk", 3), ("side", "atk", 1), ("side", "atk", 3), ("down", "atk", 1), ("down", "atk", 3), ("down", "hurt", 0), ("down", "dead", 0), ("down", "shoot", 1), ("down", "cast", 0), ("down", "cast", 1)];
                 for (d, a, f) in list {
                     let c = beast_frame(key, d, a, f);
                     if let Some((x0, _, x1, _)) = c.bounds() {

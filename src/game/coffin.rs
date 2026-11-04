@@ -1,8 +1,9 @@
 //! Ende des Prologs am großen Wasserfall. Nach dem Sieg über die Riesige Meeresspinne steigt man
 //! selbst in den Sarg an der Abbruchkante und zieht den Deckel zu; nach einer Niederlage wickelt
-//! die Spinne den Leichnam in ihr Netz, trägt ihn zum Sarg, legt ihn hinein und schließt ihn.
-//! Dann schlängeln sich zwei riesige Arme aus der schwarzen Tiefe die Klippe herauf, umschlingen
-//! den Sarg und ziehen ihn langsam hinab – man erwacht im Sarg am Galgenstrand.
+//! die Spinne den Leichnam in einen weißen Kokon, schleift ihn an einem Faden bis zum Sarg, legt
+//! ihn mit den Beinen hinein, schließt den Deckel und krabbelt selbst kopfüber die Klippe hinab in
+//! die Tiefe. Erst dann schlängeln sich zwei riesige Arme aus der schwarzen Tiefe die Klippe
+//! herauf, umschlingen den Sarg und ziehen ihn langsam hinab – man erwacht im Sarg am Galgenstrand.
 
 use super::boss::*;
 use super::fx::*;
@@ -13,13 +14,18 @@ use std::f32::consts::PI;
 pub const RISE_DUR: f32 = 4.6;
 pub const GRAB_DUR: f32 = 1.3;
 pub const PULL_DUR: f32 = 4.8;
-/// Stehplatz vor dem Sarg (Süden) und Halt der Spinne dahinter (Norden), px vom Sargfuß
+/// Stehplatz vor dem Sarg (Süden), px vom Sargfuß
 const STAND: f32 = 24.0;
-const SPIDER_BACK: f32 = 112.0;
-/// Weg der Spinne bis vor die Leiche (ihr Maul reicht so weit nach vorn)
+/// Niederlage: Abstand der Spinne zur Leiche beim Einspinnen und Länge des Fadens beim Schleifen
 const SPIDER_REACH: f32 = 84.0;
 /// Niederlage: so lange steht der Todesschriftzug, die Spinne faucht und wartet
 const SPIDER_WAIT: f32 = 1.8;
+/// Niederlage: Schleifweg zuletzt quer über dem Kopfende des Sargs (px nördlich des Sargfußes),
+/// Schleiftempo (px/s), Gang zur Kante und Abstieg kopfüber (s)
+const RUN_Y: f32 = 100.0;
+const DRAG_SPEED: f32 = 95.0;
+const LEAVE_DUR: f32 = 2.4;
+const DOWN_DUR: f32 = 2.8;
 
 /// Zeitplan einer Sarg-Sequenz (Sekunden ab Beginn).
 #[derive(Clone, Copy, Debug)]
@@ -28,13 +34,20 @@ pub struct Plan {
     pub reach: f32,
     /// Niederlage: eingesponnen, die Spinne hebt den Kokon an
     pub lift: f32,
-    /// Niederlage: Tragen beginnt
+    /// Niederlage: Schleifen beginnt
     pub carry: f32,
-    /// Ablegen im Sarg (Niederlage) bzw. Hineinsteigen (Sieg)
+    /// Niederlage: am Sarg angekommen, die Spinne dreht sich um und hebt den Kokon mit den Beinen
+    /// hinein; Sieg: Hineinsteigen
     pub lay: f32,
+    /// Niederlage: der Kokon liegt im Sarg
+    pub put: f32,
     /// Deckel gleitet auf den Sarg: Anfang, Ende (dumpfer Schlag)
     pub lid0: f32,
     pub lid1: f32,
+    /// Niederlage: die Spinne geht zur Kante, steigt kopfüber hinab, ist im Dunkel verschwunden
+    pub leave: f32,
+    pub down: f32,
+    pub gone: f32,
     /// Stille, Arme steigen auf, packen zu, ziehen hinab, Ende
     pub quiet: f32,
     pub rise: f32,
@@ -44,24 +57,86 @@ pub struct Plan {
 }
 
 /// `a` = erster Weg (Sieg: Spieler zum Sarg, Niederlage: Spinne zur Leiche),
-/// `c` = Tragen der Leiche zum Sarg (nur Niederlage).
+/// `c` = Schleifen des Kokons bis zum Sarg (nur Niederlage).
 pub fn plan(defeat: bool, a: f32, c: f32) -> Plan {
-    let (reach, lift, carry, lay, lid0, lid1) = if defeat {
+    if defeat {
         let reach = SPIDER_WAIT + a;
         let lift = reach + 2.8;
-        let carry = lift + 0.6;
+        let carry = lift + 0.7;
         let lay = carry + c;
-        (reach, lift, carry, lay, lay + 1.3, lay + 2.5)
-    } else {
-        // hineinsteigen (0,6 s), umdrehen, hinlegen (bis +2,0), Deckel zuziehen (+2,0 … +3,2)
-        (a, a, a, a, a + 2.0, a + 3.2)
-    };
-    let quiet = lid1;
-    let rise = quiet + 1.1;
-    let grab = rise + RISE_DUR;
-    let pull = grab + GRAB_DUR;
-    let end = pull + PULL_DUR + 0.25;
-    Plan { reach, lift, carry, lay, lid0, lid1, quiet, rise, grab, pull, end }
+        let put = lay + 2.2;
+        let (lid0, lid1) = (put + 0.3, put + 1.6);
+        let leave = lid1 + 0.6;
+        let down = leave + LEAVE_DUR;
+        let gone = down + DOWN_DUR;
+        // die Arme kommen erst, wenn die Spinne in der Tiefe verschwunden ist
+        let quiet = gone + 0.5;
+        return finish(Plan { reach, lift, carry, lay, put, lid0, lid1, leave, down, gone, quiet, rise: 0.0, grab: 0.0, pull: 0.0, end: 0.0 });
+    }
+    // hineinsteigen (0,6 s), umdrehen, hinlegen (bis +2,0), Deckel zuziehen (+2,0 … +3,2)
+    let (lid0, lid1) = (a + 2.0, a + 3.2);
+    finish(Plan { reach: a, lift: a, carry: a, lay: a, put: a, lid0, lid1, leave: lid1, down: lid1, gone: lid1, quiet: lid1, rise: 0.0, grab: 0.0, pull: 0.0, end: 0.0 })
+}
+
+/// Die Arme: aufsteigen, packen, hinabziehen (gleich für Sieg und Niederlage)
+fn finish(mut p: Plan) -> Plan {
+    p.rise = p.quiet + 1.1;
+    p.grab = p.rise + RISE_DUR;
+    p.pull = p.grab + GRAB_DUR;
+    p.end = p.pull + PULL_DUR + 0.25;
+    p
+}
+
+/// Schleifweg der Niederlage (Punkte, Bogenlängen): vom Leichnam zum Haltepunkt der Spinne neben
+/// dem Kopfende des Sargs, zuletzt quer über das Kopfende hinweg – so liegt der Kokon, der an einem
+/// Faden der Länge `SPIDER_REACH` hinterherschleift, am Ende genau dort, und die Spinne steht auf
+/// der dem Leichnam abgewandten Seite (`side` 1 = östlich).
+struct Drag {
+    pts: Vec<(f32, f32)>,
+    cum: Vec<f32>,
+    side: f32,
+}
+
+impl Drag {
+    fn new(p0: (f32, f32), c: (f32, f32)) -> Drag {
+        let side = if p0.0 <= c.0 { 1.0 } else { -1.0 };
+        let run_y = c.1 - RUN_Y;
+        let w1 = (c.0 - side * 150.0, run_y);
+        let s3 = (c.0 + side * SPIDER_REACH, run_y);
+        let dist = |a: (f32, f32), b: (f32, f32)| (b.0 - a.0).hypot(b.1 - a.1);
+        // liegt der Leichnam schon auf der Querbahn vor dem Sarg, geht es gerade weiter
+        let on_run = (p0.1 - run_y).abs() < 60.0 && (p0.0 - c.0) * side < -10.0 && (p0.0 - w1.0) * side > 0.0;
+        let via = !on_run && dist(p0, w1) > SPIDER_REACH + 20.0;
+        let first = if via { w1 } else { s3 };
+        let d = dist(p0, first).max(1.0);
+        let tgt = (p0.0 + (first.0 - p0.0) / d * SPIDER_REACH, p0.1 + (first.1 - p0.1) / d * SPIDER_REACH);
+        let mut pts = vec![p0, tgt];
+        if via {
+            pts.push(w1);
+        }
+        pts.push(s3);
+        let mut cum = vec![0.0f32; pts.len()];
+        for i in 1..pts.len() {
+            cum[i] = cum[i - 1] + dist(pts[i - 1], pts[i]).max(0.01);
+        }
+        Drag { pts, cum, side }
+    }
+    fn len(&self) -> f32 {
+        *self.cum.last().unwrap_or(&0.0)
+    }
+    /// Lage und Richtung (Einheitsvektor) bei Bogenlänge `s`
+    fn at(&self, s: f32) -> ((f32, f32), (f32, f32)) {
+        let s = s.clamp(0.0, self.len());
+        let i = self.cum.partition_point(|&l| l < s).clamp(1, self.pts.len() - 1);
+        let (a, b) = (self.pts[i - 1], self.pts[i]);
+        let l = (self.cum[i] - self.cum[i - 1]).max(0.01);
+        let u = ((s - self.cum[i - 1]) / l).clamp(0.0, 1.0);
+        ((a.0 + (b.0 - a.0) * u, a.1 + (b.1 - a.1) * u), ((b.0 - a.0) / l, (b.1 - a.1) / l))
+    }
+    /// Bogenlänge der Spinne bzw. des Kokons zur Zeit t
+    fn spider_s(&self, p: &Plan, t: f32) -> f32 {
+        SPIDER_REACH + (self.len() - SPIDER_REACH).max(0.0) * smooth(part(t, p.carry, p.lay))
+    }
 }
 
 fn smooth(x: f32) -> f32 {
@@ -170,11 +245,13 @@ impl Game {
             }
             b.cine = true;
             b.atk = None;
+            b.climb = 0.0;
             (sx, sy) = (b.a.x, b.a.y);
-            let d = (sx - x0).hypot(sy - y0).max(1.0);
-            let (tx, ty) = (x0 + (sx - x0) / d * SPIDER_REACH, y0 + (sy - y0) / d * SPIDER_REACH);
+            // sie stellt sich auf die Seite der Leiche, die zum Sarg weist, und schleift sie dann
+            let dr = Drag::new((x0, y0), (cx, cy));
+            let (tx, ty) = dr.pts[1];
             a = ((sx - tx).hypot(sy - ty) / 150.0).clamp(0.3, 3.5);
-            c = ((tx - cx).hypot(ty - (cy - SPIDER_BACK)) / 115.0).clamp(0.6, 6.0);
+            c = ((dr.len() - SPIDER_REACH).max(0.0) / DRAG_SPEED).clamp(0.8, 7.0);
             self.boss = Some(i);
         } else {
             a = ((x0 - cx).hypot(y0 - (cy + STAND)) / 80.0).clamp(0.25, 4.0);
@@ -305,12 +382,18 @@ impl Game {
             Some((cx, cy + 110.0))
         } else if defeat {
             let s = sp.unwrap_or(s0);
+            let dr = Drag::new(p0, (cx, cy));
             if t < p.carry {
                 Some(((p0.0 + s.0) * 0.5, (p0.1 + s.1) * 0.5 - 20.0))
             } else if t < p.lay {
-                Some((s.0, s.1 + 20.0))
+                // zwischen Spinne und Kokon
+                let (q, _) = dr.at(dr.spider_s(&p, t) - SPIDER_REACH);
+                Some(((q.0 + s.0) * 0.5, (q.1 + s.1) * 0.5 - 10.0))
+            } else if t < p.leave {
+                Some((cx + dr.side * 40.0, cy - 50.0))
             } else {
-                Some((cx, cy - 40.0))
+                // ihr nach bis zur Kante und hinab
+                Some(((cx + s.0) * 0.5, (cy - 30.0 + s.1.min(cy + 160.0)) * 0.5 + 20.0))
             }
         } else if t >= p.reach {
             Some((cx, cy - 16.0))
@@ -321,52 +404,88 @@ impl Game {
         t >= p.end
     }
 
-    /// Niederlage: die Spinne kommt, spinnt ein, trägt, legt ab, schließt den Deckel, weicht zurück.
+    /// Niederlage: die Spinne kommt, spinnt den Leichnam ein, schleift den Kokon an einem Faden zum
+    /// Sarg, hebt ihn mit den Vorderbeinen hinein, schiebt den Deckel zu und steigt dann kopfüber
+    /// die Klippe hinab ins Schwarze.
     fn update_coffin_spider(&mut self, p: &Plan, t0: f32, t: f32, p0: (f32, f32), s0: (f32, f32)) {
         let crossed = |m: f32| t0 < m && t >= m;
         let Some(si) = self.bosses.iter().position(|b| b.key == "spider") else { return };
         let (cx, cy) = self.world.prolog_coffin;
-        let d0 = (s0.0 - p0.0).hypot(s0.1 - p0.1).max(1.0);
-        let dir = ((s0.0 - p0.0) / d0, (s0.1 - p0.1) / d0);
-        let tgt = (p0.0 + dir.0 * SPIDER_REACH, p0.1 + dir.1 * SPIDER_REACH);
-        let s2 = (cx, cy - SPIDER_BACK);
+        let dr = Drag::new(p0, (cx, cy));
+        let tgt = dr.pts[1];
+        // vom Leichnam zur Spinne
+        let dir = ((tgt.0 - p0.0) / SPIDER_REACH, (tgt.1 - p0.1) / SPIDER_REACH);
+        let s3 = *dr.pts.last().unwrap_or(&tgt);
+        // hinab geht es westlich des Sargs (östlich stürzt der Wasserfall, der sie verdecken würde):
+        // erst am Kopfende vorbei, dann zur Kante
+        let l1 = (cx - 130.0, cy - 70.0);
+        let ex = cx - 140.0;
+        let edge = (ex, self.world.prolog_edge_near(ex).map(|e| e.1).unwrap_or(cy + 70.0) - 6.0);
         let at = t * 8.0;
         let b = &mut self.bosses[si];
         b.cine = true;
-        let (pos, face, anim, frame) = if t < SPIDER_WAIT {
-            (s0, (p0.0 - s0.0, p0.1 - s0.1), "idle", t * 2.0)
-        } else if t < p.reach {
-            let k = smooth(part(t, SPIDER_WAIT, p.reach));
-            (lerp2(s0, tgt, k), (tgt.0 - s0.0, tgt.1 - s0.1), "walk", at)
-        } else if t < p.lift {
-            // einspinnen: vor- und zurückwiegen, beißen, Fäden ziehen
-            let sw = (t * 5.0).sin() * 5.0;
-            ((tgt.0 - dir.1 * sw, tgt.1 + dir.0 * sw), (-dir.0, -dir.1), "atk", (t * 7.0) % 5.0)
-        } else if t < p.carry {
-            (tgt, (-dir.0, -dir.1), "idle", t * 2.0)
-        } else if t < p.lay {
-            let k = smooth(part(t, p.carry, p.lay));
-            let mv = (s2.0 - tgt.0, s2.1 - tgt.1);
-            // am Ende zum Sarg (nach Süden) drehen
-            let f = if part(t, p.carry, p.lay) > 0.8 { (0.0, 1.0) } else { mv };
-            (lerp2(tgt, s2, k), f, "walk", at)
-        } else if t < p.lid1 {
-            let fr = if t < p.lid0 { 1.0 } else { (t * 6.0) % 5.0 };
-            (s2, (0.0, 1.0), "atk", fr)
-        } else if t < p.grab {
-            // zurückweichen, den Sarg im Blick
-            let k = smooth(part(t, p.lid1, p.lid1 + 1.4));
-            ((s2.0, s2.1 - 80.0 * k), (0.0, 1.0), if k < 1.0 { "walk" } else { "idle" }, if k < 1.0 { at } else { t * 2.0 })
+        b.climb = 0.0;
+        b.hidden = false;
+        if t >= p.down {
+            // kopfüber über die Kante und die Wand hinab, bis das Schwarz sie verschluckt
+            let k = part(t, p.down, p.gone);
+            b.climb = 2.0 + smooth(part(k, 0.55, 1.0)) * 0.99;
+            b.hidden = k >= 1.0;
+            b.a.x = edge.0 + (t * 3.1).sin() * 3.0;
+            b.a.y = edge.1 + 70.0 + 380.0 * (0.25 * k + 0.75 * k * k);
+            b.a.anim = "cast";
+            b.a.frame = t * 5.0;
         } else {
-            // die Arme packen zu: sie flieht ins Dunkel
-            let k = smooth(part(t, p.grab, p.grab + 1.2));
-            ((s2.0 - 40.0 * k, s2.1 - 80.0 - 170.0 * k), (0.0, 1.0), if k < 1.0 { "walk" } else { "idle" }, if k < 1.0 { at * 1.5 } else { t * 2.0 })
-        };
-        b.a.x = pos.0;
-        b.a.y = pos.1;
-        b.a.face(face.0, face.1);
-        b.a.anim = anim;
-        b.a.frame = frame;
+            let (pos, face, anim, frame) = if t < SPIDER_WAIT {
+                (s0, (p0.0 - s0.0, p0.1 - s0.1), "idle", t * 2.0)
+            } else if t < p.reach {
+                let k = smooth(part(t, SPIDER_WAIT, p.reach));
+                (lerp2(s0, tgt, k), (tgt.0 - s0.0, tgt.1 - s0.1), "walk", at)
+            } else if t < p.lift {
+                // einspinnen: vor- und zurückwiegen, beißen, Fäden ziehen
+                let sw = (t * 5.0).sin() * 5.0;
+                ((tgt.0 - dir.1 * sw, tgt.1 + dir.0 * sw), (-dir.0, -dir.1), "atk", (t * 7.0) % 5.0)
+            } else if t < p.carry {
+                // umdrehen und den Faden am Kokon festmachen
+                let f = if part(t, p.lift, p.carry) < 0.45 { (-dir.0, -dir.1) } else { dir };
+                (tgt, f, "idle", t * 2.0)
+            } else if t < p.lay {
+                // schleifen: voran, der Kokon am Faden hinterher
+                let (q, d) = dr.at(dr.spider_s(p, t));
+                let sw = (t * 6.0).sin() * 2.0;
+                ((q.0 - d.1 * sw, q.1 + d.0 * sw), d, "walk", at * 0.8)
+            } else if t < p.put {
+                // umdrehen, mit den Vorderbeinen den Kokon greifen und in den Sarg heben
+                let f = (cx - s3.0, cy - 50.0 - s3.1);
+                if t < p.lay + 0.55 {
+                    (s3, if t < p.lay + 0.25 { (dr.side, 0.0) } else { f }, "idle", t * 2.0)
+                } else {
+                    (s3, f, "atk", ((t - p.lay - 0.55) * 3.0).min(1.9))
+                }
+            } else if t < p.lid1 {
+                // den Deckel mit den Beinen zuschieben
+                let fr = if t < p.lid0 { 1.0 } else { (t * 6.0) % 5.0 };
+                (s3, (cx + 30.0 - s3.0, cy + 8.0 - s3.1), "atk", fr)
+            } else if t < p.leave {
+                (s3, (cx - s3.0, cy - 30.0 - s3.1), "idle", t * 2.0)
+            } else {
+                // zur Kante (huschend)
+                let k = smooth(part(t, p.leave, p.down));
+                let d1 = (l1.0 - s3.0).hypot(l1.1 - s3.1).max(1.0);
+                let d2 = (edge.0 - l1.0).hypot(edge.1 - l1.1).max(1.0);
+                let s = k * (d1 + d2);
+                if s < d1 {
+                    (lerp2(s3, l1, s / d1), (l1.0 - s3.0, l1.1 - s3.1), "walk", at * 1.3)
+                } else {
+                    (lerp2(l1, edge, (s - d1) / d2), (edge.0 - l1.0, edge.1 - l1.1), "walk", at * 1.3)
+                }
+            };
+            b.a.x = pos.0;
+            b.a.y = pos.1;
+            b.a.face(face.0, face.1);
+            b.a.anim = anim;
+            b.a.frame = frame;
+        }
         let (mx, my) = (b.a.x + b.a.fx * 58.0, b.a.y + b.a.fy * 36.0);
         if crossed(0.5) {
             self.sfx("hiss");
@@ -385,15 +504,45 @@ impl Game {
         if crossed(p.lift) {
             self.sfx("crush");
         }
-        if crossed(p.lay) {
-            self.sfx("board");
+        if crossed(p.lift + 0.45) || crossed(p.lay + 0.6) {
+            self.sfx("silk");
         }
-        if crossed(p.grab) {
+        if t > p.carry && t < p.lay {
+            // der Kokon schleift über den Fels: Staub und Seidenfetzen
+            let (q, _) = dr.at(dr.spider_s(p, t) - SPIDER_REACH);
+            if rnd() < 0.35 {
+                self.fx.burst("dust", q.0 + rr(-10.0, 10.0), q.1 + 2.0, 1, BurstOpt { speed: Some(22.0), up: Some(8.0), ..Default::default() });
+            }
+            let n0 = ((t0 - p.carry) / 1.1).floor();
+            let n1 = ((t - p.carry) / 1.1).floor();
+            if n1 > n0 || crossed(p.carry + 0.05) {
+                self.sfx("slither");
+            }
+            if rnd() < 0.12 {
+                // Geifer tropft
+                self.fx.p(P { x: mx + rr(-6.0, 6.0), y: my, z: 26.0, vz: -6.0, g: 160.0, life: 0.8, col: [0.55, 0.85, 0.5, 1.0], glow: 0.6, size: 2.0, ground: true, ..Default::default() });
+            }
+        }
+        if crossed(p.put - 0.15) {
+            self.sfx("board");
+            self.fx.burst("dust", cx, cy - 20.0, 8, BurstOpt { speed: Some(40.0), up: Some(18.0), ..Default::default() });
+        }
+        if crossed(p.leave) {
             self.sfx("hiss");
         }
-        if t > p.carry && t < p.lay && rnd() < 0.15 {
-            // Geifer tropft auf den Kokon
-            self.fx.p(P { x: mx + rr(-6.0, 6.0), y: my, z: 26.0, vz: -6.0, g: 160.0, life: 0.8, col: [0.55, 0.85, 0.5, 1.0], glow: 0.6, size: 2.0, ground: true, ..Default::default() });
+        if crossed(p.down) {
+            // mit einem Ruck über die Kante
+            self.sfx("slither");
+            self.sfx("heavy");
+            self.shake(5.0);
+            self.fx.burst("dust", edge.0, edge.1, 14, BurstOpt { speed: Some(90.0), up: Some(30.0), ..Default::default() });
+        }
+        if crossed(p.down + 1.4) {
+            self.sfx("slither");
+        }
+        if t > p.down && t < p.gone && rnd() < 0.25 {
+            // Steinchen bröckeln von der Wand
+            self.fx.p(P { x: edge.0 + rr(-60.0, 60.0), y: edge.1 + rr(20.0, 200.0), z: 0.0, vz: 0.0, vy: 40.0, g: 0.0, life: 0.9, col: [0.3, 0.3, 0.32, 0.9], size: 2.0, drag: 0.2, ..Default::default() });
         }
     }
 
@@ -404,6 +553,21 @@ impl Game {
             return;
         }
         let Some(lid) = art.map.get("x:lid") else { return };
+        // zwei sehr helle Piratenfackeln links und rechts (die Flamme zeichnet die Requisite) und
+        // warmes Licht im offenen Sarg, damit man ihn in der Dunkelheit am Fall sieht
+        let pulled = match self.cutscene {
+            Some(Cut::Coffin { t, defeat, a, c, .. }) => {
+                let p = plan(defeat, a, c);
+                t >= p.pull + PULL_DUR
+            }
+            _ => false,
+        };
+        for &(tx, ty) in &self.world.prolog_torches {
+            f.light(LightDef { x: tx, y: ty + 4.0, z: 70.0, r: 320.0, col: [2.3, 1.3, 0.56], flicker: 0.18 });
+        }
+        if !pulled {
+            f.light(LightDef { x: cx0, y: cy0 + 18.0, z: 46.0, r: 160.0, col: [1.15, 0.82, 0.5], flicker: 0.12 });
+        }
         let (t, defeat, p0, a, c) = match self.cutscene {
             Some(Cut::Coffin { t, defeat, x0, y0, a, c, .. }) => (t, defeat, (x0, y0), a, c),
             _ => {
@@ -472,8 +636,8 @@ impl Game {
         f.sprite_z(&s, x, yd, y + 3.0, SprOpt { cut_bottom: cut, ev: 8.0, ..Default::default() });
     }
 
-    /// Niederlage: der Kokon wächst über den Leichnam, wird angehoben, getragen, in den Sarg gelegt;
-    /// dazu die Fäden vom Maul der Spinne.
+    /// Niederlage: der Kokon wächst über den Leichnam, schleift am Faden hinter der Spinne her, wird
+    /// mit den Vorderbeinen in den Sarg gehoben; dazu die Fäden.
     fn draw_coffin_cocoon(&self, art: &Art, f: &mut Frame, p: &Plan, t: f32, p0: (f32, f32), c: (f32, f32)) {
         let (Some(wh), Some(wv)) = (art.map.get("x:wrapH"), art.map.get("x:wrapV")) else { return };
         if t < p.reach || t >= p.lid1 {
@@ -481,11 +645,21 @@ impl Game {
         }
         let Some(b) = self.bosses.iter().find(|b| b.key == "spider") else { return };
         let mouth = (b.a.x + b.a.fx * 58.0, b.a.y + b.a.fy * 36.0);
+        // Spinnwarzen am Hinterleib
+        let rear = (b.a.x - b.a.fx * 60.0, b.a.y - b.a.fy * 38.0);
         let flip = self.player.a.flip();
         let inside = (c.0, c.1 - 32.0);
+        let dr = Drag::new(p0, self.world.prolog_coffin);
+        let len = dr.len();
         // fahles Licht auf der weißen Seide
-        let lp = if t < p.lift { p0 } else if t < p.lay { mouth } else { inside };
-        f.light(LightDef { x: lp.0, y: lp.1 + 10.0, z: 50.0, r: 120.0, col: [0.36, 0.4, 0.37], flicker: 0.05 });
+        let lp = if t < p.carry {
+            p0
+        } else if t < p.lay {
+            dr.at(dr.spider_s(p, t) - SPIDER_REACH).0
+        } else {
+            inside
+        };
+        f.light(LightDef { x: lp.0, y: lp.1 + 10.0, z: 50.0, r: 130.0, col: [0.42, 0.46, 0.42], flicker: 0.05 });
         if t < p.lift {
             let al = smooth(part(t, p.reach + 0.3, p.lift - 0.3));
             f.sprite_z(wh, p0.0, p0.1 - 2.0, p0.1 + 1.0, SprOpt { flip, tint: [255, 255, 255, (al * 255.0) as u8], ..Default::default() });
@@ -499,45 +673,58 @@ impl Game {
                 }
                 let h = |k: i32| ((j * 7919 + k * 104_729) % 1000) as f32 / 1000.0;
                 let to = (p0.0 - 22.0 + h(1) * 44.0, p0.1 - 4.0 - h(2) * 7.0);
-                let from = (mouth.0, mouth.1 - 30.0);
-                let len = (to.0 - from.0).hypot(to.1 - from.1);
-                let steps = (len / 2.0) as i32;
-                let alpha = ((1.0 - age) * 210.0) as u8;
-                for s in 0..=steps {
-                    let u = s as f32 / steps.max(1) as f32;
-                    let sag = (u * PI).sin() * 7.0;
-                    let (x, y) = (from.0 + (to.0 - from.0) * u, from.1 + (to.1 - from.1) * u + sag);
-                    f.over(Frame::quad_rect(x - 0.6, y - 0.6, 1.3, 1.3, [214, 218, 206, alpha], modes::SOLID, 0), false);
-                }
+                silk(f, (mouth.0, mouth.1 - 30.0), to, 7.0, ((1.0 - age) * 210.0) as u8);
             }
             return;
         }
-        if t < p.carry {
-            // angehoben, ans Maul
-            let k = smooth(part(t, p.lift, p.carry));
-            let q = lerp2((p0.0, p0.1 - 2.0), mouth, k);
-            let z = 26.0 * k;
-            f.shadow(q.0, q.1 + 2.0, 18.0, 5.0, 0.3);
-            f.sprite_z(wh, q.0, q.1 - z, q.1 + 1.0, SprOpt { flip, ev: z, ..Default::default() });
-            return;
-        }
+        // Kokon liegend in Richtung d (Kopf voraus), Fußpunkt q
+        let lying = |f: &mut Frame, q: (f32, f32), d: (f32, f32), wob: f32, z: f32| {
+            let fl = d.0 < 0.0;
+            let r = if fl { (-d.1).atan2(-d.0) } else { d.1.atan2(d.0) } + wob;
+            f.shadow(q.0, q.1 + 2.0, 17.0, 4.5, 0.3);
+            f.sprite_z(wh, q.0, q.1 - 2.0 - z, q.1 + 1.0, SprOpt { flip: fl, rot: r, ev: z, ..Default::default() });
+        };
         if t < p.lay {
-            // getragen, schaukelnd
-            let z = 26.0 + (t * 7.0).sin() * 2.0;
-            f.shadow(mouth.0, mouth.1 + 2.0, 18.0, 5.0, 0.3);
-            f.sprite_z(wh, mouth.0, mouth.1 - z, mouth.1 + 1.0, SprOpt { flip: b.a.fx < 0.0, rot: (t * 7.0).cos() * 0.05, ev: z, ..Default::default() });
+            // liegt bzw. schleift am Faden hinter der Spinne her
+            let s = if t < p.carry { 0.0 } else { dr.spider_s(p, t) - SPIDER_REACH };
+            let (q, d) = dr.at(s);
+            let moving = t > p.carry && t < p.lay - 0.2;
+            let wob = if moving { (t * 11.0).sin() * 0.05 } else { 0.0 };
+            let z = if moving { (t * 17.0).sin().abs() * 1.2 } else { 0.0 };
+            if t < p.carry {
+                f.sprite_z(wh, p0.0, p0.1 - 2.0, p0.1 + 1.0, SprOpt { flip, ..Default::default() });
+            } else {
+                lying(f, q, d, wob, z);
+            }
+            // der Faden von den Spinnwarzen zum Kopf des Kokons
+            if t > p.lift + 0.45 {
+                let head = (q.0 + d.0 * 20.0, q.1 + d.1 * 20.0 - 5.0 - z);
+                silk(f, (rear.0, rear.1 - 34.0), head, 5.0, 220);
+                silk(f, (rear.0 + 2.0, rear.1 - 32.0), (head.0 - d.1 * 3.0, head.1 + d.0 * 3.0), 6.5, 140);
+            }
             return;
         }
-        // in den Sarg gelegt: gedreht (Kopf nach Norden), hinabgesenkt
-        let k = part(t, p.lay, p.lid0);
-        if k < 0.65 {
-            let e = smooth(k / 0.65);
-            let q = lerp2(mouth, inside, e);
-            let z = 26.0 + (8.0 - 26.0) * e;
-            let r = if b.a.fx < 0.0 { PI / 2.0 } else { -PI / 2.0 } * e;
-            f.sprite_z(wh, q.0, q.1 - z, c.1 + 1.0, SprOpt { flip: b.a.fx < 0.0, rot: r, ev: z, ..Default::default() });
+        let (q, d) = dr.at(len - SPIDER_REACH);
+        let g = part(t, p.lay + 0.55, p.put);
+        if g <= 0.0 {
+            // sie dreht sich um, der Faden reißt
+            lying(f, q, d, 0.0, 0.0);
+            return;
+        }
+        // mit den Vorderbeinen angehoben, über den Sargrand gedreht und hineingelegt (Kopf nach Norden)
+        if g < 0.72 {
+            let e = smooth(g / 0.72);
+            let pos = lerp2(q, inside, e);
+            let z = (e * PI).sin() * 34.0 + e * 8.0;
+            let fl = d.0 < 0.0;
+            let r0 = if fl { (-d.1).atan2(-d.0) } else { d.1.atan2(d.0) };
+            let r = r0 + (if fl { PI / 2.0 } else { -PI / 2.0 } - r0) * e;
+            f.shadow(pos.0, pos.1 + 2.0, 16.0, 4.0, 0.25);
+            f.sprite_z(wh, pos.0, pos.1 - z, c.1 + 1.0, SprOpt { flip: fl, rot: r, ev: z, ..Default::default() });
+            // die Klauen halten ihn mit Fäden
+            silk(f, (mouth.0, mouth.1 - 40.0), (pos.0, pos.1 - z - 6.0), 3.0, 170);
         } else {
-            let z = 8.0 * (1.0 - smooth((k - 0.65) / 0.35));
+            let z = 8.0 * (1.0 - smooth((g - 0.72) / 0.28));
             f.sprite_z(wv, c.0, c.1 - 11.0 - z, c.1 + 1.0, SprOpt { ev: 6.0 + z, ..Default::default() });
         }
     }
@@ -612,5 +799,16 @@ impl Game {
                 }
             }
         }
+    }
+}
+
+/// Ein durchhängender Spinnfaden (Überlagerung aus kleinen Vierecken) von `from` nach `to`
+fn silk(f: &mut Frame, from: (f32, f32), to: (f32, f32), sag: f32, alpha: u8) {
+    let len = (to.0 - from.0).hypot(to.1 - from.1);
+    let steps = (len / 2.0).max(1.0) as i32;
+    for s in 0..=steps {
+        let u = s as f32 / steps as f32;
+        let (x, y) = (from.0 + (to.0 - from.0) * u, from.1 + (to.1 - from.1) * u + (u * PI).sin() * sag);
+        f.over(Frame::quad_rect(x - 0.6, y - 0.6, 1.3, 1.3, [214, 218, 206, alpha], modes::SOLID, 0), false);
     }
 }

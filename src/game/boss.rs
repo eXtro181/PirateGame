@@ -101,6 +101,9 @@ pub struct Boss {
     pub h: f32,
     /// von einer Zwischensequenz gesteuert (keine eigene Logik, Pose wie gesetzt)
     pub cine: bool,
+    /// Meeresspinne an der Klippenwand: 0 = auf der Platte, 1 = an der Wand (Kopf oben),
+    /// 2 = an der Wand kopfüber hinab
+    pub climb: f32,
 }
 
 /// PixelFX-Effekt für einen Flächenangriff im Element des Bosses (Ring um den Boss oder Einschlag)
@@ -159,6 +162,8 @@ pub const SPIDER_NAME: &str = "Riesige Meeresspinne";
 pub const SPIDER_HP: f32 = 420.0;
 pub const SPIDER_DMG: f32 = 13.0;
 pub const SPIDER_PEARLS: f32 = 700.0;
+/// so lange klettert sie aus der Klippenwand herauf (s)
+pub const SPIDER_CLIMB: f32 = 2.2;
 fn table(mega: bool, phase: i32, el: &str) -> Vec<(AK, f32, AO)> {
     use AK::*;
     let s = S;
@@ -247,6 +252,7 @@ impl Boss {
             sheet,
             h: 100.0,
             cine: false,
+            climb: 0.0,
         };
         b.set_body(key != "spider");
         b
@@ -293,10 +299,13 @@ impl Boss {
         self.a.x = self.home.0;
         self.a.y = self.home.1;
         if self.key == "spider" {
+            // lauert wieder in der Klippenwand
             self.el = "spider";
             self.name = SPIDER_NAME.into();
             self.atk = None;
             self.set_body(false);
+            self.hidden = false;
+            self.climb = 1.0;
             return;
         }
         self.el = if self.mega { "sea" } else { king(self.key).key };
@@ -396,7 +405,41 @@ impl Game {
             self.fx.p(P { x: mx, y: my, z: 30.0 + rnd() * 10.0, vz: -10.0, vx: rr(-6.0, 6.0), vy: 0.0, life: 0.9, col: [0.55, 0.85, 0.5, 1.0], glow: 0.6, size: 2.0, g: 160.0, ground: true, ..Default::default() });
         }
         match b.state {
-            BS::Dormant => return,
+            BS::Dormant => {
+                // lauert in der Wand: Beine tasten langsam
+                if b.climb > 0.0 {
+                    b.a.anim = "cast";
+                    b.a.frame = b.a.at * 0.7;
+                }
+                return;
+            }
+            BS::Intro if b.key == "spider" && b.climb > 0.0 => {
+                // aus der Klippenwand herauf und mit einem Satz über die Kante auf die Platte
+                let (lx, ly) = b.home;
+                let top = self.world.prolog_lurk_top;
+                let k = (b.st_t / SPIDER_CLIMB).min(1.0);
+                let e = k * k * (3.0 - 2.0 * k);
+                b.a.x = lx;
+                b.a.y = ly + (top + 60.0 - ly) * e;
+                b.a.anim = "cast";
+                b.a.frame = b.st_t * 5.0;
+                if rnd() < dt * 8.0 {
+                    self.fx.burst("dust", b.a.x + rr(-60.0, 60.0), b.a.y - 10.0, 2, BurstOpt { speed: Some(40.0), up: Some(10.0), ..Default::default() });
+                }
+                if b.st_t >= SPIDER_CLIMB {
+                    b.climb = 0.0;
+                    b.a.y = top - 56.0;
+                    b.a.face(px - b.a.x, py - b.a.y);
+                    b.a.anim = "idle";
+                    self.shake(14.0);
+                    self.sfx("roar");
+                    self.fx.burst("dust", b.a.x, b.a.y, 16, BurstOpt { speed: Some(170.0), up: Some(60.0), ..Default::default() });
+                    self.fx.px.play(Px::Slam, b.a.x, b.a.y + 4.0).scale(1.9).tint([210, 230, 215, 255]);
+                    Self::boss_idle(b);
+                    b.pause = 1.0;
+                }
+                return;
+            }
             BS::Dead => {
                 b.a.anim = "dead";
                 b.a.frame = 0.0;
@@ -1031,12 +1074,11 @@ impl Game {
         self.shake(20.0);
         self.sfx("death");
         if key == "spider" {
-            // Prolog: Beute, dann bleibt nur der Sprung über die Klippe
-            self.ui.banner("DIE MEERESSPINNE IST ERSCHLAGEN", "Am Abbruch wartet nur noch die Tiefe", "big", 5.0);
+            // Prolog: Beute, dann führt der Weg hinaus über den Sarg am Wasserfall
+            self.ui.banner("DIE MEERESSPINNE IST ERSCHLAGEN", "Am Wasserfall wartet ein Sarg", "big", 5.0);
             self.gain_pearls(SPIDER_PEARLS as i64, Some((x, y)));
             self.save.spider = true;
             self.save.shards += 1;
-            self.timers.push((5.4, Timed::Banner("Der einzige Weg hinaus".into(), "Spring am Abbruch in den Wasserfall".into())));
             self.boss = None;
             self.persist(true);
             return;

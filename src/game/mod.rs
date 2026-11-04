@@ -344,6 +344,13 @@ impl Game {
         if g.save.spider || !g.save.prolog {
             sb.state = BS::Dead;
             sb.hidden = true;
+        } else if g.world.prolog_lurk.0 > 0.0 {
+            // lauert von Anfang an sichtbar in der Klippenwand beim Wasserfall
+            sb.home = g.world.prolog_lurk;
+            sb.a.x = sb.home.0;
+            sb.a.y = sb.home.1;
+            sb.hidden = false;
+            sb.climb = 1.0;
         }
         g.bosses.push(sb);
         let ar = g.world.arenas.get("ende").cloned().unwrap_or(crate::world::Arena { x: 0.0, y: 0.0, r: 100.0, ry: 80.0 });
@@ -1130,15 +1137,15 @@ impl Game {
     }
 
     fn update_boss_arena(&mut self) {
-        // Prolog: die Spinne fällt aus den Netzen, sobald man ihr Revier betritt
-        if self.save.prolog && !self.save.spider && !self.sailing {
-            if let (Some(si), Some(a)) = (self.bosses.iter().position(|b| b.key == "spider"), self.world.arenas.get("prolog")) {
-                if self.bosses[si].state == BS::Dormant && ((self.player.a.x - a.x) / a.r).hypot((self.player.a.y - a.y) / a.ry) < 0.62 {
-                    let (bx, by) = (self.bosses[si].a.x, self.bosses[si].a.y);
+        // Prolog: nähert man sich dem Wasserfall (und dem Sarg), klettert die Spinne aus der
+        // Klippenwand herauf und greift an
+        if self.save.prolog && !self.save.spider && !self.sailing && self.cutscene.is_none() {
+            if let Some(si) = self.bosses.iter().position(|b| b.key == "spider") {
+                let (cx, cy) = self.world.prolog_coffin;
+                let near = cx > 0.0 && (self.player.a.x - cx).hypot((self.player.a.y - cy) * 1.2) < 400.0;
+                if self.bosses[si].state == BS::Dormant && near && self.player.state != PS::Dead {
                     self.boss_activate(si);
-                    self.shake(14.0);
-                    self.fx.burst("dust", bx, by, 12, BurstOpt { speed: Some(160.0), up: Some(60.0), ..Default::default() });
-                    self.fx.px.play(Px::Slam, bx, by).scale(1.8).tint([210, 230, 215, 255]);
+                    self.shake(8.0);
                 }
             }
         }
@@ -1354,6 +1361,7 @@ impl Game {
             b.state = BS::Dead;
             b.hidden = true;
             b.cine = false;
+            b.climb = 0.0;
         }
         self.boss = None;
         self.cam_hold = None;

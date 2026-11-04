@@ -765,7 +765,7 @@ fn beast_sheet(a: &mut Atlas, key: &str) -> CharSheet {
                 // Seebosse: nur Seitenansicht, kein Gehen (fällt auf Stehen zurück)
                 di == 2 && matches!(anim, "idle" | "atk" | "hurt")
             } else {
-                matches!(anim, "idle" | "walk" | "atk" | "hurt") || (anim == "dead" && di == 0) || (anim == "shoot" && kd.shoot)
+                matches!(anim, "idle" | "walk" | "atk" | "hurt") || (anim == "dead" && di == 0) || (anim == "shoot" && kd.shoot) || (anim == "cast" && di == 0 && key == "seaSpider")
             };
             if wanted {
                 for i in 0..n {

@@ -90,11 +90,11 @@ pub fn dialog_for(g: &mut Game, ni: usize) -> Script {
                 pages(&[
                     "Du … du atmest noch? Dann hat die See dich auch hier heraufgespuckt.",
                     "Das ist der Wrackzwinger. Mauern ringsum, so hoch, dass kein Ertrunkener je darüber kam. Im Süden nur der Abbruch über dem schwarzen Wasser.",
-                    "Sie zieht die Schiffe die Klippe herauf und spinnt sie ein. Uns auch. Die Spinne … sie haust unten am großen Fall.",
-                    "Wer hier stirbt, den holt die See zurück, irgendwohin. Und wer sie erschlägt … dem bleibt nur der Sprung.",
+                    "Sie zieht die Schiffe die Klippe herauf und spinnt sie ein. Uns auch. Die Spinne … sie lauert unten an der Klippe, beim großen Fall.",
+                    "Wer hier stirbt, den holt die See zurück, irgendwohin. Und wer sie erschlägt … für den steht am Fall ein Sarg bereit.",
                 ])
             } else {
-                pages(&["Geh … bevor sie wiederkommt.", "Am Abbruch. Beim Fall. Dort wartet sie – und dahinter die Tiefe."])
+                pages(&["Geh … bevor sie wiederkommt.", "Beim Fall lauert sie, unten an der Klippe. Und neben dem Fall steht der Sarg."])
             },
             choices: vec![bye],
         },

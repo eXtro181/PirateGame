@@ -113,7 +113,28 @@ impl Game {
         }
         // Bosse
         for (i, b) in self.bosses.iter().enumerate() {
-            if b.hidden || b.state == BS::Dormant || !vis(b.a.x, b.a.y, 300.0) {
+            if b.hidden || (b.state == BS::Dormant && b.climb <= 0.0) || !vis(b.a.x, b.a.y, 300.0) {
+                continue;
+            }
+            if b.climb > 0.0 {
+                // Meeresspinne an der Klippenwand: Rücken zur Kamera, beim Hinabsteigen kopfüber
+                if let Some(sh) = art.chars.get(b.monster) {
+                    let ai = anim_index("cast");
+                    if !sh.f[0][ai].is_empty() {
+                        let s = sh.get(0, ai, (b.a.frame.max(0.0) as usize) % sh.f[0][ai].len());
+                        let down = b.climb > 1.5;
+                        let fl = if b.a.flash > 0.0 { flags::FLASH } else { 0 };
+                        let y = if down { b.a.y - s.h as f32 * 0.5 } else { b.a.y };
+                        // beim Hinabsteigen verschluckt sie zuletzt das Schwarz (Nachkommastellen)
+                        let al = if down { 1.0 - (b.climb - 2.0).clamp(0.0, 1.0) } else { 1.0 };
+                        f.sprite_z(&s, b.a.x, y, b.a.y + 30.0, SprOpt { rot: if down { std::f32::consts::PI } else { 0.0 }, flags: fl, ev: 20.0, tint: [255, 255, 255, (al * 255.0) as u8], ..Default::default() });
+                    }
+                }
+                let c = el_col(b.el);
+                let k = if b.climb > 1.5 { 1.1 * (1.0 - (b.climb - 2.0).clamp(0.0, 1.0)) } else { 1.1 };
+                // an der Wand liegt das Licht auf Kopf und Rücken (kopfüber auf der Mitte)
+                let ly = if b.climb > 1.5 { b.a.y } else { b.a.y - 110.0 };
+                f.light(LightDef { x: b.a.x, y: ly, z: 80.0, r: 210.0, col: [c[0] * k, c[1] * k, c[2] * k], flicker: 0.2 });
                 continue;
             }
             let hov = self.hover == Hover::T(Target::Boss(i)) || self.lock == Some(Target::Boss(i));

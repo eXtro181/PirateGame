@@ -14,17 +14,29 @@ use crate::color::Rgba;
 use crate::props::PropArt;
 use std::sync::OnceLock;
 
-/// Terrain an einer Kachelecke
+/// Terrain an einer Kachelecke (unten, Mitte, oben einer Kette aus zwei Sätzen): Schädelhorn
+/// Sand – Gras – Wald, Prolog Schlamm – Fels – totes Moos
 pub const SAND: u8 = 0;
 pub const GRASS: u8 = 1;
 pub const FOREST: u8 = 2;
+pub const MUD: u8 = 0;
+pub const ROCK: u8 = 1;
+pub const MOSS: u8 = 2;
+/// erster Satz der Kette: Schädelhorn bzw. Prolog
+pub const SET_ISLE: usize = 0;
+pub const SET_PROLOG: usize = 2;
 
 /// Kachel (Spalte, Zeile) im 4×4-Bogen je Eckmaske NW·8 + NE·4 + SW·2 + SE·1 (1 = obere Fläche);
-/// beide Sätze haben dieselbe Anordnung (aus den PixelLab-Metadaten).
+/// alle Sätze haben dieselbe Anordnung (aus den PixelLab-Metadaten).
 const WANG: [(u8, u8); 16] = [(2, 1), (3, 1), (2, 2), (1, 2), (2, 0), (3, 2), (0, 1), (3, 3), (1, 1), (2, 3), (1, 0), (0, 2), (3, 0), (0, 0), (1, 3), (0, 3)];
 const TILE: i32 = 32;
 
-static SETS: [&[u8]; 2] = [include_bytes!("../assets/pixellab/ts_sand_grass.png"), include_bytes!("../assets/pixellab/ts_grass_forest.png")];
+static SETS: [&[u8]; 4] = [
+    include_bytes!("../assets/pixellab/ts_sand_grass.png"),
+    include_bytes!("../assets/pixellab/ts_grass_forest.png"),
+    include_bytes!("../assets/pixellab/ts_mud_rock.png"),
+    include_bytes!("../assets/pixellab/ts_rock_moss.png"),
+];
 
 /// Dekodiertes Bild (RGBA, Zeilen von oben)
 pub struct Img {
@@ -64,7 +76,7 @@ pub fn decode(bytes: &[u8]) -> Img {
     Img { w, h, px }
 }
 
-/// Die beiden Bodensätze (einmal dekodiert)
+/// Die Bodensätze (einmal dekodiert)
 pub struct Ground {
     sets: Vec<Img>,
 }
@@ -75,9 +87,9 @@ pub fn ground() -> &'static Ground {
 }
 
 impl Ground {
-    /// Farbe am Kachelpixel (lx, ly) für die Ecken [NW, NE, SW, SE]. Benachbarte Ecken unterscheiden
-    /// sich höchstens um ein Terrain (Sand grenzt nie direkt an Wald).
-    pub fn texel(&self, c: [u8; 4], lx: i32, ly: i32) -> Rgba {
+    /// Farbe am Kachelpixel (lx, ly) für die Ecken [NW, NE, SW, SE] in der Kette ab Satz `base`.
+    /// Benachbarte Ecken unterscheiden sich höchstens um ein Terrain (unten grenzt nie an oben).
+    pub fn texel(&self, base: usize, c: [u8; 4], lx: i32, ly: i32) -> Rgba {
         let mn = *c.iter().min().unwrap_or(&0);
         let mx = (*c.iter().max().unwrap_or(&0)).min(mn + 1);
         // reine Kachel: Sand und Gras aus dem ersten Satz, Wald als „oben“ des zweiten
@@ -88,7 +100,7 @@ impl Ground {
         };
         let m = c.iter().enumerate().fold(0usize, |acc, (k, &v)| acc | (((v.min(mx) > lo) as usize) << (3 - k)));
         let (tx, ty) = WANG[m];
-        self.sets[set].at(tx as i32 * TILE + lx.rem_euclid(TILE), ty as i32 * TILE + ly.rem_euclid(TILE))
+        self.sets[base + set].at(tx as i32 * TILE + lx.rem_euclid(TILE), ty as i32 * TILE + ly.rem_euclid(TILE))
     }
 }
 
@@ -113,7 +125,7 @@ macro_rules! obj {
     };
 }
 
-pub fn objects() -> [Obj; 13] {
+pub fn objects() -> [Obj; 26] {
     [
         obj!("plDeadTree", "deadTree.png", (20.0, 6.0), 5.0, (0.0, 0.0), Some(0.62), 24),
         obj!("plCypress", "cypress.png", (20.0, 6.0), 5.0, (0.0, 0.0), Some(0.66), 34),
@@ -128,8 +140,25 @@ pub fn objects() -> [Obj; 13] {
         obj!("plSkullTotem", "skullTotem.png", (10.0, 4.0), 5.0, (0.0, 0.0), None, 0),
         obj!("plFern", "fern.png", (16.0, 5.0), 0.0, (0.0, 0.0), None, 26),
         obj!("plThorns", "thorns.png", (16.0, 5.0), 0.0, (0.0, 0.0), None, 18),
+        // Prolog (Wrackzwinger)
+        obj!("plWreckA", "pWreckA.png", (78.0, 16.0), 0.0, (70.0, 22.0), Some(0.45), 0),
+        obj!("plWreckB", "pWreckB.png", (72.0, 14.0), 0.0, (62.0, 18.0), Some(0.45), 0),
+        obj!("plMast", "pMast.png", (16.0, 5.0), 6.0, (0.0, 0.0), Some(0.55), 0),
+        obj!("plWeb", "pWeb.png", (30.0, 6.0), 0.0, (0.0, 0.0), None, 12),
+        obj!("plCocoon", "pCocoon.png", (18.0, 5.0), 0.0, (0.0, 0.0), None, 0),
+        obj!("plSkeleton", "pSkeleton.png", (18.0, 5.0), 0.0, (0.0, 0.0), None, 0),
+        obj!("plBones", "pBones.png", (18.0, 5.0), 0.0, (0.0, 0.0), None, 0),
+        obj!("plEggs", "pEggs.png", (16.0, 5.0), 0.0, (0.0, 0.0), None, 0),
+        obj!("plCargoWeb", "pCargoWeb.png", (22.0, 7.0), 0.0, (20.0, 9.0), None, 0),
+        obj!("plAnchor", "pAnchor.png", (18.0, 6.0), 10.0, (0.0, 0.0), None, 0),
+        obj!("plTorch", "pTorch.png", (10.0, 4.0), 5.0, (0.0, 0.0), None, 0),
+        obj!("plWebTree", "pWebTree.png", (20.0, 6.0), 5.0, (0.0, 0.0), Some(0.6), 20),
+        obj!("plRocksP", "pRocks.png", (22.0, 7.0), 14.0, (0.0, 0.0), None, 0),
     ]
 }
+
+/// Höhe des Feuerkorbs der Piratenfackel über ihrem Fuß (px)
+pub const TORCH_FIRE: f32 = 92.0;
 
 /// Fußpunkt eines Objekts: unterste deckende Zeile, waagrecht die Mitte der deckenden Pixel in
 /// den untersten Zeilen
@@ -217,6 +246,10 @@ pub fn prop_arts() -> Vec<PropArt> {
             if o.name == "plFirePit" {
                 // glimmende Glut: warmes, flackerndes Licht über der Feuerstelle
                 pa = pa.light(0.0, -8.0, 16.0, 170.0, [1.9, 0.9, 0.35], 0.3);
+            }
+            if o.name == "plTorch" {
+                // Piratenfackel: helles Feuer im Eisenkorb (die Flamme zeichnet PixelFX)
+                pa = pa.light(0.0, -TORCH_FIRE, TORCH_FIRE * 0.9, 260.0, [2.6, 1.45, 0.6], 0.22);
             }
             pa
         })

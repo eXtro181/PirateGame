@@ -120,7 +120,7 @@ pub fn kind(key: &str) -> Kind {
 
 /// Für große Wesen: welches Bild tatsächlich gerendert wird (gleiche Bilder teilen sich den Atlasplatz).
 pub fn canon(key: &str, anim: &str, f: usize) -> usize {
-    if !kind(key).big {
+    if !kind(key).big || (key == "seaSpider" && anim == "cast") {
         return f;
     }
     match anim {
@@ -136,6 +136,21 @@ pub fn canon(key: &str, anim: &str, f: usize) -> usize {
 /// Ein Bild eines Wesens.
 pub fn beast_frame(key: &str, dir: &str, anim: &str, f: usize) -> Canvas {
     let kd = kind(key);
+    if key == "seaSpider" && anim == "cast" {
+        // an der Klippenwand: Bauch an der Wand, Rücken zur Kamera, Kopf nach oben; die Beine
+        // greifen im Laufzyklus (drei Bilder). Erst 180° gieren, dann −90° um x kippen:
+        // (x, y, z) → (−x, z, y), danach auf den Boden des Bildes geschoben.
+        let p = pose("walk", f * 2);
+        let mut r = Rig::new();
+        build(key, &p, &mut r);
+        r.scale(kd.sc);
+        r.rotate(2, PI, [0.0; 3]);
+        r.rotate(0, -std::f32::consts::FRAC_PI_2, [0.0; 3]);
+        let mz = r.min_z();
+        // Platz unter dem Leib: der Rücken zeigt zur Kamera und rückt im Bild nach unten
+        r.shift([0.0, 0.0, -mz + 60.0]);
+        return render_yaw(&r, 0.0, kd.w, kd.h + 170, kd.foot);
+    }
     let p = pose(anim, f);
     let mut r = Rig::new();
     build(key, &p, &mut r);
@@ -212,6 +227,13 @@ fn sea_spider(r: &mut Rig, p: &P) {
     let slime = r.mat(mat(0x9CC296).spec(235).bias(0.15));
     let vein = r.mat(mat(0x300A0E).spec(50));
     let fungus = r.mat(mat(0x7E8A5E).pat(Pat::Spots(1.4)).soft());
+    // zwei Holzbeine (Piratenstelzen mit Eisenbändern), Muschelbänke, Algen
+    let wood = r.mat(mat(0x5C3C20).pat(Pat::Grain).spec(30));
+    let wood_d = r.mat(mat(0x3E2814).pat(Pat::Grain));
+    let iron = r.mat(mat(0x2C2C32).spec(170));
+    let mussel = r.mat(mat(0x2E3A58).pat(Pat::Stripes(0.9)).spec(220).bias(0.08));
+    let kelp = r.mat(mat(0x5A6E26).pat(Pat::Stripes(2.0)).soft());
+    let moss = r.mat(mat(0x56782C).pat(Pat::Fur(1.2)).soft().bias(0.05));
     let rear = if p.atk < 0.0 { -p.atk * 10.0 } else if p.atk > 0.0 { -p.atk * 3.0 } else { 0.0 };
     let bz = 26.0 + p.bob * 0.7 + rear + if p.moving { (p.walk * 2.0).sin() * 1.4 } else { 0.0 };
     let pitch = if p.atk < 0.0 { 0.3 * -p.atk } else if p.atk > 0.0 { -0.16 * p.atk } else { 0.0 };
@@ -233,11 +255,34 @@ fn sea_spider(r: &mut Rig, p: &P) {
         let ankle = v(side * (52.0 + ca.abs() * 6.0), 4.0 + sa * 50.0 * reach + st * 0.8, bz + 6.0 + lift * 0.6);
         let foot = v(side * (60.0 + ca.abs() * 6.0), 4.0 + sa * 60.0 * reach + st, lf + lift * 0.4);
         let m = if i % 2 == 0 { leg_a } else { leg_b };
+        if i == 2 || i == 5 {
+            // Holzbein: kantiger Balken, Eisenbänder an den Gelenken, Stelze mit Eisenschuh
+            r.tube(&[hip, knee], 3.8, 3.4, wood);
+            r.tube(&[knee, ankle], 3.2, 2.8, wood);
+            r.tube(&[ankle, add(foot, v(0.0, 0.0, 2.0))], 2.6, 1.9, wood_d);
+            r.cyl(add(foot, v(0.0, 0.0, -0.5)), 2.2, 2.2, 3.2, iron);
+            for (a, b, t) in [(hip, knee, 0.15f32), (hip, knee, 0.85), (knee, ankle, 0.2), (knee, ankle, 0.8), (ankle, foot, 0.25)] {
+                r.ball(lerp3(a, b, t), 3.9 - t * 0.6, iron);
+            }
+            r.ball(knee, 4.0, iron);
+            r.ball(ankle, 3.2, iron);
+            for t in [0.35f32, 0.6] {
+                let n = lerp3(hip, knee, t);
+                r.dot(add(n, v(side * 1.2, 1.0, 3.4)), 0x8A8A90, 0.0, 1);
+            }
+            continue;
+        }
         r.tube(&[hip, knee], 3.4, 2.8, m);
         r.tube(&[knee, ankle], 2.8, 2.0, m);
         r.tube(&[ankle, foot], 2.0, 0.6, m);
         r.ball(knee, 3.2, joint);
         r.ball(ankle, 2.4, joint);
+        // Muscheln und Seepocken an den Schenkeln
+        for (k2, t) in [0.25f32, 0.5].iter().enumerate() {
+            let b = lerp3(hip, knee, *t);
+            r.ell_rot(add(b, v(side * 2.4, 0.5, 1.5)), v(2.6, 1.2, 1.1), 0.4, side * 0.6 + k2 as f32, mussel);
+        }
+        r.cyl(lerp3(knee, ankle, 0.4), 1.5, 1.5, 1.6, barn);
         // rostrote Bänder, Borsten und Stacheln entlang der Glieder
         r.ball(lerp3(hip, knee, 0.55), 3.0, band);
         for t in [0.2f32, 0.4, 0.7, 0.85] {
@@ -337,6 +382,37 @@ fn sea_spider(r: &mut Rig, p: &P) {
     // Tang hängt vom Hinterleib
     for (bx, side) in [(-14.0f32, -1.0f32), (12.0, 1.0)] {
         r.tube(&[v(bx, -30.0, bz + 2.0), v(bx + side * 3.0, -32.0, bz - 8.0), v(bx + side * 2.0, -34.0, bz - 17.0)], 1.3, 0.4, weed);
+    }
+    // voller Muscheln: Bänke aus dunklen Miesmuscheln auf Rücken und Flanken
+    for k in 0..26 {
+        let a = -1.25 + (k % 7) as f32 * 0.42 + (k as f32 * 1.7).sin() * 0.12;
+        let bq = -0.75 + (k / 7) as f32 * 0.42 + (k as f32 * 2.3).cos() * 0.08;
+        let pos = v(21.0 * a.sin() * bq.cos(), -21.0 + 23.6 * bq.sin(), bz + 4.0 + 15.6 * a.cos() * bq.cos());
+        r.ell_rot(pos, v(3.4 - (k % 3) as f32 * 0.4, 1.6, 1.4), 0.3 + (k % 4) as f32 * 0.2, k as f32 * 0.9, mussel);
+    }
+    // weitere Seepocken
+    for k in 0..12 {
+        let a = -1.1 + (k % 6) as f32 * 0.44;
+        let bq = -0.5 + (k / 6) as f32 * 0.7;
+        let pos = v(20.8 * a.sin() * bq.cos(), -21.0 + 23.4 * bq.sin(), bz + 4.0 + 15.4 * a.cos() * bq.cos());
+        r.cyl(pos, 1.7, 1.7, 1.6, barn);
+        r.dot(add(pos, v(0.0, 0.0, 1.7)), 0x2A2620, 0.0, 1);
+    }
+    // voller Algen: Tangbänder hängen an den Flanken herab, Moospolster auf dem Rücken
+    for k in 0..18 {
+        let a = -1.45 + k as f32 * 0.17;
+        let (sx, sy) = (21.0 * a.sin(), -21.0 + 20.0 * (k as f32 * 0.9).cos() * 0.4);
+        let top = v(sx, sy, bz + 4.0 + 8.0 * a.cos());
+        let sw = (k as f32 * 1.3 + p.bob).sin() * 2.0;
+        let m = if k % 3 == 0 { weed } else { kelp };
+        r.tube(&[top, add(top, v(sx.signum() * 2.5 + sw, 0.5, -7.0)), add(top, v(sx.signum() * 1.5 + sw * 1.5, 1.5, -15.0 - (k % 4) as f32 * 3.0))], 1.4, 0.5, m);
+    }
+    for (bx, by, bzz) in [(-6.0f32, -30.0f32, 14.0f32), (6.0, -16.0, 16.0), (-12.0, -12.0, 12.0), (10.0, -34.0, 10.0), (0.0, -22.0, 18.0), (-15.0, -26.0, 8.0), (14.0, -24.0, 9.0)] {
+        r.ell(v(bx, by, bz + bzz), v(5.0, 4.4, 1.8), moss);
+    }
+    // Muscheln auch auf dem Kopfbruststück
+    for (k, (bx, by)) in [(-9.0f32, 4.0f32), (-6.0, 8.0), (7.0, 2.0), (10.0, 9.0), (-2.0, 12.0)].iter().enumerate() {
+        r.ell_rot(v(*bx, *by, bz + 8.5), v(3.0, 1.4, 1.2), 0.2, k as f32 * 1.3, mussel);
     }
     // Kopfbruststück: flacher Panzer, offene Wunden
     r.ell(v(0.0, 6.0, bz), v(20.0, 18.0, 10.0), shell);

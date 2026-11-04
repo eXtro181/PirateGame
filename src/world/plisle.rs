@@ -5,7 +5,7 @@
 //! wählt der Boden-Bäcker danach (`art_px`), die Requisiten folgen dem Terrain.
 
 use super::*;
-use sw_art::pixellab::{FOREST, GRASS, SAND};
+use sw_art::pixellab::{FOREST, GRASS, MOSS, MUD, ROCK, SAND, SET_ISLE, SET_PROLOG};
 
 /// Index der wilden Insel, die mit PixelLab-Grafik gebaut wird (Schädelhorn)
 pub const PL_ISLE: usize = 25;
@@ -22,6 +22,8 @@ pub struct PlIsle {
     pub w: i32,
     pub h: i32,
     pub vtx: Vec<u8>,
+    /// erster der beiden Bodensätze (`sw_art::pixellab::SET_*`)
+    pub base: usize,
 }
 
 impl PlIsle {
@@ -133,7 +135,7 @@ impl World {
                 }
             }
         }
-        let pl = PlIsle { landing, heart, x0, y0, w: vw, h: vh, vtx };
+        let pl = PlIsle { landing, heart, x0, y0, w: vw, h: vh, vtx, base: SET_ISLE };
         // Materialien (für Seekarte, Schritte, Staub): Mehrheit der Ecken; keine Wege
         for ty in y0..=y1 {
             for tx in x0..=x1 {
@@ -236,6 +238,89 @@ impl World {
                 let big = matches!(kind, "plCypress" | "plDeadTree" | "plPalm" | "plBoulder");
                 if self.free_t(tx, ty, if big { 1 } else { 0 }) {
                     put(self, kind, tx, ty, &mut rng, true);
+                }
+            }
+        }
+    }
+
+    /// Prolog (Wrackzwinger): Eckterrain der Felsplatte aus Rauschen – Schlamm am Bach und in
+    /// Senken, rissiger Schieferfels, Flecken toten Mooses (Moos grenzt nie an Schlamm)
+    pub(super) fn pl_prolog_ground(&mut self) {
+        let (x0, y0, x1, y1) = PROLOG;
+        let land = |w: &World, tx: i32, ty: i32| -> bool {
+            inb(tx, ty) && w.zone[idx(tx, ty)] == Some(Zone::Prolog) && w.level[idx(tx, ty)] == 4 && !matches!(w.ground[idx(tx, ty)], Mat::Water | Mat::Abyss | Mat::Plank)
+        };
+        let wet = |w: &World, tx: i32, ty: i32| -> bool { inb(tx, ty) && w.ground[idx(tx, ty)] == Mat::Water && w.level[idx(tx, ty)] == 4 };
+        let (vw, vh) = (x1 - x0 + 1, y1 - y0 + 1);
+        let mut vtx = vec![NONE; (vw * vh) as usize];
+        for vy in y0..=y1 {
+            for vx in x0..=x1 {
+                let tiles = [(vx - 1, vy - 1), (vx, vy - 1), (vx - 1, vy), (vx, vy)];
+                if !tiles.iter().any(|&(a, b)| land(self, a, b)) {
+                    continue;
+                }
+                let n = self.nz.fbm(vx as f32 * 0.085 + 5.0, vy as f32 * 0.085 - 3.0, 3);
+                let t = if tiles.iter().any(|&(a, b)| wet(self, a, b)) || n < -0.16 {
+                    MUD
+                } else if n > 0.2 {
+                    MOSS
+                } else {
+                    ROCK
+                };
+                vtx[((vy - y0) * vw + vx - x0) as usize] = t;
+            }
+        }
+        let snap = vtx.clone();
+        let at = |vx: i32, vy: i32| -> u8 {
+            let (x, y) = (vx - x0, vy - y0);
+            if x < 0 || y < 0 || x >= vw || y >= vh {
+                NONE
+            } else {
+                snap[(y * vw + x) as usize]
+            }
+        };
+        for vy in y0..=y1 {
+            for vx in x0..=x1 {
+                let i = ((vy - y0) * vw + vx - x0) as usize;
+                if vtx[i] == MOSS && (-1..=1).any(|oy| (-1..=1).any(|ox| at(vx + ox, vy + oy) == MUD)) {
+                    vtx[i] = ROCK;
+                }
+            }
+        }
+        self.plp = Some(PlIsle { landing: (0, 0), heart: (0, 0), x0, y0, w: vw, h: vh, vtx, base: SET_PROLOG });
+    }
+
+    /// Prolog: etwas PixelLab-Bewuchs und Gestein statt des prozeduralen (tote Bäume mit Netzen,
+    /// Felsen voller Muscheln, Dornen), nicht im Revier der Spinne und nicht am Erwachensplatz
+    pub(super) fn pl_prolog_props(&mut self) {
+        let Some(p) = self.plp.as_ref() else { return };
+        let (x0, y0, x1, y1) = (p.x0, p.y0, p.x0 + p.w - 2, p.y0 + p.h - 2);
+        let start = self.prolog_start;
+        let mut rng = Rng::new(9_977_025);
+        for ty in y0..=y1 {
+            for tx in x0..=x1 {
+                let Some(c) = self.plp.as_ref().and_then(|p| p.corners(tx, ty)) else { continue };
+                if self.level[idx(tx, ty)] != 4 || matches!(self.ground[idx(tx, ty)], Mat::Water | Mat::Plank) {
+                    continue;
+                }
+                let (x, y) = tpos(tx, ty);
+                if (x - start.0).hypot(y - start.1) < 200.0 {
+                    continue;
+                }
+                let moss = c.iter().filter(|&&v| v == MOSS).count() >= 3;
+                let roll = rng.f();
+                let kind = if moss && roll < 0.05 {
+                    if rng.chance(0.5) { "plWebTree" } else { "plDeadTree" }
+                } else if moss && roll < 0.09 {
+                    "plThorns"
+                } else if !moss && roll < 0.012 {
+                    "plRocksP"
+                } else {
+                    continue;
+                };
+                if self.free_t(tx, ty, 1) {
+                    let flip = rng.chance(0.5);
+                    self.prop_x(kind, x + rng.int(-8, 8) as f32, y + rng.int(-5, 5) as f32, |p| p.flip = flip);
                 }
             }
         }

@@ -672,6 +672,17 @@ impl WorldView {
             if kind == "brazier" {
                 crate::pfx::draw_loop(frame, &art.pfx, crate::pfx::Px::Brazier, p.x, p.y, 25.0, t + ph, 0.5, [255; 4], 1.15);
             }
+            if kind == "plTorch" {
+                // PixelLab-Piratenfackel: lodernde Flamme im Eisenkorb, Funken darüber
+                let z = sw_art::pixellab::TORCH_FIRE + 9.0;
+                if !crate::pfx::draw_loop(frame, &art.pfx, crate::pfx::Px::Brazier, p.x, p.y, z, t + ph, 0.8, [255; 4], 1.7) {
+                    frame.glow(p.x, p.y - z - 8.0, 7.0, [255, 190, 100, 230]);
+                }
+                for k in 0..3 {
+                    let rise = ((t * 0.55 + k as f32 * 0.33 + ph) % 1.0) * 46.0;
+                    frame.glow(p.x + (t * 1.9 + k as f32 * 2.1 + ph).sin() * 6.0, p.y - z - 16.0 - rise, 1.6, [255, 170, 80, 170]);
+                }
+            }
             // Gehängte am Galgen und Käfige am Gibbet schwingen im Wind
             if kind.starts_with("gallows") || kind.starts_with("gibbet") {
                 let n = def.frames.len();

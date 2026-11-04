@@ -1,4 +1,4 @@
-# PixelLab-Grafik (Insel Schädelhorn)
+# PixelLab-Grafik (Insel Schädelhorn und Prolog-Insel Wrackzwinger)
 
 Diese Bilder stammen aus [PixelLab](https://pixellab.ai) und wurden am 4.11. mit dem PixelLab-Konto
 des Projektinhabers erzeugt (Nutzungsbedingungen: https://pixellab.ai/termsofservice). Sie sind die
@@ -11,6 +11,8 @@ einzige Ausnahme von der Projektregel, dass alle Grafik aus Code entsteht, und w
 |---|---|---|---|
 | `ts_sand_grass.png` | nasser Kiesstrand mit Muscheln und Kieseln, kaltes Grau-Braun | dunkles Moosgras | `123e9904-0b35-4994-a6fb-ad5b74786332` |
 | `ts_grass_forest.png` | dunkles Moosgras (gleiche Grundkachel) | dunkler Waldboden mit Wurzeln, Laub und Moos | `30b41b02-2f9b-472a-a39e-455362f076d6` |
+| `ts_mud_rock.png` (Prolog) | nasser, fast schwarzer Schlamm mit Pfützen und Muschelbruch | dunkler, rissiger Schieferfels mit Kieseln und Seepocken | `a7e14674-6b3b-4b55-ad60-32f10e0fee49` |
+| `ts_rock_moss.png` (Prolog) | Schieferfels (gleiche Grundkachel) | verdorrtes, totes Moos und graues Gras | `b5f9959f-c26c-4f1d-862a-da1d3489de1f` |
 
 Die Kachel je Eckmaske (NW·8 + NE·4 + SW·2 + SE·1, 1 = obere Fläche) steht als Tabelle `WANG` im Code.
 
@@ -35,3 +37,27 @@ Die Kachel je Eckmaske (NW·8 + NE·4 + SW·2 + SE·1, 1 = obere Fläche) steht 
 Bei `palm.png`, `wreckBow.png` und `rowboat.png` wurde der eingebackene beige Sandfleck auf die
 Farben des Kiesstrands umgefärbt (Helligkeit auf die Rampe der Sandkachel abgebildet), der kleine
 Wasserring der Palme entfernt.
+
+## Prolog (Wrackzwinger), gleiche Einstellungen
+
+| Datei | Größe | Beschreibung | Objekt |
+|---|---|---|---|
+| `pWreckA.png` | 192×192 | huge pirate shipwreck hull broken in half lying on its side, rotten dark planks and ribs, wrapped in thick white spider webs, barnacles, dark fantasy | `bb268971-d1e1-4cf5-ba92-f0f599ad022e` |
+| `pWreckB.png` | 192×160 | wrecked pirate ship stern with broken mast stump and torn black sails, covered in spider silk and seaweed, dark fantasy | `ce40e823-3e66-4c06-93c8-fe4ea8c52ca1` |
+| `pMast.png` | 96×160 | broken ship mast stuck upright in the ground with torn sail, ropes and spider webs, dark fantasy | `76d5924e-21c8-41c9-9be6-320ee672d817` |
+| `pWeb.png` | 128×128 | large white spider web stretched between two broken wooden posts, dark fantasy | `5232fa2c-07a9-488c-8c80-95bc8e6898bd` |
+| `pCocoon.png` | 64×48 | a dead human body tightly wrapped in thick white spider silk lying flat on the ground, elongated oval mummy-shaped cocoon, silk threads anchoring it to the ground, top-down, dark fantasy | `8c71d2db-78ed-4c2e-8915-dd56101fdf20` |
+| `pSkeleton.png` | 64×48 | pirate skeleton lying on the ground with tattered coat, bandana and rusty cutlass, dark fantasy | `fee35724-7a1e-4e12-8c47-4cadfa66a8b0` |
+| `pBones.png` | 64×48 | pile of bones and skulls with seaweed, dark fantasy | `cd2b6b28-d149-47c5-a7b2-86150b8f6d59` |
+| `pEggs.png` | 64×48 | cluster of pale glistening spider eggs wrapped in silk, dark fantasy | `f365d69a-bfee-401c-afda-4d7e20d7c91e` |
+| `pCargoWeb.png` | 64×64 | old barrels and crates wrapped in white spider webs, dark weathered wood | `84c0e3ac-e215-44d5-81b5-ac75922d0498` |
+| `pAnchor.png` | 64×64 | rusty ship anchor with broken chain half buried in the ground, barnacles and seaweed | `d0503cc6-802c-4fbd-96d8-51b1e0ae766a` |
+| `pTorch.png` | 64×112 | tall pirate torch post, wooden pole wrapped in rope with a skull and crossed bones nailed on it, iron fire basket on top with charred logs, no flame | `c184cb1c-4a89-4988-99e5-4f9ddf1e7378` |
+| `pWebTree.png` | 96×128 | dead twisted black tree with spider webs between its branches, dark fantasy | `c4f78338-85d5-46f1-8402-fdee9fb29ff9` |
+| `pRocks.png` | 64×64 | black wet rocks covered in barnacles, mussels and green seaweed | `de29a895-4aba-4b52-b8dc-4f8803f4ea85` |
+
+Bei `pWreckB.png` wurde das eingebackene Wasser am Rumpf in Schlamm umgefärbt (das Schiff steckt im
+Morast), bei `pAnchor.png` der Sandfleck in Schlamm und das Seegras in totes Moos, bei `pRocks.png`
+die blauen Rinnen in nassen Fels, das Violett halb zum Schiefergrau und die Algen in totes Moos, bei
+`pBones.png` der grüne Fleck in totes Moos – jeweils Helligkeit auf die Rampe der passenden
+Bodenkachel abgebildet.

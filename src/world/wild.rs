@@ -260,7 +260,7 @@ impl World {
         let (hx, hy) = (cx - dx * (r.rx / 5), cy - dy * (r.ry / 5));
         let pl = k == super::PL_ISLE;
         if pl {
-            self.pl = Some(super::PlIsle { landing: (lx, ly), heart: (hx, hy), x0: 0, y0: 0, w: 0, h: 0, vtx: vec![] });
+            self.pl = Some(super::PlIsle { landing: (lx, ly), heart: (hx, hy), x0: 0, y0: 0, w: 0, h: 0, vtx: vec![], base: sw_art::pixellab::SET_ISLE });
             self.flat_areas.push((hx, hy, 6, 5));
         } else {
             self.road(&[(lx, ly), ((lx + hx) / 2 + side.0 * 2, (ly + hy) / 2 + side.1 * 2), (hx, hy)], gm, 1);

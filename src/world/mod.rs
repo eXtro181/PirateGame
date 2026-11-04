@@ -500,8 +500,13 @@ pub struct World {
     /// der Sarg am großen Wasserfall (Fußpunkt) und seine Requisite: Ende des Prologs
     pub prolog_coffin: (f32, f32),
     pub prolog_coffin_prop: Option<usize>,
-    /// die PixelLab-Insel (Schädelhorn): Eckterrain für Boden aus fertigen Kacheln
+    /// die PixelLab-Insel (Schädelhorn) und der Prolog: Eckterrain für Boden aus fertigen Kacheln
     pub pl: Option<PlIsle>,
+    pub plp: Option<PlIsle>,
+    /// Prolog: Lauerplatz der Spinne in der Klippenwand, Oberkante der Wand dort, Fackeln am Sarg
+    pub prolog_lurk: (f32, f32),
+    pub prolog_lurk_top: f32,
+    pub prolog_torches: Vec<(f32, f32)>,
     /// Häuser mit rauchendem Schornstein (Indizes in `props`)
     pub chimneys: Vec<usize>,
     cur: Zone,
@@ -576,6 +581,10 @@ impl World {
             prolog_coffin: (0.0, 0.0),
             prolog_coffin_prop: None,
             pl: None,
+            plp: None,
+            prolog_lurk: (0.0, 0.0),
+            prolog_lurk_top: 0.0,
+            prolog_torches: vec![],
             chimneys: vec![],
             cur: Zone::Kueste,
             cur_biome: Biome::Coast,
@@ -806,9 +815,9 @@ impl World {
             let mut rng = Rng::new(r.seed as u64 * 131 + 5);
             self.scatter(r, &mut rng);
         }
-        self.cur = Zone::Prolog;
-        self.cur_biome = Biome::Coast;
-        self.scatter(Zone::Prolog.region(), &mut Rng::new(9_131));
+        // Prolog: Boden und Bewuchs aus PixelLab statt prozedural
+        self.pl_prolog_ground();
+        self.pl_prolog_props();
         lap("Bewuchs", &mut t);
         self.settle_on_cliffs();
         self.clear_prolog_coffin();
@@ -2107,23 +2116,23 @@ impl World {
         self.prolog_start = tpos(sx, sy);
         self.flat_areas.push((sx, sy, 3, 3));
         self.npc("drownedSailor", sx + 4, sy + 1, "stormSailor", "Sterbender Matrose", "prolog", true, None);
-        self.prop_t("torch", sx - 2, sy - 2);
-        self.prop_t("torch", sx + 6, sy - 2);
-        for (tx, ty, kind) in [(sx - 4, sy + 2, "barrels"), (sx + 7, sy + 3, "crates"), (sx - 6, sy - 1, "rowboat"), (sx + 2, sy + 4, "nets")] {
+        self.prop_t("plTorch", sx - 2, sy - 2);
+        self.prop_t("plTorch", sx + 6, sy - 2);
+        for (tx, ty, kind) in [(sx - 4, sy + 2, "plCargoWeb"), (sx + 7, sy + 3, "plCargo"), (sx - 6, sy - 1, "plRowboat"), (sx + 2, sy + 4, "plBones")] {
             self.prop_t(kind, tx, ty);
         }
         // ---- das Wrackfeld: Schiffe, eingesponnen, Netze und Kokons ringsum
         for (k, (dx, dy, flip)) in [(-30, -24, false), (32, -27, true), (-38, -4, false), (34, -6, true), (28, 13, false), (-36, 13, true), (-4, -22, true)].iter().enumerate() {
             let (tx, ty) = (cx + dx, cy + dy);
-            self.prop_tf("wreck", tx, ty, *flip);
+            self.prop_tf(if k % 2 == 0 { "plWreckA" } else { "plWreckB" }, tx, ty, *flip);
             self.flat_areas.push((tx, ty, 6, 4));
-            self.prop_t(&format!("spiderWeb{}", k % 2), tx + if *flip { -5 } else { 5 }, ty - 2);
+            self.prop_t("plWeb", tx + if *flip { -5 } else { 5 }, ty - 2);
             for (ox, oy) in [(-4, 3), (5, 3), (2, -3)] {
                 if rng.chance(0.7) {
-                    self.prop_tf(&format!("cocoon{}", (k + ox as usize) % 2), tx + ox, ty + oy, rng.chance(0.5));
+                    self.prop_tf("plCocoon", tx + ox, ty + oy, rng.chance(0.5));
                 }
             }
-            let junk = ["barrels", "crates", "anchorDeco", "sharkSkel0", "sharkSkel1", "skullpile", "nets"];
+            let junk = ["plCargoWeb", "plCargo", "plAnchor", "plEggs", "plSkeleton", "plBones", "plRocksP"];
             for _ in 0..3 {
                 let (jx, jy) = (tx + rng.int(-6, 6), ty + rng.int(-4, 5));
                 if self.free_t(jx, jy, 0) {
@@ -2132,9 +2141,8 @@ impl World {
             }
         }
         // Rippenbogen und Masten als Wegmarken, Tote, Gräber
-        self.prop_x("hullArch", tpos(cx - 12, cy - 12).0, tpos(cx - 12, cy - 12).1, |p| p.no_collide = true);
-        for (k, (dx, dy)) in [(-22, -30), (22, -18), (-24, 4), (6, 4), (-16, -2)].iter().enumerate() {
-            self.prop_t(&format!("mastPillar{}", k % 3), cx + dx, cy + dy);
+        for (dx, dy) in [(-12, -12), (-22, -30), (22, -18), (-24, 4), (6, 4), (-16, -2)] {
+            self.prop_t("plMast", cx + dx, cy + dy);
         }
         let mut n = 0;
         for _ in 0..120 {
@@ -2146,15 +2154,14 @@ impl World {
                 continue;
             }
             let kind = match rng.int(0, 7) {
-                0 => format!("cocoon{}", rng.int(0, 1)),
-                1 => format!("sitDead{}", rng.int(0, 1)),
-                2 => format!("buried{}", rng.int(0, 2)),
-                3 => "skullpile".to_string(),
-                4 => format!("spiderWeb{}", rng.int(0, 1)),
-                5 => format!("coffinBones{}", rng.int(0, 1)),
-                6 => "chainPost".to_string(),
-                _ => format!("cocoon{}", rng.int(0, 1)),
-            };
+                0 | 7 => "plCocoon",
+                1 => "plSkeleton",
+                2 | 3 => "plBones",
+                4 => "plWeb",
+                5 => "plEggs",
+                _ => "plAnchor",
+            }
+            .to_string();
             let flip = rng.chance(0.5);
             self.prop_tf(&kind, tx, ty, flip);
             n += 1;
@@ -2173,11 +2180,11 @@ impl World {
             let a = k as f32 / 10.0 * std::f32::consts::TAU;
             let (tx, ty) = (ax + (a.cos() * 13.0).round() as i32, ay + (a.sin() * 9.5).round() as i32);
             if inb(tx, ty) && self.level[idx(tx, ty)] == 4 && self.ground[idx(tx, ty)] != Mat::Water && a.sin() < 0.6 {
-                self.prop_tf(if k % 3 == 0 { "spiderWeb1" } else { "cocoon0" }, tx, ty, k % 2 == 0);
+                self.prop_tf(if k % 3 == 0 { "plWeb" } else { "plCocoon" }, tx, ty, k % 2 == 0);
             }
         }
         for (tx, ty) in [(ax - 12, ay - 6), (ax + 12, ay - 6)] {
-            self.prop_t("torch", tx, ty);
+            self.prop_t("plTorch", tx, ty);
         }
         self.prolog_foot = ((cy + 30) * TS) as f32;
         let _ = (x0, x1, y0, y1);
@@ -2248,6 +2255,15 @@ impl World {
             let i = self.prop_x("coffinEmpty", x, y, |_| {});
             self.prolog_coffin = (x, y);
             self.prolog_coffin_prop = Some(i);
+            // die Spinne lauert in der Klippenwand westlich des Sargs; ihr Revier liegt davor auf
+            // der Platte (dort ist frei, siehe `clear_prolog_coffin`)
+            // (Fußpunkt des Kletterbilds: Kopf und Vorderbeine knapp unter der Kante, der Rest
+            // im Dunkel der Tiefe)
+            let lx = x - 260.0;
+            let top = self.prolog_edge_near(lx).map(|e| e.1).unwrap_or(ey);
+            self.prolog_lurk = (lx, top + 200.0);
+            self.prolog_lurk_top = top;
+            self.arenas.insert("prolog", Arena { x: x - 230.0, y: y - 120.0, r: 10.0 * TS as f32, ry: 6.0 * TS as f32 });
         }
     }
 
@@ -2262,10 +2278,18 @@ impl World {
                 continue;
             }
             let (dx, dy) = (p.x - x, p.y - y);
-            // Sarg, Stehplatz davor und der Streifen bis zur Kante, Platz für die Spinne dahinter
-            if (dx.abs() < 76.0 && dy > -150.0 && dy < 90.0) || dx.hypot(dy) < 100.0 {
+            // Sarg, Stehplatz davor und der Streifen bis zur Kante, das Revier der Spinne westlich
+            // davon (Kampf und Zwischensequenzen)
+            let arena = dx > -560.0 && dx < 130.0 && dy > -300.0 && dy < 90.0;
+            if (dx.abs() < 76.0 && dy > -150.0 && dy < 90.0) || dx.hypot(dy) < 100.0 || arena {
                 self.props[pi].hidden = true;
             }
+        }
+        // zwei sehr helle Piratenfackeln links und rechts des Sargs
+        self.prolog_torches.clear();
+        for ox in [-56.0f32, 62.0] {
+            self.prop_x("plTorch", x + ox, y + 8.0, |_| {});
+            self.prolog_torches.push((x + ox, y + 8.0));
         }
     }
 
@@ -3648,8 +3672,8 @@ impl World {
                 if z == Zone::Ende && !self.drained {
                     continue;
                 }
-                // die PixelLab-Insel hat ihren Boden fertig gemalt
-                if self.pl.as_ref().is_some_and(|p| p.covers(tx, ty)) {
+                // die PixelLab-Insel und der Prolog haben ihren Boden fertig gemalt
+                if self.pl.as_ref().is_some_and(|p| p.covers(tx, ty)) || self.plp.as_ref().is_some_and(|p| p.covers(tx, ty)) {
                     continue;
                 }
                 let biome = self.biome[i];
@@ -3936,8 +3960,16 @@ impl TerrainMap for World {
         self.in_settlement((tx * TS + TS / 2) as f32, (ty * TS + TS / 2) as f32)
     }
     fn art_px(&self, px: i32, py: i32) -> Option<sw_art::color::Rgba> {
-        let c = self.pl.as_ref()?.corners(px.div_euclid(TS), py.div_euclid(TS))?;
-        Some(sw_art::pixellab::ground().texel(c, px, py))
+        let (tx, ty) = (px.div_euclid(TS), py.div_euclid(TS));
+        if !inb(tx, ty) || self.ground[idx(tx, ty)] == Mat::Plank {
+            return None;
+        }
+        for p in [self.pl.as_ref(), self.plp.as_ref()].into_iter().flatten() {
+            if let Some(c) = p.corners(tx, ty) {
+                return Some(sw_art::pixellab::ground().texel(p.base, c, px, py));
+            }
+        }
+        None
     }
     fn open_water(&self, tx0: i32, ty0: i32, tx1: i32, ty1: i32) -> bool {
         for ty in ty0..=ty1 {
