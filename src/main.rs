@@ -236,13 +236,6 @@ fn setup(world: &mut bevy::ecs::world::World) {
                     g.cutscene = Some(game::Cut::Wake { t });
                 }
             }
-            if app.params.contains_key("die") {
-                // Testlauf: gleich sterben (z. B. im Prolog: Erwachen im Sarg prüfen)
-                if let Scene::Play(g) = &mut app.scene {
-                    g.player.hp = 0.0;
-                    g.player_died();
-                }
-            }
             if let Some(k) = app.params.get("boss").cloned() {
                 if let Scene::Play(g) = &mut app.scene {
                     g.debug_boss(&k, app.params.contains_key("phase2"));
@@ -272,6 +265,21 @@ fn setup(world: &mut bevy::ecs::world::World) {
                         g.player.a.y = y;
                         g.cam_f = (x, y);
                     }
+                }
+            }
+            // nach dem Versetzen (&pos), damit Sterben und Sarg-Sequenz am richtigen Ort beginnen
+            if let Some(t) = app.params.get("coffin").and_then(|v| v.parse::<f32>().ok()) {
+                // Testlauf (mit &prolog): das Prolog-Ende am Sarg ab Sekunde t ansehen, mit
+                // &defeat die Niederlage gegen die Spinne
+                if let Scene::Play(g) = &mut app.scene {
+                    g.debug_coffin(app.params.contains_key("defeat"), t);
+                }
+            }
+            if app.params.contains_key("die") {
+                // Testlauf: gleich sterben (z. B. im Prolog: Erwachen im Sarg prüfen)
+                if let Scene::Play(g) = &mut app.scene {
+                    g.player.hp = 0.0;
+                    g.player_died();
                 }
             }
             if let Some(n) = app.params.get("endphase").and_then(|v| v.parse::<u32>().ok()) {

@@ -101,7 +101,7 @@ pub const KINDS: [Kind; 20] = [
     Kind { key: "seaKraken", w: 210, h: 195, foot: 4, big: true, shoot: false, shadow: 0.0, roll: 0.0, only: Some("down"), sc: 1.5, swim: false },
     Kind { key: "shark", w: 100, h: 52, foot: 14, big: false, shoot: false, shadow: 0.0, roll: 0.0, only: Some("side"), sc: 1.0, swim: false },
     // Prolog-Boss: nur im Wrackzwinger, wird bei Bedarf in den Bossbereich gezeichnet
-    ks("seaSpider", 150, 120, 36.0, PI, 1.9),
+    ks("seaSpider", 150, 120, 36.0, PI, 2.47),
     // Seebosse (erste Gestalt)
     kw("seaTiamat", 200, 190, 2.1),
     kw("seaLobster", 190, 170, 2.1),
@@ -194,7 +194,7 @@ fn build(key: &str, p: &P, r: &mut Rig) {
 fn sea_spider(r: &mut Rig, p: &P) {
     let shell = r.mat(mat(0x2A3430).pat(Pat::Scales(4.0)).spec(70));
     let shell_d = r.mat(mat(0x1A2220).pat(Pat::Spots(3.0)).spec(30));
-    let belly = r.mat(mat(0x5A2A22).pat(Pat::Stripes(4.0)));
+    let belly = r.mat(mat(0x56282A).pat(Pat::Stripes(2.2)).spec(70));
     let leg_a = r.mat(mat(0x2A1E18).pat(Pat::Grain).spec(50));
     let leg_b = r.mat(mat(0x1E2422).pat(Pat::Grain).spec(50));
     let joint = r.mat(mat(0x4A3A30).spec(40));
@@ -202,6 +202,16 @@ fn sea_spider(r: &mut Rig, p: &P) {
     let barn = r.mat(mat(0xB8B4A0).pat(Pat::Spots(1.5)));
     let fang = r.mat(mat(0x1A1614).spec(160));
     let weed = r.mat(mat(0x2E4A2A).soft());
+    // eklig: Borsten, Eiterbeulen, Eier, Würmer, offene Wunden, Geifer
+    let hair = r.mat(mat(0x15110E).spec(20));
+    let pus = r.mat(mat(0xB4AE46).spec(210).bias(0.1));
+    let pus_d = r.mat(mat(0x5E5A22).spec(40));
+    let egg = r.mat(mat(0xD6CFB0).pat(Pat::Spots(1.2)).spec(70));
+    let worm = r.mat(mat(0xC2A496).spec(90));
+    let sore = r.mat(mat(0x7C2222).spec(140));
+    let slime = r.mat(mat(0x9CC296).spec(235).bias(0.15));
+    let vein = r.mat(mat(0x300A0E).spec(50));
+    let fungus = r.mat(mat(0x7E8A5E).pat(Pat::Spots(1.4)).soft());
     let rear = if p.atk < 0.0 { -p.atk * 10.0 } else if p.atk > 0.0 { -p.atk * 3.0 } else { 0.0 };
     let bz = 26.0 + p.bob * 0.7 + rear + if p.moving { (p.walk * 2.0).sin() * 1.4 } else { 0.0 };
     let pitch = if p.atk < 0.0 { 0.3 * -p.atk } else if p.atk > 0.0 { -0.16 * p.atk } else { 0.0 };
@@ -239,41 +249,130 @@ fn sea_spider(r: &mut Rig, p: &P) {
             r.spike(b, add(b, v(side * 2.2, 0.0, 4.0)), 0.8, fang);
         }
         r.ball(lerp3(knee, ankle, 0.5), 2.4, band);
+        // dichter, borstiger Pelz auf Schenkel und Schiene: lange, schräg abstehende Haare
+        for j in 0..14 {
+            let t = 0.05 + j as f32 * 0.068;
+            let s = [1.0f32, -0.7, 0.4, -1.0][j % 4];
+            let b = lerp3(hip, knee, t);
+            let back = sub(hip, knee);
+            let bl = (back[0] * back[0] + back[1] * back[1] + back[2] * back[2]).sqrt().max(0.1);
+            let bb = v(back[0] / bl * 1.6, back[1] / bl * 1.6, back[2] / bl * 1.6);
+            r.spike(b, add(b, add(bb, v(side * (1.4 + s * 2.2), s * 2.0, 4.0 + (j % 3) as f32 * 1.3))), 0.5, hair);
+        }
+        for j in 0..11 {
+            let t = 0.06 + j as f32 * 0.085;
+            let s = [-0.8f32, 1.0, -0.3, 0.7][j % 4];
+            let c = lerp3(knee, ankle, t);
+            r.spike(c, add(c, v(side * (2.4 + s * 1.4), -s * 1.8, 3.0 + (j % 2) as f32 * 1.8)), 0.42, hair);
+        }
+        for t in [0.2f32, 0.45, 0.7] {
+            let c = lerp3(ankle, foot, t);
+            r.spike(c, add(c, v(side * 2.6, 0.8, 2.0)), 0.36, hair);
+        }
         // Tang hängt von den Knien
         if i % 3 == 0 {
             r.tube(&[knee, add(knee, v(side * 2.0, 1.0, -9.0)), add(knee, v(side * 1.0, 3.0, -16.0))], 1.2, 0.4, weed);
+        }
+        // Geiferfäden zwischen den Gliedern
+        if i % 4 == 1 {
+            r.tube(&[knee, lerp3(lerp3(knee, ankle, 0.5), v(knee[0], knee[1], ankle[2] - 4.0), 0.5), ankle], 0.3, 0.3, slime);
         }
     }
     // ---- Leib
     r.part();
     let mk = r.mark();
-    // Hinterleib mit Muster und Seepocken
-    r.ell(v(0.0, -20.0, bz + 4.0), v(18.0, 20.0, 13.0), shell_d);
-    r.ell(v(0.0, -22.0, bz + 9.0), v(13.0, 14.0, 8.0), belly);
-    for (bx, by, bzz) in [(-8.0f32, -26.0f32, 12.0f32), (7.0, -18.0, 13.0), (-3.0, -34.0, 8.0), (11.0, -30.0, 7.0), (0.0, -14.0, 14.0)] {
+    // aufgeblähter Hinterleib mit Muster und Seepocken
+    r.ell(v(0.0, -21.0, bz + 4.0), v(20.0, 23.0, 15.0), shell_d);
+    r.ell(v(0.0, -23.0, bz + 10.0), v(14.0, 16.0, 9.0), belly);
+    for (bx, by, bzz) in [(-8.0f32, -26.0f32, 13.0f32), (7.0, -18.0, 14.0), (-3.0, -37.0, 9.0), (12.0, -32.0, 8.0), (0.0, -14.0, 15.0)] {
         r.cyl(v(bx, by, bz + bzz), 2.4, 2.4, 2.2, barn);
         r.dot(v(bx, by, bz + bzz + 2.4), 0x2A2620, 0.0, 1);
     }
-    // Kopfbruststück: flacher Panzer
+    // dunkle Adern kriechen über den aufgeblähten Hinterleib
+    for j in 0..6 {
+        let a0 = -1.0 + j as f32 * 0.41 + (j as f32 * 2.7).sin() * 0.1;
+        let len = 6 + (j * 5) % 4;
+        let mut pts = vec![];
+        for q in 0..len {
+            let bq = -0.8 + q as f32 * 0.2;
+            let a = a0 + (q as f32 * 1.9 + j as f32 * 3.1).sin() * 0.22;
+            pts.push(v(20.5 * a.sin() * bq.cos(), -21.0 + 23.3 * bq.sin(), bz + 4.0 + 15.3 * a.cos() * bq.cos()));
+        }
+        r.tube(&pts, 0.45, 0.2, vein);
+        // Seitenäste
+        if let Some(&p0) = pts.get(len / 2) {
+            r.tube(&[p0, add(p0, v(2.2, -2.6, -0.8)), add(p0, v(3.0, -4.6, -2.0))], 0.3, 0.15, vein);
+        }
+    }
+    // Pilzbefall an den Flanken
+    for (bx, by, bzz) in [(-17.0f32, -16.0f32, 6.0f32), (16.0, -30.0, 4.0), (-12.0, -36.0, 3.0)] {
+        r.ell(v(bx, by, bz + bzz), v(4.0, 5.0, 2.6), fungus);
+    }
+    // nässende Eiterbeulen auf dem Rücken, jede mit dunklem Hof; einige geplatzt
+    for (k, (bx, by, bzz, br)) in [(-11.0f32, -20.0f32, 13.0f32, 3.8f32), (4.0, -28.0, 16.0, 3.2), (-4.0, -12.0, 16.5, 2.6), (13.0, -22.0, 11.0, 3.4), (-14.0, -32.0, 8.0, 2.6), (8.0, -38.0, 7.0, 3.0), (-6.0, -40.0, 6.0, 2.2), (0.0, -24.0, 18.0, 2.2), (9.0, -10.0, 14.0, 2.0), (-16.0, -24.0, 9.0, 2.0), (2.0, -34.0, 12.5, 2.6)].iter().enumerate() {
+        let (bx, by, bzz, br) = (*bx, *by, *bzz, *br);
+        r.ell(v(bx, by, bz + bzz - 0.6), v(br + 1.4, br + 1.4, 1.2), pus_d);
+        r.ball(v(bx, by, bz + bzz + 0.4), br, pus);
+        if k % 3 == 1 {
+            // aufgeplatzt: dunkles Loch, Eiter rinnt herab
+            r.dot(v(bx, by + br * 0.2, bz + bzz + br + 0.4), 0x2A2A0E, 0.0, 2);
+            r.tube(&[v(bx, by + br * 0.6, bz + bzz + br * 0.6), v(bx + 0.6, by + br + 1.5, bz + bzz - 1.0), v(bx + 1.0, by + br + 2.2, bz + bzz - 4.5)], 0.75, 0.45, pus);
+        } else {
+            r.dot(v(bx - br * 0.3, by + br * 0.3, bz + bzz + br + 0.2), 0xF2F0B0, 0.6, 1);
+        }
+    }
+    // Würmer, die sich in den Panzer bohren
+    for (k, (bx, by)) in [(-2.0f32, -24.0f32), (10.0, -14.0), (-12.0, -27.0)].iter().enumerate() {
+        let (bx, by) = (*bx, *by);
+        let z0 = bz + 14.0 - k as f32 * 1.5;
+        r.tube(&[v(bx, by, z0), v(bx + 2.0, by + 1.5, z0 + 2.0), v(bx + 3.5, by - 0.5, z0 + 1.0), v(bx + 3.0, by - 2.5, z0 + 2.4)], 0.9, 0.5, worm);
+    }
+    // Eiersack unter dem Hinterleib: Traube bleicher Eier, mit Fäden verklebt
+    for k in 0..11 {
+        let a = k as f32 * 2.1;
+        let rr = 2.5 + (k % 3) as f32 * 2.0;
+        r.ball(v(a.cos() * rr, -40.0 + a.sin() * rr * 0.6, bz - 6.0 + (k % 4) as f32 * 1.6), 1.7 + (k % 2) as f32 * 0.4, egg);
+    }
+    r.tube(&[v(-5.0, -38.0, bz - 4.0), v(0.0, -42.0, bz - 8.0), v(5.0, -38.0, bz - 4.0)], 0.3, 0.3, slime);
+    // Tang hängt vom Hinterleib
+    for (bx, side) in [(-14.0f32, -1.0f32), (12.0, 1.0)] {
+        r.tube(&[v(bx, -30.0, bz + 2.0), v(bx + side * 3.0, -32.0, bz - 8.0), v(bx + side * 2.0, -34.0, bz - 17.0)], 1.3, 0.4, weed);
+    }
+    // Kopfbruststück: flacher Panzer, offene Wunden
     r.ell(v(0.0, 6.0, bz), v(20.0, 18.0, 10.0), shell);
     r.ell(v(0.0, 8.0, bz + 5.0), v(12.0, 11.0, 5.0), shell_d);
     for (bx, by) in [(-12.0f32, 2.0f32), (13.0, 6.0), (-4.0, -4.0)] {
         r.cyl(v(bx, by, bz + 7.0), 1.8, 1.8, 1.8, barn);
     }
+    for (bx, by, rx, ry) in [(8.0f32, 0.0f32, 3.6f32, 2.4f32), (-9.0, 10.0, 2.6, 2.0)] {
+        r.ell(v(bx, by, bz + 8.6), v(rx + 1.0, ry + 1.0, 0.8), belly);
+        r.ell(v(bx, by, bz + 9.0), v(rx, ry, 0.9), sore);
+    }
     r.tube(&[v(-14.0, 0.0, bz + 6.0), v(-20.0, -2.0, bz - 6.0), v(-21.0, 0.0, bz - 14.0)], 1.4, 0.4, weed);
-    // Augenkranz: zwei große, sechs kleine Augen (leuchtend grün)
-    for (ex, ey, ez, sz) in [(-4.0f32, 22.0f32, 4.0f32, 2), (4.0, 22.0, 4.0, 2), (-8.0, 19.0, 6.0, 1), (8.0, 19.0, 6.0, 1), (-2.0, 20.0, 8.0, 1), (2.0, 20.0, 8.0, 1), (-11.0, 16.0, 4.0, 1), (11.0, 16.0, 4.0, 1)] {
+    // Augenkranz: zwei große, viele kleine Augen (leuchtend grün), dazu ein milchig-blindes
+    for (ex, ey, ez, sz) in [(-4.0f32, 22.0f32, 4.0f32, 2), (4.0, 22.0, 4.0, 2), (-8.0, 19.0, 6.0, 1), (8.0, 19.0, 6.0, 1), (-2.0, 20.0, 8.0, 1), (2.0, 20.0, 8.0, 1), (-11.0, 16.0, 4.0, 1), (11.0, 16.0, 4.0, 1), (-6.0, 21.0, 7.5, 1), (6.0, 21.0, 7.5, 1), (0.0, 21.0, 9.5, 1), (-13.0, 13.0, 6.0, 1), (13.0, 13.0, 6.0, 1), (-9.0, 17.0, 9.0, 1)] {
         r.dot(v(ex, ey, bz + ez), 0x7CF0A0, 2.2, sz);
     }
-    // Kieferklauen (öffnen sich beim Ausholen) und Taster
+    r.dot(v(9.0, 17.5, bz + 9.0), 0xC8D6C2, 0.5, 2);
+    // Kieferklauen (öffnen sich beim Ausholen), Taster, Geifer
     let open = if p.atk < 0.0 { -p.atk * 0.5 } else { 0.1 + p.bob.abs() * 0.04 };
-    for side in [-1.0f32, 1.0] {
+    let mut tips = [v(0.0, 0.0, 0.0); 2];
+    for (n, side) in [-1.0f32, 1.0].into_iter().enumerate() {
         let base = v(side * 4.0, 22.0, bz - 3.0);
         let tip = v(side * (3.0 + open * 10.0), 31.0, bz - 12.0);
+        tips[n] = tip;
         r.tube(&[base, lerp3(base, tip, 0.5), tip], 2.6, 0.8, fang);
         let pb = v(side * 9.0, 20.0, bz - 1.0);
         r.tube(&[pb, v(side * 14.0, 30.0, bz + 2.0), v(side * 12.0, 36.0, bz - 6.0)], 2.0, 1.0, leg_a);
+        // Geifer tropft von den Klauen
+        let sw = (p.bob * 1.7 + side).sin() * 1.2;
+        let drop = add(tip, v(sw, 1.0, -7.0 - (side + 1.0) * 1.5));
+        r.tube(&[tip, add(tip, v(sw * 0.4, 0.6, -3.5)), drop], 0.7, 0.35, slime);
+        r.ball(drop, 1.1, slime);
     }
+    // Schleimfaden zwischen den Klauen, schwer durchhängend
+    let mid = add(lerp3(tips[0], tips[1], 0.5), v(0.0, 1.5, -5.0 - open * 4.0));
+    r.tube(&[tips[0], mid, tips[1]], 0.35, 0.35, slime);
     r.rotate_since(mk, 0, pitch, v(0.0, 0.0, bz - 6.0));
 }
 

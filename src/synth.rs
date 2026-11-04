@@ -626,11 +626,41 @@ pub fn sfx(name: &str) -> Vec<f32> {
         "death" | "rise" | "bell" => 3.2,
         "kindle" | "roar" => 1.8,
         "cannon" | "crash" | "tide" | "level" | "pearls" | "chest" | "zap" | "fog" => 1.0,
+        "slither" => 1.7,
+        "hiss" | "creak" => 0.9,
         _ => 0.6,
     };
     let mut x = Fx::new(len, name.bytes().map(|b| b as u32).sum::<u32>() + 3);
     match name {
         "swing" => x.noise(0.0, 900.0, 3200.0, 0.16, 0.35, Band, 1.5, false),
+        // Spinnfaden: zischend, klebrig knisternd
+        "silk" => {
+            x.noise(0.0, 2400.0, 5200.0, 0.22, 0.22, Band, 3.0, false);
+            for k in 0..3 {
+                x.noise(0.05 + k as f32 * 0.06, 1800.0, 1800.0, 0.03, 0.18, Band, 6.0, false);
+            }
+        }
+        // Fauchen der Spinne
+        "hiss" => {
+            for k in 0..6 {
+                x.noise(k as f32 * 0.1, 3600.0, 4200.0, 0.14, 0.32 - k as f32 * 0.03, Band, 2.0, false);
+            }
+            x.tone(0.0, Saw, 95.0, 70.0, 0.5, 0.08);
+        }
+        // nasses Gleiten der Arme über Fels
+        "slither" => {
+            for k in 0..7 {
+                let t = k as f32 * 0.18;
+                x.noise(t, 220.0 + (k % 3) as f32 * 90.0, 520.0, 0.26, 0.45, Band, 1.6, false);
+            }
+            x.tone(0.0, Sine, 55.0, 42.0, 1.4, 0.25);
+        }
+        // Sargdeckel schabt über Holz
+        "creak" => {
+            x.tone(0.0, Saw, 210.0, 150.0, 0.55, 0.12);
+            x.tone(0.05, Saw, 330.0, 250.0, 0.45, 0.06);
+            x.noise(0.0, 700.0, 500.0, 0.6, 0.25, Band, 2.0, false);
+        }
         "bell" => {
             // tiefe Glocke unter Wasser: unharmonische Teiltöne, langer Nachhall
             for (f, v, d) in [(98.0f32, 0.32f32, 3.0f32), (196.0, 0.16, 2.4), (270.0, 0.14, 2.0), (530.0, 0.07, 1.4), (812.0, 0.04, 0.9)] {

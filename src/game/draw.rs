@@ -68,6 +68,7 @@ impl Game {
 
         self.fx.draw_under(f);
         self.draw_wake(art, f);
+        self.draw_prolog_coffin(art, f);
         // Spieler
         let p = &self.player;
         if !p.hidden {
@@ -175,7 +176,9 @@ impl Game {
                     draw_char(f, sh, &b.a, fl, [255; 4], 0.5);
                 }
             } else if let Some(sh) = art.chars.get(b.monster) {
-                draw_char(f, sh, &boss_pose(&b.a, ph), fl, [255; 4], 0.45);
+                // in Zwischensequenzen genau die gesetzte Pose
+                let pose = if b.cine { b.a } else { boss_pose(&b.a, ph) };
+                draw_char(f, sh, &pose, fl, [255; 4], 0.45);
             }
             if !b.dead() {
                 let c = el_col(b.el);

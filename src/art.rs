@@ -218,6 +218,40 @@ pub fn build_title(art: &mut Art, frame: &mut Frame) {
     art.boss_loaded = Some("title".into());
 }
 
+/// Querband eines Riesenarms (40×7): quer zur Röhre schattiert (Ränder dunkel, Glanz oben,
+/// blasse Unterseite), ohne Kanten längs der Röhre – dicht hintereinander und quer zur Bahn
+/// gedreht ergibt das einen glatten Arm. `sucker`: mit Saugnapf auf der Unterseite (+x).
+fn tentacle_band(sucker: bool) -> Canvas {
+    let (w, h) = (40, 7);
+    let mut c = Canvas::new(w, h);
+    let skin = ramp_n(hex(0x56626C), 7, 1.0);
+    let belly = ramp_n(hex(0x8C767C), 6, 1.0);
+    for y in 0..h {
+        for x in 0..w {
+            let u = (x as f32 + 0.5) / w as f32 * 2.0 - 1.0;
+            let nz = (1.0 - u * u).max(0.0).sqrt();
+            let l = (0.3 + 0.62 * (nz * 0.82 - u * 0.42)).clamp(0.0, 1.0);
+            let col = if u > 0.42 { pick(&belly, l * 0.9 + 0.1) } else { pick(&skin, l) };
+            c.put(x, y, col, nz * 8.0);
+            if l > 0.8 {
+                c.spec(x, y, 170);
+            }
+            if sucker && u > 0.48 && u < 0.94 {
+                let du = (u - 0.71) / 0.22;
+                let dv = (y as f32 + 0.5 - 3.5) / 3.6;
+                let r = du * du + dv * dv;
+                if r < 1.0 {
+                    c.set(x, y, if r < 0.32 { hex(0x2A1A20) } else { hex(0xC6AEB6) });
+                }
+            }
+            if u.abs() > 0.92 {
+                c.set(x, y, hex(0x12161A));
+            }
+        }
+    }
+    c
+}
+
 /// Krakenarm-Glied (40×40): glänzende Haut, Saugnäpfe auf der Unterseite.
 fn tentacle_seg(skin: u32, cup_in: u32, cup: u32) -> Canvas {
     let n = 40;
@@ -990,6 +1024,9 @@ pub fn build(frame: &mut Frame) -> Art {
         }
         let lid = gv::coffin_lid(0);
         a.add_trim("x:lid", &lid, 20, 56);
+        // eingesponnene Leiche (Prolog-Niederlage): am Boden liegend und im Sarg
+        a.add_trim("x:wrapH", &sw_art::structures::wrapped_body(false), 32, 26);
+        a.add_trim("x:wrapV", &sw_art::structures::wrapped_body(true), 18, 58);
     }
     // ---------------------------------------------------------------- Glutwacht und See (Rig)
     {
@@ -1315,6 +1352,9 @@ pub fn build(frame: &mut Frame) -> Art {
     a.add("fx:whirl", &wp, wp.w / 2, wp.h / 2);
     // Krakenarme des Strudels: dunkelgrün, Saugnäpfe blassgrün
     a.add("k:seg", &tentacle_seg(0x16301E, 0x2A4A30, 0x9AB894), 20, 20);
+    // Riesenarme aus der Tiefe (Prolog-Ende): Querbänder, dicht gezeichnet eine glatte Röhre
+    a.add("k:band0", &tentacle_band(false), 20, 3);
+    a.add("k:band1", &tentacle_band(true), 20, 3);
     for i in 0..2 {
         let c = cr::whirl_foam(i);
         a.add(&format!("fx:whirlFoam{i}"), &c, c.w / 2, c.h / 2);

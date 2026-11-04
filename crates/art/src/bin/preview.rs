@@ -144,6 +144,13 @@ fn main() {
                 (buried(0), 520, 200), (buried(1), 590, 200), (buried(2), 660, 200), (open_grave(0), 750, 200),
                 (sitting_dead(0), 830, 120), (sitting_dead(1), 830, 200),
             ];
+            // eingesponnene Leiche: liegend und im offenen Sarg
+            let wh = sw_art::structures::wrapped_body(false);
+            bg.place(&wh, 140, 300, 32, 26);
+            let cf = coffin(1, 0);
+            bg.place(&cf.c, 260, 330, cf.ax, cf.ay);
+            let wv = sw_art::structures::wrapped_body(true);
+            bg.place(&wv, 260, 330 - 11, 18, 58);
             for (pa, x, y) in &list {
                 bg.place(&pa.c, *x, *y, pa.ax, pa.ay);
                 for (k, f) in pa.frames.iter().enumerate().step_by(4) {

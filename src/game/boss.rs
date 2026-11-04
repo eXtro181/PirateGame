@@ -99,6 +99,8 @@ pub struct Boss {
     pub monster: &'static str,
     pub sheet: &'static str,
     pub h: f32,
+    /// von einer Zwischensequenz gesteuert (keine eigene Logik, Pose wie gesetzt)
+    pub cine: bool,
 }
 
 /// PixelFX-Effekt für einen Flächenangriff im Element des Bosses (Ring um den Boss oder Einschlag)
@@ -164,10 +166,10 @@ fn table(mega: bool, phase: i32, el: &str) -> Vec<(AK, f32, AO)> {
         // vorschnellen, mit den Vorderbeinen fegen, Netzklumpen spucken, selten anspringen –
         // langsam ausgeholt, gut zu lesen
         return vec![
-            (Dash, 3.0, AO { len: 120.0 * s, ..o() }),
-            (Sweep, 3.0, AO { reach: 62.0 * s, ..o() }),
+            (Dash, 3.0, AO { len: 156.0 * s, ..o() }),
+            (Sweep, 3.0, AO { reach: 80.0 * s, ..o() }),
             (Volley, 2.0, AO { n: 3, spread: 0.45, ..o() }),
-            (Leap, 1.0, AO { r: 40.0 * s, ..o() }),
+            (Leap, 1.0, AO { r: 52.0 * s, ..o() }),
         ];
     }
     if mega {
@@ -244,6 +246,7 @@ impl Boss {
             monster: "",
             sheet,
             h: 100.0,
+            cine: false,
         };
         b.set_body(key != "spider");
         b
@@ -259,9 +262,10 @@ impl Boss {
             self.a.r = if self.mega { 60.0 } else { 28.0 };
             self.a.hurt_r = if self.mega { 110.0 } else { 48.0 };
             if self.key == "spider" {
+                // 30 % größer als früher: Körper, Trefferfläche
                 self.monster = "seaSpider";
-                self.a.r = 34.0;
-                self.a.hurt_r = 72.0;
+                self.a.r = 44.0;
+                self.a.hurt_r = 94.0;
             } else if !self.mega {
                 self.monster = king(self.key).beast;
             }
@@ -383,6 +387,14 @@ impl Game {
         b.st_t += dt;
         b.a.at += dt;
         b.a.flash = (b.a.flash - dt).max(0.0);
+        if b.cine {
+            return;
+        }
+        // die Spinne geifert: Tropfen fallen von den Klauen
+        if b.key == "spider" && !b.hidden && !matches!(b.state, BS::Dormant | BS::Dead) && rnd() < dt * 5.0 {
+            let (mx, my) = (b.a.x + b.a.fx * 64.0 + rr(-8.0, 8.0), b.a.y + b.a.fy * 44.0);
+            self.fx.p(P { x: mx, y: my, z: 30.0 + rnd() * 10.0, vz: -10.0, vx: rr(-6.0, 6.0), vy: 0.0, life: 0.9, col: [0.55, 0.85, 0.5, 1.0], glow: 0.6, size: 2.0, g: 160.0, ground: true, ..Default::default() });
+        }
         match b.state {
             BS::Dormant => return,
             BS::Dead => {

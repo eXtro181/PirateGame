@@ -485,16 +485,19 @@ pub struct World {
     pub en: EdgeNoise,
     /// ebene Flächen (Siedlungen): Kachel-Mitte und Halbachsen
     pub flat_areas: Vec<(i32, i32, i32, i32)>,
+    /// ebene Flächen auf Meereshöhe (z. B. Feuer und Sarg am Galgenstrand: nicht im Hang)
+    pub low_areas: Vec<(i32, i32, i32, i32)>,
     /// Sarg, aus dem der Ertrunkene beim allerersten Start steigt
     pub wake_coffin: (f32, f32),
-    /// Prolog: wo man erwacht, wo man von der Klippe springt, Fuß der Klippe (px) und
-    /// wie weit das schwarze Meer reicht
+    /// Prolog: wo man erwacht, Fuß der Klippe (px)
     pub prolog_start: (f32, f32),
-    pub prolog_jump: (f32, f32),
     /// begehbare Abbruchkante des Wrackzwingers: je 16 px ein Punkt (x, letzte begehbare Zeile),
-    /// nach x sortiert – überall dort kann man in die Tiefe springen
+    /// nach x sortiert
     pub prolog_edge: Vec<(f32, f32)>,
     pub prolog_foot: f32,
+    /// der Sarg am großen Wasserfall (Fußpunkt) und seine Requisite: Ende des Prologs
+    pub prolog_coffin: (f32, f32),
+    pub prolog_coffin_prop: Option<usize>,
     /// Häuser mit rauchendem Schornstein (Indizes in `props`)
     pub chimneys: Vec<usize>,
     cur: Zone,
@@ -561,11 +564,13 @@ impl World {
             hb: vec![0.5; n],
             en: EdgeNoise::new(),
             flat_areas: vec![],
+            low_areas: vec![],
             wake_coffin: (0.0, 0.0),
             prolog_start: (0.0, 0.0),
-            prolog_jump: (0.0, 0.0),
             prolog_edge: vec![],
             prolog_foot: 0.0,
+            prolog_coffin: (0.0, 0.0),
+            prolog_coffin_prop: None,
             chimneys: vec![],
             cur: Zone::Kueste,
             cur_biome: Biome::Coast,
@@ -793,6 +798,7 @@ impl World {
         self.scatter(Zone::Prolog.region(), &mut Rng::new(9_131));
         lap("Bewuchs", &mut t);
         self.settle_on_cliffs();
+        self.clear_prolog_coffin();
         self.chimneys = (0..self.props.len()).filter(|&i| {
             let k = &self.props[i].kind;
             k.starts_with("townhouse") || k == "tavern" || k == "forge"
@@ -1563,10 +1569,12 @@ impl World {
         self.flat_areas.push((cx + 13, cy + 9, 12, 6));
         self.flat_areas.push((cx - 24, cy + 12, 8, 5));
         self.flat_areas.push((cx + 12, cy - 3, 14, 4));
-        // der Sarg des Ertrunkenen neben dem Feuer
+        // der Sarg des Ertrunkenen neben dem Feuer: beide auf ebenem Strand (nicht im Hang der
+        // Anhöhe dahinter, deren Böschung sonst genau über Sarg und Rastplatz liefe)
         self.prop_t("coffinEmpty", cx - 13, cy + 5);
         self.wake_coffin = tpos(cx - 13, cy + 5);
         self.flat_areas.push((cx - 13, cy + 5, 3, 3));
+        self.low_areas.push((cx - 11, cy + 4, 10, 7));
         let ok = |w: &World, tx: i32, ty: i32| inb(tx, ty) && !matches!(w.ground[idx(tx, ty)], Mat::Water | Mat::Abyss | Mat::Plank) && !w.path[idx(tx, ty)];
         // Galgenallee entlang des Weges nach Nordosten und zum Anleger
         let mut gk = 0;
@@ -2138,10 +2146,7 @@ impl World {
             self.prop_tf(&kind, tx, ty, flip);
             n += 1;
         }
-        // ---- Gegner (schwach), Fundstücke
-        for (kind, dx, dy) in [("drowned", -22, -14), ("drowned", -27, 1), ("crab", -34, -12), ("crab", 18, -16), ("crab", -9, -6), ("skeleton", 26, -20), ("crab", 30, 2)] {
-            self.spawn(kind, cx + dx, cy + dy, false);
-        }
+        // ---- Fundstücke (Gegner gibt es hier keine außer der Spinne)
         self.item("pearls", cx + 30, cy - 33);
         self.item("bombs", cx - 41, cy + 8);
         self.item("pearls", cx - 19, cy - 35);
@@ -2161,8 +2166,6 @@ impl World {
         for (tx, ty) in [(ax - 12, ay - 6), (ax + 12, ay - 6)] {
             self.prop_t("torch", tx, ty);
         }
-        // Absprung an der Kante (über dem schwarzen Wasser)
-        self.prolog_jump = ((apx), ((cy + cliff(ax - cx) - 13) * TS) as f32 + 8.0);
         self.prolog_foot = ((cy + 30) * TS) as f32;
         let _ = (x0, x1, y0, y1);
     }
@@ -2198,11 +2201,6 @@ impl World {
             x += 16;
         }
         self.prolog_edge = edge;
-        if let Some(ax) = self.arenas.get("prolog").map(|a| a.x) {
-            if let Some(p) = self.prolog_edge_near(ax) {
-                self.prolog_jump = p;
-            }
-        }
         // der große Fall: genau dort, wo der Bach über den Klippenkopf tritt
         let (w, tx0) = (4, cx + 13);
         let fx = (tx0 * TS) + w * TS / 2;
@@ -2229,6 +2227,33 @@ impl World {
             }
         }
         self.waterfalls.push(Waterfall { tx: tx0, ty: top.div_euclid(TS), w, x: (tx0 * TS) as f32, src: (top - 3 * TS) as f32, top: top as f32, bot: bot as f32, deep: 520.0 });
+        // der Sarg: auf dem Klippenkopf gleich westlich des Falls, gut zwei Kacheln vor der Kante
+        // (dazwischen steht man beim Hineinsteigen, darüber greifen die Arme aus der Tiefe)
+        let want = ((tx0 - 4) * TS) as f32 + 16.0;
+        if let Some((ex, ey)) = self.prolog_edge_near(want) {
+            let (x, y) = (ex, ey - 70.0);
+            let i = self.prop_x("coffinEmpty", x, y, |_| {});
+            self.prolog_coffin = (x, y);
+            self.prolog_coffin_prop = Some(i);
+        }
+    }
+
+    /// Rund um den Prolog-Sarg nichts Hohes oder Störendes (Bewuchs, Kokons, Kram): dort
+    /// spielen die Zwischensequenzen.
+    fn clear_prolog_coffin(&mut self) {
+        let Some(ci) = self.prolog_coffin_prop else { return };
+        let (x, y) = self.prolog_coffin;
+        for pi in 0..self.props.len() {
+            let p = &self.props[pi];
+            if pi == ci || p.hidden {
+                continue;
+            }
+            let (dx, dy) = (p.x - x, p.y - y);
+            // Sarg, Stehplatz davor und der Streifen bis zur Kante, Platz für die Spinne dahinter
+            if (dx.abs() < 76.0 && dy > -150.0 && dy < 90.0) || dx.hypot(dy) < 100.0 {
+                self.props[pi].hidden = true;
+            }
+        }
     }
 
     /// Nächster Punkt der Abbruchkante des Wrackzwingers zu einer x-Position
@@ -2323,6 +2348,9 @@ impl World {
         }
         for &(cx, cy, rx, ry) in &self.flat_areas {
             flat.push((cx, cy, rx, ry, false));
+        }
+        for &(cx, cy, rx, ry) in &self.low_areas {
+            flat.push((cx, cy, rx, ry, true));
         }
         flat.retain(|f| inside(f.0, f.1) && self.zone[idx(f.0, f.1)] == Some(z));
         // Abstand zum Wasser (Kacheln, Breitensuche)

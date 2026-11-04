@@ -2,6 +2,7 @@
 
 pub mod actors;
 pub mod boss;
+pub mod coffin;
 pub mod critters;
 pub mod crew;
 pub mod data;
@@ -59,8 +60,9 @@ pub enum Use {
     /// Laden betreten / verlassen
     Enter(usize),
     Leave(usize),
-    /// Prolog: am Abbruch in den Wasserfall springen
-    Plunge,
+    /// Prolog: nach dem Sieg über die Spinne in den Sarg am Wasserfall steigen (vorher nur ansehen)
+    Coffin,
+    CoffinEmpty,
 }
 
 #[derive(Clone)]
@@ -97,8 +99,10 @@ pub enum Cut {
     Wake { t: f32 },
     /// Prolog-Anfang: man liegt zwischen den Wracks und kommt zu sich
     Washed { t: f32 },
-    /// Prolog-Ende nach dem Sieg: Anlauf, Sprung über die Klippe, Sturz ins Schwarze
-    Plunge { t: f32, x0: f32, y0: f32, jx: f32, jy: f32 },
+    /// Prolog-Ende am Sarg beim Wasserfall (`coffin.rs`): nach dem Sieg steigt man hinein, nach
+    /// der Niederlage legt die Spinne den eingesponnenen Leichnam hinein; dann ziehen zwei Arme aus
+    /// der Tiefe den Sarg hinab. (x0, y0) Spieler bzw. Leichnam, (sx, sy) Spinne, a/c Wegzeiten.
+    Coffin { t: f32, defeat: bool, x0: f32, y0: f32, sx: f32, sy: f32, a: f32, c: f32 },
 }
 
 /// Zeitplan des Erwachens (s): Dunkel mit Klopfen, Aufblenden, Deckel ruckelt, rutscht weg,
@@ -163,6 +167,8 @@ pub struct Game {
     pub sea_el: Option<&'static str>,
     pub critters: Vec<Critter>,
     pub cam_f: (f32, f32),
+    /// Zwischensequenz hält die Kamera auf diesen Punkt
+    pub cam_hold: Option<(f32, f32)>,
     pub cam: (f32, f32),
     pub shake_k: f32,
     pub flash_c: [f32; 4],
@@ -274,6 +280,7 @@ impl Game {
             sea_el: None,
             critters: vec![],
             cam_f: (0.0, 0.0),
+            cam_hold: None,
             cam: (0.0, 0.0),
             shake_k: 0.0,
             flash_c: [1.0, 1.0, 1.0, 0.0],
@@ -959,40 +966,13 @@ impl Game {
                     self.cutscene = Some(Cut::Washed { t });
                 }
             }
-            Cut::Plunge { t, x0, y0, jx, jy } => {
-                let t0 = t;
-                let t = t + dt;
-                let crossed = |m: f32| t0 < m && t >= m;
-                if t < 0.7 {
-                    // Anlauf zur Kante
-                    let k = t / 0.7;
-                    self.player.a.x = x0 + (jx - x0) * k;
-                    self.player.a.y = y0 + (jy - y0) * k;
-                    self.player.a.face(jx - x0, (jy - y0).max(1.0));
-                    self.player.a.anim = "walk";
-                    self.player.a.frame = t * 10.0;
-                } else {
-                    // Sprung und Sturz: an der Klippe hinab, ins schwarze Wasser und weiter
-                    let ft = t - 0.7;
-                    self.player.a.x = jx;
-                    self.player.a.y = jy - (ft * 6.0).min(1.0) * 18.0 + 520.0 * ft * ft;
-                    self.player.a.anim = "roll";
-                    self.player.a.frame = ft * 8.0;
-                    self.cam_f.1 += (self.player.a.y - 40.0 - self.cam_f.1) * (dt * 2.0).min(1.0);
-                }
-                if crossed(0.7) {
-                    self.sfx("swing");
-                }
-                if crossed(1.9) {
-                    self.sfx("tide");
-                    self.shake(4.0);
-                }
-                self.ui.fade = ((t - 1.5) / 1.1).clamp(0.0, 1.0);
-                if t >= 3.0 {
+            Cut::Coffin { t, defeat, x0, y0, sx, sy, a, c } => {
+                let nt = t + dt;
+                if self.update_coffin(t, nt, defeat, (x0, y0), (sx, sy), a, c) {
                     self.cutscene = None;
                     self.end_prolog();
-                } else {
-                    self.cutscene = Some(Cut::Plunge { t, x0, y0, jx, jy });
+                } else if matches!(self.cutscene, Some(Cut::Coffin { .. })) {
+                    self.cutscene = Some(Cut::Coffin { t: nt, defeat, x0, y0, sx, sy, a, c });
                 }
             }
             Cut::Wake { t } => {
@@ -1044,21 +1024,27 @@ impl Game {
 
     // ---------------------------------------------------------------- Kamera, Zonen
     fn update_camera(&mut self, dt: f32, frame: &mut Frame) {
-        let (mut tx, mut ty) = if self.sailing { (self.ship.hull.x, self.ship.hull.y - 20.0) } else { (self.player.a.x + self.player.a.fx * 32.0, self.player.a.y - 24.0 + self.player.a.fy * 20.0) };
+        let (mut tx, mut ty) = if let Some(h) = self.cam_hold {
+            h
+        } else if self.sailing {
+            (self.ship.hull.x, self.ship.hull.y - 20.0)
+        } else {
+            (self.player.a.x + self.player.a.fx * 32.0, self.player.a.y - 24.0 + self.player.a.fy * 20.0)
+        };
         if self.sailing && matches!(self.end.state, EP::Rise | EP::Ship | EP::Drain) {
             // der Holländer ist riesig: Blick zwischen eigenes Schiff und seinen Rumpf
             let (ex, ey) = (self.end.x, self.end.y - 260.0);
             tx += (ex - tx) * 0.4;
             ty += (ey - ty) * 0.45;
         }
-        if let Some(bi) = self.boss {
+        if let Some(bi) = self.boss.filter(|_| self.cam_hold.is_none()) {
             let b = &self.bosses[bi];
             if !b.dead() && !b.hidden {
                 tx += (b.a.x - tx) * 0.3;
                 ty += (b.a.y - ty) * 0.3;
             }
         }
-        let k = (dt * if self.sailing { 3.0 } else { 5.0 }).min(1.0);
+        let k = (dt * if self.cam_hold.is_some() { 2.4 } else if self.sailing { 3.0 } else { 5.0 }).min(1.0);
         self.cam_f.0 += (tx - self.cam_f.0) * k;
         self.cam_f.1 += (ty - self.cam_f.1) * k;
         let (sx, sy) = if self.shake_k > 0.0 { (rr(-1.0, 1.0) * self.shake_k, rr(-1.0, 1.0) * self.shake_k) } else { (0.0, 0.0) };
@@ -1136,6 +1122,10 @@ impl Game {
         if self.death_t.is_some() {
             mood = "death";
         }
+        if let Some(Cut::Coffin { t, defeat, a, c, .. }) = self.cutscene {
+            // erst Stille, dann der tiefe Gesang, wenn die Arme kommen
+            mood = if t < coffin::plan(defeat, a, c).quiet { "silence" } else { "tiefe" };
+        }
         self.mood = mood;
     }
 
@@ -1211,12 +1201,13 @@ impl Game {
         if let Some(st) = &s.stain {
             out.extend(f(st.x, st.y, 36.0, "Perlen zurückholen", Use::Stain, None));
         }
-        if s.prolog && s.spider {
-            // überall an der Abbruchkante: der nächste Kantenpunkt zum Spieler
-            if let Some((ex, ey)) = self.world.prolog_edge_near(px) {
-                if (py - ey).abs() < 56.0 {
-                    out.extend(f(ex, ey, 48.0, "In die Tiefe springen", Use::Plunge, None));
-                }
+        if s.prolog {
+            // der Sarg am Wasserfall: erst nach dem Sieg über die Spinne steigt man hinein
+            if let Some(ci) = self.world.prolog_coffin_prop {
+                let (x, y) = self.world.prolog_coffin;
+                let (label, act) = if s.spider { ("In den Sarg steigen", Use::Coffin) } else { ("Ein leerer Sarg", Use::CoffinEmpty) };
+                // Fokus in der Sargmitte: von vorn, von der Seite und vom Kopfende erreichbar
+                out.extend(f(x, y - 18.0, 58.0, label, act, Some(ci)));
             }
         }
         out
@@ -1291,13 +1282,8 @@ impl Game {
                 Use::Stain => self.take_stain(),
                 Use::Enter(i) => self.cutscene = Some(Cut::Door { t: 0.0, door: i, enter: true, moved: false }),
                 Use::Leave(i) => self.cutscene = Some(Cut::Door { t: 0.0, door: i, enter: false, moved: false }),
-                Use::Plunge => {
-                    self.lock = None;
-                    let (x0, y0) = (self.player.a.x, self.player.a.y);
-                    // an der nächsten Stelle der Kante abspringen (ein Stück weiter, damit der Anlauf zur Kante führt)
-                    let (jx, jy) = self.world.prolog_edge_near(x0).unwrap_or(self.world.prolog_jump);
-                    self.cutscene = Some(Cut::Plunge { t: 0.0, x0, y0, jx, jy: jy + 6.0 });
-                }
+                Use::Coffin => self.start_coffin(false),
+                Use::CoffinEmpty => self.ui.toast("Ein leerer Sarg am Abgrund, der Deckel lehnt daneben. Noch lauert die Wächterin des Wrackzwingers."),
             }
         }
     }
@@ -1327,15 +1313,23 @@ impl Game {
 
     // ---------------------------------------------------------------- Tod
     pub fn player_died(&mut self) {
-        if self.death_t.is_some() {
+        if self.death_t.is_some() || matches!(self.cutscene, Some(Cut::Coffin { .. })) {
             return;
         }
         self.player.state = PS::Dead;
         self.player.a.anim = "dead";
         self.player.a.frame = 0.0;
         self.sfx("death");
-        self.ui.banner("DU BIST ERTRUNKEN", "", "death", 3.4);
         self.save.deaths += 1;
+        if self.save.prolog {
+            // im Wrackzwinger holt sich die Spinne den Leichnam (kein Perlenfleck); der
+            // Schriftzug steht nur kurz, damit man sieht, was sie tut
+            self.ui.banner("DU BIST ERTRUNKEN", "", "death", 2.0);
+            self.lock = None;
+            self.start_coffin(true);
+            return;
+        }
+        self.ui.banner("DU BIST ERTRUNKEN", "", "death", 3.4);
         let (x, y) = (self.player.a.x, self.player.a.y);
         let safe = if !self.world.blocked(x, y, 4.0, false, None) && self.world.g((x / TS as f32) as i32, (y / TS as f32) as i32) != Mat::Abyss { (x, y) } else { self.last_safe };
         if self.save.inf_pearls.is_none() && !self.save.prolog {
@@ -1347,7 +1341,8 @@ impl Game {
         self.death_t = Some(0.0);
         self.lock = None;
     }
-    /// Prolog vorbei (Tod oder Sprung): im Sarg am Galgenstrand erwachen, das Spiel beginnt.
+    /// Prolog vorbei (der Sarg wurde in die Tiefe gezogen): im Sarg am Galgenstrand erwachen, das
+    /// Spiel beginnt.
     pub fn end_prolog(&mut self) {
         self.save.prolog = false;
         self.save.woke = false;
@@ -1358,12 +1353,19 @@ impl Game {
         for b in self.bosses.iter_mut().filter(|b| b.key == "spider") {
             b.state = BS::Dead;
             b.hidden = true;
+            b.cine = false;
         }
         self.boss = None;
+        self.cam_hold = None;
         let d = derived(&self.save);
         self.player.hp = d.max_hp;
         self.player.st = d.max_st;
+        self.player.mp = d.max_mp;
+        self.player.flasks = self.save.flasks_max;
+        self.player.phials = self.save.phials_max;
         self.player.state = PS::Free;
+        self.player.a.anim = "idle";
+        self.player.a.frame = 0.0;
         self.death_t = None;
         let (x, y) = self.world.wake_coffin;
         self.player.a.x = x;

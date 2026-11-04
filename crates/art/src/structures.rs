@@ -1042,6 +1042,92 @@ pub fn cocoon(seed: i32) -> PropArt {
     prop(&format!("cocoon{seed}"), &r, 64, 56, 8).shadow(16.0, 5.0).circle(10.0)
 }
 
+/// Eingesponnene Leiche des Spielers (Prolog-Niederlage): dicht umwickelter Leib mit schräg
+/// laufenden Seidenbändern, nassen, glänzenden Speichelflecken, durchsickerndem Blut, losen
+/// Fäden am Boden und einer bleichen Hand, die aus der Hülle ragt; unter der Seide zeichnet sich
+/// das Gesicht ab. `vertical`: Kopf nach Norden (liegt so im Sarg), sonst Kopf nach Osten
+/// (wie die liegende Figur). Ursprung: senkrecht am Fußende, waagrecht in der Mitte.
+pub fn wrapped_body(vertical: bool) -> crate::canvas::Canvas {
+    let mut r = Rig::new();
+    let silk = r.mat(mat(0xB9B4A0).pat(Pat::Stripes(1.6)).soft().bias(0.08));
+    let band = r.mat(mat(0x8C866E).pat(Pat::Stripes(1.1)).spec(30));
+    let wet = r.mat(mat(0xA6C2A0).spec(230).bias(0.1));
+    let rot_ = r.mat(mat(0x4E4634).soft());
+    let blood = r.mat(mat(0x441410).spec(70));
+    let skin = r.mat(mat(0x8C9282).spec(40));
+    // Körperkoordinaten: u längs vom Fuß (0) zum Scheitel (46), w quer, z hoch
+    let at = |u: f32, w: f32, z: f32| -> V3 { if vertical { v(w, -u, z) } else { v(u - 23.0, w, z) } };
+    let rad = |ru: f32, rw: f32, rz: f32| -> V3 { if vertical { v(rw, ru, rz) } else { v(ru, rw, rz) } };
+    // Querschnitt (halbe Breite, halbe Höhe) längs des Leibs
+    let prof: [(f32, f32, f32); 9] = [(0.0, 3.5, 2.2), (4.0, 5.0, 3.0), (12.0, 6.4, 3.8), (21.0, 7.8, 4.3), (29.0, 8.8, 5.0), (34.0, 9.6, 4.6), (37.5, 4.2, 3.1), (41.5, 5.0, 4.2), (46.0, 2.0, 1.9)];
+    let body_r = |u: f32| -> (f32, f32) {
+        let u = u.clamp(0.0, 46.0);
+        for k in 1..prof.len() {
+            let (u1, w1, z1) = prof[k];
+            if u <= u1 {
+                let (u0, w0, z0) = prof[k - 1];
+                let t = (u - u0) / (u1 - u0).max(0.01);
+                return (w0 + (w1 - w0) * t, z0 + (z1 - z0) * t);
+            }
+        }
+        (2.0, 2.2)
+    };
+    r.part();
+    for &(u, ru, rw, rz) in &[(4.0f32, 5.0f32, 5.0f32, 3.0f32), (12.0, 10.0, 6.4, 3.8), (21.0, 7.0, 7.8, 4.3), (29.0, 9.0, 8.8, 5.0), (34.0, 4.0, 9.6, 4.6), (37.5, 2.6, 4.2, 3.1), (41.5, 4.6, 5.0, 4.2)] {
+        r.ell(at(u, 0.0, rz), rad(ru, rw, rz), silk);
+    }
+    // schräg laufende Wickelbänder über die sichtbare Oberseite
+    for k in 0..15 {
+        let u0 = 1.0 + k as f32 * 3.0;
+        let dir = if k % 2 == 0 { 1.0 } else { -1.0 };
+        let mut pts = vec![];
+        for j in 0..=8 {
+            let th = -PI / 2.0 + j as f32 / 8.0 * PI;
+            let u = u0 + dir * (j as f32 / 8.0 - 0.5) * 3.2;
+            let (rw, rz) = body_r(u);
+            pts.push(at(u, rw * th.sin() * 1.05, rz + rz * th.cos() * 1.06));
+        }
+        r.tube(&pts, 0.55, 0.55, band);
+    }
+    // lose Fäden, flach am Boden verklebt (schräg längs des Leibs, nicht quer wie Beine)
+    for k in 0..5 {
+        let u = 5.0 + k as f32 * 8.5;
+        let side = if k % 2 == 0 { 1.0 } else { -1.0 };
+        let (rw, _) = body_r(u);
+        r.tube(&[at(u, side * rw * 0.95, 0.8), at(u + 4.0, side * (rw + 1.6), 0.1), at(u + 8.0 + (k % 3) as f32, side * (rw + 2.4), 0.0)], 0.22, 0.16, band);
+    }
+    // nasse Speichelflecken, Verwesung, durchsickerndes Blut
+    for &(u, w) in &[(31.0f32, -3.0f32), (22.0, 4.0), (9.0, -2.0), (40.0, 2.0)] {
+        let (_, rz) = body_r(u);
+        r.ell(at(u, w, rz * 2.0 - 0.6), rad(2.6, 2.0, 0.7), wet);
+    }
+    for &(u, w) in &[(17.0f32, -4.5f32), (26.0, 5.5)] {
+        let (_, rz) = body_r(u);
+        r.ell(at(u, w, rz * 1.7), rad(2.4, 1.8, 0.8), rot_);
+    }
+    let (_, cz) = body_r(28.0);
+    r.ell(at(28.0, 1.5, cz * 2.0 - 0.4), rad(3.4, 2.6, 0.8), blood);
+    // bleiche Hand, die aus der Hülle ragt und kraftlos längs am Leib liegt
+    let (rw, rz) = body_r(20.0);
+    let palm = at(18.5, -(rw + 0.6), rz * 0.9);
+    r.ell(palm, rad(2.4, 1.6, 1.1), skin);
+    for f in 0..4 {
+        let fw = -(rw + 0.2) - f as f32 * 0.7;
+        r.tube(&[at(16.8, fw, rz * 0.8), at(14.6, fw - 0.2, rz * 0.5), at(13.4, fw, 0.6)], 0.4, 0.28, skin);
+    }
+    // Gesicht unter der Seide: Augenhöhlen und offener Mund
+    let (_, hz) = body_r(41.5);
+    for w in [-1.8f32, 1.8] {
+        r.dot(at(42.6, w, hz * 2.0 - 0.2), 0x2E2A22, 0.0, 1);
+    }
+    r.dot(at(39.8, 0.0, hz * 2.0 - 0.6), 0x241E18, 0.0, 1);
+    if vertical {
+        crate::rig::render_oblique(&r, 0.0, 36, 66, 8)
+    } else {
+        crate::rig::render_oblique(&r, 0.0, 64, 40, 14)
+    }
+}
+
 // ================================================================= Truhe
 
 /// Schatztruhe als 3D-Modell: Plankenkorpus, gewölbter Deckel, Eisenbänder mit Nieten, Eckbeschläge,
