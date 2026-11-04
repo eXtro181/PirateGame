@@ -819,6 +819,10 @@ pub trait TerrainMap {
     fn open_water(&self, _tx0: i32, _ty0: i32, _tx1: i32, _ty1: i32) -> bool {
         false
     }
+    /// Boden aus fertigen Kacheln (PixelLab-Insel): Farbe dieses Landpixels, sonst None
+    fn art_px(&self, _px: i32, _py: i32) -> Option<Rgba> {
+        None
+    }
 }
 
 /// Liegt der Chunk samt allem, was sein Backen liest, auf offener See? Dann ist er leer
@@ -1246,6 +1250,33 @@ impl ChunkBake {
                     c.set_ev(x, y, 0.0);
                     let i = c.idx(x, y);
                     c.emi[i] = [shore_lookup(sh, sz, x, y), if mt == Mat::Water { 255 } else { 64 }, 0, 0];
+                    continue;
+                }
+                if let Some(a) = m.art_px(px, py) {
+                    // Fertigkacheln (PixelLab): Farbe übernehmen, Relief aus der Helligkeit; am Wasser
+                    // wie überall eine dunkle, nasse Uferkante
+                    let mut col = a;
+                    let lu = (a[0] as f32 * 0.3 + a[1] as f32 * 0.59 + a[2] as f32 * 0.11) / 255.0;
+                    let mut rel = (lu - 0.4) * 4.0;
+                    let mut wet = 0.0f32;
+                    for (dx, dy, k) in [(1, 0, 1.0), (-1, 0, 1.0), (0, 1, 1.0), (0, -1, 1.0), (2, 0, 0.6), (-2, 0, 0.6), (0, 2, 0.6), (0, -2, 0.6), (0, 3, 0.4), (3, 0, 0.3), (-3, 0, 0.3)] {
+                        if g(x + dx, y + dy) == Mat::Water {
+                            wet = f32::max(wet, k);
+                        }
+                    }
+                    if [(1, 0), (0, 1), (-1, 0), (0, -1)].iter().any(|&(dx, dy)| g(x + dx, y + dy).transparent()) {
+                        col = mix(col, outline_of(col), 0.45);
+                        rel -= 1.0;
+                    }
+                    if wet > 0.0 {
+                        col = mix(col, shade(col, 0.62), wet * 0.6);
+                        col = mix(col, hex(0x203848), wet * 0.12);
+                    }
+                    c.put(x, y, col, rel);
+                    let i = c.idx(x, y);
+                    c.emi[i] = [0, 0, 0, if wet > 0.0 { (wet * 150.0) as u8 } else { 10 }];
+                    c.up[i] = 0;
+                    c.ev[i] = 0.0;
                     continue;
                 }
                 let b = m.biome(tx, ty);

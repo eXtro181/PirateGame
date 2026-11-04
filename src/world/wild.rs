@@ -255,17 +255,29 @@ impl World {
             self.prop_t("logPile", lx - side.0 * 2, ly - side.1 * 2);
         }
         self.prop_t("signpost", lx - side.0 * 3 + dx, ly - side.1 * 3 + dy);
-        // Herzstück zur Inselmitte hin, Weg dorthin
+        // Herzstück zur Inselmitte hin, Weg dorthin (die PixelLab-Insel hat keine Wege: ihr Boden
+        // ist fertig gemalt, Requisiten setzt `pl_props`)
         let (hx, hy) = (cx - dx * (r.rx / 5), cy - dy * (r.ry / 5));
-        self.road(&[(lx, ly), ((lx + hx) / 2 + side.0 * 2, (ly + hy) / 2 + side.1 * 2), (hx, hy)], gm, 1);
+        let pl = k == super::PL_ISLE;
+        if pl {
+            self.pl = Some(super::PlIsle { landing: (lx, ly), heart: (hx, hy), x0: 0, y0: 0, w: 0, h: 0, vtx: vec![] });
+            self.flat_areas.push((hx, hy, 6, 5));
+        } else {
+            self.road(&[(lx, ly), ((lx + hx) / 2 + side.0 * 2, (ly + hy) / 2 + side.1 * 2), (hx, hy)], gm, 1);
+        }
         let (foes, elites) = Self::wild_foes(r.biome);
         let area = r.rx * r.ry;
         let huge = r.rx >= 32;
         let n_foes = area / 120 + rng.int(0, 2) + lvl as i32;
         let mut chest_n = 0;
-        self.wild_feature(k, wi.kind, hx, hy, (dx, dy), &mut rng, &mut chest_n, true);
+        if pl {
+            // eine Truhe im Ruinenbogen-Lager
+            self.wild_chest(&wi.key, &mut chest_n, hx + 3, hy - 1, "shard", None);
+        } else {
+            self.wild_feature(k, wi.kind, hx, hy, (dx, dy), &mut rng, &mut chest_n, true);
+        }
         // sehr große Inseln: zweites Herzstück auf der anderen Seite, eigener Weg dorthin
-        if huge {
+        if huge && !pl {
             let k2 = match wi.kind {
                 IsleKind::Lager | IsleKind::Wrack => IsleKind::Ruine,
                 IsleKind::Ruine | IsleKind::Schatz => IsleKind::Lager,
@@ -315,8 +327,8 @@ impl World {
                 self.item(it, tx, ty);
             }
         }
-        // Wegmarken und Hinterlassenschaften
-        for _ in 0..(area / 90).max(6) {
+        // Wegmarken und Hinterlassenschaften (die PixelLab-Insel bekommt ihre eigenen)
+        for _ in 0..if pl { 0 } else { (area / 90).max(6) } {
             let (tx, ty) = (cx + rng.int(-r.rx * 3 / 4, r.rx * 3 / 4), cy + rng.int(-r.ry * 3 / 4, r.ry * 3 / 4));
             if !inb(tx, ty) || self.zone[idx(tx, ty)] != Some(Zone::Wild) || !self.free_t(tx, ty, 1) {
                 continue;
@@ -335,6 +347,9 @@ impl World {
             self.prop_tf(&kind, tx, ty, flip);
         }
         // Wasserfall (wird später an eine passende Hangkante gesetzt), auf sehr großen Inseln zwei
+        if pl {
+            return;
+        }
         if rng.chance(0.55) {
             self.waterfall(cx + rng.int(-4, 4), cy - r.ry / 3, 2);
         }

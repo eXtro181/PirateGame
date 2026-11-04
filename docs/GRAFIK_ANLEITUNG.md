@@ -270,9 +270,13 @@ Eine Krone besteht aus Randbüscheln (45 %) und Füllbüscheln. Sie werden **von
 
 **Titelmotiv** (`throne.rs`, in voller Größe gemalt und mit einem Kastenfilter auf 55 % verkleinert, damit Details beim Kameraschwenk nicht flimmern): Thron 540 × 680 – Spitzbogen-Lehne (`145·(1 − ((250 − y)/214)^1,7)`), vertiefte, kannelierte Innenfläche, Bronzeband mit Grünspan, Rosette (Radius 56) mit zwölf Speichen und grün leuchtendem Seelenstein, Schädelfries, Armlehnen aus Quadern mit Schädeln, drei Spitzbogennischen mit Seelenlichtern, Spitzen, Korallen (verzweigte Röhren), Seepocken, Tang, Risse, Wasserspuren, nasse Wasserlinie. Dazu kannelierte, gebrochene Säulen, eine Korallenkrone mit Steinen und Kettenglieder.
 
+**PixelLab-Insel** (`sw_art::pixellab`, `world/plisle.rs`): die einzige Stelle mit fertigen Bildern (PNGs in `crates/art/assets/pixellab/`, eingebettet, dekodiert mit der `png`-Crate). Requisiten: Farbe 1:1, Relief = (geglättete Helligkeit − 0,4)·3 + Wölbung quer zum Objekt `√(1 − u²)·3,5` (u = Lage in der Zeile von −1 bis 1), damit Punktlichter sie räumlich treffen; Fußpunkt = unterste deckende Zeile − 2, waagrecht die Mitte der deckenden Pixel der untersten 7 Zeilen; Bäume mit ausblendender Krone (ab 55–66 % der Höhe) und Wiegen im Wind, die Feuerstelle mit warmem Licht (r 170, 1,9/0,9/0,35, Flackern 0,3).
+
 ---
 
 ## 10. Gelände: Materialien, Paletten, Chunk-Backen
+
+**Fertige Kacheln (PixelLab-Insel Schädelhorn)**: `TerrainMap::art_px(px, py)` liefert für Landpixel eine Farbe aus zwei verbundenen Wang-Sätzen (Kiesstrand ↔ Moosgras, Moosgras ↔ Waldboden, je 16 Kacheln à 32 px). Jede **Kachelecke** trägt ein Terrain aus dem Uferabstand der vier angrenzenden Kacheln (Breitensuche): ≤ 2 Kacheln Sand, ab 6 Kacheln Wald, wo `fbm(0,075·Ecke) + (d − 6)·0,03 > 0,1`, sonst Gras; Wald neben Sand wird Gras (Sand und Wald teilen keinen Satz), ebenso um Landeplatz und Lager. Je Kachel: Satz = kleinstes Eckterrain, Maske NW·8 + NE·4 + SW·2 + SE·1 aus den Ecken darüber. Im Bäcker: Farbe übernehmen, Relief = (Helligkeit − 0,4)·4, am Wasser dieselbe nasse Uferkante (abdunkeln ×0,62, etwas 203848) und dunkle Umrisslinie wie überall; das Wasser selbst bleibt das des Shaders. Die Insel ist flach (keine Hochland-Ebenen, keine Wege, kein prozeduraler Bewuchs, keine Boden-Deko).
 
 **Materialien** (Priorität für Überlagerung / „erhaben“ für Kanten):
 Wasser 0/–, Abgrund 0/–, Sand 1, Schlamm 2, Asche 3, Erde 4, Eis 5, Fels 5,5, Moos 6 (erh. 3), Gras 7 (3), Wiese 7,5 (3), Schnee 7,5 (2,5), Basaltwaben 8 (1), Pflaster 9 (1,5), Marmor 10 (1,5), Planken 11 (1,5).

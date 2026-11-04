@@ -8,6 +8,7 @@
 //! Höhenebenen: Plateaus sind begehbar, ihre unteren zwei Reihen sind Basaltwände, Wege über
 //! Wände werden Treppen. Die Erzeugung ist deterministisch; Positionen sind Welt-Pixel.
 
+mod plisle;
 pub mod view;
 mod wild;
 
@@ -17,6 +18,7 @@ use std::collections::HashMap;
 use sw_art::noise::{Noise, Rng};
 use crate::game::data::shop_def;
 use sw_art::terrain::{face_px, face_span, Biome, EdgeNoise, Mat, TerrainMap, BANK_PX, FACE_PX, FACE_ROWS, RIM_PX};
+pub use plisle::{PlIsle, PL_ISLE};
 
 pub const TS: i32 = 32;
 /// Kartengröße in Kacheln: zehnmal die Fläche der früheren 560 × 420
@@ -498,6 +500,8 @@ pub struct World {
     /// der Sarg am großen Wasserfall (Fußpunkt) und seine Requisite: Ende des Prologs
     pub prolog_coffin: (f32, f32),
     pub prolog_coffin_prop: Option<usize>,
+    /// die PixelLab-Insel (Schädelhorn): Eckterrain für Boden aus fertigen Kacheln
+    pub pl: Option<PlIsle>,
     /// Häuser mit rauchendem Schornstein (Indizes in `props`)
     pub chimneys: Vec<usize>,
     cur: Zone,
@@ -571,6 +575,7 @@ impl World {
             prolog_foot: 0.0,
             prolog_coffin: (0.0, 0.0),
             prolog_coffin_prop: None,
+            pl: None,
             chimneys: vec![],
             cur: Zone::Kueste,
             cur_biome: Biome::Coast,
@@ -765,9 +770,14 @@ impl World {
             self.highlands(z.region());
         }
         for k in 0..self.wild.len() {
+            if k == PL_ISLE {
+                continue; // flach: Boden und Requisiten aus PixelLab
+            }
             let r = self.wild[k].r;
             self.highlands(r);
         }
+        self.pl_ground();
+        self.pl_props();
         lap("Hochland", &mut t);
         self.flatten_tiny();
         self.compute_faces();
@@ -787,6 +797,9 @@ impl World {
             self.scatter(z.region(), &mut rng);
         }
         for k in 0..self.wild.len() {
+            if k == PL_ISLE {
+                continue;
+            }
             self.cur = Zone::Wild;
             let r = self.wild[k].r;
             self.cur_biome = r.biome;
@@ -3635,6 +3648,10 @@ impl World {
                 if z == Zone::Ende && !self.drained {
                     continue;
                 }
+                // die PixelLab-Insel hat ihren Boden fertig gemalt
+                if self.pl.as_ref().is_some_and(|p| p.covers(tx, ty)) {
+                    continue;
+                }
                 let biome = self.biome[i];
                 let g = self.ground[i];
                 let mut rng = Rng::new(((tx as u64) << 21) ^ (ty as u64).wrapping_mul(0x9E37_79B9) ^ 0x5EED);
@@ -3917,6 +3934,10 @@ impl TerrainMap for World {
     }
     fn town(&self, tx: i32, ty: i32) -> bool {
         self.in_settlement((tx * TS + TS / 2) as f32, (ty * TS + TS / 2) as f32)
+    }
+    fn art_px(&self, px: i32, py: i32) -> Option<sw_art::color::Rgba> {
+        let c = self.pl.as_ref()?.corners(px.div_euclid(TS), py.div_euclid(TS))?;
+        Some(sw_art::pixellab::ground().texel(c, px, py))
     }
     fn open_water(&self, tx0: i32, ty0: i32, tx1: i32, ty1: i32) -> bool {
         for ty in ty0..=ty1 {

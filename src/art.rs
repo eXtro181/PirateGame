@@ -1024,6 +1024,10 @@ pub fn build(frame: &mut Frame) -> Art {
         }
         let lid = gv::coffin_lid(0);
         a.add_trim("x:lid", &lid, 20, 56);
+        // PixelLab-Insel Schädelhorn: Bäume, Felsen, Wrack, Ruine, Feuerstelle, Kram, Büsche
+        for pa in sw_art::pixellab::prop_arts() {
+            add_prop(&mut a, &mut props, pa);
+        }
         // eingesponnene Leiche (Prolog-Niederlage): am Boden liegend und im Sarg
         a.add_trim("x:wrapH", &sw_art::structures::wrapped_body(false), 32, 26);
         a.add_trim("x:wrapV", &sw_art::structures::wrapped_body(true), 18, 58);

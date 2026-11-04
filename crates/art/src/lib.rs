@@ -19,3 +19,4 @@ pub mod structures;
 pub mod font;
 pub mod throne;
 pub mod ui;
+pub mod pixellab;
