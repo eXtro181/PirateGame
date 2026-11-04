@@ -275,19 +275,22 @@ impl Game {
         let (x, y) = (s.x, s.y);
         match el {
             "fire" => {
-                self.fx.burst("fire", x, y, 18, BurstOpt { speed: Some(140.0), up: Some(200.0), ..Default::default() });
+                self.fx.px.play(Px::Pillar, x, y + 1.0).scale((s.r / 60.0).clamp(0.7, 1.5)).speed(1.4);
                 self.flash_light = Some((x, y, 0.15));
             }
-            "ice" => self.fx.burst("ice", x, y, 18, BurstOpt { speed: Some(120.0), up: Some(180.0), ..Default::default() }),
+            "ice" => {
+                self.fx.px.play(Px::IceShatter, x, y + 1.0).scale((s.r / 60.0).clamp(0.7, 1.6));
+            }
             "wind" => {
                 self.lightning = self.lightning.max(0.18);
-                self.fx.burst("spark", x, y, 16, BurstOpt { speed: Some(160.0), up: Some(120.0), ..Default::default() });
-                self.fx.bolt(&[(x + rr(-30.0, 30.0), y - 320.0), (x + rr(-20.0, 20.0), y - 200.0), (x + rr(-14.0, 14.0), y - 90.0), (x, y)], [0.85, 0.92, 1.0, 1.0], 0.25);
+                self.fx.px.play(Px::Lightning, x, y + 1.0).scale((s.r / 70.0).clamp(0.9, 1.7)).gain(1.2);
                 self.sfx("zap");
             }
-            _ => self.fx.burst("splash", x, y, 20, BurstOpt { speed: Some(160.0), up: Some(240.0), col: Some([0.35, 0.6, 0.35, 1.0]), ..Default::default() }),
+            _ => {
+                self.fx.px.play(Px::Acid, x, y + 1.0).scale((s.r / 50.0).clamp(0.8, 1.8));
+            }
         }
-        self.fx.burst("splash", x, y, 10, BurstOpt { speed: Some(120.0), up: Some(200.0), ..Default::default() });
+        self.fx.px.play(Px::Splash, x, y).scale((s.r / 50.0).clamp(0.7, 1.8));
         self.shake(5.0);
         if self.sailing && (self.ship.hull.x - x).hypot(self.ship.hull.y - y) < s.r + 20.0 {
             self.ship_damage(s.dmg);
@@ -343,9 +346,9 @@ impl Game {
             match b.state {
                 SS::Rise => {
                     b.st_t += dt;
-                    if rnd() < 0.6 {
-                        let (x, y) = (b.x + rr(-70.0, 70.0), b.y);
-                        self.fx.burst("splash", x, y, 2, BurstOpt { speed: Some(90.0), up: Some(160.0), ..Default::default() });
+                    if rnd() < 0.12 {
+                        let (x, y) = (b.x + rr(-70.0, 70.0), b.y + rr(-10.0, 10.0));
+                        self.fx.px.play(Px::Splash, x, y).scale(rr(0.8, 1.3));
                     }
                     if self.sea_bosses[i].st_t > 1.4 {
                         self.sea_bosses[i].state = SS::Fight;
@@ -396,9 +399,9 @@ impl Game {
                     b.st_t += dt;
                     let t = b.st_t;
                     if t < 1.4 {
-                        if rnd() < 0.8 {
-                            let (x, y) = (b.x + rr(-90.0, 90.0), b.y);
-                            self.fx.burst("splash", x, y, 3, BurstOpt { speed: Some(120.0), up: Some(220.0), ..Default::default() });
+                        if rnd() < 0.16 {
+                            let (x, y) = (b.x + rr(-90.0, 90.0), b.y + rr(-12.0, 12.0));
+                            self.fx.px.play(Px::Splash, x, y).scale(rr(0.9, 1.5));
                         }
                     } else if b.hull.alpha < 1.0 {
                         if b.hull.alpha == 0.0 {
@@ -412,9 +415,9 @@ impl Game {
                         }
                         let b = &mut self.sea_bosses[i];
                         b.hull.alpha = ((t - 1.4) / 1.6).min(1.0).max(0.01);
-                        if rnd() < 0.7 {
-                            let (x, y) = (b.hull.x + rr(-80.0, 80.0), b.hull.y);
-                            self.fx.burst("splash", x, y, 2, BurstOpt { speed: Some(80.0), up: Some(140.0), ..Default::default() });
+                        if rnd() < 0.14 {
+                            let (x, y) = (b.hull.x + rr(-80.0, 80.0), b.hull.y + rr(-10.0, 10.0));
+                            self.fx.px.play(Px::Splash, x, y).scale(rr(0.8, 1.3));
                         }
                     } else {
                         b.state = SS::Ship;
@@ -524,7 +527,9 @@ impl Game {
             let d = b.def();
             self.sfx("death");
             self.shake(14.0);
-            self.fx.rise("soul", x, y, 60, 120.0, None);
+            self.fx.rise("soul", x, y, 30, 120.0, None);
+            self.fx.px.play(Px::Soul, x, y).scale(2.4).gain(1.2);
+            self.fx.px.play(Px::Geyser, x, y + 2.0).scale(1.8);
             self.gain_pearls(d.pearls, Some((x, y)));
             self.save.sea_kings.insert(d.el.into(), true);
             self.ui.banner(&format!("{} ERBEUTET", d.wreck.to_uppercase()), "Es brennt nun im See der Glutwacht", "big", 4.0);

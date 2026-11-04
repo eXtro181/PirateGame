@@ -140,6 +140,8 @@ pub mod modes {
     pub const MAP: u8 = 7;
     /// UI: Zierschrift, weich gefiltert
     pub const TEXT: u8 = 8;
+    /// Überlagerung: PixelFX-Effekt (prm = Bodenzeile für die Verdeckung, Helligkeit)
+    pub const FX: u8 = 10;
 }
 pub mod flags {
     pub const FLASH: u8 = 1;

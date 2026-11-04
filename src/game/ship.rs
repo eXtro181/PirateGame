@@ -447,10 +447,13 @@ impl Game {
         g.hp -= n;
         g.hull.flash = 0.1;
         let (x, y, name) = (g.hull.x, g.hull.y, g.name);
-        self.fx.burst("dust", x, y - 12.0, 10, BurstOpt { speed: Some(120.0), col: Some([0.3, 0.45, 0.45, 1.0]), ..Default::default() });
+        self.fx.burst("dust", x, y - 12.0, 6, BurstOpt { speed: Some(120.0), col: Some([0.3, 0.45, 0.45, 1.0]), ..Default::default() });
+        self.fx.px.play(Px::Blunt, x, y).z(16.0).scale(1.2).tint([190, 255, 225, 255]);
         if self.ghosts[i].hp <= 0.0 {
             self.sfx("death");
-            self.fx.rise("soul", x, y, 40, 80.0, None);
+            self.fx.rise("soul", x, y, 20, 80.0, None);
+            self.fx.px.play(Px::Soul, x, y).scale(2.0).gain(1.1);
+            self.fx.px.play(Px::Splash, x, y).scale(2.0);
             self.gain_pearls(700, Some((x, y)));
             self.ui.banner(&format!("{name} versenkt"), "", "small", 2.0);
         }
@@ -478,7 +481,9 @@ impl Game {
         let (x, y) = (k.x, k.y);
         if self.kraken.hp <= 0.0 {
             self.sfx("death");
-            self.fx.rise("soul", x, y, 50, 120.0, None);
+            self.fx.rise("soul", x, y, 24, 120.0, None);
+            self.fx.px.play(Px::Soul, x, y).scale(2.6).gain(1.2);
+            self.fx.px.play(Px::Geyser, x, y + 2.0).scale(2.0);
             self.gain_pearls(3000, Some((x, y)));
             self.save.shards += 3;
             self.ui.banner("DER KRAKEN SINKT", "3 Gezeitensplitter", "big", 3.0);

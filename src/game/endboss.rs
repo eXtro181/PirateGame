@@ -313,8 +313,11 @@ impl Game {
                     self.shake(3.0 + t);
                 }
                 let (ex, ey) = (self.end.x, self.end.y);
-                for _ in 0..3 {
+                for _ in 0..2 {
                     self.fx.burst("splash", ex + rr(-HULL_RX, HULL_RX), ey + rr(-40.0, 60.0), 2, BurstOpt { speed: Some(120.0), up: Some(260.0), ..Default::default() });
+                }
+                if rnd() < dt * 5.0 {
+                    self.fx.px.play(Px::Splash, ex + rr(-HULL_RX, HULL_RX), ey + rr(-30.0, 50.0)).scale(rr(1.2, 2.0));
                 }
                 if t > 2.0 && t - dt <= 2.0 {
                     self.sfx("roar");
@@ -343,7 +346,8 @@ impl Game {
         for s in hits {
             if s.dmg < 0.0 {
                 // Krakenarm schlägt aufs Wasser
-                self.fx.burst("splash", s.x, s.y, 26, BurstOpt { speed: Some(170.0), up: Some(320.0), col: Some([0.9, 0.5, 0.45, 1.0]), ..Default::default() });
+                self.fx.burst("splash", s.x, s.y, 12, BurstOpt { speed: Some(170.0), up: Some(320.0), col: Some([0.9, 0.5, 0.45, 1.0]), ..Default::default() });
+                self.fx.px.play(Px::Splash, s.x, s.y).scale(1.8).tint([255, 190, 180, 255]);
                 self.shake(7.0);
                 self.sfx("crash");
                 if self.sailing && (self.ship.hull.x - s.x).hypot(self.ship.hull.y - s.y) < s.r + 40.0 {
@@ -352,12 +356,12 @@ impl Game {
                 continue;
             }
             // Donnerschlag
-            self.fx.bolt(&[(s.x + rr(-14.0, 14.0), s.y - 420.0), (s.x + rr(-8.0, 8.0), s.y - 200.0), (s.x, s.y)], [0.8, 0.92, 1.0, 1.0], 0.3);
+            self.fx.px.play(Px::Lightning, s.x, s.y + 1.0).scale((s.r / 70.0).clamp(1.0, 1.8)).gain(1.25);
             self.flash([0.8, 0.9, 1.0], 0.18);
             self.lightning = 0.6;
             self.sfx("zap");
-            self.fx.burst("splash", s.x, s.y, 16, BurstOpt { speed: Some(150.0), up: Some(240.0), col: Some([0.75, 0.85, 1.0, 1.0]), ..Default::default() });
-            self.fx.ring(s.x, s.y, 6.0, s.r, 0.35, [0.7, 0.85, 1.0]);
+            self.fx.burst("splash", s.x, s.y, 10, BurstOpt { speed: Some(150.0), up: Some(240.0), col: Some([0.75, 0.85, 1.0, 1.0]), ..Default::default() });
+            self.fx.px.play(Px::Splash, s.x, s.y).scale(1.6).tint([200, 225, 255, 255]);
             self.shake(6.0);
             if self.sailing && (self.ship.hull.x - s.x).hypot(self.ship.hull.y - s.y) < s.r + 40.0 {
                 self.ship_damage(s.dmg);
@@ -464,7 +468,7 @@ impl Game {
                     s.life = 3.2;
                     s.sea = true;
                     self.shots.push(s);
-                    self.fx.burst("smoke", x0, y0 - 30.0, 6, BurstOpt { speed: Some(70.0), up: Some(50.0), g: Some(-30.0), life: Some(1.4), ..Default::default() });
+                    self.fx.px.play(Px::Muzzle, x0, y0).z(30.0).dir(-std::f32::consts::FRAC_PI_2).scale(2.0).gain(1.2);
                 }
                 self.shake(9.0);
                 self.sfx("cannon");
@@ -573,7 +577,8 @@ impl Game {
                     self.ui.banner("DER KRAKEN SINKT", "Der Holländer ist wieder verwundbar", "big", 3.0);
                     self.sfx("death");
                     self.shake(12.0);
-                    self.fx.burst("splash", x, y, 50, BurstOpt { speed: Some(220.0), up: Some(320.0), col: Some([0.9, 0.4, 0.35, 1.0]), ..Default::default() });
+                    self.fx.burst("splash", x, y, 24, BurstOpt { speed: Some(220.0), up: Some(320.0), col: Some([0.9, 0.4, 0.35, 1.0]), ..Default::default() });
+                    self.fx.px.play(Px::Geyser, x, y + 2.0).scale(2.2).tint([255, 170, 160, 255]);
                 }
                 return;
             }
@@ -582,7 +587,8 @@ impl Game {
         e.hp -= n;
         e.flash = 0.1;
         let (x, y) = (e.x + rr(-200.0, 200.0), e.y);
-        self.fx.burst("dust", x, y - 60.0, 6, BurstOpt { speed: Some(120.0), col: Some([0.3, 0.4, 0.35, 1.0]), ..Default::default() });
+        self.fx.burst("dust", x, y - 60.0, 4, BurstOpt { speed: Some(120.0), col: Some([0.3, 0.4, 0.35, 1.0]), ..Default::default() });
+        self.fx.px.play(Px::Blunt, x, y).z(60.0).scale(1.4).tint([190, 255, 220, 255]);
         if self.end.hp <= 0.0 {
             self.end.hp = 0.0;
             self.end.state = EP::Drain;

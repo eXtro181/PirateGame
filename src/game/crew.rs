@@ -107,7 +107,7 @@ impl Game {
             s.r = 4.0;
             self.shots.push(s);
             self.fx.mark(MarkKind::Circle, lx, ly, 52.0, 0.0, 0.0, flight, Some([1.0, 0.6, 0.25, 0.35]));
-            self.fx.burst("smoke", sx, sy - 20.0, 8, BurstOpt { speed: Some(50.0), up: Some(60.0), g: Some(-30.0), life: Some(1.0), ..Default::default() });
+            self.fx.px.play(Px::Muzzle, sx, sy).z(14.0).dir(-std::f32::consts::FRAC_PI_2).scale(1.6).gain(1.2);
             self.sfx("cannon");
         }
         // Kettenkugeln: sechs schnelle Schüsse kurz hintereinander
@@ -164,7 +164,8 @@ impl Game {
                 k.hit = 0.9;
                 let dmg = 45.0 * (1.0 + self.save.ship_atk as f32 * 0.08);
                 self.hurt_target(t, dmg, Target::Player, HurtOpt::default());
-                self.fx.burst("splash", tx, ty, 24, BurstOpt { speed: Some(180.0), up: Some(260.0), ..Default::default() });
+                self.fx.px.play(Px::Splash, tx, ty).scale(1.5);
+                self.fx.px.play(Px::Blunt, tx, ty).z(16.0).scale(1.2).tint([200, 255, 210, 255]);
                 self.shake(6.0);
                 self.sfx("crash");
             }
@@ -176,7 +177,7 @@ impl Game {
         if k.life > 0.0 && self.sailing {
             self.crew_guns.kraken = Some(k);
         } else {
-            self.fx.burst("splash", k.x, k.y, 30, BurstOpt { speed: Some(140.0), up: Some(200.0), ..Default::default() });
+            self.fx.px.play(Px::Splash, k.x, k.y).scale(2.0);
         }
     }
 

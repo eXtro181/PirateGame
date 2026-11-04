@@ -1,7 +1,10 @@
 //! Effekte in Weltpixeln: Partikel (Blut, Funken, Glut, Seelenlicht, Schnee, Regen, Asche),
-//! Hiebbögen, Kettenblitze, Schadenszahlen, Telegraphen für Angriffe, Druckringe.
+//! Kettenblitze, Telegraphen für Angriffe und die PixelFX-Effekte (`px`: Hiebe, Treffer, Paraden,
+//! Explosionen, Zauber, Seelen; siehe `crate::pfx`). Die früheren eigenen Hiebbögen und Druckringe
+//! sind durch PixelFX ersetzt.
 
 use crate::gfx::{modes, Frame, LightDef};
+pub use crate::pfx::Px;
 use std::cell::RefCell;
 use sw_art::noise::Rng;
 
@@ -111,52 +114,32 @@ pub struct Mark {
     pub dur: f32,
     pub col: Col,
 }
-struct Slash {
-    x: f32,
-    y: f32,
-    ang: f32,
-    r: f32,
-    col: Col,
-    width: f32,
-    t: f32,
-    dur: f32,
-}
 struct Bolt {
     segs: Vec<[f32; 4]>,
     col: Col,
     t: f32,
     dur: f32,
 }
-struct Ring {
-    x: f32,
-    y: f32,
-    r0: f32,
-    r1: f32,
-    t: f32,
-    dur: f32,
-    col: [f32; 3],
-}
 
 #[derive(Default)]
 pub struct Fx {
     pub parts: Vec<P>,
-    slashes: Vec<Slash>,
     bolts: Vec<Bolt>,
     pub marks: Vec<Mark>,
-    rings: Vec<Ring>,
     /// Fußspuren: x, y, Rest, Farbe (Sand, Schnee, Asche, Schlamm)
     pub prints: Vec<(f32, f32, f32, [u8; 4])>,
     pub t: f32,
+    /// laufende PixelFX-Effekte
+    pub px: crate::pfx::Pfx,
 }
 
 impl Fx {
     pub fn clear(&mut self) {
         self.parts.clear();
-        self.slashes.clear();
         self.bolts.clear();
         self.marks.clear();
-        self.rings.clear();
         self.prints.clear();
+        self.px.clear();
     }
     pub fn p(&mut self, p: P) {
         if self.parts.len() > 1400 {
@@ -205,9 +188,6 @@ impl Fx {
             });
         }
     }
-    pub fn slash(&mut self, x: f32, y: f32, ang: f32, r: f32, col: Col, width: f32) {
-        self.slashes.push(Slash { x, y, ang, r, col, width, t: 0.0, dur: 0.15 });
-    }
     pub fn bolt(&mut self, pts: &[(f32, f32)], col: Col, dur: f32) {
         let mut segs = vec![];
         for i in 0..pts.len().saturating_sub(1) {
@@ -229,9 +209,6 @@ impl Fx {
     }
     pub fn mark(&mut self, kind: MarkKind, x: f32, y: f32, r: f32, ang: f32, w: f32, dur: f32, col: Option<Col>) {
         self.marks.push(Mark { kind, x, y, r, ang, w, t: 0.0, dur, col: col.unwrap_or([0.9, 0.2, 0.18, 0.45]) });
-    }
-    pub fn ring(&mut self, x: f32, y: f32, r0: f32, r1: f32, dur: f32, col: [f32; 3]) {
-        self.rings.push(Ring { x, y, r0, r1, t: 0.0, dur, col });
     }
 
     /// Umgebungspartikel um die Kamera je Biom.
@@ -278,6 +255,7 @@ impl Fx {
 
     pub fn update(&mut self, dt: f32) {
         self.t += dt;
+        self.px.update(dt);
         for p in self.prints.iter_mut() {
             p.2 -= dt;
         }
@@ -307,22 +285,14 @@ impl Fx {
             }
         }
         self.parts.retain(|p| p.life > 0.0);
-        for s in self.slashes.iter_mut() {
-            s.t += dt;
-        }
         for s in self.bolts.iter_mut() {
             s.t += dt;
         }
         for s in self.marks.iter_mut() {
             s.t += dt;
         }
-        for s in self.rings.iter_mut() {
-            s.t += dt;
-        }
-        self.slashes.retain(|s| s.t < s.dur);
         self.bolts.retain(|s| s.t < s.dur);
         self.marks.retain(|s| s.t < s.dur);
-        self.rings.retain(|s| s.t < s.dur);
     }
 
     fn c8(c: Col, a: f32) -> [u8; 4] {
@@ -389,7 +359,8 @@ impl Fx {
         }
     }
 
-    pub fn draw(&self, f: &mut Frame) {
+    pub fn draw(&self, f: &mut Frame, lib: &crate::pfx::Lib) {
+        self.px.draw(f, lib);
         for p in &self.parts {
             let a = (p.life / p.max * 2.0).min(1.0);
             let y = p.y - p.z;
@@ -409,24 +380,6 @@ impl Fx {
                 f.world_q(p.y + 1.0, q);
             }
         }
-        for s in &self.slashes {
-            let k = s.t / s.dur;
-            let n = 22;
-            for i in 0..n {
-                let t = i as f32 / (n - 1) as f32;
-                if t > k * 1.6 {
-                    continue;
-                }
-                let a = s.ang - 1.2 + t * 2.4;
-                let r = s.r * (0.85 + 0.15 * (t * std::f32::consts::PI).sin());
-                let x = s.x + a.cos() * r;
-                let y = s.y + a.sin() * r * 0.75;
-                let fade = 1.0 - k;
-                let col = Self::c8([s.col[0] * 1.4, s.col[1] * 1.4, s.col[2] * 1.4, 1.0], fade);
-                let w = s.width * 2.0 * (1.0 - (t - 0.5).abs() * 1.4).max(0.3);
-                f.over(Frame::quad_rect(x - w, y - w * 0.5, w * 2.0, w, col, modes::SOLID, 0), true);
-            }
-        }
         for b in &self.bolts {
             let fade = 1.0 - b.t / b.dur;
             let col = Self::c8([b.col[0] * 2.0, b.col[1] * 2.0, b.col[2] * 2.0, 1.0], fade);
@@ -438,18 +391,9 @@ impl Fx {
                 }
             }
         }
-        for g in &self.rings {
-            let k = g.t / g.dur;
-            let r = g.r0 + (g.r1 - g.r0) * k;
-            let col = Self::c8([g.col[0] * 1.5, g.col[1] * 1.5, g.col[2] * 1.5, 1.0], 1.0 - k);
-            let n = (r * 1.2).round().max(16.0) as i32;
-            for i in 0..n {
-                let a = i as f32 / n as f32 * std::f32::consts::TAU;
-                f.over(Frame::quad_rect(g.x + a.cos() * r - 1.0, g.y + a.sin() * r * 0.6 - 1.0, 2.0, 2.0, col, modes::SOLID, 0), true);
-            }
-        }
     }
-    pub fn lights(&self, f: &mut Frame) {
+    pub fn lights(&self, f: &mut Frame, lib: &crate::pfx::Lib) {
+        self.px.lights(f, lib);
         for b in &self.bolts {
             for s in b.segs.iter().step_by(4) {
                 let k = 1.0 - b.t / b.dur;

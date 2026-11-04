@@ -7,6 +7,9 @@
 @group(1) @binding(4) var t_mask: texture_2d<f32>;
 @group(1) @binding(5) var t_noise: texture_2d<f32>;
 @group(1) @binding(6) var t_map: texture_2d<f32>;
+// nur in der Überlagerung: G-Puffer (Normale + Höhe, Leuchten) für die Verdeckung der Effekte
+@group(2) @binding(0) var t_gn: texture_2d<f32>;
+@group(2) @binding(1) var t_ge: texture_2d<f32>;
 
 struct VIn {
     @location(0) pos: vec2<f32>,
@@ -174,7 +177,7 @@ fn abyss(p_in: vec2<f32>) -> GOut {
     em += vec3<f32>(1.0, 0.45, 0.2) * spark * 0.8;
     o.alb = vec4<f32>(c, 1.0);
     o.nrm = vec4<f32>(0.5, 0.5, 0.0, 0.0);
-    o.emi = vec4<f32>(em, 1.0);
+    o.emi = vec4<f32>(em, 0.875);
     return o;
 }
 
@@ -313,7 +316,8 @@ fn fs_gbuf(v: VOut) -> GOut {
     let elev = n.b * 510.0 + v.prm.x;
     o.alb = vec4<f32>(rgb, 1.0);
     o.nrm = vec4<f32>(n.rg, clamp(elev / 510.0, 0.0, 1.0), n.a);
-    o.emi = vec4<f32>(glow * v.col.a, 1.0);
+    // Alpha im Leuchtpuffer: 1 = Sprite (kann Effekte verdecken), 0,875 = Boden-Chunk, 0,5 = Wasser
+    o.emi = vec4<f32>(glow * v.col.a, select(1.0, 0.875, chunk));
     return o;
 }
 
@@ -365,6 +369,21 @@ fn fs_overlay(v: VOut) -> @location(0) vec4<f32> {
     }
     if (mode == 2u) {
         return vec4<f32>(v.col.rgb * v.col.a, v.col.a);
+    }
+    if (mode == 10u) {
+        // PixelFX-Effekt (Licht über Transparenz als Deckkraft, vormultipliziert gemischt)
+        let c = textureSampleLevel(t_acol, s_near, v.uv, i32(v.ext.x), 0.0);
+        var a = c.a * v.col.a;
+        if (a < 0.004) { discard; }
+        // Verdeckung: steht hier etwas Aufrechtes (Figur, Mauer, Requisit), dessen Bodenzeile vor dem
+        // Fuß des Effekts liegt (prm.x), liegt der Effekt dahinter. Boden und Wasser verdecken nie.
+        let ip = vec2<i32>(floor(v.clip.xy));
+        if (textureLoad(t_ge, ip, 0).a > 0.95) {
+            let e = textureLoad(t_gn, ip, 0).b * 510.0;
+            a *= 1.0 - smoothstep(v.prm.x + 1.0, v.prm.x + 7.0, v.world.y + e) * smoothstep(2.0, 6.0, e);
+            if (a < 0.004) { discard; }
+        }
+        return vec4<f32>(c.rgb * v.col.rgb * v.prm.y * a, a);
     }
     let c = textureSampleLevel(t_acol, s_near, v.uv, i32(v.ext.x), 0.0);
     if (c.a < 0.45) { discard; }

@@ -427,7 +427,7 @@ impl Game {
             p.a.frame = 2.0;
             if t >= 1.0 {
                 p.jump = None;
-                self.fx.burst("dust", p.a.x, p.a.y, 10, BurstOpt { speed: Some(70.0), ..Default::default() });
+                self.fx.px.play(Px::Land, p.a.x, p.a.y).scale(0.8);
                 self.sfx("roll");
                 self.shake(2.0);
             } else {
@@ -633,10 +633,10 @@ impl Game {
                     p.drank = true;
                     if p.drink_mp {
                         p.mp = p.d.max_mp;
-                        self.fx.rise("soul", p.a.x, p.a.y, 18, 28.0, None);
+                        self.fx.px.play(Px::Heal, p.a.x, p.a.y + 1.0).tint([150, 255, 225, 255]).front(4.0);
                     } else {
                         p.heal_left = p.d.max_hp * 0.45;
-                        self.fx.rise("heal", p.a.x, p.a.y, 16, 28.0, Some(c::HEAL));
+                        self.fx.px.play(Px::Heal, p.a.x, p.a.y + 1.0).front(4.0);
                     }
                     self.sfx("heal");
                 }
@@ -716,8 +716,33 @@ impl Game {
         let reach = (w.range * 14.0 + 6.0) * S;
         let dmg = p.d.dmg * if p.heavy { w.heavy_mul } else { 1.0 } * (1.0 + p.combo as f32 * 0.1);
         let ang = p.a.fy.atan2(p.a.fx);
-        let col = if p.heavy { [1.0, 0.85, 0.6, 1.0] } else { [0.9, 0.95, 1.0, 1.0] };
-        self.fx.slash(p.a.x + p.a.fx * 12.0, p.a.y - 22.0 + p.a.fy * 8.0, ang, reach * 0.75, col, if p.heavy { 2.0 } else { 1.4 });
+        // PixelFX: Säbelhieb, zweiter Hieb von unten, dritter als Stoß; schwer = Doppelhieb.
+        // Rapier sticht, Hammer und Knüppel schlagen dumpf, der Fetisch leuchtet türkis.
+        let wk = w.key;
+        let blunt = matches!(wk, "hammer" | "club");
+        let kind = if p.heavy {
+            if wk == "rapier" { Px::Thrust } else { Px::Slash2 }
+        } else if wk == "rapier" || (p.combo == 2 && wk != "hammer" && wk != "club") {
+            Px::Thrust
+        } else {
+            Px::Slash
+        };
+        let sc = (reach / 60.0).clamp(0.75, 1.4) * if p.heavy { 1.15 } else { 1.0 };
+        let tint = match wk {
+            "fetish" => [150, 255, 225, 255],
+            "hammer" | "club" => [255, 214, 170, 255],
+            _ => [255; 4],
+        };
+        let i = self.fx.px.play(kind, p.a.x + p.a.fx * 6.0, p.a.y + p.a.fy * 6.0);
+        if kind == Px::Thrust {
+            i.dir(ang).z(18.0);
+        } else {
+            i.face(ang);
+            if p.combo == 1 {
+                i.tilt_back();
+            }
+        }
+        i.scale(sc).tint(tint).front(8.0).gain(1.15);
         let mut hit = false;
         for t in self.hittables() {
             let Some((tx, ty, thr, by)) = self.target_pos(t) else { continue };
@@ -728,7 +753,8 @@ impl Game {
             let d = (dmg * (0.9 + rnd() * 0.2)).round();
             self.hurt_target(t, d, Target::Player, HurtOpt { push: (p.a.fx * 12.0, p.a.fy * 12.0), poise: Some(if p.heavy { dmg * 2.0 } else { dmg }), ..Default::default() });
             hit = true;
-            self.fx.burst("spark", tx, ty - by, 6, BurstOpt { speed: Some(140.0), ..Default::default() });
+            let hk = if p.heavy { Px::Crit } else if blunt { Px::Blunt } else { Px::Hit };
+            self.fx.px.play(hk, tx, ty).z(by).dir(ang).scale(if p.heavy { 0.8 } else { 1.0 }).front(2.0);
         }
         if hit {
             self.shake(if p.heavy { 6.0 } else { 3.0 });
@@ -777,7 +803,7 @@ impl Game {
                 let Some((cx, cy, _, by)) = self.target_pos(c) else { break };
                 pts.push((cx, cy - by));
                 self.hurt_target(c, (dmg * k).round(), Target::Player, HurtOpt { poise: Some(dmg), ..Default::default() });
-                self.fx.burst("soulLight", cx, cy - 20.0, 8, BurstOpt { speed: Some(120.0), ..Default::default() });
+                self.fx.px.play(Px::Zap, cx, cy).z(by).tint([170, 255, 235, 255]).dir((cy - p.a.y).atan2(cx - p.a.x));
                 k *= 0.8;
                 let mut nx = None;
                 let mut nd = 160.0;
@@ -805,9 +831,7 @@ impl Game {
     }
 
     pub fn explode(&mut self, x: f32, y: f32, r: f32, dmg: f32) {
-        self.fx.burst("ember", x, y, 30, BurstOpt { speed: Some(200.0), ..Default::default() });
-        self.fx.burst("smoke", x, y, 10, BurstOpt { speed: Some(80.0), up: Some(40.0), g: Some(-40.0), life: Some(0.9), ..Default::default() });
-        self.fx.ring(x, y, 6.0, r, 0.3, [1.0, 0.6, 0.3]);
+        self.fx.px.play(Px::Boom, x, y).scale((r / 80.0).clamp(0.45, 1.6)).gain(1.2);
         self.shake(6.0);
         self.sfx("cannon");
         self.flash_light = Some((x, y, 0.25));
@@ -839,9 +863,8 @@ impl Game {
             s.r = 6.0;
             s.life = 0.7;
             self.shots.push(s);
-            let (mx, my) = (p.a.x + ang.cos() * 28.0, p.a.y + ang.sin() * 20.0);
-            self.fx.burst("smoke", mx, my, 5, BurstOpt { speed: Some(40.0), up: Some(20.0), g: Some(-20.0), life: Some(0.6), ..Default::default() });
-            self.fx.burst("spark", mx, my - 24.0, 4, BurstOpt { speed: Some(120.0), ..Default::default() });
+            let (mx, my) = (p.a.x + ang.cos() * 14.0, p.a.y + ang.sin() * 10.0);
+            self.fx.px.play(Px::Muzzle, mx, my).z(26.0).dir(ang).front(6.0).gain(1.2);
             self.sfx("pistol");
             self.shake(3.0);
         }
@@ -865,6 +888,8 @@ impl Game {
         p.iframes = 0.45;
         let (x, y) = (p.a.x, p.a.y);
         self.fx.burst("blood", x, y - 20.0, 8, BurstOpt { speed: Some(100.0), ..Default::default() });
+        let from_a = o.push.1.atan2(o.push.0);
+        self.fx.px.play(if o.heavy { Px::Blunt } else { Px::Hit }, x, y).z(22.0).dir(from_a).tint([255, 150, 140, 255]).front(2.0);
         self.shake(if o.heavy { 8.0 } else { 4.0 });
         self.sfx("hurt");
         if o.push != (0.0, 0.0) {
@@ -890,7 +915,10 @@ impl Game {
         self.flash([1.0, 1.0, 1.0], 0.25);
         self.shake(4.0);
         if let Some((x, y, _, _)) = self.target_pos(from) {
-            self.fx.burst("spark", x, y - 28.0, 18, BurstOpt { speed: Some(220.0), ..Default::default() });
+            let (px, py) = (self.player.a.x, self.player.a.y);
+            // zwischen den Klingen
+            let (mx, my) = (px + (x - px) * 0.45, py + (y - py) * 0.45);
+            self.fx.px.play(Px::Parry, mx, my).z(26.0).dir((y - py).atan2(x - px)).front(4.0).gain(1.2);
         }
         self.ui.toast("Pariert! Jetzt zustechen.");
     }
@@ -969,7 +997,7 @@ impl Game {
                 e.state = ES::Chase;
                 e.st_t = 0.0;
                 self.sfx("roar");
-                self.fx.burst("spark", e.a.x, e.a.y - 20.0, 10, BurstOpt { speed: Some(120.0), ..Default::default() });
+                self.fx.px.play(Px::Poof, e.a.x, e.a.y + 1.0).scale(0.8);
                 let n = self.edefs[e.def].name;
                 self.ui.toast(&format!("{n}!"));
             }
@@ -1083,16 +1111,24 @@ impl Game {
                         self.sfx(if shot == "cannon" { "cannon" } else if shot == "soul" { "zap" } else { "pistol" });
                     } else if aoe > 0.0 {
                         let (ix, iy) = (e.a.x + e.a.fx * 32.0, e.a.y + e.a.fy * 24.0);
-                        self.fx.ring(ix, iy, 8.0, aoe, 0.35, [0.8, 0.75, 0.6]);
-                        self.fx.burst("dust", ix, iy, 14, BurstOpt { speed: Some(140.0), ..Default::default() });
+                        self.fx.px.play(Px::Slam, ix, iy).scale((aoe / 104.0).clamp(0.45, 1.5));
                         self.shake(6.0);
                         self.sfx("crush");
                         if (px - ix).hypot((py - iy) * 1.3) < aoe {
                             self.hurt_player(dmg, Target::Enemy(idx), HurtOpt { heavy: true, push: (e.a.fx * 28.0, e.a.fy * 28.0), ..Default::default() });
                         }
                     } else {
-                        let col = if burn { [1.0, 0.6, 0.3, 1.0] } else { [0.85, 0.85, 0.9, 1.0] };
-                        self.fx.slash(e.a.x + e.a.fx * 16.0, e.a.y - 20.0 + e.a.fy * 12.0, e.a.fy.atan2(e.a.fx), reach * 0.8, col, 1.4);
+                        // PixelFX: Bestien kratzen, Figuren hauen (rötlicher Stahl, glühend bei Feuergegnern)
+                        let ea = e.a.fy.atan2(e.a.fx);
+                        let sc = (reach / 60.0).clamp(0.7, 1.6);
+                        let tint = if burn { [255, 170, 110, 255] } else if chill { [190, 225, 255, 255] } else { [255, 205, 195, 255] };
+                        let i = self.fx.px.play(if is_beast { Px::Claw } else { Px::Slash }, e.a.x + e.a.fx * 6.0, e.a.y + e.a.fy * 6.0);
+                        if is_beast {
+                            i.dir(ea).z(e.body_y * 0.6);
+                        } else {
+                            i.face(ea);
+                        }
+                        i.scale(sc).tint(tint).front(8.0);
                         self.sfx("swing");
                         if e.a.in_arc(px, py, 12.0, reach, 1.0) && self.hurt_player(dmg, Target::Enemy(idx), HurtOpt::default()) {
                             if chill {
@@ -1100,6 +1136,7 @@ impl Game {
                             }
                             if burn {
                                 self.fx.burst("ember", px, py - 20.0, 6, BurstOpt::default());
+                                self.fx.px.play(Px::Brazier, px, py + 1.0).scale(0.45).life(0.9).light(0.0);
                             }
                         }
                     }
@@ -1195,6 +1232,16 @@ impl Game {
             (e.a.x, e.a.y, d.pearls * (1.0 + 0.4 * e.lvl as f32), matches!(d.body, Body::Sheet(s) if s.contains("kel")))
         };
         self.sfx(if skel { "bones" } else { "crush" });
+        // PixelFX: Skelette zersplittern in ihrer Gestalt, Figuren geben ihre Seele frei, Bestien verpuffen
+        let beast = matches!(self.edefs[self.enemies[i].def].body, Body::Beast(_));
+        if skel {
+            self.fx.px.play(Px::Shatter, x, y).front(1.0);
+        } else if beast {
+            self.fx.px.play(Px::Poof, x, y + 1.0).scale(1.1);
+            self.fx.px.play(Px::Soul, x, y).scale(0.8).gain(0.9);
+        } else {
+            self.fx.px.play(Px::Soul, x, y).front(1.0);
+        }
         let k = if self.save.origin == "schmuggler" { 1.2 } else { 1.0 } * if self.save.gift == "coin" { 1.15 } else { 1.0 };
         let charm = if self.save.items.contains_key("driftCharm") { 1.15 } else { 1.0 };
         self.gain_pearls((pearls * k * charm * (1.0 + 0.25 * self.save.ng as f32)).round() as i64, Some((x, y)));
@@ -1296,7 +1343,13 @@ impl Game {
                                 self.hurt_target(t, s.dmg, Target::Player, o);
                             }
                             if s.on_hit == OnHit::Splash {
-                                self.fx.burst("splash", s.x, s.y, 6, BurstOpt::default());
+                                self.fx.px.play(Px::Splash, s.x, s.y).scale(0.5);
+                            } else if s.kind == "bullet" {
+                                self.fx.px.play(Px::Bullet, s.x, s.y).z(s.z).dir(s.vy.atan2(s.vx) + std::f32::consts::PI);
+                            } else if s.kind == "shard" {
+                                self.fx.px.play(Px::IceShatter, s.x, s.y + 1.0).scale(0.45);
+                            } else if s.kind == "soul" {
+                                self.fx.px.play(Px::Zap, s.x, s.y).z(s.z).tint([150, 255, 220, 255]).scale(0.8);
                             }
                         }
                     }

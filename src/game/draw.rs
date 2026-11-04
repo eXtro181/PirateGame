@@ -93,7 +93,8 @@ impl Game {
             let hov = self.hover == Hover::T(Target::Enemy(i)) || self.lock == Some(Target::Enemy(i));
             let fl = if e.a.flash > 0.0 { flags::FLASH } else { 0 } | if hov { flags::OUTLINE } else { 0 };
             let dead_a = if e.state == ES::Dead { (1.0 - (e.dead_t - 1.5).max(0.0) / 1.5).max(0.0) } else { 1.0 };
-            if dead_a <= 0.0 {
+            // tote Skelette zersplittern (PixelFX zeichnet ihre Gestalt), der Leichnam bleibt nicht liegen
+            if dead_a <= 0.0 || (e.state == ES::Dead && matches!(d.body, Body::Sheet(s) if s.contains("kel"))) {
                 continue;
             }
             let tint = if e.elite { [255, 214, 200, (255.0 * dead_a) as u8] } else { [255, 255, 255, (255.0 * dead_a) as u8] };
@@ -206,13 +207,12 @@ impl Game {
             }
             let k = 0.6 + 0.4 * (it.t * 3.0).sin();
             let c = item(it.item).rarity.col();
-            f.glow(it.x, it.y - 10.0 - (it.t * 2.0).sin() * 3.0, 7.0 + k * 3.0, [c[0], c[1], c[2], (160.0 * k) as u8]);
-            f.glow(it.x, it.y - 10.0, 3.0, [255, 255, 240, 220]);
-            for j in 0..3 {
-                let a = it.t * 1.3 + j as f32 * 2.1;
-                let r = ((it.t * 0.8 + j as f32 * 0.33) % 1.0) * 26.0;
-                f.glow(it.x + a.sin() * 6.0, it.y - 12.0 - r, 1.5, [c[0], c[1], c[2], 180]);
+            // PixelFX-Beutestrahl in der Farbe der Seltenheit, darunter ein kleiner Glanz
+            let tint = [((c[0] as u16 + 255) / 2) as u8, ((c[1] as u16 + 255) / 2) as u8, ((c[2] as u16 + 255) / 2) as u8, 215];
+            if !crate::pfx::draw_loop(f, &art.pfx, Px::Loot, it.x, it.y, 0.0, it.t + i as f32 * 0.37, 0.5, tint, 1.0) {
+                f.glow(it.x, it.y - 10.0 - (it.t * 2.0).sin() * 3.0, 7.0 + k * 3.0, [c[0], c[1], c[2], (160.0 * k) as u8]);
             }
+            f.glow(it.x, it.y - 6.0, 3.0, [255, 255, 240, 200]);
             if self.hover == Hover::Item(i) {
                 f.glow(it.x, it.y - 10.0, 18.0, [255, 230, 160, 80]);
             }
@@ -221,7 +221,10 @@ impl Game {
         // Perlenfleck
         if let Some(st) = &self.save.stain {
             let k = 0.6 + 0.4 * (self.stain_t * 3.0).sin();
-            f.glow(st.x, st.y - 6.0, 12.0 + 4.0 * k, [95, 242, 200, (150.0 * k) as u8]);
+            // verlorene Perlen: eine kleine Geisterflamme an der Stelle des Todes
+            if !crate::pfx::draw_loop(f, &art.pfx, Px::Spirit, st.x, st.y, 0.0, self.stain_t, 0.6, [255; 4], 1.1) {
+                f.glow(st.x, st.y - 6.0, 12.0 + 4.0 * k, [95, 242, 200, (150.0 * k) as u8]);
+            }
             f.glow(st.x, st.y - 8.0, 3.0, [200, 255, 240, 255]);
             f.light(LightDef { x: st.x, y: st.y, z: 20.0, r: 90.0, col: [0.35, 1.0, 0.82], flicker: 0.2 });
         }
@@ -327,8 +330,8 @@ impl Game {
             }
         }
         self.draw_critters(f);
-        self.fx.draw(f);
-        self.fx.lights(f);
+        self.fx.draw(f, &art.pfx);
+        self.fx.lights(f, &art.pfx);
         // Nebelschichten je Zone
         let z = self.env_key();
         let (fc, fa, sp) = match z {

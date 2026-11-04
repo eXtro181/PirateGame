@@ -101,6 +101,27 @@ pub struct Boss {
     pub h: f32,
 }
 
+/// PixelFX-Effekt für einen Flächenangriff im Element des Bosses (Ring um den Boss oder Einschlag)
+fn el_fx(el: &str) -> Px {
+    match el {
+        "fire" => Px::FireRing,
+        "ice" => Px::Frost,
+        "earth" => Px::Spike,
+        "sea" => Px::Geyser,
+        "spider" => Px::Acid,
+        _ => Px::Slam,
+    }
+}
+/// Färbung für Effekte ohne eigenes Element (Wind blassblau, Knochen fahlgrün)
+fn el_tint(el: &str) -> [u8; 4] {
+    match el {
+        "wind" => [190, 220, 255, 255],
+        "bone" => [190, 255, 220, 255],
+        "spider" => [210, 255, 200, 255],
+        _ => [255; 4],
+    }
+}
+
 fn part(el: &str) -> &'static str {
     match el {
         "fire" => "ember",
@@ -111,6 +132,13 @@ fn part(el: &str) -> &'static str {
         _ => "earth",
     }
 }
+/// Element-Farbe (linear) als Färbung für die stählernen Hiebe der Bosse
+fn boss_tint(ec: [f32; 3]) -> [u8; 4] {
+    let m = ec[0].max(ec[1]).max(ec[2]).max(0.01);
+    let f = |c: f32| (150.0 + 105.0 * (c / m)).min(255.0) as u8;
+    [f(ec[0]), f(ec[1]), f(ec[2]), 255]
+}
+
 fn shot_kind(el: &str) -> &'static str {
     match el {
         "fire" => "fireball",
@@ -298,7 +326,16 @@ impl Game {
         b.state = BS::Intro;
         b.st_t = 0.0;
         let (x, y, el) = (b.a.x, b.a.y, b.el);
-        self.fx.rise(part(el), x, y, 40, 60.0, Some(kind_col(part(el))));
+        self.fx.rise(part(el), x, y, 24, 60.0, Some(kind_col(part(el))));
+        let k = match el {
+            "fire" => Px::Pillar,
+            "ice" => Px::Frost,
+            "wind" => Px::Lightning,
+            "earth" => Px::Spike,
+            "sea" => Px::Geyser,
+            _ => Px::Slam,
+        };
+        self.fx.px.play(k, x, y + 2.0).scale(1.3).tint(el_tint(el));
         self.sfx("roar");
         self.boss = Some(i);
         self.boss_ghost = self.bosses[i].hp;
@@ -380,9 +417,10 @@ impl Game {
                         self.flash([0.6, 1.0, 0.8], 0.9);
                         self.shake(22.0);
                         self.sfx("roar");
-                        self.fx.burst("bone", b.a.x, b.a.y - 60.0, 80, BurstOpt { speed: Some(340.0), ..Default::default() });
-                        self.fx.burst("dust", b.a.x, b.a.y, 40, BurstOpt { speed: Some(220.0), ..Default::default() });
-                        self.fx.ring(b.a.x, b.a.y, 30.0, 320.0, 0.9, [0.6, 1.0, 0.8]);
+                        self.fx.burst("bone", b.a.x, b.a.y - 60.0, 50, BurstOpt { speed: Some(340.0), ..Default::default() });
+                        self.fx.px.play(Px::Slam, b.a.x, b.a.y).scale(2.4).tint([200, 255, 225, 255]);
+                        self.fx.px.play(Px::Shatter, b.a.x, b.a.y).scale(2.2);
+                        self.fx.px.play(Px::Soul, b.a.x, b.a.y).scale(2.0);
                         self.ui.banner(MEGA_NAME2, "Was von Malakor bleibt, erhebt sich", "boss", 3.4);
                     }
                 } else if b.st_t > 4.0 {
@@ -404,8 +442,14 @@ impl Game {
                     self.flash([1.0, 1.0, 1.0], 0.9);
                     self.shake(14.0);
                     self.sfx("roar");
-                    self.fx.burst(part(b.el), b.a.x, b.a.y - 40.0, 50, BurstOpt { speed: Some(280.0), col: Some(kind_col(part(b.el))), ..Default::default() });
-                    self.fx.ring(b.a.x, b.a.y, 20.0, 240.0, 0.8, el_col(b.el));
+                    self.fx.burst(part(b.el), b.a.x, b.a.y - 40.0, 30, BurstOpt { speed: Some(280.0), col: Some(kind_col(part(b.el))), ..Default::default() });
+                    let k = match b.el {
+                        "fire" => Px::Pillar,
+                        "wind" => Px::Lightning,
+                        e => el_fx(e),
+                    };
+                    self.fx.px.play(k, b.a.x, b.a.y + 2.0).scale(1.6).tint(el_tint(b.el)).gain(1.2);
+                    self.fx.px.play(Px::Slam, b.a.x, b.a.y).scale(1.5).tint(el_tint(b.el));
                     let n = b.name.clone();
                     self.ui.banner(&n, "Die zweite Gestalt", "boss", 2.6);
                 }
@@ -612,8 +656,9 @@ impl Game {
                         a.tick -= dt;
                         if a.tick <= 0.0 {
                             a.tick = 0.12;
-                            let ec = el_col(b.el);
-                            self.fx.slash(b.a.x, b.a.y - 40.0, a.t * 9.0, a.o.r, [ec[0], ec[1], ec[2], 1.0], 2.0);
+                            let sa = a.t * 9.0;
+                            let sc = (a.o.r / 70.0).clamp(1.0, 2.6);
+                            self.fx.px.play(Px::Slash2, b.a.x + sa.cos() * 10.0, b.a.y + sa.sin() * 8.0).face(sa).scale(sc).tint([200, 255, 225, 255]).front(10.0);
                             self.sfx("swing");
                             if b.a.dist(px, py) < a.o.r + 10.0 && a.hits < 4 {
                                 a.hits += 1;
@@ -643,8 +688,7 @@ impl Game {
                         b.a.anim = if b.human { "roll" } else { "idle" };
                         b.a.frame = k * 4.0;
                         if k >= 1.0 {
-                            let ec = el_col(b.el);
-                            self.slam_hit(idx, b, a.tx, a.ty, a.o.r, ec);
+                            self.slam_hit(idx, b, a.tx, a.ty, a.o.r);
                             if !b.human && b.mega {
                                 // Knochenkraken: Splitterring beim Auftauchen
                                 for i in 0..10 {
@@ -707,8 +751,7 @@ impl Game {
                 }
                 if a.o.double && a.n == 0 && a.t > 0.45 {
                     a.n = 1;
-                    let ec = el_col(b.el);
-                    self.slam_hit(idx, b, px, py, a.o.r, ec);
+                    self.slam_hit(idx, b, px, py, a.o.r);
                 }
                 if a.t >= a.rec {
                     Self::boss_idle(b);
@@ -727,11 +770,10 @@ impl Game {
         a.t = 0.0;
     }
 
-    fn slam_hit(&mut self, idx: usize, b: &Boss, x: f32, y: f32, r: f32, ec: [f32; 3]) {
+    fn slam_hit(&mut self, idx: usize, b: &Boss, x: f32, y: f32, r: f32) {
         let (px, py) = (self.player.a.x, self.player.a.y);
-        self.fx.ring(x, y, 8.0, r, 0.4, ec);
-        self.fx.burst(part(b.el), x, y, 24, BurstOpt { speed: Some(200.0), col: Some(kind_col(part(b.el))), ..Default::default() });
-        self.fx.burst("dust", x, y, 12, BurstOpt { speed: Some(140.0), ..Default::default() });
+        self.fx.burst(part(b.el), x, y, 12, BurstOpt { speed: Some(200.0), col: Some(kind_col(part(b.el))), ..Default::default() });
+        self.fx.px.play(Px::Slam, x, y).scale((r / 100.0).clamp(0.7, 2.6)).tint(el_tint(b.el));
         self.shake(12.0);
         self.sfx("crush");
         if (px - x).hypot((py - y) * 1.3) < r {
@@ -750,7 +792,9 @@ impl Game {
                 b.a.face(px - b.a.x, py - b.a.y);
                 let (fx, fy) = (b.a.fx, b.a.fy);
                 self.boss_move(b, fx * 16.0, fy * 16.0);
-                self.fx.slash(b.a.x + fx * 20.0, b.a.y - 28.0 + fy * 12.0, fy.atan2(fx), a.o.reach * 0.8, [ec[0], ec[1], ec[2], 1.0], 2.0);
+                let sc = (a.o.reach / 60.0).clamp(1.0, 2.6);
+                let i = self.fx.px.play(if a.o.heavy { Px::Slash2 } else { Px::Slash }, b.a.x + fx * 10.0, b.a.y + fy * 10.0);
+                i.face(fy.atan2(fx)).scale(sc).front(10.0).tint(boss_tint(ec));
                 if b.a.in_arc(px, py, 12.0, a.o.reach, 1.15) {
                     self.hurt_player(Self::boss_dmg(b, if a.o.heavy { 1.2 } else { 0.8 }), me, HurtOpt { heavy: a.o.heavy, push: (fx * 16.0, fy * 16.0), ..Default::default() });
                     self.element_hit(b.el);
@@ -758,7 +802,8 @@ impl Game {
                 self.sfx("swing");
             }
             AK::Sweep => {
-                self.fx.slash(b.a.x, b.a.y - 40.0, a.ang, a.o.reach, [ec[0], ec[1], ec[2], 1.0], 3.0);
+                let sc = (a.o.reach / 60.0).clamp(1.2, 3.0);
+                self.fx.px.play(Px::Slash2, b.a.x + a.ang.cos() * 10.0, b.a.y + a.ang.sin() * 10.0).face(a.ang).scale(sc).front(12.0).tint(boss_tint(ec)).gain(1.15);
                 let (dx, dy) = (px - b.a.x, py - b.a.y);
                 let d = dx.hypot(dy);
                 let da = ((dy.atan2(dx) - a.ang + std::f32::consts::PI * 3.0) % std::f32::consts::TAU - std::f32::consts::PI).abs();
@@ -770,7 +815,7 @@ impl Game {
                 Self::boss_recover(b, a, 0.9);
             }
             AK::Slam => {
-                self.slam_hit(idx, b, a.tx, a.ty, a.o.r, ec);
+                self.slam_hit(idx, b, a.tx, a.ty, a.o.r);
                 Self::boss_recover(b, a, if a.o.double { 1.3 } else { 1.0 });
             }
             AK::Volley => {
@@ -796,8 +841,15 @@ impl Game {
                 self.sfx(if b.el == "fire" { "cannon" } else { "tide" });
             }
             AK::Nova => {
-                self.fx.ring(b.a.x, b.a.y, 12.0, a.o.r, 0.5, ec);
-                self.fx.burst(part(b.el), b.a.x, b.a.y, 40, BurstOpt { speed: Some(300.0), col: Some(kind_col(part(b.el))), ..Default::default() });
+                self.fx.burst(part(b.el), b.a.x, b.a.y, 20, BurstOpt { speed: Some(300.0), col: Some(kind_col(part(b.el))), ..Default::default() });
+                let k = match b.el {
+                    "wind" => Px::Slam,
+                    e => el_fx(e),
+                };
+                self.fx.px.play(k, b.a.x, b.a.y + 1.0).scale((a.o.r / 110.0).clamp(0.8, 2.8)).tint(el_tint(b.el)).gain(1.1);
+                if b.el == "wind" {
+                    self.fx.px.play(Px::Zap, b.a.x, b.a.y).z(40.0).scale(1.6);
+                }
                 if (px - b.a.x).hypot((py - b.a.y) * 1.3) < a.o.r {
                     self.hurt_player(Self::boss_dmg(b, 1.0), me, HurtOpt { heavy: true, unparryable: true, push: ((px - b.a.x) * 0.3, (py - b.a.y) * 0.3), poise: None });
                     if a.o.slow {
@@ -846,7 +898,7 @@ impl Game {
             }
             AK::Leap => {
                 self.sfx("heavy");
-                self.fx.burst("dust", b.a.x, b.a.y, 14, BurstOpt { speed: Some(120.0), ..Default::default() });
+                self.fx.px.play(Px::Land, b.a.x, b.a.y).scale(1.6);
             }
             _ => {}
         }
@@ -856,32 +908,32 @@ impl Game {
     fn boss_impact(&mut self, idx: usize, b: &Boss, x: f32, y: f32, r: f32, m: f32, bolt: bool) {
         let (px, py) = (self.player.a.x, self.player.a.y);
         if bolt || b.el == "wind" {
-            self.fx.bolt(&[(x + rr(-12.0, 12.0), y - 280.0), (x, y)], [0.8, 0.9, 1.0, 1.0], 0.25);
+            self.fx.px.play(Px::Lightning, x, y + 1.0).scale((r / 70.0).clamp(0.8, 1.6)).gain(1.2);
             self.flash([0.8, 0.9, 1.0], 0.12);
             self.lightning = 0.5;
             self.sfx("zap");
         } else if b.el == "sea" {
             // Geysir aus dem Meeresgrund
-            self.fx.burst("splash", x, y, 30, BurstOpt { speed: Some(90.0), up: Some(420.0), ..Default::default() });
-            self.fx.burst("splash", x, y, 12, BurstOpt { speed: Some(200.0), up: Some(120.0), ..Default::default() });
+            self.fx.px.play(Px::Geyser, x, y + 1.0).scale((r / 60.0).clamp(0.9, 1.8));
             self.sfx("tide");
         } else if b.el == "bone" {
             // Knochenarm bricht aus dem Grund
-            self.fx.burst("bone", x, y, 16, BurstOpt { speed: Some(160.0), up: Some(220.0), ..Default::default() });
-            self.fx.burst("dust", x, y, 10, BurstOpt { speed: Some(120.0), ..Default::default() });
+            self.fx.burst("bone", x, y, 12, BurstOpt { speed: Some(160.0), up: Some(220.0), ..Default::default() });
+            self.fx.px.play(Px::Spike, x, y + 1.0).scale((r / 70.0).clamp(0.7, 1.5)).tint([235, 245, 225, 255]);
             self.sfx("crush");
         } else if b.el == "fire" {
-            self.fx.burst("ember", x, y, 18, BurstOpt { speed: Some(180.0), ..Default::default() });
+            self.fx.px.play(Px::Pillar, x, y + 1.0).scale((r / 60.0).clamp(0.6, 1.3)).speed(1.3);
             self.sfx("cannon");
         } else if b.el == "ice" {
-            self.fx.burst("ice", x, y, 16, BurstOpt { speed: Some(140.0), up: Some(160.0), ..Default::default() });
+            self.fx.px.play(Px::IceShatter, x, y + 1.0).scale((r / 70.0).clamp(0.6, 1.4));
             self.sfx("parried");
+        } else if b.el == "spider" {
+            self.fx.px.play(Px::Acid, x, y + 1.0).scale((r / 60.0).clamp(0.6, 1.4));
+            self.sfx("tide");
         } else {
-            self.fx.burst("earth", x, y, 16, BurstOpt { speed: Some(160.0), up: Some(180.0), ..Default::default() });
-            self.fx.burst("dust", x, y, 8, BurstOpt { speed: Some(100.0), ..Default::default() });
+            self.fx.px.play(Px::Spike, x, y + 1.0).scale((r / 70.0).clamp(0.6, 1.4));
             self.sfx("crush");
         }
-        self.fx.ring(x, y, 4.0, r, 0.3, el_col(b.el));
         if (px - x).hypot((py - y) * 1.3) < r + 6.0 {
             self.hurt_player(Self::boss_dmg(b, m), Target::Boss(idx), HurtOpt { unparryable: true, ..Default::default() });
             self.element_hit(b.el);
@@ -894,6 +946,7 @@ impl Game {
             "fire" => {
                 let (x, y) = (self.player.a.x, self.player.a.y);
                 self.fx.burst("ember", x, y - 20.0, 6, BurstOpt::default());
+                self.fx.px.play(Px::Brazier, x, y + 1.0).scale(0.45).life(1.0);
             }
             "earth" => self.player.st = (self.player.st - 15.0).max(0.0),
             _ => {}
@@ -910,7 +963,7 @@ impl Game {
         b.a.flash = 0.08;
         let (x, y, el) = (b.a.x, b.a.y, b.el);
         let by = b.body_y;
-        self.fx.burst(part(el), x, y - by, 6, BurstOpt { speed: Some(120.0), col: Some(kind_col(part(el))), ..Default::default() });
+        self.fx.burst(part(el), x, y - by, 4, BurstOpt { speed: Some(120.0), col: Some(kind_col(part(el))), ..Default::default() });
         self.sfx("hit");
         if self.bosses[i].mega && self.bosses[i].phase == 1 && self.bosses[i].hp <= 0.0 {
             // Malakor fällt – und steht als Skelettkraken wieder auf
@@ -958,8 +1011,10 @@ impl Game {
             b.hp = 0.0;
             (b.a.x, b.a.y, b.el, b.mega, b.key)
         };
-        self.fx.burst(part(el), x, y - 40.0, 80, BurstOpt { speed: Some(320.0), col: Some(kind_col(part(el))), ..Default::default() });
-        self.fx.rise("soul", x, y, 60, 80.0, None);
+        self.fx.burst(part(el), x, y - 40.0, 40, BurstOpt { speed: Some(320.0), col: Some(kind_col(part(el))), ..Default::default() });
+        self.fx.rise("soul", x, y, 30, 80.0, None);
+        self.fx.px.play(Px::Soul, x, y).scale(2.2).gain(1.2);
+        self.fx.px.play(Px::Slam, x, y).scale(2.0).tint(el_tint(el));
         self.flash([1.0, 1.0, 1.0], 1.0);
         self.shake(20.0);
         self.sfx("death");

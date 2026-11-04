@@ -244,7 +244,7 @@ impl Game {
                     if sailing && m.k != SK::Jelly && d < def.aggro {
                         m.st = MS::Rise;
                         m.st_t = 0.0;
-                        self.fx.burst("splash", m.x, m.y, 14, BurstOpt { speed: Some(110.0), up: Some(160.0), ..Default::default() });
+                        self.fx.px.play(Px::Splash, m.x, m.y).scale((def.r / 40.0).clamp(0.8, 2.0));
                         self.sfx("tide");
                     }
                     if sailing && m.k == SK::Jelly && d < 120.0 {
@@ -302,7 +302,7 @@ impl Game {
         }
         self.sea_slams.retain(|s| s.2 > 0.0);
         for (tx, ty, dmg) in hits {
-            self.fx.burst("splash", tx, ty, 18, BurstOpt { speed: Some(150.0), up: Some(220.0), ..Default::default() });
+            self.fx.px.play(Px::Splash, tx, ty).scale(1.4);
             if self.sailing && (self.ship.hull.x - tx).hypot(self.ship.hull.y - ty) < 62.0 {
                 self.shake(6.0);
                 self.ship_damage(dmg);
@@ -340,7 +340,8 @@ impl Game {
                     m.cool = 2.6;
                     m.st = MS::Strike;
                     m.st_t = 0.0;
-                    self.fx.burst("splash", m.x, m.y, 16, BurstOpt { speed: Some(140.0), up: Some(180.0), ..Default::default() });
+                    self.fx.px.play(Px::Splash, m.x, m.y).scale(1.3);
+                    self.fx.px.play(Px::Blunt, (m.x + sx) * 0.5, (m.y + sy) * 0.5).z(20.0).scale(1.2);
                     self.sfx("crash");
                     self.ship_damage(dmg);
                 }
@@ -402,7 +403,7 @@ impl Game {
                             self.ship_damage(dmg);
                             self.shake(7.0);
                         }
-                        self.fx.burst("splash", m.aim.0, m.aim.1, 14, BurstOpt { speed: Some(130.0), up: Some(150.0), ..Default::default() });
+                        self.fx.px.play(Px::Splash, m.aim.0, m.aim.1).scale(1.3);
                         self.sfx("crash");
                         m.st = MS::Hunt;
                         m.st_t = 0.0;
@@ -429,7 +430,7 @@ impl Game {
                 if d < def.r + 34.0 && m.cool <= 0.0 {
                     m.cool = 1.2;
                     self.ship_damage(dmg);
-                    self.fx.burst("spark", m.x, m.y - 10.0, 8, BurstOpt { speed: Some(80.0), col: Some([0.5, 0.9, 1.0, 1.0]), ..Default::default() });
+                    self.fx.px.play(Px::Zap, m.x, m.y).z(10.0).tint([150, 230, 255, 255]);
                 }
             }
         }
@@ -453,12 +454,13 @@ impl Game {
             let p = species(k).pearls * (1.0 + 0.4 * lvl as f32) * (1.0 + 0.25 * self.save.ng as f32);
             self.gain_pearls(p.round() as i64, Some((x, y)));
             self.sfx("death");
-            self.fx.burst("splash", x, y, 22, BurstOpt { speed: Some(160.0), up: Some(200.0), ..Default::default() });
+            self.fx.px.play(Px::Splash, x, y).scale(1.6);
+            self.fx.px.play(Px::Soul, x, y).scale(1.2).gain(0.9);
             if matches!(k, SK::Bones) {
                 self.fx.burst("bone", x, y, 14, BurstOpt::default());
             }
         } else {
-            self.fx.burst("splash", x, y, 6, BurstOpt { speed: Some(90.0), up: Some(90.0), ..Default::default() });
+            self.fx.px.play(Px::Splash, x, y).scale(0.7);
         }
     }
 

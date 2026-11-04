@@ -69,6 +69,8 @@ pub struct Gpu {
     _bgl0: wgpu::BindGroupLayout,
     bgl_scene: wgpu::BindGroupLayout,
     bgl_post: wgpu::BindGroupLayout,
+    /// Überlagerung: G-Puffer (Normale+Höhe, Leuchten) für die Verdeckung der PixelFX-Effekte
+    bgl_gb: wgpu::BindGroupLayout,
     bg0: wgpu::BindGroup,
     scene_mod: wgpu::ShaderModule,
     post_mod: wgpu::ShaderModule,
@@ -93,6 +95,7 @@ pub struct Gpu {
     bg_scene: Option<wgpu::BindGroup>,
     targets: Option<Targets>,
     bg_light: Option<wgpu::BindGroup>,
+    bg_gb: Option<wgpu::BindGroup>,
     bg_bright: Option<wgpu::BindGroup>,
     bg_blur_h: Option<wgpu::BindGroup>,
     bg_blur_v: Option<wgpu::BindGroup>,
@@ -261,6 +264,8 @@ impl Gpu {
         let post_mod = d.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("post"), source: wgpu::ShaderSource::Wgsl(Cow::Owned(post_src)) });
         let pl_scene = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("pl_scene"), bind_group_layouts: &[&bgl0, &bgl_scene], push_constant_ranges: &[] });
         let pl_post = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("pl_post"), bind_group_layouts: &[&bgl0, &bgl_post], push_constant_ranges: &[] });
+        let bgl_gb = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor { label: Some("bgl_gb"), entries: &[tex_entry(0, Dm::D2, true), tex_entry(1, Dm::D2, true)] });
+        let pl_over = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("pl_over"), bind_group_layouts: &[&bgl0, &bgl_scene, &bgl_gb], push_constant_ranges: &[] });
         let all = wgpu::ColorWrites::ALL;
                 let p_gbuf = pipe(d, "gbuf", &pl_scene, &scene_mod, "vs_world", "fs_gbuf", true, &[ct(ALB, None, all), ct(NRM, None, all), ct(hdr, None, all)]);
         let p_decal = pipe(
@@ -275,8 +280,8 @@ impl Gpu {
         );
         // Überlagerung schreibt nur Farbe: Alpha der Szene trägt die Bodenzeile für die Tiefenschärfe
         let col = wgpu::ColorWrites::COLOR;
-        let p_over_a = pipe(d, "over_a", &pl_scene, &scene_mod, "vs_world", "fs_overlay", true, &[ct(hdr, Some(PREMUL), col)]);
-        let p_over_add = pipe(d, "over_add", &pl_scene, &scene_mod, "vs_world", "fs_overlay", true, &[ct(hdr, Some(ADD), col)]);
+        let p_over_a = pipe(d, "over_a", &pl_over, &scene_mod, "vs_world", "fs_overlay", true, &[ct(hdr, Some(PREMUL), col)]);
+        let p_over_add = pipe(d, "over_add", &pl_over, &scene_mod, "vs_world", "fs_overlay", true, &[ct(hdr, Some(ADD), col)]);
         let p_light = pipe(d, "light", &pl_post, &post_mod, "vs_full", "fs_light", false, &[ct(hdr, None, all)]);
         let p_bright = pipe(d, "bright", &pl_post, &post_mod, "vs_full", "fs_bright", false, &[ct(hdr, None, all)]);
         let p_blur_h = pipe(d, "blur_h", &pl_post, &post_mod, "vs_full", "fs_blur_h", false, &[ct(hdr, None, all)]);
@@ -299,6 +304,7 @@ impl Gpu {
             _bgl0: bgl0,
             bgl_scene,
             bgl_post,
+            bgl_gb,
             bg0,
             scene_mod,
             post_mod,
@@ -323,6 +329,7 @@ impl Gpu {
             bg_scene: None,
             targets: None,
             bg_light: None,
+            bg_gb: None,
             bg_bright: None,
             bg_blur_h: None,
             bg_blur_v: None,
@@ -450,6 +457,14 @@ fn prepare(mut gpu: ResMut<Gpu>, mut p: ResMut<Packed>, dev: Res<RenderDevice>, 
         // vierte Textur im Lichtdurchgang: Rauschen für die ziehenden Wolkenschatten
         let noise_l = view2(&gpu.noise);
         gpu.bg_light = Some(post_bg(d, &gpu.bgl_post, [&t.alb, &t.nrm, &t.emi, &noise_l]));
+        gpu.bg_gb = Some(d.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("bg_gb"),
+            layout: &gpu.bgl_gb,
+            entries: &[
+                wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(&t.nrm) },
+                wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&t.emi) },
+            ],
+        }));
         gpu.bg_bright = Some(post_bg(d, &gpu.bgl_post, [&t.lit, &t.lit, &t.lit, &t.lit]));
         gpu.bg_blur_h = Some(post_bg(d, &gpu.bgl_post, [&t.bright, &t.bright, &t.bright, &t.bright]));
         gpu.bg_blur_v = Some(post_bg(d, &gpu.bgl_post, [&t.blur_a, &t.blur_a, &t.blur_a, &t.blur_a]));
@@ -576,6 +591,7 @@ impl Node for SwNode {
             pass.set_pipeline(&gpu.p_light);
             pass.draw(0..3, 0..1);
             pass.set_bind_group(1, gpu.bg_scene.as_ref().unwrap(), &[]);
+            pass.set_bind_group(2, gpu.bg_gb.as_ref().unwrap(), &[]);
             pass.set_vertex_buffer(0, gpu.vbuf.slice(..));
             pass.set_index_buffer(gpu.ibuf.slice(..), wgpu::IndexFormat::Uint32);
             pass.set_pipeline(&gpu.p_over_a);

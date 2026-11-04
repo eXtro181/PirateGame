@@ -143,6 +143,8 @@ pub struct Game {
     pub slow_t: f32,
     pub sailing: bool,
     pub flash_light: Option<(f32, f32, f32)>,
+    /// Testansicht (`&fxzoo`): alle PixelFX-Effekte im Raster um den Spieler, Zeit bis zur nächsten Runde
+    pub fx_zoo: Option<f32>,
     pub ship: Ship,
     pub ghosts: Vec<GhostShip>,
     pub sharks: Vec<Shark>,
@@ -257,6 +259,7 @@ impl Game {
             slow_t: 0.0,
             sailing: false,
             flash_light: None,
+            fx_zoo: None,
             ship,
             ghosts: vec![],
             sharks: vec![],
@@ -789,6 +792,18 @@ impl Game {
             self.update_crew(dt);
             self.update_end(dt, art);
             self.fx.update(dt);
+            if let Some(t) = self.fx_zoo.as_mut() {
+                *t -= dt;
+                if *t <= 0.0 {
+                    *t = 3.0;
+                    let (px, py) = (self.player.a.x, self.player.a.y);
+                    for (i, k) in crate::pfx::all().enumerate() {
+                        let cell = if i >= 14 { i + 1 } else { i };
+                        let (cx, cy) = ((cell % 7) as f32 - 3.0, (cell / 7) as f32 - 2.0);
+                        self.fx.px.play(k, px + cx * 120.0, py + cy * 110.0 + 40.0).life(3.0);
+                    }
+                }
+            }
             // in den Abgrund gestürzt?
             if !self.sailing && self.player.state != PS::Dead && self.player.state != PS::Roll {
                 let (x, y) = (self.player.a.x, self.player.a.y);
@@ -1007,7 +1022,8 @@ impl Game {
                 if crossed(WAKE_RISE) {
                     self.sfx("crash");
                     self.shake(6.0);
-                    self.fx.burst("dust", x + 30.0, y + 6.0, 18, BurstOpt { speed: Some(70.0), up: Some(40.0), ..Default::default() });
+                    self.fx.burst("dust", x + 30.0, y + 6.0, 8, BurstOpt { speed: Some(70.0), up: Some(40.0), ..Default::default() });
+                    self.fx.px.play(Px::Land, x + 30.0, y + 6.0).scale(1.1);
                 }
                 if crossed(WAKE_HOP + 0.7) {
                     self.fx.burst("dust", x, y + 22.0, 10, BurstOpt { speed: Some(50.0), up: Some(30.0), ..Default::default() });
@@ -1132,7 +1148,8 @@ impl Game {
                     let (bx, by) = (self.bosses[si].a.x, self.bosses[si].a.y);
                     self.boss_activate(si);
                     self.shake(14.0);
-                    self.fx.burst("dust", bx, by, 30, BurstOpt { speed: Some(160.0), up: Some(60.0), ..Default::default() });
+                    self.fx.burst("dust", bx, by, 12, BurstOpt { speed: Some(160.0), up: Some(60.0), ..Default::default() });
+                    self.fx.px.play(Px::Slam, bx, by).scale(1.8).tint([210, 230, 215, 255]);
                 }
             }
         }
@@ -1398,6 +1415,8 @@ impl Game {
         self.sailing = false;
         let lf = self.save.last_fire.clone();
         self.place_at_fire(&lf, false);
+        self.fx.clear();
+        self.fx.px.play(Px::Respawn, self.player.a.x, self.player.a.y + 1.0).gain(1.1);
         if self.save.prolog {
             // Tod im Wrackzwinger: man erwacht im Sarg am Galgenstrand, das Spiel beginnt
             self.end_prolog();
@@ -1427,7 +1446,8 @@ impl Game {
             self.world.props[f.prop].lit = true;
             self.sfx("kindle");
             self.ui.banner("SÄBELFEUER ENTZÜNDET", f.name, "big", 3.0);
-            self.fx.rise("soul", f.x, f.y, 30, 28.0, None);
+            self.fx.rise("soul", f.x, f.y, 16, 28.0, None);
+            self.fx.px.play(Px::Respawn, f.x, f.y + 2.0).scale(1.2).gain(1.2);
         }
         self.save.last_fire = f.id.clone();
         self.player.state = PS::Sit;
@@ -1632,7 +1652,8 @@ impl Game {
         self.refresh = Some(false);
         self.sfx("level");
         let (x, y) = (self.player.a.x, self.player.a.y);
-        self.fx.rise("soul", x, y, 20, 28.0, None);
+        self.fx.rise("soul", x, y, 10, 28.0, None);
+        self.fx.px.play(Px::Heal, x, y + 1.0).tint([170, 255, 230, 255]).front(4.0);
         let sel = self.ui.list.as_ref().map(|l| l.sel).unwrap_or(0);
         self.level_menu();
         if let Some(l) = self.ui.list.as_mut() {
@@ -1748,6 +1769,7 @@ impl Game {
     // ---------------------------------------------------------------- Gegenstände, Truhen, Buge
     fn pick_up(&mut self, i: usize) {
         let it = self.items.remove(i);
+        self.fx.px.play(Px::Collect, it.x, it.y).z(12.0).front(2.0);
         self.save.picked.push(it.id.clone());
         self.give_item(it.item);
         self.persist(true);
@@ -1815,7 +1837,7 @@ impl Game {
             self.ui.toast("Die Truhe lebt!");
             self.shake(6.0);
         } else {
-            self.fx.burst("spark", x, y - 16.0, 10, BurstOpt { speed: Some(100.0), ..Default::default() });
+            self.fx.px.play(Px::Collect, x, y).z(16.0).tint([255, 220, 150, 255]).front(2.0);
             let l: &'static str = ITEMS.iter().find(|i| i.key == loot).map(|i| i.key).unwrap_or("pearls");
             self.give_item(l);
         }
@@ -1836,7 +1858,8 @@ impl Game {
         }
         self.save.mounted.insert(sl.el.into(), true);
         self.apply_slot(si);
-        self.fx.rise("soul", sl.x, sl.y, 40, 40.0, None);
+        self.fx.rise("soul", sl.x, sl.y, 20, 40.0, None);
+        self.fx.px.play(Px::Respawn, sl.x, sl.y + 2.0).scale(1.3).gain(1.2);
         self.sfx("kindle");
         self.flash([0.4, 1.0, 0.85], 0.4);
         let n = ["fire", "ice", "wind", "earth"].iter().filter(|e| self.save.mounted.get(**e).copied().unwrap_or(false)).count();

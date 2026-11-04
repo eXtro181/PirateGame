@@ -5,6 +5,7 @@ mod art;
 mod audio;
 mod game;
 mod gfx;
+mod pfx;
 mod prof;
 mod save;
 mod synth;
@@ -317,6 +318,11 @@ fn setup(world: &mut bevy::ecs::world::World) {
                     g.debug_zoo(&art);
                 }
             }
+            if app.params.contains_key("fxzoo") {
+                if let Scene::Play(g) = &mut app.scene {
+                    g.fx_zoo = Some(0.5);
+                }
+            }
         }
     }
     let (lk, wpn) = app.menu.look_weapon();
@@ -375,6 +381,8 @@ fn tick(
     app.t += dt;
     prof::frame();
     f.begin();
+    // PixelFX-Effekte nach und nach backen (ein Effekt je Bild)
+    art.pfx.step(f);
     let Ok(window) = win.single() else { return };
     let sf = window.scale_factor();
     let to_ui = |p: Vec2| p * sf / f.ui_scale.max(1.0);
@@ -512,7 +520,7 @@ fn tick(
                 ui::title::draw(art, f, &mut app.fx, app.t, dt);
                 app.fx.ambient(dt, f.view(), 6, true);
                 app.fx.update(dt);
-                app.fx.draw(f);
+                app.fx.draw(f, &art.pfx);
                 let (vx, vy, vw, vh) = f.view();
                 f.fog(vx - 20.0, vy - 20.0, vw + 40.0, vh + 40.0, [70, 90, 110, 60], 5.0);
             }

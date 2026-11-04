@@ -634,6 +634,12 @@ impl WorldView {
                 q.prm[1] = cut;
                 frame.world_q(p.y, q);
             }
+            // Flammen (PixelFX: Feuerschalen-Feuer auf Wracks, Fackelflamme, Geisterflamme des Säbelfeuers);
+            // solange die Effekte noch gebacken werden, die eigenen Flammenbilder
+            let ph = pi as f32 * 0.731;
+            if kind == "brazier" {
+                crate::pfx::draw_loop(frame, &art.pfx, crate::pfx::Px::Brazier, p.x, p.y, 25.0, t + ph, 0.5, [255; 4], 1.15);
+            }
             // Gehängte am Galgen und Käfige am Gibbet schwingen im Wind
             if kind.starts_with("gallows") || kind.starts_with("gibbet") {
                 let n = def.frames.len();
@@ -659,12 +665,19 @@ impl WorldView {
                     // brennendes Wrack: Flammen an Bug, Mitte und Heck
                     let sx = if p.flip { -1.0 } else { 1.0 };
                     for (k, (ox, oy)) in [(-34.0f32, -30.0f32), (2.0, -52.0), (30.0, -26.0), (-8.0, -18.0)].iter().enumerate() {
-                        let fs = def.frames[(fi + k * 2) % def.frames.len()];
                         let (fx, fy) = (p.x + ox * sx, p.y + oy);
+                        if crate::pfx::draw_loop(frame, &art.pfx, crate::pfx::Px::Brazier, fx, p.y, -oy, t * (0.9 + k as f32 * 0.07) + ph + k as f32 * 0.77, if k == 1 { 1.0 } else { 0.75 }, [255; 4], 1.2) {
+                            continue;
+                        }
+                        let fs = def.frames[(fi + k * 2) % def.frames.len()];
                         frame.sprite_z(&fs, fx, fy, p.y + 1.0, SprOpt { scale: if k == 1 { 1.3 } else { 1.0 }, tint: [255, 255, 255, 220], ev: lvl + (p.y - fy), ..Default::default() });
                         let rise = ((t * 0.5 + k as f32 * 0.29) % 1.0) * 60.0;
                         frame.glow(fx + (t * 1.3 + k as f32).sin() * 6.0, fy - 34.0 - rise, 2.0, [255, 170, 80, 170]);
                     }
+                } else if kind == "saberfire" && crate::pfx::draw_loop(frame, &art.pfx, crate::pfx::Px::Spirit, p.x + 2.0, p.y, 5.0, t + ph, 0.95, [255; 4], 1.25) {
+                    // Geisterflamme des Säbelfeuers
+                } else if kind == "torch" && crate::pfx::draw_loop(frame, &art.pfx, crate::pfx::Px::Torch, p.x, p.y, 37.0, t + ph, 0.72, [255; 4], 1.15) {
+                    // Fackelflamme
                 } else {
                     let (fx, fy) = match kind {
                         "saberfire" => (p.x + 2.0, p.y - 6.0),

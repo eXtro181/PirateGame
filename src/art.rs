@@ -88,6 +88,8 @@ pub struct Art {
     pub boss_slot: DynSlot,
     pub boss_loaded: Option<String>,
     pub pages: u32,
+    /// PixelFX-Effekte (eigene Atlasseite hinter den festen Seiten, werden in den ersten Bildern gebacken)
+    pub pfx: crate::pfx::Lib,
 }
 
 /// Ein reservierter Atlasbereich, dessen Inhalt zur Laufzeit neu gezeichnet und hochgeladen wird.
@@ -1245,7 +1247,8 @@ pub fn build(frame: &mut Frame) -> Art {
 
     info!("Grafik erzeugt in {:?} · {} Atlasseiten", t0.elapsed(), pages);
     info!("Atlas belegt: {:.2} Seiten", a.used());
-    frame.init = Some(GfxInit { atlas_pages: pages, mask_w: crate::world::MW as u32, mask_h: crate::world::MH as u32, map_w: crate::ui::hud::MAP_W as u32, map_h: crate::ui::hud::MAP_H as u32 });
+    // eine Seite mehr für die PixelFX-Effekte
+    frame.init = Some(GfxInit { atlas_pages: pages + 1, mask_w: crate::world::MW as u32, mask_h: crate::world::MH as u32, map_w: crate::ui::hud::MAP_W as u32, map_h: crate::ui::hud::MAP_H as u32 });
     // Seiten in den Upload verschieben statt kopieren (spart beim Start 2 × 16 MB je Seite;
     // Wasm-Speicher wächst nur und gibt nichts zurück)
     let map = std::mem::take(&mut a.map);
@@ -1267,6 +1270,7 @@ pub fn build(frame: &mut Frame) -> Art {
         boss_slot,
         boss_loaded: None,
         pages: pages + 1,
+        pfx: crate::pfx::Lib::new(pages),
     };
     let look = chars::player_look(&[0, 1, 1, 5, 0, 0, 0, 0], "cutlass");
     build_player(&mut art, frame, &look);
