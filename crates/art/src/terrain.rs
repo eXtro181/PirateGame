@@ -1420,6 +1420,19 @@ fn slope_pixel(mats: &mut Materials, en: &EdgeNoise, c: &mut Canvas, x: i32, y: 
     let grassy = matches!(mt, Mat::Grass | Mat::Meadow | Mat::Moss | Mat::Snow);
     if ramp && !town {
         path_pixel(c, x, y, px, py, en, &bp, b, 1.0 - d, 0.0);
+        let along = if dir.0 != 0.0 { px } else { py };
+        let sk = (along + 2).rem_euclid(13);
+        if sk < 3 && d > 0.08 && d < 0.94 {
+            let wood = !matches!(b, Biome::Frost | Biome::Fire | Biome::End);
+            let base = if wood { hex(0x6A4A2E) } else { pickf(&bp.stone, 0.75) };
+            let i = c.idx(x, y);
+            c.col[i] = match sk {
+                0 => shade(base, 1.22),
+                1 => base,
+                _ => shade(base, 0.6),
+            };
+            c.rel[i] += 1.5;
+        }
         return true;
     }
     if ramp {
@@ -1456,8 +1469,11 @@ fn slope_pixel(mats: &mut Materials, en: &EdgeNoise, c: &mut Canvas, x: i32, y: 
     // sanfte Böschung: kaum dunkler zum Fuß, selten Fels, eher offene Erde
     let mut col = shade(stex.col[si], 0.99 - e * e * 0.15 + side + n2 * 0.04);
     let mut rel = d * 13.0;
-    if d > 0.9 {
-        col = shade(stex.col[si], 1.04);
+    if d > 0.93 {
+        col = shade(stex.col[si], 0.8);
+    } else if d > 0.82 {
+        col = shade(stex.col[si], 1.13);
+        rel += 1.0;
     } else if n > 0.52 - (1.0 - (d - 0.5).abs() * 2.0) * 0.08 {
         col = pickf(&bp.cliff, (0.5 + n * 0.3 + n2 * 0.2 + side).clamp(0.0, 1.0));
         rel += 2.0;
@@ -1468,8 +1484,8 @@ fn slope_pixel(mats: &mut Materials, en: &EdgeNoise, c: &mut Canvas, x: i32, y: 
         col = pickf(&bp.stone, 0.65);
         rel += 1.5;
     }
-    if d < 0.1 {
-        col = shade(col, 0.9 + d);
+    if d < 0.16 {
+        col = shade(col, 0.76 + d * 1.5);
     }
     c.put(x, y, col, rel);
     let i = c.idx(x, y);
@@ -1492,7 +1508,10 @@ fn face_pixel<M: TerrainMap>(m: &M, mats: &mut Materials, en: &EdgeNoise, c: &mu
     let ev_at = |f: i32| top_ev + (bot_ev - top_ev) * (f as f32 / hgt as f32);
     if m.stairs(tx, ty) {
         if b == Biome::Hub || m.town(tx, ty) {
-            stairs_pixel(c, x, y, px, fy, hgt, &bp, ev_at(fy));
+            // Wangen nur an den Rändern des Treppenlaufs (nicht an jeder Kachelgrenze)
+            let lx = px.rem_euclid(T);
+            let edge = if !m.stairs(tx - 1, ty) && lx < 4 { lx } else if !m.stairs(tx + 1, ty) && lx > T - 5 { T - 1 - lx } else { -1 };
+            stairs_pixel(c, x, y, px, fy, hgt, &bp, ev_at(fy), edge);
         } else {
             // in der Natur: ein Weg den Hang hinab, Ränder wellig in den Hang verlaufend
             let lx = px.rem_euclid(T);
@@ -1508,6 +1527,22 @@ fn face_pixel<M: TerrainMap>(m: &M, mats: &mut Materials, en: &EdgeNoise, c: &mu
             let ft = fy as f32 / hgt as f32;
             if k >= 1.0 {
                 path_pixel(c, x, y, px, py, en, &bp, b, ft, ev_at(fy));
+                // Stufen quer zum Weg: helle Trittkante, dunkler Schatten darunter (Holz, im Eis
+                // und in der Glut Stein) – so liest man den Aufgang sofort
+                let sk = (fy + 3).rem_euclid(14);
+                if fy > 4 && fy < hgt - 4 && sk < 4 {
+                    let wood = !matches!(b, Biome::Frost | Biome::Fire | Biome::End);
+                    let base = if wood { hex(0x6A4A2E) } else { pickf(&bp.stone, 0.75) };
+                    let i = c.idx(x, y);
+                    let (col, rel) = match sk {
+                        0 => (shade(base, 1.25), 2.5),
+                        1 => (base, 2.0),
+                        2 => (shade(base, 0.6), 0.5),
+                        _ => (shade(c.col[i], 0.7), 0.0),
+                    };
+                    c.col[i] = col;
+                    c.rel[i] = c.rel[i].max(rel);
+                }
                 return;
             }
             let top_mat = if top_mat.transparent() { Mat::Rock } else { top_mat };
@@ -1702,9 +1737,13 @@ fn hill_pixel(mats: &mut Materials, en: &EdgeNoise, c: &mut Canvas, x: i32, y: i
     let mut col = shade(tex.col[ti], 0.99 - t * 0.07 - t * t * 0.08 + n2 * 0.04);
     let mut rel = (1.0 - t) * 18.0;
     let lip = 2.0 + (n * 0.5 + 0.5) * 3.0;
-    if (fy as f32) < lip {
-        // weiche Kante: heller Saum
-        col = shade(tex.col[ti], 1.05);
+    if fy == 0 {
+        // Abschlusslinie: trennt die obere Ebene klar vom Hang
+        col = shade(tex.col[ti], 0.78);
+    } else if (fy as f32) < lip + 1.0 {
+        // heller Saum an der Kante
+        col = shade(tex.col[ti], 1.16);
+        rel += 1.5;
     } else {
         let mid = 1.0 - ((t - 0.5) * 2.0).abs().min(1.0);
         // flache Grasstufen quer zum Hang, gewellt: oben ein Lichtsaum, darunter ein Hauch Schatten
@@ -1734,10 +1773,10 @@ fn hill_pixel(mats: &mut Materials, en: &EdgeNoise, c: &mut Canvas, x: i32, y: i
             rel += 2.0;
         }
     }
-    // Fuß des Hangs: weiche Verdeckung, am Wasser nass
-    if t > 0.85 {
-        let k = (t - 0.85) / 0.15;
-        col = shade(col, 1.0 - k * 0.12);
+    // Fuß des Hangs: deutliche Verdeckung, am Wasser nass
+    if t > 0.8 {
+        let k = (t - 0.8) / 0.2;
+        col = shade(col, 1.0 - k * k * 0.26);
         if water {
             col = mix(col, hex(0x1A3846), k * 0.3);
         }
@@ -1881,8 +1920,8 @@ fn masonry_pixel(c: &mut Canvas, x: i32, y: i32, px: i32, fy: i32, hgt: i32, bp:
     }
     let to_bottom = hgt - fy;
     let mut col = pickf(&st, v.clamp(0.0, 1.0));
-    if to_bottom < 8 {
-        col = shade(col, 0.72 + to_bottom as f32 * 0.035);
+    if to_bottom < 12 {
+        col = shade(col, 0.6 + to_bottom as f32 * 0.033);
         if water {
             col = mix(col, hex(0x1A3846), 0.45);
         }
@@ -1903,23 +1942,42 @@ fn mortar_line(v: &mut f32, px: i32, w: i32) {
     }
 }
 
+/// Treppenstufe (Festung, Ort): helle Trittkante, Trittfläche, dunkle Schattenfuge, Setzstufe;
+/// Wangen an den Rändern des Laufs (`edge` = Abstand zum Rand, −1 innen), Schwellen oben und
+/// unten. Klare Kontraste, damit man jeden Aufgang sofort erkennt.
 #[allow(clippy::too_many_arguments)]
-fn stairs_pixel(c: &mut Canvas, x: i32, y: i32, px: i32, fy: i32, hgt: i32, bp: &BiomePal, ev: f32) {
+fn stairs_pixel(c: &mut Canvas, x: i32, y: i32, px: i32, fy: i32, hgt: i32, bp: &BiomePal, ev: f32, edge: i32) {
     let st = &bp.stone;
     let step = 8;
-    let k = fy % step;
-    let lx = px.rem_euclid(T);
-    let side = lx < 3 || lx > T - 4;
-    let (col, rel, up) = if side {
-        (st[1], 2.0, 200u8)
+    let k = (fy - 4).rem_euclid(step);
+    let (mut col, mut rel, mut up) = if fy < 4 {
+        // Schwelle oben: breite helle Platte mit dunkler Kante darunter
+        if fy == 3 { (st[0], 0.0, 230u8) } else { (shade(st[5], 1.05), 2.5, 50u8) }
+    } else if fy > hgt - 5 {
+        // Schwelle unten
+        if fy == hgt - 4 { (st[0], 0.0, 230u8) } else { (st[4], 1.5, 60u8) }
+    } else if k == 0 {
+        (shade(st[5], 1.08), 2.0, 30u8) // Trittkante hell
     } else if k < 3 {
-        (st[4], 1.0, 40u8) // Trittfläche hell
-    } else if k < 4 {
-        (st[3], 0.5, 120u8)
+        (st[4], 1.2, 40u8) // Trittfläche
+    } else if k == 3 {
+        (st[0], -0.5, 240u8) // Schattenfuge unter der Kante
     } else {
-        (pickf(&st[1..4], 0.5 - (k - 4) as f32 * 0.1), 0.0, 230u8) // Setzstufe
+        (pickf(&st[1..4], 0.42 - (k - 4) as f32 * 0.08), 0.0, 230u8) // Setzstufe
     };
-    let col = if fy > hgt - 3 { shade(col, 0.8) } else { col };
+    if edge >= 0 {
+        // Wange: außen dunkel, innen Licht von links oben
+        col = match edge {
+            0 => st[0],
+            1 => st[2],
+            _ => if px.rem_euclid(T) < 16 { st[3] } else { st[2] },
+        };
+        rel = 3.0;
+        up = 200;
+        if (fy + px).rem_euclid(17) == 0 {
+            col = shade(col, 0.8);
+        }
+    }
     c.put(x, y, col, rel);
     let i = c.idx(x, y);
     c.up[i] = up;

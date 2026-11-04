@@ -474,6 +474,8 @@ pub struct World {
     cur_biome: Biome,
     /// die Glutwacht ist gebaut: Ebenen und Hafenkante je Pixel aus den Ringen
     cur_hub_round: bool,
+    /// Antritt einer Treppe (oben/unten): bleibt frei von Bewuchs und Requisiten
+    landing: Vec<bool>,
     nz: Noise,
     info: Box<dyn Fn(&str) -> Option<PropInfo> + Send + Sync>,
 }
@@ -539,6 +541,7 @@ impl World {
             cur: Zone::Kueste,
             cur_biome: Biome::Coast,
             cur_hub_round: false,
+            landing: vec![false; n],
             nz: Noise::new(4242),
             info,
         };
@@ -732,8 +735,11 @@ impl World {
             self.highlands(r);
         }
         lap("Hochland", &mut t);
+        self.flatten_tiny();
         self.compute_faces();
         self.auto_stairs();
+        self.prune_stairs();
+        self.extend_stairs();
         self.compute_field();
         self.place_waterfalls();
         self.prolog_fall();
@@ -2459,7 +2465,323 @@ impl World {
                 }
             }
         }
-        self.extend_stairs();
+    }
+
+    /// Kacheln mit Inhalt (Feuer, Figuren, Gegner, Truhen, Fundstücke, Anleger, Arenen, Tore,
+    /// Siedlungen, Wasserfälle) samt kleinem Umkreis: dort lohnt sich ein Weg hinauf.
+    fn content_tiles(&self) -> Vec<bool> {
+        let n = (MW * MH) as usize;
+        let mut c = vec![false; n];
+        let mut mark = |x: f32, y: f32, r: i32| {
+            let (tx, ty) = ((x / TS as f32) as i32, (y / TS as f32) as i32);
+            for yy in ty - r..=ty + r {
+                for xx in tx - r..=tx + r {
+                    if inb(xx, yy) {
+                        c[idx(xx, yy)] = true;
+                    }
+                }
+            }
+        };
+        for f in &self.fires {
+            mark(f.x, f.y, 2);
+        }
+        for n in &self.npcs {
+            mark(n.x, n.y, 1);
+        }
+        for s in &self.spawns {
+            mark(s.x, s.y, 1);
+        }
+        for it in &self.items {
+            mark(it.x, it.y, 1);
+        }
+        for &ci in &self.chests {
+            mark(self.props[ci].x, self.props[ci].y, 1);
+        }
+        for d in &self.docks {
+            mark(d.px, d.py, 3);
+        }
+        for a in self.arenas.values() {
+            mark(a.x, a.y, (a.r / TS as f32) as i32);
+        }
+        for g in &self.gates {
+            mark(g.x, g.y, 2);
+        }
+        for s in &self.settlements {
+            mark(s.0, s.1, (s.2 / TS as f32) as i32);
+        }
+        for w in &self.waterfalls {
+            mark((w.tx * TS) as f32, (w.ty * TS) as f32, 2);
+        }
+        c
+    }
+
+    /// Unnötige Ebenenwechsel einebnen: winzige Erhebungen ohne Inhalt (unter 36 Kacheln)
+    /// sinken auf die Ebene darunter – vor dem Berechnen der Hänge und Treppen.
+    fn flatten_tiny(&mut self) {
+        let n = (MW * MH) as usize;
+        let content = self.content_tiles();
+        let mut flattened = 0;
+        for _pass in 0..2 {
+            let mut seen = vec![false; n];
+            let mut q: Vec<usize> = vec![];
+            for start in 0..n {
+                let l = self.level[start];
+                if seen[start] || l == 0 || matches!(self.ground[start], Mat::Water | Mat::Abyss) || self.tall_faces(start) || self.zone[start] == Some(Zone::Ende) {
+                    continue;
+                }
+                // Fläche gleicher Ebene sammeln
+                q.clear();
+                q.push(start);
+                seen[start] = true;
+                let mut k = 0;
+                let mut has = false;
+                while k < q.len() && q.len() < 400 {
+                    let i = q[k];
+                    k += 1;
+                    has |= content[i];
+                    let (x, y) = ((i as i32) % MW, (i as i32) / MW);
+                    for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+                        if !inb(x + dx, y + dy) {
+                            continue;
+                        }
+                        let j = idx(x + dx, y + dy);
+                        if !seen[j] && self.level[j] == l && !matches!(self.ground[j], Mat::Water | Mat::Abyss) {
+                            seen[j] = true;
+                            q.push(j);
+                        }
+                    }
+                }
+                if q.len() < 36 && !has {
+                    for &i in &q {
+                        self.level[i] = l - 1;
+                    }
+                    flattened += 1;
+                }
+            }
+        }
+        bevy::log::info!("Welt: {flattened} winzige Erhebungen eingeebnet");
+    }
+
+    /// Treppen aufräumen: nur Treppen behalten, die zwei begehbare Flächen verschiedener Ebenen
+    /// wirklich verbinden; je Flächenpaar höchstens wenige (Wege bevorzugt, mit Abstand), und
+    /// immer die, ohne die ein Ort mit Inhalt (Feuer, Truhe, Gegner, Figur …) unerreichbar wäre.
+    fn prune_stairs(&mut self) {
+        let n = (MW * MH) as usize;
+        let content = self.content_tiles();
+        // ---- begehbare Flächen (gleiche Ebene, keine Wand, keine Treppe, kein Wasser)
+        let walk = |w: &World, i: usize| !matches!(w.ground[i], Mat::Water | Mat::Abyss) && !w.cliff[i] && !w.stairs[i];
+        let mut terr = vec![-1i32; n];
+        let mut t_level: Vec<u8> = vec![];
+        let mut t_size: Vec<u32> = vec![];
+        let mut t_content: Vec<bool> = vec![];
+        let mut t_entry: Vec<bool> = vec![];
+        let mut q: Vec<usize> = vec![];
+        for start in 0..n {
+            if terr[start] >= 0 || !walk(self, start) {
+                continue;
+            }
+            let id = t_level.len() as i32;
+            let l = self.level[start];
+            q.clear();
+            q.push(start);
+            terr[start] = id;
+            let (mut k, mut has, mut shore) = (0, false, false);
+            while k < q.len() {
+                let i = q[k];
+                k += 1;
+                has |= content[i];
+                let (x, y) = ((i as i32) % MW, (i as i32) / MW);
+                for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+                    if !inb(x + dx, y + dy) {
+                        continue;
+                    }
+                    let j = idx(x + dx, y + dy);
+                    if self.ground[j] == Mat::Water {
+                        shore = true;
+                    }
+                    if terr[j] < 0 && self.level[j] == l && walk(self, j) {
+                        terr[j] = id;
+                        q.push(j);
+                    }
+                }
+            }
+            t_level.push(l);
+            t_size.push(q.len() as u32);
+            t_content.push(has);
+            // man kommt über das Meer: Flächen auf Meereshöhe am Ufer sind Eingänge
+            t_entry.push(l == 0 && shore);
+        }
+        let nt = t_level.len();
+        // ---- Treppengruppen und die Flächen, die sie berühren
+        let mut grp = vec![-1i32; n];
+        let mut groups: Vec<(Vec<usize>, Vec<i32>, i32, (i32, i32))> = vec![];
+        for start in 0..n {
+            if grp[start] >= 0 || !self.stairs[start] || self.tall_faces(start) {
+                continue;
+            }
+            let gid = groups.len() as i32;
+            let mut tiles = vec![start];
+            grp[start] = gid;
+            let mut k = 0;
+            let mut touch: Vec<i32> = vec![];
+            let mut roads = 0;
+            while k < tiles.len() {
+                let i = tiles[k];
+                k += 1;
+                let (x, y) = ((i as i32) % MW, (i as i32) / MW);
+                for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+                    if !inb(x + dx, y + dy) {
+                        continue;
+                    }
+                    let j = idx(x + dx, y + dy);
+                    if self.stairs[j] && grp[j] < 0 && !self.tall_faces(j) {
+                        grp[j] = gid;
+                        tiles.push(j);
+                    } else if terr[j] >= 0 {
+                        if !touch.contains(&terr[j]) {
+                            touch.push(terr[j]);
+                        }
+                        if self.path[j] {
+                            roads += 1;
+                        }
+                    }
+                }
+            }
+            let c = tiles[tiles.len() / 2];
+            groups.push((tiles, touch, roads, ((c as i32) % MW, (c as i32) / MW)));
+        }
+        // ---- nötige Treppen: kürzeste Wege von den Eingängen zu jeder Fläche mit Inhalt
+        let mut adj: Vec<Vec<(usize, usize)>> = vec![vec![]; nt];
+        for (gi, g) in groups.iter().enumerate() {
+            for a in 0..g.1.len() {
+                for b in a + 1..g.1.len() {
+                    let (ta, tb) = (g.1[a] as usize, g.1[b] as usize);
+                    if t_level[ta] != t_level[tb] {
+                        adj[ta].push((tb, gi));
+                        adj[tb].push((ta, gi));
+                    }
+                }
+            }
+        }
+        let mut parent: Vec<Option<(usize, usize)>> = vec![None; nt];
+        let mut reached = vec![false; nt];
+        let mut bq: std::collections::VecDeque<usize> = std::collections::VecDeque::new();
+        for t in 0..nt {
+            if t_entry[t] {
+                reached[t] = true;
+                bq.push_back(t);
+            }
+        }
+        while let Some(t) = bq.pop_front() {
+            for &(u, gi) in &adj[t] {
+                if !reached[u] {
+                    reached[u] = true;
+                    parent[u] = Some((t, gi));
+                    bq.push_back(u);
+                }
+            }
+        }
+        let mut required = vec![false; groups.len()];
+        for t in 0..nt {
+            if !t_content[t] || !reached[t] {
+                continue;
+            }
+            let mut cur = t;
+            while let Some((p, gi)) = parent[cur] {
+                required[gi] = true;
+                cur = p;
+            }
+        }
+        // ---- auswählen: verbindet die Gruppe überhaupt zwei Ebenen? Je Paar nur die besten
+        let mut keep = vec![false; groups.len()];
+        let mut by_pair: HashMap<(i32, i32), Vec<usize>> = HashMap::new();
+        let mut dead = 0;
+        for (gi, g) in groups.iter().enumerate() {
+            let mut best: Option<(i32, i32)> = None;
+            for a in 0..g.1.len() {
+                for b in a + 1..g.1.len() {
+                    let (ta, tb) = (g.1[a], g.1[b]);
+                    if t_level[ta as usize] != t_level[tb as usize] {
+                        let k = (ta.min(tb), ta.max(tb));
+                        let sz = t_size[ta as usize].min(t_size[tb as usize]);
+                        if best.map_or(true, |bp| sz > t_size[bp.0 as usize].min(t_size[bp.1 as usize])) {
+                            best = Some(k);
+                        }
+                    }
+                }
+            }
+            match best {
+                Some(k) => by_pair.entry(k).or_default().push(gi),
+                None => dead += 1,
+            }
+            if required[gi] {
+                keep[gi] = true;
+            }
+        }
+        for (pair, list) in by_pair.iter_mut() {
+            let small = t_size[pair.0 as usize].min(t_size[pair.1 as usize]);
+            let has = t_content[pair.0 as usize] || t_content[pair.1 as usize];
+            // winzige leere Fläche: kein Weg hinauf nötig (außer er wird gebraucht)
+            if small < 30 && !has {
+                continue;
+            }
+            let quota = (1 + small / 900).min(3) as usize;
+            list.sort_by_key(|&gi| -(groups[gi].2 * 10 + groups[gi].0.len() as i32));
+            let mut chosen: Vec<(i32, i32)> = list.iter().filter(|&&gi| keep[gi]).map(|&gi| groups[gi].3).collect();
+            for &gi in list.iter() {
+                if keep[gi] {
+                    continue;
+                }
+                if chosen.len() >= quota {
+                    break;
+                }
+                let c = groups[gi].3;
+                if chosen.iter().all(|o| (o.0 - c.0).abs() + (o.1 - c.1).abs() >= 14) {
+                    keep[gi] = true;
+                    chosen.push(c);
+                }
+            }
+        }
+        // Antritte oben und unten freihalten (kein Baum, Fels oder Busch davor)
+        for (gi, g) in groups.iter().enumerate() {
+            if !keep[gi] {
+                continue;
+            }
+            for &i in &g.0 {
+                let (x, y) = ((i as i32) % MW, (i as i32) / MW);
+                for (dx, dy) in [(0, -1), (0, 1), (-1, 0), (1, 0), (0, -2), (0, 2)] {
+                    if inb(x + dx, y + dy) {
+                        let j = idx(x + dx, y + dy);
+                        if terr[j] >= 0 {
+                            self.landing[j] = true;
+                        }
+                    }
+                }
+            }
+        }
+        // ---- entfernen
+        let mut removed = 0;
+        for (gi, g) in groups.iter().enumerate() {
+            if keep[gi] {
+                continue;
+            }
+            removed += 1;
+            for &i in &g.0 {
+                self.stairs[i] = false;
+                if self.cliff[i] {
+                    self.path[i] = false;
+                }
+            }
+        }
+        bevy::log::info!(
+            "Welt: Treppen {} Gruppen, {} behalten ({} nötig), {} entfernt ({} ohne Verbindung); {} Flächen",
+            groups.len(),
+            groups.len() - removed,
+            required.iter().filter(|r| **r).count(),
+            removed,
+            dead,
+            nt
+        );
     }
     /// Treppenkacheln eine Reihe über und unter die Wand verlängern: die pixelgenauen Kanten
     /// liegen bis zu einer halben Kachel neben dem Kachelraster.
@@ -2506,6 +2828,16 @@ impl World {
                 continue;
             }
             let (tx, ty) = ((p.x / TS as f32) as i32, (p.y / TS as f32) as i32);
+            // nichts Festes auf Treppen und vor ihren Antritten (nur in der Natur und auf wilden
+            // Inseln; Festung und Siedlungen sind von Hand gesetzt)
+            if inb(tx, ty) && (self.stairs[idx(tx, ty)] || self.landing[idx(tx, ty)]) && self.biome[idx(tx, ty)] != Biome::Hub && !self.in_settlement(p.x, p.y) && !p.no_collide {
+                if let Some(inf) = (self.info)(&p.kind) {
+                    if inf.circle > 0.0 || inf.boxc.0 > 0.0 {
+                        self.props[pi].hidden = true;
+                        continue;
+                    }
+                }
+            }
             if inb(tx, ty) && self.biome[idx(tx, ty)] != Biome::Hub && !self.stairs[idx(tx, ty)] {
                 // steht der Fuß auf einer Wand oder Böschung? (Welt-Kollision ist hier noch nicht gebaut)
                 let (px, py) = (p.x as i32, p.y as i32);
@@ -3078,7 +3410,7 @@ impl World {
                 }
                 let g = self.g(tx, ty);
                 let i = idx(tx, ty);
-                if g == Mat::Water || self.cliff[i] || g == Mat::Abyss || self.path[i] || g == Mat::Plank {
+                if g == Mat::Water || self.cliff[i] || g == Mat::Abyss || self.path[i] || g == Mat::Plank || self.landing[i] || self.stairs[i] {
                     continue;
                 }
                 let (x, y) = tpos(tx, ty);
