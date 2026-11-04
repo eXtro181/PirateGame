@@ -59,6 +59,8 @@ pub enum Use {
     /// Laden betreten / verlassen
     Enter(usize),
     Leave(usize),
+    /// Prolog: am Abbruch in den Wasserfall springen
+    Plunge,
 }
 
 #[derive(Clone)]
@@ -93,6 +95,10 @@ pub enum Cut {
     Door { t: f32, door: usize, enter: bool, moved: bool },
     /// allererster Start: der Ertrunkene schiebt den Sargdeckel weg und steigt heraus
     Wake { t: f32 },
+    /// Prolog-Anfang: man liegt zwischen den Wracks und kommt zu sich
+    Washed { t: f32 },
+    /// Prolog-Ende nach dem Sieg: Anlauf, Sprung über die Klippe, Sturz ins Schwarze
+    Plunge { t: f32, x0: f32, y0: f32 },
 }
 
 /// Zeitplan des Erwachens (s): Dunkel mit Klopfen, Aufblenden, Deckel ruckelt, rutscht weg,
@@ -322,6 +328,14 @@ impl Game {
             }
             g.bosses.push(b);
         }
+        // Prolog: die Meeresspinne (vor Malakor; Malakor bleibt der letzte Boss der Liste)
+        let ar = g.world.arenas.get("prolog").cloned().unwrap_or(crate::world::Arena { x: 0.0, y: 0.0, r: 100.0, ry: 80.0 });
+        let mut sb = Boss::new("spider", &ar);
+        if g.save.spider || !g.save.prolog {
+            sb.state = BS::Dead;
+            sb.hidden = true;
+        }
+        g.bosses.push(sb);
         let ar = g.world.arenas.get("ende").cloned().unwrap_or(crate::world::Arena { x: 0.0, y: 0.0, r: 100.0, ry: 80.0 });
         let mut mb = Boss::new("mega", &ar);
         if g.save.end_won {
@@ -357,6 +371,14 @@ impl Game {
             g.world.props[ci].open = g.save.chests.contains(&id);
         }
         g.move_crew_to_hub();
+        // Perlenfleck auf festen Boden (alte Spielstände: die wilden Inseln von damals gibt es nicht mehr)
+        if let Some((x, y)) = g.save.stain.as_ref().map(|st| (st.x, st.y)) {
+            let (nx, ny) = g.world.near_land(x, y);
+            if let Some(st) = g.save.stain.as_mut() {
+                st.x = nx;
+                st.y = ny;
+            }
+        }
         g.spawn_all(art);
         let lf = g.save.last_fire.clone();
         g.place_at_fire(&lf, true);
@@ -366,7 +388,18 @@ impl Game {
         g.light_fires();
         g.refresh_player(true, art, frame);
         g.hp_ghost = g.player.hp;
-        if !g.save.woke && lf == "kueste" && g.save.play_time < 1.0 {
+        if g.save.prolog {
+            // Neues Spiel: im Wrackzwinger zwischen den Wracks zu sich kommen
+            let (x, y) = g.world.prolog_start;
+            g.player.a.x = x;
+            g.player.a.y = y;
+            g.cam_f = (x, y);
+            g.last_safe = (x, y);
+            if g.save.play_time < 1.0 {
+                g.ui.fade = 1.0;
+                g.cutscene = Some(Cut::Washed { t: 0.0 });
+            }
+        } else if !g.save.woke && lf == "kueste" && g.save.play_time < 1.0 {
             // allererster Start: im Sarg erwachen
             let (x, y) = g.world.wake_coffin;
             g.player.a.x = x;
@@ -610,6 +643,8 @@ impl Game {
         if let Some(i) = self.sea_boss {
             let d = self.sea_bosses[i].def();
             crate::art::build_sea_boss(art, frame, d.el, Some(d.beast));
+        } else if self.save.prolog {
+            crate::art::build_prolog_boss(art, frame);
         } else if !matches!(self.end.state, EP::Dormant | EP::Done) || self.world.in_end(self.player.a.x, self.player.a.y) && !self.sailing {
             crate::art::build_malakor(art, frame);
         }
@@ -884,6 +919,68 @@ impl Game {
                     self.cutscene = if self.ui.fade <= 0.0 { None } else { Some(Cut::Door { t, door, enter, moved }) };
                 }
             }
+            Cut::Washed { t } => {
+                let t0 = t;
+                let t = t + dt;
+                let crossed = |m: f32| t0 < m && t >= m;
+                // im Dunkeln das Rauschen des Falls, dann langsam aufblenden; man liegt, rappelt sich auf
+                self.ui.fade = if t < 1.2 { 1.0 } else { (1.0 - (t - 1.2) / 1.8).max(0.0) };
+                self.player.hidden = false;
+                self.player.a.anim = if t < 3.4 { "dead" } else { "hurt" };
+                self.player.a.frame = 0.0;
+                if crossed(0.4) {
+                    self.sfx("tide");
+                }
+                if crossed(3.4) {
+                    let (x, y) = (self.player.a.x, self.player.a.y);
+                    self.fx.burst("dust", x, y + 4.0, 10, BurstOpt { speed: Some(40.0), up: Some(24.0), ..Default::default() });
+                }
+                if t >= 4.2 {
+                    self.cutscene = None;
+                    self.player.a.anim = "idle";
+                    self.ui.banner(Zone::Prolog.def().name, "Die See hat dich ausgespien", "big", 3.8);
+                    self.persist(true);
+                } else {
+                    self.cutscene = Some(Cut::Washed { t });
+                }
+            }
+            Cut::Plunge { t, x0, y0 } => {
+                let t0 = t;
+                let t = t + dt;
+                let crossed = |m: f32| t0 < m && t >= m;
+                let (jx, jy) = self.world.prolog_jump;
+                if t < 0.7 {
+                    // Anlauf zur Kante
+                    let k = t / 0.7;
+                    self.player.a.x = x0 + (jx - x0) * k;
+                    self.player.a.y = y0 + (jy - y0) * k;
+                    self.player.a.face(jx - x0, (jy - y0).max(1.0));
+                    self.player.a.anim = "walk";
+                    self.player.a.frame = t * 10.0;
+                } else {
+                    // Sprung und Sturz: an der Klippe hinab, ins schwarze Wasser und weiter
+                    let ft = t - 0.7;
+                    self.player.a.x = jx;
+                    self.player.a.y = jy - (ft * 6.0).min(1.0) * 18.0 + 520.0 * ft * ft;
+                    self.player.a.anim = "roll";
+                    self.player.a.frame = ft * 8.0;
+                    self.cam_f.1 += (self.player.a.y - 40.0 - self.cam_f.1) * (dt * 2.0).min(1.0);
+                }
+                if crossed(0.7) {
+                    self.sfx("swing");
+                }
+                if crossed(1.9) {
+                    self.sfx("tide");
+                    self.shake(4.0);
+                }
+                self.ui.fade = ((t - 1.5) / 1.1).clamp(0.0, 1.0);
+                if t >= 3.0 {
+                    self.cutscene = None;
+                    self.end_prolog();
+                } else {
+                    self.cutscene = Some(Cut::Plunge { t, x0, y0 });
+                }
+            }
             Cut::Wake { t } => {
                 let t0 = t;
                 let t = t + dt;
@@ -982,7 +1079,7 @@ impl Game {
             }
         }
         // Seekarte: was man sieht, wird aufgedeckt
-        if chart_reveal(&mut self.save.chart, tx, ty, if self.sailing { 3 } else { 2 }) {
+        if z != Zone::Prolog && chart_reveal(&mut self.save.chart, tx, ty, if self.sailing { 3 } else { 2 }) {
             self.chart_ver += 1;
         }
         self.zone_t = (self.zone_t - dt).max(0.0);
@@ -1028,6 +1125,17 @@ impl Game {
     }
 
     fn update_boss_arena(&mut self) {
+        // Prolog: die Spinne fällt aus den Netzen, sobald man ihr Revier betritt
+        if self.save.prolog && !self.save.spider && !self.sailing {
+            if let (Some(si), Some(a)) = (self.bosses.iter().position(|b| b.key == "spider"), self.world.arenas.get("prolog")) {
+                if self.bosses[si].state == BS::Dormant && ((self.player.a.x - a.x) / a.r).hypot((self.player.a.y - a.y) / a.ry) < 0.62 {
+                    let (bx, by) = (self.bosses[si].a.x, self.bosses[si].a.y);
+                    self.boss_activate(si);
+                    self.shake(14.0);
+                    self.fx.burst("dust", bx, by, 30, BurstOpt { speed: Some(160.0), up: Some(60.0), ..Default::default() });
+                }
+            }
+        }
         let mi = self.bosses.len() - 1;
         if self.bosses[mi].state == BS::Dormant && !self.save.end_won && self.end.state == EP::Seabed && !self.sailing {
             if let Some(a) = self.world.arenas.get("ende") {
@@ -1086,6 +1194,10 @@ impl Game {
         }
         if let Some(st) = &s.stain {
             out.extend(f(st.x, st.y, 36.0, "Perlen zurückholen", Use::Stain, None));
+        }
+        if s.prolog && s.spider {
+            let (jx, jy) = self.world.prolog_jump;
+            out.extend(f(jx, jy, 48.0, "In die Tiefe springen", Use::Plunge, None));
         }
         out
     }
@@ -1159,6 +1271,10 @@ impl Game {
                 Use::Stain => self.take_stain(),
                 Use::Enter(i) => self.cutscene = Some(Cut::Door { t: 0.0, door: i, enter: true, moved: false }),
                 Use::Leave(i) => self.cutscene = Some(Cut::Door { t: 0.0, door: i, enter: false, moved: false }),
+                Use::Plunge => {
+                    self.lock = None;
+                    self.cutscene = Some(Cut::Plunge { t: 0.0, x0: self.player.a.x, y0: self.player.a.y });
+                }
             }
         }
     }
@@ -1199,7 +1315,7 @@ impl Game {
         self.save.deaths += 1;
         let (x, y) = (self.player.a.x, self.player.a.y);
         let safe = if !self.world.blocked(x, y, 4.0, false, None) && self.world.g((x / TS as f32) as i32, (y / TS as f32) as i32) != Mat::Abyss { (x, y) } else { self.last_safe };
-        if self.save.inf_pearls.is_none() {
+        if self.save.inf_pearls.is_none() && !self.save.prolog {
             self.save.stain = if self.save.pearls > 0 { Some(Stain { x: safe.0, y: safe.1, pearls: self.save.pearls }) } else { None };
             self.save.pearls = 0;
             self.pearl_shown = 0.0;
@@ -1207,6 +1323,39 @@ impl Game {
         self.stain_t = 0.0;
         self.death_t = Some(0.0);
         self.lock = None;
+    }
+    /// Prolog vorbei (Tod oder Sprung): im Sarg am Galgenstrand erwachen, das Spiel beginnt.
+    pub fn end_prolog(&mut self) {
+        self.save.prolog = false;
+        self.save.woke = false;
+        self.save.last_fire = "kueste".into();
+        if !self.save.lit_fires.iter().any(|f| f == "kueste") {
+            self.save.lit_fires.push("kueste".into());
+        }
+        for b in self.bosses.iter_mut().filter(|b| b.key == "spider") {
+            b.state = BS::Dead;
+            b.hidden = true;
+        }
+        self.boss = None;
+        let d = derived(&self.save);
+        self.player.hp = d.max_hp;
+        self.player.st = d.max_st;
+        self.player.state = PS::Free;
+        self.death_t = None;
+        let (x, y) = self.world.wake_coffin;
+        self.player.a.x = x;
+        self.player.a.y = y + 20.0;
+        self.player.hidden = true;
+        self.cam_f = (x, y);
+        self.last_safe = (x, y + 40.0);
+        self.ui.fade = 1.0;
+        self.zone_key = Zone::Kueste;
+        self.wild_cur = None;
+        self.zone_name = self.place_name();
+        self.env_cur = env::env("kueste", false);
+        self.fx.clear();
+        self.cutscene = Some(Cut::Wake { t: 0.0 });
+        self.persist(true);
     }
     pub fn ship_sunk(&mut self) {
         self.sailing = false;
@@ -1249,6 +1398,11 @@ impl Game {
         self.sailing = false;
         let lf = self.save.last_fire.clone();
         self.place_at_fire(&lf, false);
+        if self.save.prolog {
+            // Tod im Wrackzwinger: man erwacht im Sarg am Galgenstrand, das Spiel beginnt
+            self.end_prolog();
+            return;
+        }
         self.persist(true);
     }
     fn take_stain(&mut self) {

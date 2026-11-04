@@ -1,7 +1,10 @@
-//! Die Welt: eine Kachelkarte (32 px) mit dem Archipel in der Mitte – Galgenstrand, Glutwacht,
-//! die vier Königsgebiete –, dem Ende der Welt in der Südost-Ecke (nur durch den Strudel im See
-//! der Glutwacht erreichbar), vier Seegebieten der Seebosse weit draußen (Glutsee, Eismeer,
-//! Sturmsee, Tiefengrund) und rund siebzig wilden Inseln im weiten Ozean.
+//! Die Welt: eine Kachelkarte (32 px), strahlenförmig aufgebaut: die Glutwacht in der Mitte, der
+//! Galgenstrand gleich südlich davon, die vier Königsinseln in den vier Diagonalen (Frostgrotte
+//! im Nordwesten, Aschebucht im Nordosten, Rabenwacht im Südwesten, Fluchmangroven im Südosten),
+//! die Seegebiete der Seebosse weit draußen in den vier Himmelsrichtungen (Eismeer, Glutsee,
+//! Sturmsee, Tiefengrund), große wilde Inseln dazwischen, das Ende der Welt in der Südost-Ecke
+//! (nur durch den Strudel im Hafen der Glutwacht erreichbar) und abseits in der Nordwest-Ecke die
+//! ummauerte Prolog-Insel, die man nur zu Beginn betritt.
 //! Höhenebenen: Plateaus sind begehbar, ihre unteren zwei Reihen sind Basaltwände, Wege über
 //! Wände werden Treppen. Die Erzeugung ist deterministisch; Positionen sind Welt-Pixel.
 
@@ -13,16 +16,21 @@ pub use wild::WildIsle;
 use std::collections::HashMap;
 use sw_art::noise::{Noise, Rng};
 use crate::game::data::shop_def;
-use sw_art::terrain::{face_px, Biome, EdgeNoise, Mat, TerrainMap, BANK_PX, FACE_ROWS, RIM_PX};
+use sw_art::terrain::{face_px, face_span, Biome, EdgeNoise, Mat, TerrainMap, BANK_PX, FACE_PX, FACE_ROWS, RIM_PX};
 
 pub const TS: i32 = 32;
 /// Kartengröße in Kacheln: zehnmal die Fläche der früheren 560 × 420
 pub const MW: i32 = 1776;
 pub const MH: i32 = 1328;
-/// Verschiebung des Archipels der früheren Karte in die Mitte der großen Karte (Kacheln)
+/// Verschiebung des Archipels der früheren Karte in die Mitte der großen Karte (Kacheln) –
+/// nur noch für den Umzug alter Spielstände (v5)
 pub const CORE: (i32, i32) = (648, 480);
-const CX: i32 = CORE.0;
-const CY: i32 = CORE.1;
+/// Mitte der Glutwacht (Kacheln): Herz der Welt
+pub const HUB: (i32, i32) = (888, 640);
+/// Prolog-Insel in der Nordwest-Ecke (Kachelrahmen x0, y0, x1, y1): für Schiffe gesperrt
+pub const PROLOG: (i32, i32, i32, i32) = (16, 16, 236, 196);
+/// Mitte des Titelbilds (offenes Meer nordöstlich der Glutwacht, Kacheln)
+pub const TITLE_T: (i32, i32) = (978, 532);
 /// Ende der Welt: 156 × 120 Kacheln in der Südost-Ecke
 pub const END_X0: i32 = MW - 156;
 pub const END_Y0: i32 = MH - 120;
@@ -41,6 +49,8 @@ pub enum Zone {
     Ende,
     /// eine der wilden Inseln (welche: `World::wild_at`)
     Wild,
+    /// der Wrackzwinger: ummauerte Prolog-Insel über dem tiefen Wasserfall (nur zu Beginn)
+    Prolog,
 }
 /// Die festen Gebiete (ohne die wilden Inseln)
 pub const ZONES: [Zone; 7] = [Zone::Kueste, Zone::Hain, Zone::Asche, Zone::Frost, Zone::Raben, Zone::Mangroven, Zone::Ende];
@@ -61,16 +71,81 @@ impl Zone {
         &ZONE_DEFS[self as usize]
     }
 }
-pub static ZONE_DEFS: [ZoneDef; 8] = [
-    ZoneDef { key: "kueste", name: "Galgenstrand", biome: Biome::Coast, music: "salz", cx: 240 + CX, cy: 260 + CY, rx: 46, ry: 26, seed: 1 },
-    ZoneDef { key: "hain", name: "Glutwacht", biome: Biome::Hub, music: "hain", cx: 240 + CX, cy: 172 + CY, rx: 36, ry: 33, seed: 2 },
-    ZoneDef { key: "asche", name: "Aschebucht", biome: Biome::Fire, music: "glut", cx: 348 + CX, cy: 160 + CY, rx: 42, ry: 30, seed: 3 },
-    ZoneDef { key: "frost", name: "Frostgrotte", biome: Biome::Frost, music: "frost", cx: 136 + CX, cy: 118 + CY, rx: 44, ry: 32, seed: 4 },
-    ZoneDef { key: "raben", name: "Hafen Rabenwacht", biome: Biome::Wind, music: "sturm", cx: 136 + CX, cy: 236 + CY, rx: 44, ry: 32, seed: 5 },
-    ZoneDef { key: "mangroven", name: "Fluchmangroven", biome: Biome::Earth, music: "tiefe", cx: 348 + CX, cy: 256 + CY, rx: 42, ry: 30, seed: 6 },
+pub static ZONE_DEFS: [ZoneDef; 9] = [
+    ZoneDef { key: "kueste", name: "Galgenstrand", biome: Biome::Coast, music: "salz", cx: HUB.0 - 38, cy: HUB.1 + 172, rx: 46, ry: 26, seed: 1 },
+    ZoneDef { key: "hain", name: "Glutwacht", biome: Biome::Hub, music: "hain", cx: HUB.0, cy: HUB.1, rx: 62, ry: 62, seed: 2 },
+    ZoneDef { key: "asche", name: "Aschebucht", biome: Biome::Fire, music: "glut", cx: HUB.0 + 418, cy: HUB.1 - 290, rx: 42, ry: 30, seed: 3 },
+    ZoneDef { key: "frost", name: "Frostgrotte", biome: Biome::Frost, music: "frost", cx: HUB.0 - 418, cy: HUB.1 - 290, rx: 44, ry: 32, seed: 4 },
+    ZoneDef { key: "raben", name: "Hafen Rabenwacht", biome: Biome::Wind, music: "sturm", cx: HUB.0 - 418, cy: HUB.1 + 340, rx: 44, ry: 32, seed: 5 },
+    ZoneDef { key: "mangroven", name: "Fluchmangroven", biome: Biome::Earth, music: "tiefe", cx: HUB.0 + 418, cy: HUB.1 + 340, rx: 42, ry: 30, seed: 6 },
     ZoneDef { key: "ende", name: "Ende der Welt", biome: Biome::End, music: "ende", cx: END_X0 + 78, cy: END_Y0 + 62, rx: 60, ry: 45, seed: 7 },
     ZoneDef { key: "wild", name: "Wilde Inseln", biome: Biome::Wind, music: "salz", cx: MW / 2, cy: MH / 2, rx: 1, ry: 1, seed: 8 },
+    ZoneDef { key: "prolog", name: "Wrackzwinger", biome: Biome::Coast, music: "tiefe", cx: 126, cy: 100, rx: 64, ry: 46, seed: 9 },
 ];
+
+/// Glutwacht als kreisrunde Hafenfestung (Radien in Kacheln vom Mittelpunkt `HUB`): Hafenbecken
+/// mit Strudel, Kai (Ebene 0), unterer Ring (1, Nordhälfte und Seiten), Schrein-Terrasse (2, Norden),
+/// Balkone (3, Nordflanken) und die Ringmauer (4) – in der Nordmitte direkt hinter dem Schrein
+/// zwei Ebenen hoch, im Süden zum Meer vier Ebenen. Im Süden schneidet das Seetor durch.
+pub mod hubgeo {
+    pub const BASIN: f32 = 20.0;
+    pub const QUAY: f32 = 26.0;
+    pub const L2: f32 = 33.0;
+    pub const L3: f32 = 42.0;
+    /// Innenradius der Ringmauer an den Nordflanken, in der Nordmitte und im Süden
+    pub const WALL_N: f32 = 49.0;
+    pub const WALL_C: f32 = 42.0;
+    pub const WALL_S: f32 = 38.0;
+    /// Außenradius der Ringmauer
+    pub const OUT: f32 = 55.0;
+    /// halbe Breite des Seetors und der Nordmitte
+    pub const GATE: f32 = 4.5;
+    pub const CENTER: f32 = 15.0;
+}
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum HubCell {
+    Water,
+    Level(u8),
+    Outside,
+}
+/// Zelle der Festung an (dx, dy) Kacheln vom Mittelpunkt (auch Bruchteile: je Pixel).
+pub fn hub_cell(dx: f32, dy: f32) -> HubCell {
+    use hubgeo::*;
+    let r = (dx * dx + dy * dy).sqrt();
+    if dx.abs() < GATE && dy > 0.0 && r < OUT + 10.0 {
+        return HubCell::Water;
+    }
+    if r >= OUT {
+        return HubCell::Outside;
+    }
+    if r < BASIN {
+        return HubCell::Water;
+    }
+    let s = (dy / r.max(1.0)).max(0.0);
+    let r_in = if dy < 0.0 && dx.abs() < CENTER { WALL_C } else { WALL_N - (WALL_N - WALL_S) * s };
+    if r >= r_in {
+        return HubCell::Level(4);
+    }
+    if dy > 3.0 || r < QUAY {
+        return HubCell::Level(0);
+    }
+    if dy > -6.0 || r < L2 {
+        return HubCell::Level(1);
+    }
+    if dy > -14.0 || r < L3 {
+        return HubCell::Level(2);
+    }
+    HubCell::Level(3)
+}
+/// Mittelpunkt der Glutwacht in Welt-Pixeln
+pub fn hub_center() -> (f32, f32) {
+    let d = Zone::Hain.def();
+    ((d.cx * TS + TS / 2) as f32, (d.cy * TS + TS / 2) as f32)
+}
+fn hub_px(px: i32, py: i32) -> HubCell {
+    let (cx, cy) = hub_center();
+    hub_cell((px as f32 + 0.5 - cx) / TS as f32, (py as f32 + 0.5 - cy) / TS as f32)
+}
 
 /// Ein Landgebiet für die Erzeugung (Inselform, Hochland, Bewuchs): Kerninsel oder wilde Insel.
 #[derive(Clone, Copy, Debug)]
@@ -309,6 +384,8 @@ pub struct Waterfall {
     pub src: f32,
     pub top: f32,
     pub bot: f32,
+    /// tiefer Fall: so viele px stürzt das Wasser unter dem Klippenfuß weiter ins Dunkel
+    pub deep: f32,
 }
 #[derive(Clone, Debug)]
 pub struct Deco {
@@ -385,11 +462,18 @@ pub struct World {
     pub flat_areas: Vec<(i32, i32, i32, i32)>,
     /// Sarg, aus dem der Ertrunkene beim allerersten Start steigt
     pub wake_coffin: (f32, f32),
+    /// Prolog: wo man erwacht, wo man von der Klippe springt, Fuß der Klippe (px) und
+    /// wie weit das schwarze Meer reicht
+    pub prolog_start: (f32, f32),
+    pub prolog_jump: (f32, f32),
+    pub prolog_foot: f32,
     /// Häuser mit rauchendem Schornstein (Indizes in `props`)
     pub chimneys: Vec<usize>,
     cur: Zone,
     /// Biom des gerade erzeugten Gebiets (Pflanzentabellen)
     cur_biome: Biome,
+    /// die Glutwacht ist gebaut: Ebenen und Hafenkante je Pixel aus den Ringen
+    cur_hub_round: bool,
     nz: Noise,
     info: Box<dyn Fn(&str) -> Option<PropInfo> + Send + Sync>,
 }
@@ -448,9 +532,13 @@ impl World {
             en: EdgeNoise::new(),
             flat_areas: vec![],
             wake_coffin: (0.0, 0.0),
+            prolog_start: (0.0, 0.0),
+            prolog_jump: (0.0, 0.0),
+            prolog_foot: 0.0,
             chimneys: vec![],
             cur: Zone::Kueste,
             cur_biome: Biome::Coast,
+            cur_hub_round: false,
             nz: Noise::new(4242),
             info,
         };
@@ -549,17 +637,32 @@ impl World {
         if inb(tx, ty) && self.stairs[idx(tx, ty)] {
             return (l, true);
         }
-        // Wand bzw. Hang nach Süden
-        let fpx = face_px(if inb(tx, ty) { self.biome[idx(tx, ty)] } else { Biome::Coast });
-        let mut d = 3;
-        while d <= fpx {
-            if self.lpx(px, py + d) < l {
+        // Wand bzw. Hang nach Süden (Festungsmauern und Felsklippen so hoch wie der Höhenunterschied)
+        let bio = if inb(tx, ty) { self.biome[idx(tx, ty)] } else { Biome::Coast };
+        if bio == Biome::Hub || (inb(tx, ty) && self.tall_faces(idx(tx, ty))) {
+            let mut d = 3;
+            while d <= FACE_PX * 4 + 3 {
+                let lb = self.lpx(px, py + d);
+                if lb < l {
+                    if d <= face_span(Biome::Hub, l, lb) + 2 {
+                        return (l, false);
+                    }
+                    break;
+                }
+                d += 6;
+            }
+        } else {
+            let fpx = face_px(bio);
+            let mut d = 3;
+            while d <= fpx {
+                if self.lpx(px, py + d) < l {
+                    return (l, false);
+                }
+                d += 6;
+            }
+            if self.lpx(px, py + fpx) < l {
                 return (l, false);
             }
-            d += 6;
-        }
-        if self.lpx(px, py + fpx) < l {
-            return (l, false);
         }
         // Böschung seitlich, Kante oben
         let mut d = 3;
@@ -590,6 +693,7 @@ impl World {
                 self.island(z.region());
             }
         }
+        self.island(Zone::Prolog.region());
         self.plan_wild();
         for k in 0..self.wild.len() {
             let r = self.wild[k].r;
@@ -608,9 +712,12 @@ impl World {
                 Zone::Raben => self.layout_wind(&mut rng),
                 Zone::Mangroven => self.layout_earth(&mut rng),
                 Zone::Ende => self.layout_end(&mut rng),
-                Zone::Wild => {}
+                Zone::Wild | Zone::Prolog => {}
             }
         }
+        self.cur = Zone::Prolog;
+        self.cur_biome = Biome::Coast;
+        self.layout_prolog(&mut Rng::new(9_977));
         for k in 0..self.wild.len() {
             self.cur = Zone::Wild;
             self.cur_biome = self.wild[k].r.biome;
@@ -629,6 +736,7 @@ impl World {
         self.auto_stairs();
         self.compute_field();
         self.place_waterfalls();
+        self.prolog_fall();
         self.compute_field();
         self.compute_shore();
         lap("Hänge und Ufer", &mut t);
@@ -645,6 +753,9 @@ impl World {
             let mut rng = Rng::new(r.seed as u64 * 131 + 5);
             self.scatter(r, &mut rng);
         }
+        self.cur = Zone::Prolog;
+        self.cur_biome = Biome::Coast;
+        self.scatter(Zone::Prolog.region(), &mut Rng::new(9_131));
         lap("Bewuchs", &mut t);
         self.settle_on_cliffs();
         self.chimneys = (0..self.props.len()).filter(|&i| {
@@ -654,15 +765,7 @@ impl World {
         let mut rng = Rng::new(9191);
         self.sea_props(&mut rng);
         lap("See", &mut t);
-        let rt = |v: &[(i32, i32)]| v.iter().map(|&(x, y)| (((x + CX) * TS) as f32, ((y + CY) * TS) as f32)).collect::<Vec<_>>();
-        self.ghost_routes = vec![
-            rt(&[(294, 210), (306, 220), (286, 228), (276, 210)]),
-            rt(&[(184, 156), (192, 140), (198, 200)]),
-            rt(&[(284, 106), (306, 114), (294, 130)]),
-            rt(&[(188, 270), (204, 286), (176, 284)]),
-            rt(&[(180, 180), (172, 200), (192, 212)]),
-        ];
-        self.ghost_routes.extend(self.outer_routes());
+        self.ghost_routes = self.outer_routes();
         bevy::log::info!("Welt: {} wilde Inseln, gesamt {:.0} ms", self.wild.len(), t0.elapsed().as_secs_f64() * 1000.0);
     }
 
@@ -866,15 +969,19 @@ impl World {
                 if l == 0 {
                     continue;
                 }
+                // Festung und Felsklippen: eine Wandhöhe je Ebene Unterschied, sonst immer eine
+                let hub = self.tall_faces(i);
+                let max_rows = if hub { FH * 4 } else { FH };
                 let mut k = 0;
-                while k < FH && inb(x, y + k + 1) && self.level[idx(x, y + k + 1)] >= l {
+                while k < max_rows && inb(x, y + k + 1) && self.level[idx(x, y + k + 1)] >= l {
                     k += 1;
                 }
-                if k < FH && (!inb(x, y + k + 1) || self.level[idx(x, y + k + 1)] < l) {
+                if k < max_rows && (!inb(x, y + k + 1) || self.level[idx(x, y + k + 1)] < l) {
                     let low = if inb(x, y + k + 1) { self.level[idx(x, y + k + 1)] } else { 0 };
-                    if low < l {
+                    let rows = if hub { FH * (l - low) as i32 } else { FH };
+                    if low < l && k < rows {
                         self.cliff[i] = true;
-                        self.face[i] = (FH - 1 - k) as i8;
+                        self.face[i] = (rows - 1 - k) as i8;
                     }
                 }
             }
@@ -1142,7 +1249,7 @@ impl World {
     /// Wunschort eines Wasserfalls; `place_waterfalls` setzt ihn nach dem Hochland an die nächste
     /// passende Hangkante (Bach oben, Fall über den Hang, Becken unten).
     fn waterfall(&mut self, tx: i32, ty: i32, w: i32) {
-        self.waterfalls.push(Waterfall { tx, ty, w, x: 0.0, src: 0.0, top: 0.0, bot: 0.0 });
+        self.waterfalls.push(Waterfall { tx, ty, w, x: 0.0, src: 0.0, top: 0.0, bot: 0.0, deep: 0.0 });
     }
     fn place_waterfalls(&mut self) {
         let mut wfs = std::mem::take(&mut self.waterfalls);
@@ -1504,97 +1611,203 @@ impl World {
         self.item("pearls", cx + 28, cy - 20);
         self.npc("herald", cx - 6, cy + 6, "carver", "Alter Galionsschnitzer", "herald", true, None);
     }
-    /// Glutwacht nach dem Vorbild eines Feuerband-Schreins: kompakter Ring aus Mauern um einen
-    /// See in der Mitte. Im See ein eigener Steg zum Strudel, am Inselrand der Anleger fürs Schiff.
-    /// Nördlich über dem See die Feuerterrasse mit Säbelfeuer und Thronen, dahinter der Schrein.
+    /// Glutwacht: kreisrunde Hafenfestung im Geist eines verfallenen Feuerschreins, düster und
+    /// piratisch (siehe `hubgeo`). Mitte: Hafenbecken mit Strudel, Ring der brennenden Bossschiffe
+    /// und Steg; im Süden das Seetor fürs Schiff. Ringsum steigen Kai (Werft, Liegeplatz, Crew-Tafel),
+    /// unterer Ring (Schmied, Händlerin), Schrein-Terrasse (Säbelfeuer, Throne der Galionsfiguren,
+    /// Laternenmagd, Glutbaum), Balkone und die hohe Ringmauer an. Treppen verbinden je eine Ebene;
+    /// hinter der Nordmauer ragt der Bergfried auf.
     fn layout_hub(&mut self, rng: &mut Rng) {
+        use hubgeo::*;
         let d = self.cur.def();
         let (cx, cy) = (d.cx, d.cy);
-        let (wx0, wx1, wy0, wy1) = (cx - 22, cx + 22, cy - 27, cy + 21);
-        let px = |tx: i32| (tx * TS) as f32;
-        let py = |ty: i32| (ty * TS) as f32;
-        // Hof pflastern (auch wo die Insel ausfranst)
-        for y in wy0 - 1..=wy1 + 1 {
-            for x in wx0 - 1..=wx1 + 1 {
+        let (hx, hy) = hub_center();
+        let rr = (OUT + 20.0) as i32;
+        // ---- Grund: Ebenen und Material je Kachel aus den Ringen
+        for y in cy - rr..=cy + rr {
+            for x in cx - rr..=cx + rr {
+                if !inb(x, y) {
+                    continue;
+                }
+                let (dx, dy) = ((x - cx) as f32, (y - cy) as f32);
+                let r = (dx * dx + dy * dy).sqrt();
+                if r > rr as f32 {
+                    continue;
+                }
+                let i = idx(x, y);
+                // weit draußen: Wasser bleibt Wasser, Inselreste im Süden verschwinden
+                if r > OUT + 7.0 && (self.zone[i] != Some(Zone::Hain) || self.ground[i] == Mat::Water) {
+                    continue;
+                }
+                if r > OUT + 7.0 && dy > 10.0 {
+                    self.ground[i] = Mat::Water;
+                    self.level[i] = 0;
+                    continue;
+                }
+                self.zone[i] = Some(Zone::Hain);
+                self.biome[i] = Biome::Hub;
+                self.path[i] = false;
+                match hub_cell(dx, dy) {
+                    HubCell::Water => {
+                        self.ground[i] = Mat::Water;
+                        self.level[i] = 0;
+                    }
+                    HubCell::Level(l) => {
+                        self.level[i] = l;
+                        self.ground[i] = if l == 2 || l == 3 { Mat::Marble } else { Mat::Cobble };
+                    }
+                    HubCell::Outside => {
+                        self.level[i] = 0;
+                        // im Süden steigt die Mauer aus dem Meer, sonst ein felsiger Fuß
+                        if dy > 10.0 {
+                            self.ground[i] = Mat::Water;
+                        } else if r < OUT + 4.0 || self.ground[i] != Mat::Water {
+                            self.ground[i] = if (x * 7 + y * 3) % 5 == 0 { Mat::Dirt } else { Mat::Rock };
+                        }
+                    }
+                }
+            }
+        }
+        // begehbare Flächen als Weg (kein Bewuchs), Mauerfronten nicht
+        for y in cy - rr..=cy + rr {
+            for x in cx - rr..=cx + rr {
                 if !inb(x, y) {
                     continue;
                 }
                 let i = idx(x, y);
-                self.ground[i] = Mat::Cobble;
-                self.level[i] = 0;
-                self.path[i] = true;
-                self.zone[i] = Some(Zone::Hain);
-                self.biome[i] = Biome::Hub;
-            }
-        }
-        // ---- Ebenen: Feuerterrasse (1), Schrein (2), Wachplattformen (3)
-        self.terrace(wx0 + 1, wy0 + 1, wx1 - 1, cy - 12, 1);
-        self.terrace(cx - 13, wy0 + 1, cx + 13, cy - 20, 2);
-        self.terrace(wx0 + 1, wy0 + 1, wx0 + 6, wy0 + 6, 3);
-        self.terrace(wx1 - 6, wy0 + 1, wx1 - 1, wy0 + 6, 3);
-        for x in [wx0 + 2, wx1 - 4] {
-            self.stair(x, 3, cy - 12);
-        }
-        self.stair(cx - 1, 3, cy - 20);
-        self.stair(wx0 + 3, 2, wy0 + 6);
-        self.stair(wx1 - 4, 2, wy0 + 6);
-        for y in wy0 + 1..=cy - 12 {
-            for x in wx0 + 1..=wx1 - 1 {
-                let l = self.level[idx(x, y)];
-                if l >= 1 {
-                    self.ground[idx(x, y)] = if l >= 2 { Mat::Marble } else { Mat::Cobble };
+                if self.zone[i] != Some(Zone::Hain) || self.ground[i] == Mat::Water {
+                    continue;
                 }
-            }
-        }
-        // ---- der See in der Mitte, Kanal zum Seetor im Osten (für das Schiff zum Strudel)
-        let (lx, ly) = (cx, cy + 2);
-        self.pond(lx, ly, 16, 12, Some(Mat::Marble), 0.03);
-        for y in ly - 3..=ly + 3 {
-            for x in lx + 12..=cx + 60 {
-                if inb(x, y) {
-                    let i = idx(x, y);
-                    self.ground[i] = Mat::Water;
-                    self.path[i] = false;
-                    self.level[i] = 0;
+                if !matches!(hub_cell((x - cx) as f32, (y - cy) as f32), HubCell::Level(_)) {
+                    continue;
                 }
-            }
-        }
-        for x in lx + 12..=wx1 + 4 {
-            for y in [ly - 4, ly + 4] {
-                if inb(x, y) && self.ground[idx(x, y)] != Mat::Water {
-                    self.ground[idx(x, y)] = Mat::Marble;
+                let l = self.level[i];
+                let mut face = false;
+                if l > 0 {
+                    for k in 1..=FH * 4 {
+                        if !inb(x, y + k) {
+                            break;
+                        }
+                        let lb = self.level[idx(x, y + k)];
+                        if lb < l {
+                            face = k <= FH * (l - lb) as i32;
+                            break;
+                        }
+                    }
                 }
+                self.path[i] = !face;
             }
         }
-        self.whirlpool = (px(lx) + 16.0, py(ly) + 16.0);
-        // Steg im See: vom Südufer zwischen den Schiffen hindurch bis vor den Strudel
-        let (s0, s1) = (ly + 7, ly + 14);
+        // ---- Treppen: nur zwischen benachbarten Ebenen, wo man wirklich hinauf will
+        // Kai ↔ unterer Ring: Mitte (vom Steg) und Diagonalen; Ostend/Westend zum Südplatz
+        self.hub_stair(cx - 2, cx + 2, cy - 31, cy - 22);
+        self.hub_stair(cx - 18, cx - 16, cy - 25, cy - 14);
+        self.hub_stair(cx + 16, cx + 18, cy - 25, cy - 14);
+        self.hub_stair(cx - 32, cx - 29, cy - 2, cy + 6);
+        self.hub_stair(cx + 29, cx + 32, cy - 2, cy + 6);
+        // unterer Ring ↔ Schrein-Terrasse: große Mitteltreppe und an den Enden der Terrasse
+        self.hub_stair(cx - 3, cx + 3, cy - 37, cy - 29);
+        self.hub_stair(cx - 41, cx - 38, cy - 10, cy - 2);
+        self.hub_stair(cx + 38, cx + 41, cy - 10, cy - 2);
+        // Schrein-Terrasse ↔ Balkone
+        self.hub_stair(cx - 21, cx - 19, cy - 43, cy - 33);
+        self.hub_stair(cx + 19, cx + 21, cy - 43, cy - 33);
+        self.hub_stair(cx - 46, cx - 44, cy - 18, cy - 10);
+        self.hub_stair(cx + 44, cx + 46, cy - 18, cy - 10);
+        // Balkone ↔ Ringmauer
+        self.hub_stair(cx - 28, cx - 26, cy - 48, cy - 38);
+        self.hub_stair(cx + 26, cx + 28, cy - 48, cy - 38);
+        // ---- Hafenbecken: Strudel, Ring der besiegten Bossschiffe (Diagonalen), Steg von Norden
+        self.whirlpool = (hx, hy);
+        for (k, a) in [-45.0f32, 45.0, 135.0, 225.0].iter().enumerate() {
+            let a = a.to_radians();
+            self.hub_wrecks.push(HubWreck { el: ["fire", "ice", "wind", "earth"][k], x: hx + a.cos() * 410.0, y: hy + a.sin() * 360.0, h: a + std::f32::consts::PI });
+        }
+        let (s0, s1) = (cy - (BASIN as i32) - 1, cy - 12);
         for y in s0..=s1 {
-            for x in lx - 1..=lx + 1 {
+            for x in cx - 1..=cx + 1 {
                 let i = idx(x, y);
                 self.ground[i] = Mat::Plank;
                 self.path[i] = true;
                 self.level[i] = 0;
             }
         }
-        for y in (s0..=s1).step_by(2) {
-            self.prop_t("bridgePost", lx - 2, y);
-            self.prop_t("bridgePost", lx + 2, y);
+        for y in (s0 + 1..=s1).step_by(2) {
+            self.prop_t("bridgePost", cx - 2, y);
+            self.prop_t("bridgePost", cx + 2, y);
         }
-        self.prop_t("lamppost", lx - 2, s0 - 1);
-        self.prop_t("lamppost", lx + 2, s0 - 1);
-        self.pier_end = (px(lx) + 16.0, py(s0) + 8.0);
-        // Ring der besiegten Bossschiffe um den Strudel (Ellipse, je 90°, diagonal)
-        let (wx, wy) = self.whirlpool;
-        for (k, a) in [-45.0f32, 45.0, 135.0, 225.0].iter().enumerate() {
-            let a = a.to_radians();
-            self.hub_wrecks.push(HubWreck { el: ["fire", "ice", "wind", "earth"][k], x: wx + a.cos() * 340.0, y: wy + a.sin() * 250.0, h: a + std::f32::consts::PI });
+        self.prop_t("lamppost", cx - 2, s1);
+        self.prop_t("lamppost", cx + 2, s1);
+        self.pier_end = ((cx * TS + TS / 2) as f32, (s1 * TS) as f32 + 8.0);
+        // ---- Kai (Ebene 0): Liegeplatz und Schiffsmeister im Osten, Werft auf dem Südostplatz
+        self.dock(Zone::Hain, cx + 23, cy, -1, 0);
+        self.npc("shipmaster", cx + 24, cy - 3, "shipmaster", "Schiffsmeister Brack", "shipmaster", false, None);
+        for y in cy + 9..=cy + 24 {
+            for x in cx + 8..=cx + 30 {
+                if inb(x, y) && self.level[idx(x, y)] == 0 && self.ground[idx(x, y)] == Mat::Cobble && matches!(hub_cell((x - cx) as f32, (y - cy) as f32), HubCell::Level(0)) {
+                    self.ground[idx(x, y)] = Mat::Plank;
+                }
+            }
         }
-        // ---- Feuerterrasse (Ebene 1): Säbelfeuer, Throne der Galionsfiguren, Schmied und Händlerin
-        let (fx, fy) = (cx, cy - 17);
-        self.plaza(fx, fy, 6, 2, Mat::Marble, Some(1));
+        self.prop_t("slipway", cx + 19, cy + 18);
+        self.prop_t("crane", cx + 10, cy + 15);
+        self.prop_t("logPile", cx + 26, cy + 12);
+        self.prop_t("ropeCoil", cx + 13, cy + 20);
+        self.prop_t("ropeCoil", cx + 24, cy + 21);
+        self.prop_t("crates", cx + 28, cy + 16);
+        self.prop_t("barrels", cx + 9, cy + 22);
+        self.prop_t("anchorDeco", cx + 15, cy + 10);
+        self.prop_t("flagPole", cx + 29, cy + 9);
+        self.prop_t("lamppost", cx + 12, cy + 10);
+        self.prop_t("lamppost", cx + 26, cy + 23);
+        self.prop_t("signpost", cx + 21, cy + 6);
+        self.prop_t("chainPost", cx + 7, cy + 12);
+        // Crew-Tafel auf dem Südwestplatz, Feuerbecken und Fässer
+        let (tx, ty) = (cx - 17, cy + 14);
+        self.prop_t("table", tx, ty);
+        self.prop_t("bench", tx, ty + 2);
+        self.prop_t("table", tx - 6, ty);
+        self.prop_t("bench", tx - 6, ty + 2);
+        self.prop_t("brazier", tx + 4, ty - 2);
+        self.prop_t("brazier", tx - 10, ty - 2);
+        self.prop_t("barrels", tx - 11, ty + 3);
+        self.prop_t("crates", tx + 5, ty + 3);
+        self.prop_t("lamppost", tx - 3, ty - 4);
+        self.crew_spots = [(tx - 1, ty + 1), (tx + 1, ty + 1), (tx - 7, ty + 1), (tx - 5, ty + 1)].iter().map(|&(x, y)| tpos(x, y)).collect();
+        self.prop_t("hullArch", cx - 14, cy + 25);
+        self.prop_t("rowboat", cx - 24, cy + 22);
+        // Westkai: Gedenkstätte der Ertrunkenen (Säbelgräber, Kerzen, Statue)
+        for (k, (gx, gy)) in [(cx - 23, cy - 6), (cx - 24, cy - 2), (cx - 24, cy + 2), (cx - 23, cy + 6)].iter().enumerate() {
+            self.prop_t(&format!("swordGrave{}", k % 3), *gx, *gy);
+        }
+        self.prop_tn("candles0", cx - 22, cy - 4);
+        self.prop_tn("candles2", cx - 22, cy + 4);
+        self.prop_t("hoodedStatue", cx - 24, cy);
+        // Nordkai beidseits des Stegs: Netze, Poller, Laternen
+        for (x, y, kind) in [(cx - 8, cy - 22, "nets"), (cx + 8, cy - 22, "barrels"), (cx - 13, cy - 19, "chainPost"), (cx + 13, cy - 19, "chainPost"), (cx - 5, cy - 23, "lamppost"), (cx + 5, cy - 23, "lamppost")] {
+            self.prop_t(kind, x, y);
+        }
+        // ---- unterer Ring (Ebene 1): Schmied im Westen, Händlerin im Osten, Feuerbecken an der Treppe
+        let (sx, sy) = (cx - 37, cy - 2);
+        self.prop_t("forge", sx - 1, sy - 2);
+        self.prop_t("anchorDeco", sx + 4, sy + 1);
+        self.prop_t("barrels", sx - 5, sy + 1);
+        self.npc("smith", sx, sy, "smith", "Schmied Harrow", "smith", false, None);
+        let (mx, my) = (cx + 37, cy - 2);
+        self.prop_t("stall0", mx, my - 2);
+        self.prop_t("crates", mx - 4, my + 1);
+        self.prop_t("barrels", mx + 4, my + 1);
+        self.npc("merchant", mx, my, "merchant", "Händlerin Sabeth", "merchant", false, None);
+        for (x, y) in [(cx - 5, cy - 30), (cx + 5, cy - 30), (cx - 33, cy - 1), (cx + 33, cy - 1)] {
+            self.prop_t("brazier", x, y);
+        }
+        for (x, y) in [(cx - 8, cy - 30), (cx + 8, cy - 30)] {
+            self.prop_t("bannerPole", x, y);
+        }
+        // ---- Schrein-Terrasse (Ebene 2): Säbelfeuer, Throne, Laternenmagd, Glutbaum, Säulen
+        let (fx, fy) = (cx, cy - 39);
         self.fire("hain", fx, fy);
-        for (el, tx, ty) in [("fire", fx - 9, fy), ("ice", fx - 5, fy - 2), ("wind", fx + 5, fy - 2), ("earth", fx + 9, fy)] {
+        for (el, tx, ty) in [("fire", fx - 9, fy + 2), ("ice", fx - 5, fy - 1), ("wind", fx + 5, fy - 1), ("earth", fx + 9, fy + 2)] {
             let (sx, sy) = tpos(tx, ty);
             let pi = self.prop_x("figureheadSlot", sx, sy, |p| {
                 p.slot = Some(el);
@@ -1602,130 +1815,299 @@ impl World {
             });
             self.slots.push(Slot { el, prop: pi, x: sx, y: sy });
         }
-        for (i, (tx, ty)) in [(fx - 3, fy + 2), (fx + 3, fy + 2), (fx - 7, fy + 2), (fx + 7, fy + 2)].iter().enumerate() {
+        self.npc("maid", fx - 2, fy + 2, "lanternMaid", "Die Laternenmagd", "maid", false, None);
+        for (i, (tx, ty)) in [(fx - 3, fy + 3), (fx + 3, fy + 3), (fx - 12, fy + 3), (fx + 12, fy + 3)].iter().enumerate() {
             self.prop_t(&format!("swordGrave{}", i % 3), *tx, *ty);
         }
-        for (i, (tx, ty)) in [(fx - 11, fy - 1), (fx - 2, fy - 2), (fx + 2, fy - 2), (fx + 11, fy - 1)].iter().enumerate() {
+        for (i, (tx, ty)) in [(fx - 11, fy), (fx - 2, fy - 2), (fx + 2, fy - 2), (fx + 11, fy)].iter().enumerate() {
             self.prop_tn(&format!("candles{}", i % 3), *tx, *ty);
         }
         for (tx, ty) in [(fx - 3, fy - 1), (fx + 3, fy - 1)] {
             self.prop_t("brazier", tx, ty);
         }
-        // Säulenreihe an der Terrassenkante über dem See
-        for dx in [-15, -11, 11, 15] {
-            self.prop_t("stoneColumn", cx + dx, cy - 15);
+        self.prop_t("emberTree0", fx + 14, fy + 2);
+        for (x, y) in [(fx - 13, fy - 1), (fx + 13, fy - 2)] {
+            self.prop_t("hoodedStatue", x, y);
         }
-        self.npc("maid", fx - 2, fy + 1, "lanternMaid", "Die Laternenmagd", "maid", false, None);
-        let (sx, sy) = (wx0 + 6, cy - 16);
-        self.plaza(sx, sy, 3, 1, Mat::Dirt, Some(1));
-        self.prop_t("forge", sx - 1, sy - 2);
-        self.prop_t("anchorDeco", sx + 3, sy + 1);
-        self.prop_t("barrels", sx - 4, sy + 1);
-        self.npc("smith", sx, sy, "smith", "Schmied Harrow", "smith", false, None);
-        let (mx, my) = (wx1 - 6, cy - 16);
-        self.plaza(mx, my, 3, 1, Mat::Dirt, Some(1));
-        self.prop_t("stall0", mx, my - 2);
-        self.prop_t("crates", mx - 4, my + 1);
-        self.prop_t("barrels", mx + 4, my + 1);
-        self.npc("merchant", mx, my, "merchant", "Händlerin Sabeth", "merchant", false, None);
-        // ---- Schrein (Ebene 2): Bergfried, Statuen, Banner
-        let (kx, ky) = (px(cx) + 16.0, py(cy - 24) + 24.0);
-        self.prop("fortKeep", kx, ky);
-        for dx in [-10, 10] {
-            self.prop_t("hoodedStatue", cx + dx, cy - 24);
+        // gebrochene Säulen an der Terrassenkante, Masten an den Flanken
+        for (x, y) in [(cx - 16, cy - 33), (cx + 16, cy - 33), (cx - 9, cy - 35), (cx + 9, cy - 35)] {
+            self.prop_t("stoneColumn", x, y);
         }
-        for dx in [-6, 6] {
-            self.prop_t("bannerPole", cx + dx, cy - 23);
+        for (k, (x, y)) in [(cx - 25, cy - 27), (cx + 25, cy - 27), (cx - 33, cy - 17), (cx + 33, cy - 17)].iter().enumerate() {
+            self.prop_t(&format!("mastPillar{}", k % 3), *x, *y);
         }
-        // Wachplattformen (Ebene 3) mit Kanonen und Feuerbecken
-        for (bx, flip) in [(wx0 + 4, false), (wx1 - 4, true)] {
-            self.prop_tf("cannon", bx, wy0 + 3, flip);
-            self.prop_t("brazier", bx + if flip { -2 } else { 2 }, wy0 + 2);
-            self.prop_t("bannerPole", bx, wy0 + 2);
+        // ---- Balkone (Ebene 3): Kapitänsfriedhof im Nordwesten, Kanonenbalkon im Nordosten
+        for (i, (gx, gy)) in [(cx - 31, cy - 36), (cx - 35, cy - 33), (cx - 38, cy - 29), (cx - 29, cy - 39), (cx - 40, cy - 25)].iter().enumerate() {
+            let kind = if i % 2 == 0 { format!("grave{}", i % 2) } else { format!("swordGrave{}", i % 3) };
+            self.prop_t(&kind, *gx, *gy);
         }
-        // ---- Mauern und Türme (Seetor im Osten, Landtor im Süden)
+        self.prop_t("skullpile", cx - 33, cy - 37);
+        self.prop_tn("candles1", cx - 36, cy - 31);
+        for (x, y, flip) in [(cx + 31, cy - 37, true), (cx + 37, cy - 32, true), (cx + 41, cy - 26, false)] {
+            self.prop_tf("cannon", x, y, flip);
+        }
+        self.prop_t("crates", cx + 34, cy - 36);
+        self.prop_t("barrels", cx + 40, cy - 30);
+        self.prop_t("flagPole", cx + 29, cy - 40);
+        for (x, y) in [(cx - 24, cy - 40), (cx + 24, cy - 40)] {
+            self.prop_t("brazier", x, y);
+        }
+        // ---- Ringmauer (Ebene 4): Zinnen an der Außenkante, Türme, Seetor; Bergfried dahinter
+        let mut k = 0;
+        let mut a = 0.0f32;
+        while a < std::f32::consts::TAU {
+            let (ca, sa) = (a.cos(), a.sin());
+            let (dx, dy) = (ca * (OUT - 0.8), sa * (OUT - 0.8));
+            // nur wo die Mauer quer im Bild liegt (an den Seiten stünden die Stücke übereinander)
+            if sa.abs() > 0.55 && !(dy > 0.0 && dx.abs() < GATE + 3.0) {
+                self.prop_x(&format!("battlement{}", k % 3), hx + dx * TS as f32, hy + dy * TS as f32, |_| {});
+                k += 1;
+            }
+            a += 2.1 / OUT;
+        }
+        for i in 0..8 {
+            let a = (22.5 + i as f32 * 45.0).to_radians();
+            let (dx, dy) = (a.cos() * (OUT - 1.4), a.sin() * (OUT - 1.4));
+            self.prop("fortTower", hx + dx * TS as f32, hy + dy * TS as f32);
+        }
+        for i in 0..16 {
+            let a = (i as f32 * 22.5).to_radians();
+            let (ca, sa) = (a.cos(), a.sin());
+            if sa > 0.3 && ca.abs() < 0.2 {
+                continue;
+            }
+            let rad = if sa > 0.0 { OUT - 3.0 } else { OUT - 2.6 };
+            self.prop("brazier", hx + ca * rad * TS as f32, hy + sa * rad * TS as f32);
+        }
+        let gy = hy + (WALL_S + 6.0) * TS as f32;
+        for dx in [-(GATE + 2.4), GATE + 2.4] {
+            self.prop("gateTower", hx + dx * TS as f32, gy);
+        }
+        self.prop_x("fortArch", hx, hy + (OUT - 3.0) * TS as f32, |p| p.no_collide = true);
+        self.prop("fortKeep", hx, hy - (OUT + 4.5) * TS as f32);
+        for dx in [-5.0f32, 5.0] {
+            self.prop("bannerPole", hx + dx * TS as f32, hy - (OUT - 1.5) * TS as f32);
+        }
+        // Kanonen auf der Südmauer, zum Meer gerichtet
+        for (x, flip) in [(cx - 14, false), (cx - 24, false), (cx + 14, true), (cx + 24, true)] {
+            let y = cy + ((OUT * OUT - ((x - cx) * (x - cx)) as f32).sqrt() as i32) - 5;
+            self.prop_tf("cannon", x, y, flip);
+        }
+        // ---- draußen am Fuß der Mauer: tote Bäume und Felsen im Norden
+        for (x, y, r, n) in [(-40, -44, 4.0, 3), (40, -44, 4.0, 3), (-56, -10, 3.0, 2), (56, -10, 3.0, 2)] {
+            self.grove(cx + x, cy + y, r, rng, n, None);
+        }
+        self.cur_hub_round = true;
+    }
+
+    /// Prolog: der Wrackzwinger. Eine hohe Felsplatte (Ebene 4) über dem schwarzen Meer, im
+    /// Norden, Osten und Westen von hohen Mauern umschlossen, im Süden die Abbruchkante über dem
+    /// tiefen Wasserfall. Überall Wracks – die Beute der Riesigen Meeresspinne, eingesponnen in
+    /// Netze und Kokons. Ein Bach entspringt an der Nordmauer und stürzt im Süden über die Klippe.
+    /// Am Abbruch liegt das Revier der Spinne; dahinter bleibt nur der Sprung.
+    fn layout_prolog(&mut self, rng: &mut Rng) {
+        let d = Zone::Prolog.def();
+        let (cx, cy) = (d.cx, d.cy);
+        let (x0, y0, x1, y1) = PROLOG;
+        // ---- alles Meer, dann die Felsplatte
+        for y in y0..y1 {
+            for x in x0..x1 {
+                let i = idx(x, y);
+                self.ground[i] = Mat::Water;
+                self.level[i] = 0;
+                self.zone[i] = Some(Zone::Prolog);
+                self.biome[i] = Biome::Coast;
+                self.path[i] = false;
+            }
+        }
+        let cliff = |dx: i32| -> i32 { 30 + ((dx as f32 * 0.21).sin() * 1.6 + (dx as f32 * 0.07).cos() * 1.2).round() as i32 };
+        for y in cy - 46..=cy + 34 {
+            for x in cx - 58..=cx + 58 {
+                let (dx, dy) = (x - cx, y - cy);
+                let e = (dx as f32 / 55.0).powi(4) + ((dy as f32 + 6.0) / 41.0).powi(4) + self.nz.n2(x as f32 * 0.2, y as f32 * 0.2) * 0.08;
+                if e < 1.0 && dy < cliff(dx) {
+                    let i = idx(x, y);
+                    let n = self.nz.fbm(x as f32 * 0.09, y as f32 * 0.09, 3);
+                    self.ground[i] = if n > 0.28 { Mat::Rock } else if n < -0.3 { Mat::Sand } else if n < -0.05 { Mat::Mud } else { Mat::Dirt };
+                    self.level[i] = 4;
+                }
+            }
+        }
+        // ---- der Bach: Quelle an der Nordmauer, in Schleifen nach Süden über die Klippe
+        let river: [(i32, i32); 8] = [(12, -36), (14, -28), (8, -18), (13, -8), (20, 2), (17, 11), (15, 18), (15, 34)];
+        for w in river.windows(2) {
+            let ((ax, ay), (bx, by)) = (w[0], w[1]);
+            let n = ((bx - ax).abs().max((by - ay).abs()) * 3).max(1);
+            for k in 0..=n {
+                let t = k as f32 / n as f32;
+                let (fx, fy) = (cx as f32 + ax as f32 + (bx - ax) as f32 * t, cy as f32 + ay as f32 + (by - ay) as f32 * t);
+                for oy in -2..=2 {
+                    for ox in -2..=2 {
+                        let (tx, ty) = ((fx + ox as f32 * 0.6).round() as i32, (fy + oy as f32 * 0.6).round() as i32);
+                        if inb(tx, ty) && self.level[idx(tx, ty)] == 4 {
+                            self.ground[idx(tx, ty)] = Mat::Water;
+                        }
+                    }
+                }
+            }
+        }
+        self.pond(cx + 12, cy - 36, 3, 2, Some(Mat::Rock), 0.2);
+        for y in cy - 39..=cy - 33 {
+            for x in cx + 8..=cx + 16 {
+                if self.ground[idx(x, y)] == Mat::Water {
+                    self.level[idx(x, y)] = 4;
+                }
+            }
+        }
+        // Steg über den Bach zum Ostteil
+        for x in cx + 6..=cx + 12 {
+            for y in cy - 15..=cy - 14 {
+                let i = idx(x, y);
+                if self.ground[i] == Mat::Water {
+                    self.ground[i] = Mat::Plank;
+                    self.path[i] = true;
+                }
+            }
+        }
+        // ---- hohe Mauern: Norden, Westen, Osten; Türme an den Ecken und an der Klippe
+        let (wx0, wx1, wy0) = (cx - 50, cx + 50, cy - 40);
         let mut k = 0;
         let mut x = wx0 + 2;
         while x <= wx1 - 2 {
-            self.prop_x(&format!("fortWall{}", k % 2), px(x), py(wy0) + 24.0, |_| {});
-            if (x - cx).abs() > 4 {
-                self.prop_x(&format!("fortWall{}", (k + 1) % 2), px(x), py(wy1) + 24.0, |_| {});
-            }
+            self.prop_x(&format!("highWall{}", k % 2), ((x * TS) as f32) + 16.0, (wy0 * TS) as f32 + 26.0, |_| {});
             k += 1;
             x += 4;
         }
         let mut y = wy0 + 4;
-        while y <= wy1 {
-            self.prop("fortWallV", px(wx0) + 16.0, py(y));
-            if !(ly - 5..=ly + 8).contains(&y) {
-                self.prop("fortWallV", px(wx1) + 16.0, py(y));
-            }
+        while y <= cy + 22 {
+            self.prop("highWallV", (wx0 * TS) as f32 + 16.0, (y * TS) as f32);
+            self.prop("highWallV", (wx1 * TS) as f32 + 16.0, (y * TS) as f32);
             y += 4;
         }
-        for (tx, ty) in [(wx0, wy0), (wx1, wy0), (wx0, wy1), (wx1, wy1), (wx1, ly - 6), (wx1, ly + 6)] {
-            self.prop("fortTower", px(tx) + 16.0, py(ty) + 16.0);
+        for (tx, ty) in [(wx0, wy0), (wx1, wy0), (wx0, cy + 24), (wx1, cy + 24)] {
+            self.prop("fortTower", (tx * TS) as f32 + 16.0, (ty * TS) as f32 + 16.0);
         }
-        let gy = py(wy1) + 24.0;
-        for dx in [-70.0f32, 70.0] {
-            self.prop("gateTower", px(cx) + 16.0 + dx, gy - 6.0);
+        // ---- Erwachen zwischen Trümmern an der Nordmauer, ein sterbender Matrose daneben
+        let (sx, sy) = (cx - 16, cy - 35);
+        self.prolog_start = tpos(sx, sy);
+        self.flat_areas.push((sx, sy, 3, 3));
+        self.npc("drownedSailor", sx + 4, sy + 1, "stormSailor", "Sterbender Matrose", "prolog", true, None);
+        self.prop_t("torch", sx - 2, sy - 2);
+        self.prop_t("torch", sx + 6, sy - 2);
+        for (tx, ty, kind) in [(sx - 4, sy + 2, "barrels"), (sx + 7, sy + 3, "crates"), (sx - 6, sy - 1, "rowboat"), (sx + 2, sy + 4, "nets")] {
+            self.prop_t(kind, tx, ty);
         }
-        self.prop_x("fortArch", px(cx) + 16.0, gy, |p| p.no_collide = true);
-        // ---- Seeufer (Ebene 0): Crew-Tafel im Südosten, Friedhof im Südwesten und Westen
-        let (tx, ty) = (cx + 11, cy + 18);
-        self.prop_t("table", tx, ty);
-        self.prop_t("bench", tx, ty + 2);
-        self.prop_t("table", tx + 5, ty);
-        self.prop_t("bench", tx + 5, ty + 2);
-        self.prop_t("brazier", tx + 8, ty - 1);
-        self.prop_t("barrels", tx + 9, ty + 2);
-        self.crew_spots = [(tx - 1, ty + 1), (tx + 1, ty + 1), (tx + 4, ty + 1), (tx + 6, ty + 1)].iter().map(|&(x, y)| tpos(x, y)).collect();
-        for (i, (gx, gy)) in [(wx0 + 3, cy + 17), (wx0 + 6, cy + 18), (wx0 + 9, cy + 19), (wx0 + 2, cy + 8), (wx0 + 3, cy + 12), (wx0 + 2, cy - 2)].iter().enumerate() {
-            if i % 3 == 0 {
-                self.prop_t(&format!("swordGrave{}", i % 3), *gx, *gy);
-            } else {
-                self.prop_t(if i % 2 == 0 { "grave0" } else { "grave1" }, *gx, *gy);
+        // ---- das Wrackfeld: Schiffe, eingesponnen, Netze und Kokons ringsum
+        for (k, (dx, dy, flip)) in [(-30, -24, false), (32, -27, true), (-38, -4, false), (34, -6, true), (28, 13, false), (-36, 13, true), (-4, -22, true)].iter().enumerate() {
+            let (tx, ty) = (cx + dx, cy + dy);
+            self.prop_tf("wreck", tx, ty, *flip);
+            self.flat_areas.push((tx, ty, 6, 4));
+            self.prop_t(&format!("spiderWeb{}", k % 2), tx + if *flip { -5 } else { 5 }, ty - 2);
+            for (ox, oy) in [(-4, 3), (5, 3), (2, -3)] {
+                if rng.chance(0.7) {
+                    self.prop_tf(&format!("cocoon{}", (k + ox as usize) % 2), tx + ox, ty + oy, rng.chance(0.5));
+                }
             }
-        }
-        self.prop_t("skullpile", wx0 + 12, cy + 19);
-        self.prop_t("hoodedStatue", wx0 + 2, cy + 3);
-        for (tx, ty) in [(cx - 3, wy1 - 2), (cx + 3, wy1 - 2), (cx - 4, s1 + 1), (cx + 4, s1 + 1), (wx0 + 3, cy - 9), (wx1 - 3, cy - 9)] {
-            self.prop_t("brazier", tx, ty);
-        }
-        self.prop_t("emberTree0", wx0 + 3, cy - 6);
-        self.prop_t("emberTree0", wx1 - 3, ly + 9);
-        // ---- Draußen: Weg zum Anleger am Südrand der Insel, Schiffsmeister am Steg, tote Bäume
-        self.road(&[(cx, wy1 + 1), (cx, wy1 + 6)], Mat::Cobble, 1);
-        self.dock(Zone::Hain, cx, wy1 + 4, 0, 1);
-        let (dpx, dpy) = self.docks.last().map(|d| (d.px, d.py)).unwrap_or((px(cx), py(wy1 + 8)));
-        let (dtx, dty) = ((dpx / TS as f32) as i32, (dpy / TS as f32) as i32);
-        self.npc("shipmaster", dtx - 3, dty - 4, "shipmaster", "Schiffsmeister Brack", "shipmaster", false, None);
-        // Werft auf einem breiten Holzkai beidseits des Anlegers: Helling mit Schiff im Bau,
-        // Kran, Holz, Taue, Laternen – weithin sichtbar
-        for y in dty - 9..=dty - 3 {
-            for x in dtx - 12..=dtx + 13 {
-                if inb(x, y) && (self.ground[idx(x, y)] == Mat::Water || y >= dty - 6) {
-                    let i = idx(x, y);
-                    self.ground[i] = Mat::Plank;
-                    self.path[i] = true;
-                    self.level[i] = 0;
+            let junk = ["barrels", "crates", "anchorDeco", "sharkSkel0", "sharkSkel1", "skullpile", "nets"];
+            for _ in 0..3 {
+                let (jx, jy) = (tx + rng.int(-6, 6), ty + rng.int(-4, 5));
+                if self.free_t(jx, jy, 0) {
+                    self.prop_t(junk[rng.int(0, junk.len() as i32 - 1) as usize], jx, jy);
                 }
             }
         }
-        self.prop_t("slipway", dtx + 7, dty - 6);
-        self.prop_t("crane", dtx - 7, dty - 5);
-        self.prop_t("crates", dtx + 2, dty - 6);
-        self.prop_t("anchorDeco", dtx - 5, dty - 7);
-        self.prop_t("logPile", dtx - 9, dty - 7);
-        self.prop_t("ropeCoil", dtx - 1, dty - 6);
-        self.prop_t("ropeCoil", dtx + 1, dty - 3);
-        self.prop_t("barrels", dtx - 6, dty - 2);
-        self.prop_t("cannon", dtx + 3, dty - 2);
-        self.prop_t("lamppost", dtx - 2, dty - 2);
-        self.prop_t("lamppost", dtx + 2, dty - 9);
-        self.prop_t("flagPole", dtx - 9, dty - 3);
-        self.prop_t("signpost", dtx - 1, dty - 8);
-        for (x, y, r, n) in [(-30, -4, 5.0, 4), (-28, 14, 4.0, 3), (28, -14, 4.0, 3)] {
-            self.grove(cx + x, cy + y, r, rng, n, None);
+        // Rippenbogen und Masten als Wegmarken, Tote, Gräber
+        self.prop_x("hullArch", tpos(cx - 12, cy - 12).0, tpos(cx - 12, cy - 12).1, |p| p.no_collide = true);
+        for (k, (dx, dy)) in [(-22, -30), (22, -18), (-24, 4), (6, 4), (-16, -2)].iter().enumerate() {
+            self.prop_t(&format!("mastPillar{}", k % 3), cx + dx, cy + dy);
+        }
+        let mut n = 0;
+        for _ in 0..120 {
+            if n >= 26 {
+                break;
+            }
+            let (tx, ty) = (cx + rng.int(-46, 46), cy + rng.int(-34, 14));
+            if !inb(tx, ty) || self.level[idx(tx, ty)] != 4 || self.ground[idx(tx, ty)] == Mat::Water || !self.free_t(tx, ty, 1) {
+                continue;
+            }
+            let kind = match rng.int(0, 7) {
+                0 => format!("cocoon{}", rng.int(0, 1)),
+                1 => format!("sitDead{}", rng.int(0, 1)),
+                2 => format!("buried{}", rng.int(0, 2)),
+                3 => "skullpile".to_string(),
+                4 => format!("spiderWeb{}", rng.int(0, 1)),
+                5 => format!("coffinBones{}", rng.int(0, 1)),
+                6 => "chainPost".to_string(),
+                _ => format!("cocoon{}", rng.int(0, 1)),
+            };
+            let flip = rng.chance(0.5);
+            self.prop_tf(&kind, tx, ty, flip);
+            n += 1;
+        }
+        // ---- Gegner (schwach), Fundstücke
+        for (kind, dx, dy) in [("drowned", -22, -14), ("drowned", -27, 1), ("crab", -34, -12), ("crab", 18, -16), ("crab", -9, -6), ("skeleton", 26, -20), ("crab", 30, 2)] {
+            self.spawn(kind, cx + dx, cy + dy, false);
+        }
+        self.item("pearls", cx + 30, cy - 33);
+        self.item("bombs", cx - 41, cy + 8);
+        self.item("pearls", cx - 19, cy - 35);
+        self.item("bullets", cx + 38, cy + 8);
+        // ---- das Revier der Spinne am Abbruch: freie Fläche, Kokons am Rand, Fackeln
+        let (ax, ay) = (cx - 4, cy + 8);
+        self.flat_areas.push((ax, ay, 12, 9));
+        let (apx, apy) = tpos(ax, ay);
+        self.arenas.insert("prolog", Arena { x: apx, y: apy, r: 11.0 * TS as f32, ry: 8.0 * TS as f32 });
+        for k in 0..10 {
+            let a = k as f32 / 10.0 * std::f32::consts::TAU;
+            let (tx, ty) = (ax + (a.cos() * 13.0).round() as i32, ay + (a.sin() * 9.5).round() as i32);
+            if inb(tx, ty) && self.level[idx(tx, ty)] == 4 && self.ground[idx(tx, ty)] != Mat::Water && a.sin() < 0.6 {
+                self.prop_tf(if k % 3 == 0 { "spiderWeb1" } else { "cocoon0" }, tx, ty, k % 2 == 0);
+            }
+        }
+        for (tx, ty) in [(ax - 12, ay - 6), (ax + 12, ay - 6)] {
+            self.prop_t("torch", tx, ty);
+        }
+        // Absprung an der Kante (über dem schwarzen Wasser)
+        self.prolog_jump = ((apx), ((cy + cliff(ax - cx) - 13) * TS) as f32 + 8.0);
+        self.prolog_foot = ((cy + 30) * TS) as f32;
+        let _ = (x0, x1, y0, y1);
+    }
+
+    /// Der große Fall: der Bach stürzt an der Abbruchkante des Wrackzwingers über die ganze
+    /// Klippe und noch weit darunter ins schwarze Wasser.
+    fn prolog_fall(&mut self) {
+        let d = Zone::Prolog.def();
+        let (cx, cy) = (d.cx, d.cy);
+        // Kante: die unterste Reihe der Platte über dem Bach
+        let mut ty = cy + 10;
+        while ty < cy + 40 && self.level[idx(cx + 15, ty + 1)] == 4 {
+            ty += 1;
+        }
+        let bot = ((ty + 1) * TS) as f32;
+        let w = 4;
+        self.waterfalls.push(Waterfall { tx: cx + 13, ty, w, x: ((cx + 13) * TS) as f32, src: bot - FACE_PX as f32 * 4.0 - 3.0 * TS as f32, top: bot - FACE_PX as f32 * 4.0, bot, deep: 520.0 });
+    }
+
+    /// Treppe durch eine Mauerfront der Festung in den Spalten x0..=x1: sucht in jeder Spalte
+    /// zwischen y0 und y1 die Kante, an der die Ebene nach Süden um genau eins fällt, und legt den
+    /// Weg über die drei Reihen der Front (`compute_faces` macht daraus Treppen).
+    fn hub_stair(&mut self, x0: i32, x1: i32, y0: i32, y1: i32) {
+        for x in x0..=x1 {
+            for y in y0..y1 {
+                if !inb(x, y) || !inb(x, y + 1) {
+                    continue;
+                }
+                let (a, b) = (self.level[idx(x, y)], self.level[idx(x, y + 1)]);
+                if a == b + 1 && self.ground[idx(x, y + 1)] != Mat::Water {
+                    for k in 0..FH {
+                        if inb(x, y - k) {
+                            self.path[idx(x, y - k)] = true;
+                        }
+                    }
+                    self.path[idx(x, y + 1)] = true;
+                    break;
+                }
+            }
         }
     }
 
@@ -2205,36 +2587,6 @@ impl World {
         None
     }
 
-    /// Rechteckige Terrasse (Kachelgrenzen einschließlich) auf Ebene `lvl`. Die unteren
-    /// Reihen werden zur Mauerfront; nur wo `stair` einen Weg legt, entstehen Treppen.
-    fn terrace(&mut self, x0: i32, y0: i32, x1: i32, y1: i32, lvl: u8) {
-        for y in y0..=y1 {
-            for x in x0..=x1 {
-                if !inb(x, y) {
-                    continue;
-                }
-                let i = idx(x, y);
-                if self.ground[i] == Mat::Water {
-                    continue;
-                }
-                self.level[i] = self.level[i].max(lvl);
-                if y > y1 - FH {
-                    self.path[i] = false;
-                }
-            }
-        }
-    }
-    /// Treppe der Breite `w` durch die Mauerfront, deren unterste Reihe `y1` ist.
-    fn stair(&mut self, x: i32, w: i32, y1: i32) {
-        for yy in y1 - FH + 1..=y1 {
-            for xx in x..x + w {
-                if inb(xx, yy) {
-                    self.path[idx(xx, yy)] = true;
-                }
-            }
-        }
-    }
-
     /// Requisiten auf See: in den vier Seegebieten nach Element, sonst Felsnadeln, Klippen,
     /// brennende Wracks, versunkene Masten und Bojen an den Anlegern.
     fn sea_props(&mut self, rng: &mut Rng) {
@@ -2690,6 +3042,15 @@ impl World {
     pub fn in_settlement(&self, x: f32, y: f32) -> bool {
         self.settlements.iter().any(|s| ((x - s.0) / s.2).powi(2) + ((y - s.1) / s.3).powi(2) < 1.0)
     }
+    /// Wände über mehrere Ebenen (Festung, Prolog-Klippe)?
+    fn tall_faces(&self, i: usize) -> bool {
+        self.biome[i] == Biome::Hub || self.zone[i] == Some(Zone::Prolog)
+    }
+    /// Liegt (x, y) im Bereich der Prolog-Insel (Nordwest-Ecke)?
+    pub fn in_prolog(&self, x: f32, y: f32) -> bool {
+        let (x0, y0, x1, y1) = PROLOG;
+        x >= (x0 * TS) as f32 && y >= (y0 * TS) as f32 && x < (x1 * TS) as f32 && y < (y1 * TS) as f32
+    }
     pub fn in_end(&self, x: f32, y: f32) -> bool {
         let (x0, y0, x1, y1) = self.end_rect;
         let (tx, ty) = ((x / TS as f32) as i32, (y / TS as f32) as i32);
@@ -2847,6 +3208,11 @@ impl World {
             if tx >= MW - 100 && ty <= 30 {
                 return true;
             }
+            // die Prolog-Insel liegt abseits hinter einer Nebelwand: kein Schiff fährt dorthin
+            let (px0, py0, px1, py1) = PROLOG;
+            if tx >= px0 - 30 && tx < px1 + 30 && ty >= py0 - 30 && ty < py1 + 30 {
+                return true;
+            }
             return g != Mat::Water || self.shore[i] < 2;
         }
         g == Mat::Water || g == Mat::Abyss
@@ -3000,6 +3366,38 @@ impl TerrainMap for World {
     fn stairs(&self, tx: i32, ty: i32) -> bool {
         inb(tx, ty) && self.stairs[idx(tx, ty)]
     }
+    fn mat_px(&self, px: i32, py: i32) -> Option<Mat> {
+        let (tx, ty) = (px.div_euclid(TS), py.div_euclid(TS));
+        if !inb(tx, ty) || !self.cur_hub_round {
+            return None;
+        }
+        let i = idx(tx, ty);
+        if self.biome[i] != Biome::Hub || self.zone[i] != Some(Zone::Hain) || self.ground[i] == Mat::Plank {
+            return None;
+        }
+        // Hafenbecken und Seetor mit glatter, runder Kaimauer; draußen im Süden steigt die Mauer
+        // pixelgenau aus dem Meer, sonst ein schmaler Felsfuß
+        match hub_px(px, py) {
+            HubCell::Water => Some(Mat::Water),
+            HubCell::Level(_) if self.ground[i] == Mat::Water => Some(Mat::Cobble),
+            HubCell::Outside => {
+                let (cx, cy) = hub_center();
+                let (dx, dy) = ((px as f32 - cx) / TS as f32, (py as f32 - cy) / TS as f32);
+                let r = (dx * dx + dy * dy).sqrt();
+                if dy > 10.0 && r < hubgeo::OUT + 7.0 {
+                    Some(Mat::Water)
+                } else if r < hubgeo::OUT + 2.5 && dy <= 10.0 {
+                    Some(Mat::Rock)
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
+    }
+    fn deep_cliff(&self, tx: i32, ty: i32) -> bool {
+        inb(tx, ty) && self.zone[idx(tx, ty)] == Some(Zone::Prolog) && self.biome[idx(tx, ty)] != Biome::Hub
+    }
     fn town(&self, tx: i32, ty: i32) -> bool {
         self.in_settlement((tx * TS + TS / 2) as f32, (ty * TS + TS / 2) as f32)
     }
@@ -3022,8 +3420,20 @@ impl TerrainMap for World {
             return 0;
         }
         let i = idx(tx, ty);
-        // Festung: klare, gerade Mauerfronten
-        if self.biome[i] == Biome::Hub || self.hb.is_empty() {
+        // Festung: kreisrunde Ringe je Pixel (glatte Mauerbögen); sonst klare Kachelkanten
+        if self.biome[i] == Biome::Hub {
+            // (Ladenräume sind auch Festungsbiom, gehören aber zu ihrer Insel)
+            if self.cur_hub_round && self.zone[i] == Some(Zone::Hain) {
+                // außerhalb der Mauer liegt alles auf Meereshöhe (auch in Kacheln, deren Mitte
+                // schon zur Mauer gehört: so bleibt der Mauerfuß rund)
+                return match hub_px(px, py) {
+                    HubCell::Level(l) => l,
+                    HubCell::Water | HubCell::Outside => 0,
+                };
+            }
+            return self.level[i];
+        }
+        if self.hb.is_empty() {
             return self.level[i];
         }
         let fx = px as f32 / TS as f32 - 0.5;

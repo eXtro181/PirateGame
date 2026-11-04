@@ -137,7 +137,8 @@ impl Game {
         let ngk = ng_hp(&self.save);
         let mut out: Vec<SeaMon> = vec![];
         let (mcx, mcy) = ((MW * TS) as f32 / 2.0, (MH * TS) as f32 / 2.0);
-        let (cx0, cy0, cx1, cy1) = (((crate::world::CORE.0 + 30) * TS) as f32, ((crate::world::CORE.1 + 10) * TS) as f32, ((crate::world::CORE.0 + 460) * TS) as f32, ((crate::world::CORE.1 + 345) * TS) as f32);
+        // rund um Glutwacht und Galgenstrand beginnt die Reise: dort nur wenige
+        let (hx, hy) = (((crate::world::HUB.0 * TS) as f32), ((crate::world::HUB.1 + 80) * TS) as f32);
         let mut tries = 0;
         let mut points = 0;
         while points < 340 && tries < 30000 {
@@ -151,7 +152,10 @@ impl Game {
                 continue;
             }
             // am Archipel nur wenige (dort beginnt die Reise)
-            if x > cx0 && x < cx1 && y > cy0 && y < cy1 && !rng.chance(0.18) {
+            if (x - hx).hypot((y - hy) * 1.2) < (230 * TS) as f32 && !rng.chance(0.18) {
+                continue;
+            }
+            if self.world.in_prolog(x, y) {
                 continue;
             }
             if out.iter().any(|m| (m.x - x).hypot(m.y - y) < 640.0) {

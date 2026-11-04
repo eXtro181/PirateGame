@@ -491,7 +491,11 @@ impl WorldView {
         for wf in &w.waterfalls {
             let x0 = wf.x;
             let wwid = (wf.w * TS) as f32;
-            if x0 > vx + vw + 50.0 || x0 + wwid + 50.0 < vx || wf.src > vy + vh + 100.0 || wf.bot + 60.0 < vy {
+            if x0 > vx + vw + 50.0 || x0 + wwid + 50.0 < vx || wf.src > vy + vh + 100.0 || wf.bot + wf.deep + 60.0 < vy {
+                continue;
+            }
+            if wf.deep > 0.0 {
+                self.draw_deep_fall(wf, frame, t);
                 continue;
             }
             let q = |x: f32, y: f32, w: f32, h: f32, c: [u8; 4]| crate::gfx::Frame::quad_rect(x, y, w, h, c, modes::SOLID, 0);
@@ -511,6 +515,80 @@ impl WorldView {
                 frame.glow(x0 + wwid * (k as f32 / 10.0) + a.sin() * 6.0, wf.bot + 8.0 + (a * 1.3).cos() * 4.0, 16.0, [220, 250, 255, 90]);
             }
             frame.light(LightDef { x: x0 + wwid / 2.0, y: wf.bot + 20.0, z: 20.0, r: 120.0, col: [0.3, 0.6, 0.7], flicker: 0.0 });
+        }
+        self.draw_prolog_dark(w, frame);
+    }
+
+    /// Der große Fall des Wrackzwingers: über die ganze Klippe und darunter weiter ins Schwarze.
+    /// Streifen, fallende Wasserballen, Gischt an der Kante und Nebel am Fuß; je tiefer, desto
+    /// dunkler und durchsichtiger.
+    fn draw_deep_fall(&self, wf: &crate::world::Waterfall, frame: &mut Frame, t: f32) {
+        let q = |x: f32, y: f32, w: f32, h: f32, c: [u8; 4]| crate::gfx::Frame::quad_rect(x, y, w, h, c, modes::SOLID, 0);
+        let x0 = wf.x;
+        let wwid = (wf.w * TS) as f32;
+        let h = wf.bot - wf.top;
+        let total = h + wf.deep;
+        // durchgehende Streifen: an der Klippe hell, darunter in Stücken immer dunkler
+        let segs = 8;
+        for k in 0..(wwid as i32 / 3) {
+            let xx = x0 + 3.0 + k as f32 * 3.0 * (wwid - 6.0) / wwid + (t * 1.7 + k as f32).sin() * 0.8;
+            let bright = k % 3 == 0;
+            frame.over(q(xx, wf.top - 4.0, 3.0, h + 4.0, if bright { [228, 244, 250, 230] } else { [120, 190, 208, 205] }), false);
+            for s in 0..segs {
+                let f0 = s as f32 / segs as f32;
+                let a = ((1.0 - f0).powf(1.6) * if bright { 170.0 } else { 140.0 }) as u8;
+                let y = wf.bot + f0 * wf.deep;
+                frame.over(q(xx, y, 3.0, wf.deep / segs as f32 + 1.0, [90, 140, 160, a]), false);
+            }
+        }
+        // fallende Wasserballen: zeigen die Geschwindigkeit
+        for k in 0..18 {
+            let lane = (k * 7 % wf.w.max(1) as i32) as f32 * TS as f32 + (k % 4) as f32 * 7.0 + 4.0;
+            let f = (t * (0.55 + (k % 5) as f32 * 0.07) + k as f32 * 0.137).fract();
+            let y = wf.top + f * total;
+            let a = if y > wf.bot { ((1.0 - (y - wf.bot) / wf.deep) * 200.0).max(0.0) as u8 } else { 235 };
+            frame.over(q(x0 + lane.min(wwid - 8.0), y, 6.0, 18.0 + f * 26.0, [235, 248, 255, a]), false);
+        }
+        // Gischt und Kantenschaum oben
+        frame.over(q(x0 + 1.0, wf.top - 5.0, wwid - 2.0, 6.0, [236, 250, 255, 230]), false);
+        for k in 0..8 {
+            let a = t * 2.6 + k as f32 * 1.3;
+            frame.glow(x0 + wwid * (k as f32 / 8.0) + a.sin() * 4.0, wf.top - 2.0 + a.cos() * 2.0, 9.0, [220, 245, 255, 90]);
+        }
+        // Nebel am Klippenfuß: steigt auf, verliert sich im Dunkel
+        for k in 0..14 {
+            let a = t * 0.6 + k as f32 * 0.9;
+            let rise = (t * 0.25 + k as f32 * 0.071).fract();
+            let (x, y) = (x0 + wwid * 0.5 + a.sin() * (wwid * 0.4 + 60.0 * rise), wf.bot + 30.0 - rise * 160.0);
+            frame.glow(x, y, 40.0 + rise * 50.0, [170, 196, 210, (70.0 * (1.0 - rise)) as u8]);
+        }
+        frame.light(LightDef { x: x0 + wwid / 2.0, y: wf.bot - 40.0, z: 60.0, r: 260.0, col: [0.25, 0.45, 0.55], flicker: 0.0 });
+        frame.light(LightDef { x: x0 + wwid / 2.0, y: wf.top + 10.0, z: 30.0, r: 140.0, col: [0.4, 0.6, 0.7], flicker: 0.0 });
+    }
+
+    /// Prolog: unter der Klippe ist das Meer tiefschwarz – ein Verlauf vom Klippenfuß ins Nichts.
+    fn draw_prolog_dark(&self, w: &World, frame: &mut Frame) {
+        if w.prolog_foot <= 0.0 {
+            return;
+        }
+        let (vx, vy, vw, vh) = frame.view();
+        let (x0, _, x1, y1) = crate::world::PROLOG;
+        let (ax, bx, by) = ((x0 * TS) as f32, (x1 * TS) as f32, (y1 * TS) as f32);
+        let top = w.prolog_foot - 70.0;
+        if vx > bx || vx + vw < ax || vy + vh < top || vy > by + 600.0 {
+            return;
+        }
+        let (l, r) = (ax.max(vx - 20.0), bx.min(vx + vw + 20.0));
+        let q = |y: f32, h: f32, a: u8| crate::gfx::Frame::quad_rect(l, y, r - l, h, [2, 3, 5, a], modes::SOLID, 0);
+        let n = 16;
+        let band = 22.0;
+        for i in 0..n {
+            let k = (i + 1) as f32 / n as f32;
+            frame.over(q(top + i as f32 * band, band + 1.0, (k.powf(1.3) * 255.0) as u8), false);
+        }
+        let solid = top + n as f32 * band;
+        if solid < vy + vh + 20.0 {
+            frame.over(q(solid, (vy + vh + 40.0 - solid).max(0.0), 255), false);
         }
     }
 

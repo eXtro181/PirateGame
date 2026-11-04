@@ -1,9 +1,9 @@
-//! Die wilden Inseln: rund siebzig Eilande im weiten Ozean um den Archipel. Jede hat einen
-//! Anleger zur Mitte der Karte hin, einen eigenen Charakter (Piratenlager, Ruine, Friedhof,
-//! Wrackstrand, wilder Hain, Schatzinsel), Gegner nach Biom und Entfernung, Truhen und Fundstücke.
-//! Auf etwa jeder vierten brennt ein Säbelfeuer (Schnellreise). Biom und Name richten sich nach der
-//! Himmelsrichtung: Frost im Norden, Glut im Osten, Sturm im Westen, Moder im Süden, dazwischen
-//! Galgen- und Knocheninseln.
+//! Die wilden Inseln: rund fünfzig große Inseln im weiten Ozean zwischen den Königsinseln und
+//! den Seegebieten. Jede hat einen Anleger zur Mitte der Karte hin, einen eigenen Charakter
+//! (Piratenlager, Ruine, Friedhof, Wrackstrand, wilder Hain, Schatzinsel; große Inseln zusätzlich
+//! ein zweites Herzstück), Gegner nach Biom und Entfernung, Truhen und Fundstücke. Auf etwa jeder
+//! vierten brennt ein Säbelfeuer (Schnellreise). Biom und Name richten sich nach dem nächsten
+//! Königs- oder Seegebiet, dazwischen Galgen- und Knocheninseln.
 
 use super::*;
 
@@ -36,8 +36,8 @@ pub struct WildIsle {
     pub fire: bool,
 }
 
-/// Der alte Archipel samt Umgebung (Geisterschiffe, Haie, Kraken, Titelbild): dort keine wilden Inseln
-const CORE_BOX: (i32, i32, i32, i32) = (CX + 30, CY + 10, CX + 460, CY + 345);
+/// Freiraum um die festen Inseln (Kacheln): dort keine wilden Inseln
+const CORE_GAP: i32 = 46;
 
 const PRE_FROST: [&str; 12] = ["Reif", "Eis", "Frost", "Schnee", "Firn", "Hagel", "Nordlicht", "Gletscher", "Raureif", "Kalt", "Weißdorn", "Eiszapfen"];
 const PRE_FIRE: [&str; 12] = ["Glut", "Aschen", "Brand", "Schwefel", "Ruß", "Funken", "Lava", "Feuer", "Kohlen", "Zunder", "Rauch", "Essen"];
@@ -46,6 +46,37 @@ const PRE_WIND: [&str; 12] = ["Sturm", "Möwen", "Nebel", "Raben", "Wind", "Donn
 const PRE_COAST: [&str; 12] = ["Galgen", "Knochen", "Toten", "Schädel", "Grab", "Witwen", "Henkers", "Geister", "Leichen", "Sarg", "Gebein", "Trauer"];
 const SUF: [&str; 12] = ["insel", "holm", "riff", "fels", "klippe", "bucht", "sand", "werder", "horn", "zahn", "eiland", "schären"];
 
+/// Liegt ein Kreis (Kacheln) im Freiraum der festen Orte? Kerninseln, Titelbild, Prolog-Ecke,
+/// Seegebiete, Ende der Welt und Ladenräume bleiben frei.
+pub(super) fn reserved(cx: i32, cy: i32, rad: i32) -> bool {
+    let dist = |x: i32, y: i32| (((cx - x).pow(2) + (cy - y).pow(2)) as f32).sqrt();
+    for z in [Zone::Kueste, Zone::Hain, Zone::Asche, Zone::Frost, Zone::Raben, Zone::Mangroven] {
+        let d = z.def();
+        if dist(d.cx, d.cy) < (d.rx.max(d.ry) + 8 + rad + CORE_GAP) as f32 {
+            return true;
+        }
+    }
+    // Seeweg zwischen Glutwacht und Galgenstrand
+    let (k, h) = (Zone::Kueste.def(), Zone::Hain.def());
+    if dist((k.cx + h.cx) / 2, (k.cy + h.cy) / 2) < (rad + 70) as f32 {
+        return true;
+    }
+    if dist(TITLE_T.0, TITLE_T.1) < (rad + 40) as f32 {
+        return true;
+    }
+    let (px0, py0, px1, py1) = PROLOG;
+    if cx + rad + 70 > px0 && cx - rad - 70 < px1 && cy + rad + 70 > py0 && cy - rad - 70 < py1 {
+        return true;
+    }
+    if SEAS.iter().any(|s| dist(s.cx, s.cy) < (s.r + rad + 22) as f32) {
+        return true;
+    }
+    if cx + rad + 40 > END_X0 && cy + rad + 40 > END_Y0 {
+        return true;
+    }
+    cx + rad + 30 > MW - 110 && cy - rad - 30 < 40
+}
+
 impl World {
     /// Lage, Größe, Biom, Art und Namen der wilden Inseln festlegen (noch ohne Inhalt).
     pub(super) fn plan_wild(&mut self) {
@@ -53,38 +84,33 @@ impl World {
         let mut out: Vec<WildIsle> = vec![];
         let mut used: Vec<&'static str> = vec![];
         let (mcx, mcy) = (MW as f32 / 2.0, MH as f32 / 2.0);
+        // Biom-Anker: die vier Königsinseln und die vier Seegebiete
+        let mut anchors: Vec<(i32, i32, &'static str)> = SEAS.iter().map(|s| (s.cx, s.cy, s.el)).collect();
+        for (z, el) in [(Zone::Frost, "ice"), (Zone::Asche, "fire"), (Zone::Raben, "wind"), (Zone::Mangroven, "earth")] {
+            anchors.push((z.def().cx, z.def().cy, el));
+        }
         let mut tries = 0;
-        while out.len() < 72 && tries < 9000 {
+        while out.len() < 64 && tries < 12000 {
             tries += 1;
-            // eher kleine und mittlere Eilande, wenige große
+            // große Inseln: mittel, groß und einige sehr große (keine Winzlinge mehr)
             let size = rng.f();
-            let rx = if size < 0.45 { rng.int(10, 14) } else if size < 0.85 { rng.int(15, 22) } else { rng.int(23, 30) };
-            let ry = ((rx as f32) * rng.range(0.6, 0.85)).round() as i32;
-            let (cx, cy) = (rng.int(44 + rx, MW - 44 - rx), rng.int(44 + ry, MH - 44 - ry));
+            let rx = if size < 0.5 { rng.int(22, 29) } else if size < 0.85 { rng.int(30, 37) } else { rng.int(38, 46) };
+            let ry = ((rx as f32) * rng.range(0.62, 0.82)).round() as i32;
+            // nicht ganz am Kartenrand: die Inseln liegen zwischen den festen Orten
+            let (cx, cy) = (rng.int(64 + rx, MW - 64 - rx), rng.int(60 + ry, MH - 60 - ry));
             let rad = rx.max(ry) + 8;
-            // nicht am Archipel, nicht in den Seegebieten, nicht am Ende der Welt, nicht bei den Ladenräumen
-            let (bx0, by0, bx1, by1) = CORE_BOX;
-            if cx + rad + 14 > bx0 && cx - rad - 14 < bx1 && cy + rad + 14 > by0 && cy - rad - 14 < by1 {
-                continue;
-            }
-            if SEAS.iter().any(|s| (((cx - s.cx).pow(2) + (cy - s.cy).pow(2)) as f32).sqrt() < (s.r + rad + 18) as f32) {
-                continue;
-            }
-            if cx + rad + 40 > END_X0 && cy + rad + 40 > END_Y0 {
-                continue;
-            }
-            if cx + rad + 30 > MW - 110 && cy - rad - 30 < 40 {
+            if reserved(cx, cy, rad) {
                 continue;
             }
             if out.iter().any(|o| {
                 let orad = o.r.rx.max(o.r.ry) + 8;
-                (((cx - o.r.cx).pow(2) + (cy - o.r.cy).pow(2)) as f32).sqrt() < (rad + orad + 44) as f32
+                (((cx - o.r.cx).pow(2) + (cy - o.r.cy).pow(2)) as f32).sqrt() < (rad + orad + 36) as f32
             }) {
                 continue;
             }
-            // Biom nach dem nächsten Seegebiet (Himmelsrichtung), dazwischen Galgeninseln
-            let near = SEAS.iter().min_by_key(|s| (cx - s.cx).pow(2) + (cy - s.cy).pow(2)).map(|s| s.el).unwrap_or("wind");
-            let biome = if rng.chance(0.16) {
+            // Biom nach dem nächsten Anker (Königsinsel oder Seegebiet), dazwischen Galgeninseln
+            let near = anchors.iter().min_by_key(|a| (cx - a.0).pow(2) + (cy - a.1).pow(2)).map(|a| a.2).unwrap_or("wind");
+            let biome = if rng.chance(0.14) {
                 Biome::Coast
             } else {
                 match near {
@@ -100,9 +126,7 @@ impl World {
                 if rng.chance(0.75) { IsleKind::Friedhof } else { IsleKind::Wrack }
             } else {
                 let k = rng.f();
-                if rx <= 13 {
-                    if k < 0.35 { IsleKind::Wrack } else if k < 0.65 { IsleKind::Hain } else { IsleKind::Schatz }
-                } else if k < 0.28 {
+                if k < 0.28 {
                     IsleKind::Lager
                 } else if k < 0.5 {
                     IsleKind::Ruine
@@ -138,10 +162,10 @@ impl World {
             let n = out.len();
             let seed = 100 + n as u32 * 7;
             out.push(WildIsle {
-                key: format!("w{n}"),
+                key: format!("i{n}"),
                 name,
                 kind,
-                r: Region { zone: Zone::Wild, biome, cx, cy, rx, ry, seed, steep: if rx < 15 { 0.7 } else { 1.0 } },
+                r: Region { zone: Zone::Wild, biome, cx, cy, rx, ry, seed, steep: if rx < 30 { 0.85 } else { 1.0 } },
                 tier,
                 fire: false,
             });
@@ -196,8 +220,14 @@ impl World {
         None
     }
 
-    /// Inhalt einer wilden Insel: Anleger, Landeplatz (mit Feuer), Herzstück nach Art, Wege,
-    /// Gegner, Truhen und Fundstücke.
+    fn wild_chest(&mut self, key: &str, n: &mut i32, tx: i32, ty: i32, loot: &str, mimic: Option<&str>) {
+        let id = format!("{key}c{n}");
+        *n += 1;
+        self.chest(&id, tx, ty, loot, mimic);
+    }
+
+    /// Inhalt einer wilden Insel: Anleger, Landeplatz (mit Feuer), Herzstück nach Art (auf sehr
+    /// großen Inseln ein zweites), Wege, Gegner, Truhen und Fundstücke – mit der Fläche wachsend.
     pub(super) fn layout_wild(&mut self, k: usize) {
         let wi = self.wild[k].clone();
         let r = wi.r;
@@ -229,20 +259,106 @@ impl World {
         let (hx, hy) = (cx - dx * (r.rx / 5), cy - dy * (r.ry / 5));
         self.road(&[(lx, ly), ((lx + hx) / 2 + side.0 * 2, (ly + hy) / 2 + side.1 * 2), (hx, hy)], gm, 1);
         let (foes, elites) = Self::wild_foes(r.biome);
-        let big = r.rx >= 15;
-        let n_foes = if big { 4 + rng.int(0, 3) } else { 2 + rng.int(0, 1) } + lvl as i32;
+        let area = r.rx * r.ry;
+        let huge = r.rx >= 32;
+        let n_foes = area / 120 + rng.int(0, 2) + lvl as i32;
         let mut chest_n = 0;
+        self.wild_feature(k, wi.kind, hx, hy, (dx, dy), &mut rng, &mut chest_n, true);
+        // sehr große Inseln: zweites Herzstück auf der anderen Seite, eigener Weg dorthin
+        if huge {
+            let k2 = match wi.kind {
+                IsleKind::Lager | IsleKind::Wrack => IsleKind::Ruine,
+                IsleKind::Ruine | IsleKind::Schatz => IsleKind::Lager,
+                IsleKind::Friedhof => IsleKind::Hain,
+                IsleKind::Hain => IsleKind::Friedhof,
+            };
+            let s2 = if rng.chance(0.5) { 1 } else { -1 };
+            let (tx, ty) = (cx + side.0 * s2 * r.rx / 2, cy + side.1 * s2 * r.ry / 2);
+            if let Some((ax, ay)) = self.wild_spot(tx, ty, 2) {
+                self.road(&[(hx, hy), ((hx + ax) / 2 - dx * 2, (hy + ay) / 2 - dy * 2), (ax, ay)], gm, 1);
+                self.wild_feature(k, k2, ax, ay, (dx, dy), &mut rng, &mut chest_n, false);
+            }
+        }
+        // Gegner über die Insel verteilt (nicht am Landeplatz)
+        let mut placed = 0;
+        for _ in 0..(n_foes * 15) {
+            if placed >= n_foes {
+                break;
+            }
+            let (tx, ty) = (cx + rng.int(-r.rx * 2 / 3, r.rx * 2 / 3), cy + rng.int(-r.ry * 2 / 3, r.ry * 2 / 3));
+            if (tx - lx).abs() < 7 && (ty - ly).abs() < 6 {
+                continue;
+            }
+            if !inb(tx, ty) || self.zone[idx(tx, ty)] != Some(Zone::Wild) || matches!(self.ground[idx(tx, ty)], Mat::Water | Mat::Abyss) {
+                continue;
+            }
+            let kind = *rng.pick(foes);
+            self.wild_spawn(kind, tx, ty, false, lvl);
+            placed += 1;
+        }
+        // gefährliche Inseln haben einen Wächter (sehr große zwei)
+        if lvl >= 2 && wi.kind != IsleKind::Schatz {
+            let e = elites[(k + 1) % elites.len()];
+            self.wild_spawn(e, hx + 2, hy + 4, true, lvl);
+        }
+        if huge && lvl >= 1 {
+            if let Some((tx, ty)) = self.wild_spot(cx - dx * r.rx / 2, cy - dy * r.ry / 2, 1) {
+                let e = elites[k % elites.len()];
+                self.wild_spawn(e, tx, ty, true, lvl);
+            }
+        }
+        // Fundstücke
+        for _ in 0..(area / 260).max(2) {
+            let (tx, ty) = (cx + rng.int(-r.rx / 2, r.rx / 2), cy + rng.int(-r.ry / 2, r.ry / 2));
+            if inb(tx, ty) && self.zone[idx(tx, ty)] == Some(Zone::Wild) && !matches!(self.ground[idx(tx, ty)], Mat::Water | Mat::Abyss) {
+                let it = *rng.pick(&["pearls", "pearls", "bullets", "bombs"]);
+                self.item(it, tx, ty);
+            }
+        }
+        // Wegmarken und Hinterlassenschaften
+        for _ in 0..(area / 90).max(6) {
+            let (tx, ty) = (cx + rng.int(-r.rx * 3 / 4, r.rx * 3 / 4), cy + rng.int(-r.ry * 3 / 4, r.ry * 3 / 4));
+            if !inb(tx, ty) || self.zone[idx(tx, ty)] != Some(Zone::Wild) || !self.free_t(tx, ty, 1) {
+                continue;
+            }
+            let kind = match (r.biome, rng.int(0, 5)) {
+                (_, 0) => "skullpile".to_string(),
+                (Biome::Coast, _) => format!("grave{}", rng.int(0, 1)),
+                (_, 1) => "stoneColumn".to_string(),
+                (_, 2) => "marbleStone".to_string(),
+                (Biome::Earth, _) => "swampTree".to_string(),
+                (Biome::Frost, _) => "crystalBlue".to_string(),
+                (_, 3) => format!("buried{}", rng.int(0, 2)),
+                _ => "logPile".to_string(),
+            };
+            let flip = rng.chance(0.5);
+            self.prop_tf(&kind, tx, ty, flip);
+        }
+        // Wasserfall (wird später an eine passende Hangkante gesetzt), auf sehr großen Inseln zwei
+        if rng.chance(0.55) {
+            self.waterfall(cx + rng.int(-4, 4), cy - r.ry / 3, 2);
+        }
+        if huge && rng.chance(0.5) {
+            self.waterfall(cx + rng.int(-r.rx / 3, r.rx / 3), cy + r.ry / 4, 2);
+        }
+    }
+
+    /// Ein Herzstück einer wilden Insel bei (hx, hy). `main`: das erste (mit Wrack am Gegenstrand
+    /// und Schatzwächter); (dx, dy) = Richtung zum Anleger.
+    #[allow(clippy::too_many_arguments)]
+    fn wild_feature(&mut self, k: usize, kind: IsleKind, hx: i32, hy: i32, (dx, dy): (i32, i32), rng: &mut Rng, chest_n: &mut i32, main: bool) {
+        let wi = self.wild[k].clone();
+        let r = wi.r;
+        let (cx, cy) = (r.cx, r.cy);
+        let gm = Self::wild_ground(r.biome);
+        let lvl = wi.tier;
         let key = wi.key.clone();
-        let mut chest = |w: &mut World, tx: i32, ty: i32, loot: &str, mimic: Option<&str>| {
-            let id = format!("{key}c{chest_n}");
-            chest_n += 1;
-            w.chest(&id, tx, ty, loot, mimic);
-        };
+        let (_, elites) = Self::wild_foes(r.biome);
         let common_loot = |rng: &mut Rng| -> &'static str {
             let v = rng.f();
             if v < 0.55 { "pearls" } else if v < 0.72 { "shard" } else if v < 0.86 { "bombs" } else { "bullets" }
         };
-        match wi.kind {
+        match kind {
             IsleKind::Lager => {
                 self.plaza(hx, hy, 6, 4, gm, Some(0));
                 self.flat_areas.push((hx, hy, 8, 6));
@@ -259,7 +375,8 @@ impl World {
                 self.prop_t("flagPole", hx + 6, hy - 3);
                 self.prop_tf("cannon", hx - 6, hy + 3, true);
                 self.prop_t("cannon", hx + 6, hy + 3);
-                chest(self, hx, hy - 2, common_loot(&mut rng), None);
+                let loot = common_loot(rng);
+                self.wild_chest(&key, chest_n, hx, hy - 2, loot, None);
             }
             IsleKind::Ruine => {
                 self.plaza(hx, hy, 6, 4, Mat::Marble, Some(0));
@@ -276,7 +393,8 @@ impl World {
                 self.prop_tn("candles1", hx + 2, hy);
                 self.prop_t(&format!("swordGrave{}", rng.int(0, 2)), hx + 3, hy + 2);
                 self.prop_t("hoodedStatue", hx - 4, hy + 2);
-                chest(self, hx, hy + 1, if lvl >= 2 && rng.chance(0.5) { "shard" } else { common_loot(&mut rng) }, None);
+                let loot = if lvl >= 2 && rng.chance(0.5) { "shard" } else { common_loot(rng) };
+                self.wild_chest(&key, chest_n, hx, hy + 1, loot, None);
             }
             IsleKind::Friedhof => {
                 self.flat_areas.push((hx, hy, 8, 5));
@@ -305,7 +423,9 @@ impl World {
                 }
                 self.prop_t("torch", hx - 3, hy - 4);
                 self.prop_t("torch", hx + 3, hy - 4);
-                chest(self, hx + 1, hy - 3, common_loot(&mut rng), if lvl >= 1 && rng.chance(0.3) { Some("livingChest") } else { None });
+                let loot = common_loot(rng);
+                let mimic = if lvl >= 1 && rng.chance(0.3) { Some("livingChest") } else { None };
+                self.wild_chest(&key, chest_n, hx + 1, hy - 3, loot, mimic);
             }
             IsleKind::Wrack => {
                 // das Wrack liegt am Strand gegenüber dem Anleger
@@ -318,20 +438,22 @@ impl World {
                             self.prop_t(kind, tx + ox, ty + oy);
                         }
                     }
-                    chest(self, tx + 1, ty + 3, common_loot(&mut rng), if rng.chance(0.25) { Some("mimicChest") } else { None });
+                    let loot = common_loot(rng);
+                    let mimic = if rng.chance(0.25) { Some("mimicChest") } else { None };
+                    self.wild_chest(&key, chest_n, tx + 1, ty + 3, loot, mimic);
                 }
-                for _ in 0..2 {
+                for _ in 0..3 {
                     if let Some((tx, ty)) = self.wild_spot(cx + rng.int(-r.rx / 2, r.rx / 2), cy + rng.int(-r.ry / 2, r.ry / 2), 1) {
                         self.prop_t(&format!("sharkSkel{}", rng.int(0, 1)), tx, ty);
                     }
                 }
             }
             IsleKind::Hain => {
-                for _ in 0..(if big { 7 } else { 4 }) {
+                for _ in 0..(r.rx * r.ry / 90).max(5) {
                     let (gx, gy) = (cx + rng.int(-r.rx / 2, r.rx / 2), cy + rng.int(-r.ry / 2, r.ry / 2));
-                    self.grove(gx, gy, 4.0 + rng.f() * 2.0, &mut rng, 5, None);
+                    self.grove(gx, gy, 4.0 + rng.f() * 2.0, rng, 5, None);
                 }
-                for _ in 0..4 {
+                for _ in 0..6 {
                     if let Some((tx, ty)) = self.wild_spot(cx + rng.int(-r.rx / 2, r.rx / 2), cy + rng.int(-r.ry / 2, r.ry / 2), 0) {
                         let kind = if r.biome == Biome::Frost { "crystalBlue" } else { "glowFlower" };
                         self.prop_t(kind, tx, ty);
@@ -339,7 +461,8 @@ impl World {
                 }
                 self.item("soulflower", hx, hy);
                 if let Some((tx, ty)) = self.wild_spot(hx + 3, hy + 2, 0) {
-                    chest(self, tx, ty, common_loot(&mut rng), None);
+                    let loot = common_loot(rng);
+                    self.wild_chest(&key, chest_n, tx, ty, loot, None);
                 }
             }
             IsleKind::Schatz => {
@@ -347,101 +470,65 @@ impl World {
                 self.plaza(hx, hy, 3, 2, gm, Some(0));
                 self.flat_areas.push((hx, hy, 5, 4));
                 let best = ["rum", "phial", "shard", "shard"][k % 4];
-                chest(self, hx, hy - 1, if lvl >= 1 { best } else { "shard" }, None);
-                chest(self, hx + 3, hy + 1, "pearls", None);
+                self.wild_chest(&key, chest_n, hx, hy - 1, if lvl >= 1 { best } else { "shard" }, None);
+                self.wild_chest(&key, chest_n, hx + 3, hy + 1, "pearls", None);
                 self.prop_t("skullpile", hx - 3, hy);
                 self.prop_t("marbleStone", hx - 2, hy - 2);
                 self.prop_t("torch", hx + 2, hy - 2);
-                let e = elites[k % elites.len()];
-                self.wild_spawn(e, hx - 1, hy + 3, true, lvl);
+                if main {
+                    let e = elites[k % elites.len()];
+                    self.wild_spawn(e, hx - 1, hy + 3, true, lvl);
+                }
             }
-        }
-        // Gegner über die Insel verteilt (nicht am Landeplatz)
-        let mut placed = 0;
-        for _ in 0..60 {
-            if placed >= n_foes {
-                break;
-            }
-            let (tx, ty) = (cx + rng.int(-r.rx * 2 / 3, r.rx * 2 / 3), cy + rng.int(-r.ry * 2 / 3, r.ry * 2 / 3));
-            if (tx - lx).abs() < 7 && (ty - ly).abs() < 6 {
-                continue;
-            }
-            if !inb(tx, ty) || self.zone[idx(tx, ty)] != Some(Zone::Wild) || matches!(self.ground[idx(tx, ty)], Mat::Water | Mat::Abyss) {
-                continue;
-            }
-            let kind = *rng.pick(foes);
-            self.wild_spawn(kind, tx, ty, false, lvl);
-            placed += 1;
-        }
-        // große, gefährliche Inseln haben einen Wächter
-        if big && lvl >= 2 && wi.kind != IsleKind::Schatz {
-            let e = elites[(k + 1) % elites.len()];
-            self.wild_spawn(e, hx + 2, hy + 4, true, lvl);
-        }
-        // Fundstücke
-        for _ in 0..(if big { 3 } else { 1 }) {
-            let (tx, ty) = (cx + rng.int(-r.rx / 2, r.rx / 2), cy + rng.int(-r.ry / 2, r.ry / 2));
-            if inb(tx, ty) && self.zone[idx(tx, ty)] == Some(Zone::Wild) && !matches!(self.ground[idx(tx, ty)], Mat::Water | Mat::Abyss) {
-                let it = *rng.pick(&["pearls", "pearls", "bullets", "bombs"]);
-                self.item(it, tx, ty);
-            }
-        }
-        // ein paar Wegmarken und Hinterlassenschaften
-        for _ in 0..(if big { 6 } else { 3 }) {
-            let (tx, ty) = (cx + rng.int(-r.rx * 3 / 4, r.rx * 3 / 4), cy + rng.int(-r.ry * 3 / 4, r.ry * 3 / 4));
-            if !inb(tx, ty) || self.zone[idx(tx, ty)] != Some(Zone::Wild) || !self.free_t(tx, ty, 1) {
-                continue;
-            }
-            let kind = match (r.biome, rng.int(0, 5)) {
-                (_, 0) => "skullpile".to_string(),
-                (Biome::Coast, _) => format!("grave{}", rng.int(0, 1)),
-                (_, 1) => "stoneColumn".to_string(),
-                (_, 2) => "marbleStone".to_string(),
-                (Biome::Earth, _) => "swampTree".to_string(),
-                (Biome::Frost, _) => "crystalBlue".to_string(),
-                (_, 3) => format!("buried{}", rng.int(0, 2)),
-                _ => "logPile".to_string(),
-            };
-            let flip = rng.chance(0.5);
-            self.prop_tf(&kind, tx, ty, flip);
-        }
-        // Wasserfall auf großen Inseln (wird später an eine passende Hangkante gesetzt)
-        if r.rx >= 22 && rng.chance(0.5) {
-            self.waterfall(cx + rng.int(-4, 4), cy - r.ry / 3, 2);
         }
     }
 
-    /// Routen der Geisterschiffe im weiten Ozean (geschlossene Schleifen über freiem Wasser)
+    /// Routen der Geisterschiffe: je eine Schleife auf den Seewegen von der Glutwacht zu den vier
+    /// Königsinseln und zum Galgenstrand, dazu Schleifen im weiten Ozean (über freiem Wasser).
     pub(super) fn outer_routes(&self) -> Vec<Vec<(f32, f32)>> {
         let mut rng = Rng::new(31_337);
         let mut out: Vec<Vec<(f32, f32)>> = vec![];
+        let free = |w: &World, tx: i32, ty: i32| inb(tx, ty) && w.ground[idx(tx, ty)] == Mat::Water && w.shore[idx(tx, ty)] >= 8 && !w.in_end((tx * TS) as f32, (ty * TS) as f32) && !w.in_prolog((tx * TS) as f32, (ty * TS) as f32);
+        let lane = |w: &World, cx: i32, cy: i32, rng: &mut Rng, rmin: f32, rmax: f32| -> Option<Vec<(f32, f32)>> {
+            let n = rng.int(3, 5);
+            let rad = rng.range(rmin, rmax);
+            let mut pts = vec![];
+            for i in 0..n {
+                let a = i as f32 / n as f32 * std::f32::consts::TAU + rng.f() * 0.5;
+                let (tx, ty) = (cx + (a.cos() * rad) as i32, cy + (a.sin() * rad * 0.8) as i32);
+                if !free(w, tx, ty) {
+                    return None;
+                }
+                pts.push(((tx * TS) as f32, (ty * TS) as f32));
+            }
+            Some(pts)
+        };
+        let hub = Zone::Hain.def();
+        for z in [Zone::Frost, Zone::Asche, Zone::Raben, Zone::Mangroven, Zone::Kueste] {
+            let d = z.def();
+            // auf halbem Weg; wenn dort Land liegt, ein Stück daneben
+            for t in 0..24 {
+                let f = 0.5 + (t % 5) as f32 * 0.06 - 0.12;
+                let (cx, cy) = (hub.cx + ((d.cx - hub.cx) as f32 * f) as i32 + rng.int(-12, 12), hub.cy + ((d.cy - hub.cy) as f32 * f) as i32 + rng.int(-12, 12));
+                if let Some(r) = lane(self, cx, cy, &mut rng, 14.0, 24.0) {
+                    out.push(r);
+                    break;
+                }
+            }
+        }
+        let inner = out.len();
         let mut tries = 0;
-        let free = |w: &World, tx: i32, ty: i32| inb(tx, ty) && w.ground[idx(tx, ty)] == Mat::Water && w.shore[idx(tx, ty)] >= 8 && !w.in_end((tx * TS) as f32, (ty * TS) as f32);
-        while out.len() < 14 && tries < 3000 {
+        while out.len() < inner + 14 && tries < 3000 {
             tries += 1;
             let (cx, cy) = (rng.int(80, MW - 80), rng.int(80, MH - 80));
-            let (bx0, by0, bx1, by1) = CORE_BOX;
-            if cx > bx0 && cx < bx1 && cy > by0 && cy < by1 {
+            if (cx - hub.cx).abs() < 120 && (cy - hub.cy).abs() < 110 {
                 continue;
             }
             if out.iter().any(|r| (r[0].0 / TS as f32 - cx as f32).hypot(r[0].1 / TS as f32 - cy as f32) < 160.0) {
                 continue;
             }
-            let n = rng.int(3, 5);
-            let rad = rng.range(18.0, 34.0);
-            let mut pts = vec![];
-            let mut ok = true;
-            for i in 0..n {
-                let a = i as f32 / n as f32 * std::f32::consts::TAU + rng.f() * 0.5;
-                let (tx, ty) = (cx + (a.cos() * rad) as i32, cy + (a.sin() * rad * 0.8) as i32);
-                if !free(self, tx, ty) {
-                    ok = false;
-                    break;
-                }
-                pts.push(((tx * TS) as f32, (ty * TS) as f32));
-            }
-            if ok {
-                out.push(pts);
+            if let Some(r) = lane(self, cx, cy, &mut rng, 18.0, 34.0) {
+                out.push(r);
             }
         }
         out

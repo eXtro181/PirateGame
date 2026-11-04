@@ -8,8 +8,8 @@ use crate::game::fx::{rnd, rr, Fx, P};
 use crate::gfx::{flags, Frame, LightDef, SprOpt};
 use std::f32::consts::PI;
 
-/// Weltpunkt, um den das Titelbild aufgebaut wird (offenes Meer zwischen Eismeer und Aschebucht).
-pub const TITLE_SEA: (f32, f32) = ((330 + crate::world::CORE.0) as f32 * 32.0, (52 + crate::world::CORE.1) as f32 * 32.0);
+/// Weltpunkt, um den das Titelbild aufgebaut wird (offenes Meer nordöstlich der Glutwacht).
+pub const TITLE_SEA: (f32, f32) = (crate::world::TITLE_T.0 as f32 * 32.0, crate::world::TITLE_T.1 as f32 * 32.0);
 /// Fußpunkt des Throns (Wasserlinie) relativ zu TITLE_SEA: rechts der Bildmitte, unten im Bild
 pub const THRONE_OFF: (f32, f32) = (175.0, 262.0);
 

@@ -85,6 +85,19 @@ pub fn dialog_for(g: &mut Game, ni: usize) -> Script {
     *n += 1;
     let bye = ch("Lebewohl", Cmd::EndTalk);
     match def.dialog {
+        "prolog" => Script {
+            pages: if first {
+                pages(&[
+                    "Du … du atmest noch? Dann hat die See dich auch hier heraufgespuckt.",
+                    "Das ist der Wrackzwinger. Mauern ringsum, so hoch, dass kein Ertrunkener je darüber kam. Im Süden nur der Abbruch über dem schwarzen Wasser.",
+                    "Sie zieht die Schiffe die Klippe herauf und spinnt sie ein. Uns auch. Die Spinne … sie haust unten am großen Fall.",
+                    "Wer hier stirbt, den holt die See zurück, irgendwohin. Und wer sie erschlägt … dem bleibt nur der Sprung.",
+                ])
+            } else {
+                pages(&["Geh … bevor sie wiederkommt.", "Am Abbruch. Beim Fall. Dort wartet sie – und dahinter die Tiefe."])
+            },
+            choices: vec![bye],
+        },
         "herald" => {
             if first {
                 return Script {
@@ -105,8 +118,8 @@ pub fn dialog_for(g: &mut Game, ni: usize) -> Script {
                 }
                 return Script {
                     pages: vec![
-                        format!("Die Throne sind voll. Aber im Festungssee {} noch {wrecks_missing} Schiff{}.", if wrecks_missing > 1 { "fehlen" } else { "fehlt" }, if wrecks_missing > 1 { "e" } else { "" }),
-                        "Die Ungeheuer schlafen in den vier Ecken der See: Glutsee im Osten, Eismeer im Norden, Sturmsee im Südwesten, Tiefengrund im Südosten.".into(),
+                        format!("Die Throne sind voll. Aber im Hafenbecken der Festung {} noch {wrecks_missing} Schiff{}.", if wrecks_missing > 1 { "fehlen" } else { "fehlt" }, if wrecks_missing > 1 { "e" } else { "" }),
+                        "Die Ungeheuer schlafen weit draußen in den vier Himmelsrichtungen: Glutsee im Osten, Eismeer im Norden, Sturmsee im Westen, Tiefengrund im Süden.".into(),
                     ],
                     choices: vec![bye],
                 };
@@ -114,7 +127,7 @@ pub fn dialog_for(g: &mut Game, ni: usize) -> Script {
             Script {
                 pages: vec![
                     format!("Noch {missing} Galionsfigur{}. Die Throne der Glutwacht warten.", if missing > 1 { "en fehlen" } else { " fehlt" }),
-                    "Die Glut liegt im Osten, der Frost im Nordwesten. Rabenwacht im Westen, die Mangroven im Südosten.".into(),
+                    "Die Glut liegt im Nordosten, der Frost im Nordwesten. Rabenwacht im Südwesten, die Mangroven im Südosten.".into(),
                     "Und vergiss die See nicht. Dort draußen schlafen Dinge, die größer sind als jeder König.".into(),
                 ],
                 choices: vec![bye],

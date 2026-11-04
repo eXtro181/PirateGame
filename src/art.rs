@@ -598,6 +598,36 @@ pub fn build_sea_boss(art: &mut Art, frame: &mut Frame, el: &str, beast: Option<
     art.boss_loaded = Some(el.to_string());
     info!("Seeboss {el} gezeichnet in {:.2}s", t0.elapsed().as_secs_f32());
 }
+/// Prolog: die Riesige Meeresspinne in den Boss-Bereich zeichnen (nur solange man im
+/// Wrackzwinger ist; danach übernehmen Seebosse und Holländer den Bereich wieder).
+pub fn build_prolog_boss(art: &mut Art, frame: &mut Frame) {
+    if art.boss_loaded.as_deref() == Some("prolog") {
+        return;
+    }
+    let t0 = bevy::platform::time::Instant::now();
+    let slot = art.boss_slot;
+    let mut a = slot.atlas();
+    let mut sh = beast_sheet(&mut a, "seaSpider");
+    if !slot.upload(frame, &a) {
+        return;
+    }
+    for d in sh.f.iter_mut() {
+        for an in d.iter_mut() {
+            for s in an.iter_mut() {
+                slot.fix(s);
+            }
+        }
+    }
+    if let Some(old) = art.boss_loaded.take() {
+        art.ships.remove(&old);
+    }
+    for k in sw_art::beasts::KINDS.iter().filter(|k| sw_art::beasts::sea_boss(k.key)) {
+        art.chars.remove(k.key);
+    }
+    art.chars.insert("seaSpider".into(), sh);
+    art.boss_loaded = Some("prolog".into());
+    info!("Meeresspinne gezeichnet in {:.2}s", t0.elapsed().as_secs_f32());
+}
 impl Art {
     pub fn spr(&self, name: &str) -> Spr {
         self.map.get(name).copied().unwrap_or_else(|| {
@@ -977,7 +1007,20 @@ pub fn build(frame: &mut Frame) -> Art {
             stc::hooded_statue(),
             stc::banner_pole(),
             stc::buoy(),
+            stc::hull_arch(),
+            stc::chain_post(),
+            stc::high_wall(0),
+            stc::high_wall(1),
+            stc::high_wall_v(),
         ];
+        for i in 0..2 {
+            list.push(stc::spider_web(i));
+            list.push(stc::cocoon(i));
+        }
+        for i in 0..3 {
+            list.push(stc::battlement(i));
+            list.push(stc::mast_pillar(i));
+        }
         for i in 0..3 {
             list.push(stc::sword_grave(i));
             list.push(stc::candles(i));
@@ -1177,8 +1220,8 @@ pub fn build(frame: &mut Frame) -> Art {
 
     // ---------------------------------------------------------------- Wesen (Kreaturen-Rig)
     for k in sw_art::beasts::KINDS.iter() {
-        if sw_art::beasts::sea_boss(k.key) {
-            continue; // Seebosse: beim Kampfbeginn in den Boss-Bereich
+        if sw_art::beasts::sea_boss(k.key) || k.key == "seaSpider" {
+            continue; // Seebosse und die Meeresspinne: bei Bedarf in den Boss-Bereich
         }
         let sh = beast_sheet(&mut a, k.key);
         chs.insert(k.key.to_string(), sh);

@@ -221,6 +221,26 @@ pub fn env(zone: &str, sailing_open_sea: bool) -> Env {
             light_k: 1.15,
             ..base
         },
+        // Wrackzwinger (Prolog): kaltes Mondlicht, dichter Seenebel, schwarzes Wasser
+        "prolog" => Env {
+            rays: 0.45,
+            ambient: l(0x6A7890, 0.52),
+            sky: 0.45,
+            sun: l(0xA8B8D8, 0.62),
+            // Mond von vorn links: die hohe Klippe und die Mauern bekommen Licht und Plastik
+            sun_dir: n3([-0.5, 0.32, 0.8]),
+            shadow: 0.62,
+            fog: l(0x1E2630, 1.0),
+            fog_k: 0.15,
+            lift: [0.006, 0.01, 0.018],
+            gain: [0.95, 0.98, 1.04],
+            sat: 0.72,
+            water_a: l(0x0C161C, 1.0),
+            water_b: l(0x010203, 1.0),
+            water_c: l(0x6A7880, 1.0),
+            light_k: 1.25,
+            ..base
+        },
         // Ladenräume: warmes Kerzen- und Fackellicht, kein Nebel
         "innen" => Env {
             rays: 0.0,

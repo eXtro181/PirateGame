@@ -84,7 +84,7 @@ const fn kw(key: &'static str, w: i32, h: i32, sc: f32) -> Kind {
     Kind { key, w: (w as f32 * sc) as i32, h: (h as f32 * sc) as i32, foot: (40.0 * sc) as i32, big: true, shoot: false, shadow: 0.0, roll: 0.0, only: None, sc, swim: true }
 }
 
-pub const KINDS: [Kind; 19] = [
+pub const KINDS: [Kind; 20] = [
     k("crab", 64, 48, false, false, 14.0, PI),
     k("crabWarrior", 120, 96, true, false, 28.0, PI),
     k("shell", 72, 72, false, false, 15.0, 1.3),
@@ -100,6 +100,8 @@ pub const KINDS: [Kind; 19] = [
     ks("krakenBasilisk", 170, 170, 36.0, 1.3, 1.6),
     Kind { key: "seaKraken", w: 210, h: 195, foot: 4, big: true, shoot: false, shadow: 0.0, roll: 0.0, only: Some("down"), sc: 1.5, swim: false },
     Kind { key: "shark", w: 100, h: 52, foot: 14, big: false, shoot: false, shadow: 0.0, roll: 0.0, only: Some("side"), sc: 1.0, swim: false },
+    // Prolog-Boss: nur im Wrackzwinger, wird bei Bedarf in den Bossbereich gezeichnet
+    ks("seaSpider", 150, 120, 36.0, PI, 1.9),
     // Seebosse (erste Gestalt)
     kw("seaTiamat", 200, 190, 2.1),
     kw("seaLobster", 190, 170, 2.1),
@@ -181,8 +183,98 @@ fn build(key: &str, p: &P, r: &mut Rig) {
         "seaSerpent" => serpent(r, p),
         "seaAngler" => abyss_angler(r, p),
         "shark" => shark(r, p),
+        "seaSpider" => sea_spider(r, p),
         _ => crab(r, p, 0),
     }
+}
+
+/// Riesige Meeresspinne (Prolog-Boss): flacher Panzer mit Seepocken und Tang, gemusterter
+/// Hinterleib, Augenkranz, Kieferklauen, acht lange, gebänderte Beine im Wechselschritt.
+/// Beim Angriff steigen die Vorderbeine auf und stoßen herab.
+fn sea_spider(r: &mut Rig, p: &P) {
+    let shell = r.mat(mat(0x2A3430).pat(Pat::Scales(4.0)).spec(70));
+    let shell_d = r.mat(mat(0x1A2220).pat(Pat::Spots(3.0)).spec(30));
+    let belly = r.mat(mat(0x5A2A22).pat(Pat::Stripes(4.0)));
+    let leg_a = r.mat(mat(0x2A1E18).pat(Pat::Grain).spec(50));
+    let leg_b = r.mat(mat(0x1E2422).pat(Pat::Grain).spec(50));
+    let joint = r.mat(mat(0x4A3A30).spec(40));
+    let band = r.mat(mat(0x6A2A20).spec(30));
+    let barn = r.mat(mat(0xB8B4A0).pat(Pat::Spots(1.5)));
+    let fang = r.mat(mat(0x1A1614).spec(160));
+    let weed = r.mat(mat(0x2E4A2A).soft());
+    let rear = if p.atk < 0.0 { -p.atk * 10.0 } else if p.atk > 0.0 { -p.atk * 3.0 } else { 0.0 };
+    let bz = 26.0 + p.bob * 0.7 + rear + if p.moving { (p.walk * 2.0).sin() * 1.4 } else { 0.0 };
+    let pitch = if p.atk < 0.0 { 0.3 * -p.atk } else if p.atk > 0.0 { -0.16 * p.atk } else { 0.0 };
+    // ---- acht Beine (vier je Seite, von vorn nach hinten), Wechselschritt
+    r.part();
+    for i in 0..8 {
+        let side = if i < 4 { -1.0f32 } else { 1.0 };
+        let k = (i % 4) as f32;
+        // Ansatz am Kopfbruststück, Richtung von vorn (k = 0) nach hinten (k = 3)
+        let a = (0.42 - k * 0.32) * PI;
+        let (ca, sa) = (a.cos(), a.sin());
+        let ph = if (i % 2 == 0) == (side < 0.0) { 0.0 } else { PI };
+        let (st, lf) = step(p, ph, 7.0, 7.0);
+        let front = k == 0.0;
+        let lift = if front && p.atk < 0.0 { -p.atk * 26.0 } else if front && p.atk > 0.0 { (1.0 - p.atk) * 8.0 } else { 0.0 };
+        let reach = if front && p.atk > 0.0 { 1.0 + p.atk * 0.35 } else { 1.0 };
+        let hip = v(side * 12.0 * ca.abs().max(0.4), 4.0 + sa * 10.0, bz - 3.0);
+        let knee = v(side * (30.0 + ca.abs() * 8.0), 4.0 + sa * 30.0 + st * 0.4, bz + 22.0 + lift * 0.9);
+        let ankle = v(side * (52.0 + ca.abs() * 6.0), 4.0 + sa * 50.0 * reach + st * 0.8, bz + 6.0 + lift * 0.6);
+        let foot = v(side * (60.0 + ca.abs() * 6.0), 4.0 + sa * 60.0 * reach + st, lf + lift * 0.4);
+        let m = if i % 2 == 0 { leg_a } else { leg_b };
+        r.tube(&[hip, knee], 3.4, 2.8, m);
+        r.tube(&[knee, ankle], 2.8, 2.0, m);
+        r.tube(&[ankle, foot], 2.0, 0.6, m);
+        r.ball(knee, 3.2, joint);
+        r.ball(ankle, 2.4, joint);
+        // rostrote Bänder, Borsten und Stacheln entlang der Glieder
+        r.ball(lerp3(hip, knee, 0.55), 3.0, band);
+        for t in [0.2f32, 0.4, 0.7, 0.85] {
+            let b = lerp3(hip, knee, t);
+            r.spike(b, add(b, v(side * 1.5, 0.0, 4.0)), 0.8, fang);
+        }
+        for t in [0.3f32, 0.6] {
+            let b = lerp3(knee, ankle, t);
+            r.spike(b, add(b, v(side * 2.2, 0.0, 4.0)), 0.8, fang);
+        }
+        r.ball(lerp3(knee, ankle, 0.5), 2.4, band);
+        // Tang hängt von den Knien
+        if i % 3 == 0 {
+            r.tube(&[knee, add(knee, v(side * 2.0, 1.0, -9.0)), add(knee, v(side * 1.0, 3.0, -16.0))], 1.2, 0.4, weed);
+        }
+    }
+    // ---- Leib
+    r.part();
+    let mk = r.mark();
+    // Hinterleib mit Muster und Seepocken
+    r.ell(v(0.0, -20.0, bz + 4.0), v(18.0, 20.0, 13.0), shell_d);
+    r.ell(v(0.0, -22.0, bz + 9.0), v(13.0, 14.0, 8.0), belly);
+    for (bx, by, bzz) in [(-8.0f32, -26.0f32, 12.0f32), (7.0, -18.0, 13.0), (-3.0, -34.0, 8.0), (11.0, -30.0, 7.0), (0.0, -14.0, 14.0)] {
+        r.cyl(v(bx, by, bz + bzz), 2.4, 2.4, 2.2, barn);
+        r.dot(v(bx, by, bz + bzz + 2.4), 0x2A2620, 0.0, 1);
+    }
+    // Kopfbruststück: flacher Panzer
+    r.ell(v(0.0, 6.0, bz), v(20.0, 18.0, 10.0), shell);
+    r.ell(v(0.0, 8.0, bz + 5.0), v(12.0, 11.0, 5.0), shell_d);
+    for (bx, by) in [(-12.0f32, 2.0f32), (13.0, 6.0), (-4.0, -4.0)] {
+        r.cyl(v(bx, by, bz + 7.0), 1.8, 1.8, 1.8, barn);
+    }
+    r.tube(&[v(-14.0, 0.0, bz + 6.0), v(-20.0, -2.0, bz - 6.0), v(-21.0, 0.0, bz - 14.0)], 1.4, 0.4, weed);
+    // Augenkranz: zwei große, sechs kleine Augen (leuchtend grün)
+    for (ex, ey, ez, sz) in [(-4.0f32, 22.0f32, 4.0f32, 2), (4.0, 22.0, 4.0, 2), (-8.0, 19.0, 6.0, 1), (8.0, 19.0, 6.0, 1), (-2.0, 20.0, 8.0, 1), (2.0, 20.0, 8.0, 1), (-11.0, 16.0, 4.0, 1), (11.0, 16.0, 4.0, 1)] {
+        r.dot(v(ex, ey, bz + ez), 0x7CF0A0, 2.2, sz);
+    }
+    // Kieferklauen (öffnen sich beim Ausholen) und Taster
+    let open = if p.atk < 0.0 { -p.atk * 0.5 } else { 0.1 + p.bob.abs() * 0.04 };
+    for side in [-1.0f32, 1.0] {
+        let base = v(side * 4.0, 22.0, bz - 3.0);
+        let tip = v(side * (3.0 + open * 10.0), 31.0, bz - 12.0);
+        r.tube(&[base, lerp3(base, tip, 0.5), tip], 2.6, 0.8, fang);
+        let pb = v(side * 9.0, 20.0, bz - 1.0);
+        r.tube(&[pb, v(side * 14.0, 30.0, bz + 2.0), v(side * 12.0, 36.0, bz - 6.0)], 2.0, 1.0, leg_a);
+    }
+    r.rotate_since(mk, 0, pitch, v(0.0, 0.0, bz - 6.0));
 }
 
 // ================================================================= Helfer

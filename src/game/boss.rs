@@ -123,9 +123,25 @@ fn shot_kind(el: &str) -> &'static str {
 fn o() -> AO {
     AO::default()
 }
+
+/// Prolog-Boss: die Riesige Meeresspinne (eine Gestalt, nicht schwer)
+pub const SPIDER_NAME: &str = "Riesige Meeresspinne";
+pub const SPIDER_HP: f32 = 420.0;
+pub const SPIDER_DMG: f32 = 13.0;
+pub const SPIDER_PEARLS: f32 = 700.0;
 fn table(mega: bool, phase: i32, el: &str) -> Vec<(AK, f32, AO)> {
     use AK::*;
     let s = S;
+    if el == "spider" {
+        // vorschnellen, mit den Vorderbeinen fegen, Netzklumpen spucken, selten anspringen –
+        // langsam ausgeholt, gut zu lesen
+        return vec![
+            (Dash, 3.0, AO { len: 120.0 * s, ..o() }),
+            (Sweep, 3.0, AO { reach: 62.0 * s, ..o() }),
+            (Volley, 2.0, AO { n: 3, spread: 0.45, ..o() }),
+            (Leap, 1.0, AO { r: 40.0 * s, ..o() }),
+        ];
+    }
     if mega {
         return if phase == 1 {
             // Malakor: Vierklingen-Hiebfolge, Klingenwirbel, Bartpeitsche, Gezeitensprung,
@@ -168,7 +184,11 @@ fn table(mega: bool, phase: i32, el: &str) -> Vec<(AK, f32, AO)> {
 impl Boss {
     pub fn new(key: &'static str, ar: &crate::world::Arena) -> Self {
         let mega = key == "mega";
-        let (name, hp, el, sheet) = if mega { (MEGA_NAME.to_string(), MEGA_HP, "sea", "malakor") } else {
+        let (name, hp, el, sheet) = if mega {
+            (MEGA_NAME.to_string(), MEGA_HP, "sea", "malakor")
+        } else if key == "spider" {
+            (SPIDER_NAME.to_string(), SPIDER_HP, "spider", "")
+        } else {
             let k = king(key);
             (k.name.to_string(), k.hp, k.key, k.sheet)
         };
@@ -197,7 +217,7 @@ impl Boss {
             sheet,
             h: 100.0,
         };
-        b.set_body(true);
+        b.set_body(key != "spider");
         b
     }
     pub fn set_body(&mut self, human: bool) {
@@ -210,7 +230,11 @@ impl Boss {
         } else {
             self.a.r = if self.mega { 60.0 } else { 28.0 };
             self.a.hurt_r = if self.mega { 110.0 } else { 48.0 };
-            if !self.mega {
+            if self.key == "spider" {
+                self.monster = "seaSpider";
+                self.a.r = 34.0;
+                self.a.hurt_r = 72.0;
+            } else if !self.mega {
                 self.monster = king(self.key).beast;
             }
             self.h = if self.mega { 300.0 } else { 150.0 };
@@ -223,6 +247,8 @@ impl Boss {
     pub fn def_dmg(&self) -> f32 {
         if self.mega {
             MEGA_DMG
+        } else if self.key == "spider" {
+            SPIDER_DMG
         } else {
             king(self.key).dmg
         }
@@ -234,6 +260,13 @@ impl Boss {
         self.hidden = true;
         self.a.x = self.home.0;
         self.a.y = self.home.1;
+        if self.key == "spider" {
+            self.el = "spider";
+            self.name = SPIDER_NAME.into();
+            self.atk = None;
+            self.set_body(false);
+            return;
+        }
         self.el = if self.mega { "sea" } else { king(self.key).key };
         self.name = if self.mega { MEGA_NAME.into() } else { king(self.key).name.into() };
         if self.mega {
@@ -259,7 +292,7 @@ impl Game {
         if b.state != BS::Dormant {
             return;
         }
-        b.max_hp = if b.mega { MEGA_HP } else { king(b.key).hp } * k;
+        b.max_hp = if b.mega { MEGA_HP } else if b.key == "spider" { SPIDER_HP } else { king(b.key).hp } * k;
         b.hp = b.max_hp;
         b.hidden = false;
         b.state = BS::Intro;
@@ -270,7 +303,8 @@ impl Game {
         self.boss = Some(i);
         self.boss_ghost = self.bosses[i].hp;
         let n = self.bosses[i].name.clone();
-        self.ui.banner(&n, if self.bosses[i].mega { "Herr des Fliegenden Holländers" } else { "Geisterkönig" }, "boss", 3.0);
+        let sub = if self.bosses[i].mega { "Herr des Fliegenden Holländers" } else if self.bosses[i].key == "spider" { "Wächterin des Wrackzwingers" } else { "Geisterkönig" };
+        self.ui.banner(&n, sub, "boss", 3.0);
     }
 
     fn boss_pick(&self, b: &Boss) -> (AK, AO) {
@@ -611,7 +645,7 @@ impl Game {
                         if k >= 1.0 {
                             let ec = el_col(b.el);
                             self.slam_hit(idx, b, a.tx, a.ty, a.o.r, ec);
-                            if !b.human {
+                            if !b.human && b.mega {
                                 // Knochenkraken: Splitterring beim Auftauchen
                                 for i in 0..10 {
                                     let an = i as f32 / 10.0 * std::f32::consts::TAU;
@@ -743,11 +777,12 @@ impl Game {
                 for i in 0..a.o.n {
                     let an = ang + if a.o.n > 1 { (i as f32 / (a.o.n - 1) as f32 - 0.5) * a.o.spread * 2.0 } else { 0.0 };
                     let sp = if b.el == "wind" { 300.0 } else { 220.0 };
-                    let kind = if b.el == "bone" { "boneshard" } else { shot_kind(b.el) };
+                    let kind = if b.el == "bone" { "boneshard" } else if b.el == "spider" { "shard" } else { shot_kind(b.el) };
                     let mut s = Shot::new(Owner::Enemy, kind, b.a.x + an.cos() * 28.0, b.a.y + an.sin() * 20.0, if b.human { 36.0 } else { 48.0 }, an.cos() * sp, an.sin() * sp * 0.8, Self::boss_dmg(b, 0.6));
                     s.r = 8.0;
                     s.life = 2.2;
                     s.glow = match kind {
+                        _ if b.el == "spider" => Some([1.0, 1.0, 0.9]),
                         "fireball" => Some([1.5, 0.6, 0.2]),
                         "shard" => Some([0.6, 1.0, 1.3]),
                         "feather" => Some([1.0, 1.0, 1.2]),
@@ -895,7 +930,7 @@ impl Game {
             return;
         }
         let b = &mut self.bosses[i];
-        if !b.mega && b.phase == 1 && b.hp <= b.max_hp * 0.5 {
+        if !b.mega && b.key != "spider" && b.phase == 1 && b.hp <= b.max_hp * 0.5 {
             b.phase = 2;
             b.state = BS::Transform;
             b.st_t = 0.0;
@@ -928,6 +963,17 @@ impl Game {
         self.flash([1.0, 1.0, 1.0], 1.0);
         self.shake(20.0);
         self.sfx("death");
+        if key == "spider" {
+            // Prolog: Beute, dann bleibt nur der Sprung über die Klippe
+            self.ui.banner("DIE MEERESSPINNE IST ERSCHLAGEN", "Am Abbruch wartet nur noch die Tiefe", "big", 5.0);
+            self.gain_pearls(SPIDER_PEARLS as i64, Some((x, y)));
+            self.save.spider = true;
+            self.save.shards += 1;
+            self.timers.push((5.4, Timed::Banner("Der einzige Weg hinaus".into(), "Spring am Abbruch in den Wasserfall".into())));
+            self.boss = None;
+            self.persist(true);
+            return;
+        }
         let pearls = if mega { MEGA_PEARLS } else { king(key).pearls } * (1.0 + 0.25 * self.save.ng as f32);
         if mega {
             self.ui.banner("DER ERTRUNKENE KÖNIG IST BESIEGT", "Am Grund erscheint ein Säbelfeuer", "big", 5.0);

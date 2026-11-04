@@ -776,3 +776,268 @@ pub fn rope_coil() -> PropArt {
     }
     prop("ropeCoil", &r, 32, 30, 8).shadow(10.0, 3.0)
 }
+
+// ================================================================= Glutwacht als runde Hafenfestung
+
+/// Zinnenbrüstung auf der Ringmauer: 64 px breites Stück mit drei Zinnen, Moos und Ruß.
+pub fn battlement(seed: u32) -> PropArt {
+    let mut r = Rig::new();
+    let m = mats(&mut r);
+    let moss = r.mat(mat(0x2E3A28).soft());
+    r.part();
+    r.cube(v(0.0, -3.0, 7.0), v(32.0, 4.0, 7.0), m.brick);
+    r.cube(v(0.0, -3.0, 14.5), v(32.6, 4.6, 1.2), m.trim);
+    for k in 0..3 {
+        let x = -21.0 + k as f32 * 21.0;
+        let h = 9.0 - ((seed as i32 + k) % 3) as f32 * 1.5;
+        r.cube(v(x, -3.0, 15.5 + h * 0.5), v(6.5, 3.6, h * 0.5), m.brick_d);
+        r.cube(v(x, -3.0, 15.6 + h), v(7.0, 4.0, 0.9), m.trim);
+    }
+    for i in 0..10 {
+        let x = -30.0 + ((i * 13 + seed as i32 * 7) % 60) as f32;
+        r.dot(v(x, 1.2, 2.0 + ((i * 5) % 9) as f32), if i % 3 == 0 { 0x2A3A26 } else { 0x141216 }, 0.0, 1);
+    }
+    r.ell(v(-26.0 + (seed % 3) as f32 * 20.0, 0.8, 3.0), v(6.0, 1.0, 2.5), moss);
+    prop(&format!("battlement{seed}"), &r, 72, 56, 6).shadow(30.0, 4.0).boxc(31.0, 5.0)
+}
+
+/// Gebrochener Schiffsmast als Ruinensäule: Mastfuß in Steinsockel, zerfetztes Segel, Rah,
+/// Wanten, hängende Laterne (glimmt).
+pub fn mast_pillar(seed: u32) -> PropArt {
+    let mut r = Rig::new();
+    let m = mats(&mut r);
+    let sail = r.mat(mat(0x6A5E4A).pat(Pat::Stripes(7.0)).soft());
+    let rope = r.mat(mat(0x5A4A32));
+    let lamp = r.mat(mat(0xFFB45A).glow(1.8).bias(0.4).soft());
+    let hgt = 150.0 - (seed % 3) as f32 * 18.0;
+    r.part();
+    // Sockel aus Quadern
+    r.cube(v(0.0, -6.0, 6.0), v(12.0, 9.0, 6.0), m.trim);
+    r.cube(v(0.0, -6.0, 13.0), v(10.0, 7.5, 1.4), m.brick_d);
+    // Mast, leicht schief, oben gesplittert
+    let lean = if seed % 2 == 0 { 4.0 } else { -5.0 };
+    r.tube(&[v(0.0, -6.0, 12.0), v(lean * 0.5, -6.0, hgt * 0.55), v(lean, -6.0, hgt)], 5.0, 3.6, m.wood);
+    for k in 0..5 {
+        let a = k as f32 * 1.3;
+        r.spike(v(lean, -6.0, hgt - 2.0), v(lean + a.cos() * 3.0, -6.0 + a.sin() * 2.0, hgt + 6.0 + (k % 2) as f32 * 4.0), 1.4, m.wood);
+    }
+    // Eisenbänder
+    for z in [30.0f32, 62.0, 94.0] {
+        r.cyl(v(lean * z / hgt, -6.0, z), 5.4, 5.4, 2.0, m.iron);
+    }
+    // Rah mit zerfetztem Segel
+    let rz = hgt * 0.68;
+    r.tube(&[v(-30.0 + lean * 0.6, -4.0, rz + 4.0), v(28.0 + lean * 0.6, -4.0, rz - 4.0)], 1.8, 1.4, m.wood);
+    let (a, b) = (v(-26.0, -3.0, rz + 2.0), v(22.0, -3.0, rz - 3.0));
+    r.quad(a, b, v(16.0, -2.0, rz - 34.0), v(-12.0, -2.0, rz - 40.0), sail);
+    r.tri(v(-12.0, -2.0, rz - 40.0), v(16.0, -2.0, rz - 34.0), v(2.0, -1.6, rz - 52.0), sail);
+    // Wanten zum Sockel
+    for sx in [-12.0f32, 12.0] {
+        r.tube(&[v(lean * 0.8, -6.0, hgt * 0.8), v(sx, -2.0, 12.0)], 0.5, 0.5, rope);
+    }
+    // Laterne an der Rah
+    r.tube(&[v(20.0, -4.0, rz - 3.0), v(20.0, -4.0, rz - 14.0)], 0.4, 0.4, m.iron);
+    r.cube(v(20.0, -4.0, rz - 18.0), v(3.0, 3.0, 4.0), m.iron);
+    r.ell(v(20.0, -2.6, rz - 18.0), v(2.2, 1.0, 3.0), lamp);
+    prop(&format!("mastPillar{seed}"), &r, 80, 200, 10)
+        .shadow(18.0, 6.0)
+        .circle(11.0)
+        .light(20.0, -2.0, hgt * 0.68 - 18.0, 110.0, [1.3, 0.8, 0.4], 0.25)
+}
+
+/// Kielbogen: die Rippen eines gestrandeten Rumpfs, als Torbogen über einem Weg (keine Kollision
+/// in der Mitte; die Füße kollidieren nicht, damit man hindurchgehen kann).
+pub fn hull_arch() -> PropArt {
+    let mut r = Rig::new();
+    let m = mats(&mut r);
+    let bone = r.mat(mat(0x5A4630).pat(Pat::Grain));
+    r.part();
+    // Kiel oben als Firstbalken
+    r.tube(&[v(-6.0, -40.0, 104.0), v(0.0, -20.0, 108.0), v(6.0, 0.0, 104.0)], 4.0, 3.4, m.wood);
+    for k in 0..5 {
+        let y = -36.0 + k as f32 * 8.0;
+        let w = 54.0 - (k as f32 - 2.0).abs() * 4.0;
+        for s in [-1.0f32, 1.0] {
+            r.tube(&[v(0.0, y, 106.0), v(s * w * 0.55, y, 92.0), v(s * w * 0.95, y, 52.0), v(s * w, y, 6.0)], 2.6, 2.0, bone);
+        }
+    }
+    // Planken-Reste und Eisennägel
+    for k in 0..6 {
+        let s = if k % 2 == 0 { -1.0 } else { 1.0 };
+        let z = 30.0 + k as f32 * 9.0;
+        r.cube(v(s * 50.0, -20.0 + (k % 3) as f32 * 6.0, z), v(2.0, 7.0, 3.0), m.wood);
+    }
+    for k in 0..8 {
+        r.dot(v(-44.0 + k as f32 * 12.0, 0.8, 60.0 + (k % 3) as f32 * 14.0), 0x2A2A30, 0.0, 1);
+    }
+    // Laterne am First
+    r.tube(&[v(0.0, -2.0, 104.0), v(0.0, -2.0, 92.0)], 0.4, 0.4, m.iron);
+    r.ell(v(0.0, -2.0, 88.0), v(3.0, 3.0, 4.0), m.fire);
+    prop("hullArch", &r, 140, 150, 8).light(0.0, -2.0, 88.0, 120.0, [1.2, 0.7, 0.35], 0.3)
+}
+
+/// Kettenpfahl: Eisenpfahl mit hängenden Ketten und Haken (Hafen, Richtstätte).
+pub fn chain_post() -> PropArt {
+    let mut r = Rig::new();
+    let m = mats(&mut r);
+    r.part();
+    r.cyl(v(0.0, 0.0, 0.0), 4.0, 4.0, 6.0, m.trim);
+    r.tube(&[v(0.0, 0.0, 4.0), v(0.0, 0.0, 58.0)], 2.0, 1.6, m.iron);
+    r.tube(&[v(-10.0, 0.0, 56.0), v(10.0, 0.0, 56.0)], 1.2, 1.2, m.iron);
+    for s in [-1.0f32, 1.0] {
+        let mut pts = vec![];
+        for k in 0..9 {
+            let t = k as f32 / 8.0;
+            pts.push(v(s * 10.0 + s * (t * 3.0).sin() * 2.0, 0.6, 56.0 - t * 34.0 + (t * PI).sin() * 3.0));
+        }
+        r.tube(&pts, 0.9, 0.9, m.iron);
+        r.spike(v(s * 10.0, 0.6, 22.0), v(s * 12.0, 0.6, 16.0), 1.2, m.iron);
+    }
+    prop("chainPost", &r, 40, 80, 6).shadow(6.0, 3.0).circle(5.0)
+}
+
+// ================================================================= Prolog: der Wrackzwinger
+
+/// Hohe Zwingermauer (Ost-West, 128 px lang): nasses, bemoostes Mauerwerk mit Strebepfeilern,
+/// Ketten, Spinnweben in den Ecken und Rankenspuren.
+pub fn high_wall(seed: i32) -> PropArt {
+    let mut r = Rig::new();
+    let m = mats(&mut r);
+    let moss = r.mat(mat(0x26342A).pat(Pat::Spots(3.0)).soft());
+    let silk = r.mat(mat(0xC8CCC4).soft().bias(0.2));
+    let hgt = 176.0;
+    r.part();
+    r.cube(v(0.0, -14.0, 6.0), v(64.5, 15.0, 6.0), m.trim);
+    r.cube(v(0.0, -14.0, hgt * 0.5), v(64.0, 14.0, hgt * 0.5), m.brick);
+    r.cube(v(0.0, -14.0, hgt - 1.0), v(64.8, 14.8, 1.6), m.trim);
+    // Zinnen
+    let mut x = -58.0;
+    while x <= 58.0 {
+        r.cube(v(x, -3.0, hgt + 6.0), v(4.5, 3.0, 6.0), m.brick_d);
+        x += 14.5;
+    }
+    // Strebepfeiler, Gesims auf halber Höhe
+    for bx in [-46.0f32, 46.0] {
+        r.cube(v(bx, 3.0, 50.0), v(7.0, 5.0, 50.0), m.brick_d);
+        r.cube_rot(v(bx, 1.0, 104.0), v(7.0, 3.5, 7.0), 0.6, 0.0, m.trim);
+    }
+    r.cube(v(0.0, 0.4, 92.0), v(64.6, 1.2, 1.8), m.trim);
+    // Ketten mit Haken
+    for cx in [-22.0f32, 20.0] {
+        let mut pts = vec![];
+        for k in 0..10 {
+            let t = k as f32 / 9.0;
+            pts.push(v(cx + (t * 5.0).sin() * 2.0, 1.2, 150.0 - t * 70.0));
+        }
+        r.tube(&pts, 0.9, 0.9, m.iron);
+        r.spike(v(cx, 1.2, 80.0), v(cx + 2.0, 1.2, 74.0), 1.3, m.iron);
+    }
+    // Moos und Wasserspuren unten
+    for k in 0..7 {
+        let x = -56.0 + k as f32 * 18.0 + (seed * 5 % 7) as f32;
+        r.ell(v(x, 0.8, 8.0 + (k % 3) as f32 * 6.0), v(7.0, 1.0, 4.0), moss);
+    }
+    // Spinnweben in den Ecken (Seide)
+    for s in [-1.0f32, 1.0] {
+        let c = v(s * 62.0, 1.4, hgt - 4.0);
+        for k in 0..6 {
+            let a = k as f32 / 5.0 * PI * 0.5;
+            r.tube(&[c, add(c, v(-s * a.cos() * 30.0, 0.0, -a.sin() * 30.0))], 0.35, 0.35, silk);
+        }
+        for ring in 1..4 {
+            let rr = ring as f32 * 9.0;
+            let mut pts = vec![];
+            for k in 0..6 {
+                let a = k as f32 / 5.0 * PI * 0.5;
+                pts.push(add(c, v(-s * a.cos() * rr, 0.0, -a.sin() * rr)));
+            }
+            r.tube(&pts, 0.3, 0.3, silk);
+        }
+    }
+    for i in 0..60 {
+        let x = -62.0 + ((i * 41 + seed * 13) % 124) as f32;
+        let z = 8.0 + ((i * 29 + seed * 7) % 160) as f32;
+        r.dot(v(x, 0.6, z), if i % 3 == 0 { 0x2A3A26 } else { 0x141216 }, 0.0, 1);
+    }
+    // jede zweite Mauer trägt eine Wandfackel: Lichtinseln entlang der Mauer
+    if seed % 2 == 0 {
+        sconce(&mut r, &m, v(0.0, 0.4, 58.0));
+    }
+    let pa = prop(&format!("highWall{seed}"), &r, 150, 240, 10).shadow(66.0, 9.0).boxc(64.0, 26.0);
+    if seed % 2 == 0 {
+        pa.light(0.0, -2.0, 64.0, 170.0, [1.2, 0.6, 0.28], 0.25)
+    } else {
+        pa
+    }
+}
+
+/// Hohe Zwingermauer (Nord-Süd, 128 px lang; Fußpunkt = Südende).
+pub fn high_wall_v() -> PropArt {
+    let mut r = Rig::new();
+    let m = mats(&mut r);
+    let hgt = 176.0;
+    r.part();
+    r.cube(v(0.0, -64.0, 6.0), v(15.0, 64.5, 6.0), m.trim);
+    r.cube(v(0.0, -64.0, hgt * 0.5), v(14.0, 64.0, hgt * 0.5), m.brick);
+    r.cube(v(0.0, -64.0, hgt - 1.0), v(14.8, 64.8, 1.6), m.trim);
+    let mut y = -122.0;
+    while y <= -4.0 {
+        r.cube(v(-10.5, y, hgt + 6.0), v(3.0, 4.5, 6.0), m.brick_d);
+        y += 14.0;
+    }
+    r.cube(v(15.2, -64.0, 92.0), v(1.2, 64.6, 1.8), m.trim);
+    prop("highWallV", &r, 44, 330, 10).shadow(16.0, 4.0).boxc(15.0, 128.0)
+}
+
+/// Riesiges Spinnennetz zwischen zwei Pfählen bzw. Trümmern (flach im Bild, Seide glänzt).
+pub fn spider_web(seed: i32) -> PropArt {
+    let mut r = Rig::new();
+    let m = mats(&mut r);
+    let silk = r.mat(mat(0xD8DCD2).soft().bias(0.3).spec(90));
+    let (w, h) = (54.0 + (seed % 2) as f32 * 14.0, 70.0);
+    r.part();
+    for s in [-1.0f32, 1.0] {
+        r.tube(&[v(s * w, 0.0, 0.0), v(s * (w - 4.0), 0.0, h + 8.0)], 2.2, 1.6, m.wood);
+    }
+    let c = v(0.0, 0.0, h * 0.58);
+    let spokes = 12;
+    let mut ends = vec![];
+    for k in 0..spokes {
+        let a = k as f32 / spokes as f32 * TAU + seed as f32 * 0.3;
+        let e = v((a.cos() * w * 0.95).clamp(-w + 3.0, w - 3.0), 0.0, (c[2] + a.sin() * h * 0.55).clamp(3.0, h + 4.0));
+        r.tube(&[c, e], 0.32, 0.32, silk);
+        ends.push(e);
+    }
+    for ring in 1..7 {
+        let t = ring as f32 / 7.0;
+        let mut pts = vec![];
+        for e in ends.iter().chain(ends.first()) {
+            pts.push(lerp3(c, *e, t + ((ring * 3 + seed) % 4) as f32 * 0.01));
+        }
+        r.tube(&pts, 0.28, 0.28, silk);
+    }
+    // eingesponnene Beute im Netz
+    r.ell(v(w * 0.3, 0.6, h * 0.7), v(5.0, 3.0, 9.0), silk);
+    prop(&format!("spiderWeb{seed}"), &r, (w * 2.0) as i32 + 16, 100, 6).shadow(w, 3.0)
+}
+
+/// Kokon: eingesponnener Ertrunkener (liegend) bzw. eingesponnenes Fass (stehend).
+pub fn cocoon(seed: i32) -> PropArt {
+    let mut r = Rig::new();
+    let silk = r.mat(mat(0xBCC0B4).pat(Pat::Stripes(2.5)).soft().bias(0.15));
+    let dark = r.mat(mat(0x5A584E).soft());
+    r.part();
+    if seed % 2 == 0 {
+        r.ell_rot(v(0.0, 0.0, 6.0), v(18.0, 7.0, 6.5), 0.0, 0.25, silk);
+        r.ell(v(-16.0, 0.0, 7.0), v(6.0, 6.0, 6.0), silk);
+        r.ell(v(-18.0, 2.0, 8.0), v(2.5, 1.0, 2.0), dark);
+    } else {
+        r.ell(v(0.0, 0.0, 16.0), v(11.0, 10.0, 16.0), silk);
+        r.ell(v(0.0, 0.0, 33.0), v(6.0, 6.0, 4.0), silk);
+    }
+    for k in 0..5 {
+        let a = k as f32 * 1.7;
+        r.tube(&[v(a.cos() * 12.0, a.sin() * 6.0, 2.0), v(a.cos() * 22.0, a.sin() * 12.0, 0.0)], 0.3, 0.3, silk);
+    }
+    prop(&format!("cocoon{seed}"), &r, 64, 56, 8).shadow(16.0, 5.0).circle(10.0)
+}

@@ -636,13 +636,15 @@ impl Game {
                 let kk = (b.hp / b.max_hp).max(0.0);
                 Ui::rect(f, bx, by, (bw * kk).round(), 5.0, col::BLOOD);
                 Ui::rect(f, bx, by, (bw * kk).round(), 1.0, col::BLOOD_L);
-                if b.phase == 1 {
+                if b.phase == 1 && b.key != "spider" {
                     Ui::rect(f, bx + bw / 2.0, by - 1.0, 1.0, 7.0, col::BRASS);
                 }
             }
         }
         if self.slow_t > 0.0 {
-            text::t(f, art, "Unterkühlt", 16.0, 60.0, [150, 215, 255, 255]);
+            // im Prolog sind es Netzklumpen der Spinne, sonst Frost
+            let (label, c) = if self.save.prolog { ("Eingesponnen", [225, 228, 215, 255]) } else { ("Unterkühlt", [150, 215, 255, 255]) };
+            text::t(f, art, label, 16.0, 60.0, c);
         }
     }
 

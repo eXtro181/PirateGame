@@ -795,6 +795,16 @@ pub trait TerrainMap {
     fn level(&self, tx: i32, ty: i32) -> u8;
     /// Wandkachel: (Zeile in der Wand 0.., Anzahl Wandzeilen, Ebene oben, Ebene unten)
     fn face(&self, tx: i32, ty: i32) -> Option<(i32, i32, u8, u8)>;
+    /// Material eines Pixels, wenn die Karte es genau weiß (z. B. kreisrunde Hafenkante der
+    /// Festung); sonst wird zwischen den Kacheln gemischt
+    fn mat_px(&self, _px: i32, _py: i32) -> Option<Mat> {
+        None
+    }
+    /// Steile, sehr hohe Felsklippe statt Naturhang (je Ebene Unterschied eine Wandhöhe,
+    /// Säulenbasalt): z. B. die Abbruchkante der Prolog-Insel über dem tiefen Wasserfall
+    fn deep_cliff(&self, _tx: i32, _ty: i32) -> bool {
+        false
+    }
     fn stairs(&self, tx: i32, ty: i32) -> bool;
     fn biome(&self, tx: i32, ty: i32) -> Biome;
     /// Kachel in einer Siedlung (dort Treppen, in der Natur Wege)
@@ -856,6 +866,9 @@ impl EdgeNoise {
 
 /// Material an einem Weltpixel (nur Oberflächen; Wände werden gesondert behandelt).
 pub fn mat_at<M: TerrainMap>(m: &M, en: &EdgeNoise, px: i32, py: i32) -> Mat {
+    if let Some(mt) = m.mat_px(px, py) {
+        return mt;
+    }
     let fx = px as f32 / T as f32 - 0.5;
     let fy = py as f32 / T as f32 - 0.5;
     let tx = fx.floor() as i32;
@@ -903,6 +916,18 @@ const PAD: i32 = 4;
 const MX: i32 = BANK_PX + 4;
 const MN: i32 = RIM_PX + 16;
 const MS: i32 = SLOPE_PX + 2;
+/// Festungsmauern wachsen mit dem Höhenunterschied (bis vier Ebenen): Rand unten dann größer
+const MS_HUB: i32 = FACE_PX * 4 + 2;
+
+/// Höhe einer Wand bzw. eines Hangs nach Süden in px: in der Festung je Ebene Unterschied eine
+/// volle Mauerhöhe (hohe Ringmauern), in der Natur immer ein flacher Hang.
+pub fn face_span(b: Biome, l: u8, lb: u8) -> i32 {
+    if b == Biome::Hub {
+        FACE_PX * (l as i32 - lb as i32).max(1)
+    } else {
+        SLOPE_PX
+    }
+}
 
 /// Boden-Chunk in Schritten backen: `new` rechnet die Raster vor, `rows` malt Zeilenbänder.
 /// So kann ein Chunk über mehrere Bilder verteilt entstehen und Laufen/Segeln ruckelt nicht.
@@ -927,13 +952,25 @@ pub struct ChunkBake {
     /// Vorberechnung: 0 Materialraster, 1 Ebenenraster, 2 Abstand nach unten, 3 seitliche Abstände, 4 fertig
     stage: u8,
     prow: i32,
+    /// Rand unten (px): größer, wenn Festungsmauern in der Nähe sind
+    ms: i32,
 }
 
 impl ChunkBake {
     pub fn new<M: TerrainMap>(m: &M, en: &EdgeNoise, x0: i32, y0: i32, sz: i32) -> Self {
         let _ = en;
         let mut c = Canvas::flat(sz, sz);
-        let (gw, lw, lh) = (sz + PAD * 2, sz + MX * 2, sz + MN + MS);
+        // liegt Festung im Chunk oder knapp darunter? Dann reicht der Blick nach unten über hohe Mauern
+        let mut ms = MS;
+        'hub: for ty in (y0 - MN).div_euclid(T)..=(y0 + sz + MS_HUB).div_euclid(T) {
+            for tx in (x0 - MX).div_euclid(T)..=(x0 + sz + MX).div_euclid(T) {
+                if m.biome(tx, ty) == Biome::Hub || m.deep_cliff(tx, ty) {
+                    ms = MS_HUB;
+                    break 'hub;
+                }
+            }
+        }
+        let (gw, lw, lh) = (sz + PAD * 2, sz + MX * 2, sz + MN + ms);
         let n = (sz * sz) as usize;
         let mut b = ChunkBake {
             x0,
@@ -954,6 +991,7 @@ impl ChunkBake {
             row: 0,
             stage: 0,
             prow: 0,
+            ms,
         };
         if open_water_chunk(m, x0, y0, sz) {
             // offene See: nichts zu rechnen (weit vom Ufer)
@@ -974,7 +1012,7 @@ impl ChunkBake {
     /// Vorberechnung in Bändern: Materialraster, Ebenenraster, dann Abstände. true = fertig.
     fn prep<M: TerrainMap>(&mut self, m: &M, en: &EdgeNoise, n: i32) -> bool {
         let (x0, y0, sz, pad, mx, mn) = (self.x0, self.y0, self.sz, PAD, MX, MN);
-        let (gw, lw, lh) = (sz + pad * 2, sz + mx * 2, sz + mn + MS);
+        let (gw, lw, lh) = (sz + pad * 2, sz + mx * 2, sz + mn + self.ms);
         match self.stage {
             0 => {
                 // Materialraster mit Rand
@@ -1175,7 +1213,7 @@ impl ChunkBake {
             return;
         }
         let (x0, y0, sz, pad, mx, mn) = (self.x0, self.y0, self.sz, PAD, MX, MN);
-        let (gw, lw, lh) = (sz + pad * 2, sz + mx * 2, sz + mn + MS);
+        let (gw, lw, lh) = (sz + pad * 2, sz + mx * 2, sz + mn + self.ms);
         let (grid, wd, lg, down, sh) = (&self.grid, &self.wd, &self.lg, &self.down, &self.sh);
         let (lo_l, lo_r, lo_u, hi_l, hi_r, hi_u) = (&self.lo_l, &self.lo_r, &self.lo_u, &self.hi_l, &self.hi_r, &self.hi_u);
         let c = &mut self.c;
@@ -1192,13 +1230,14 @@ impl ChunkBake {
                 let l = lv(x, y);
                 let pi = (y * sz + x) as usize;
                 let (dd, lb) = down[pi];
-                let fpx = face_px(m.biome(tx, ty));
+                let deep = m.deep_cliff(tx, ty);
+                let fpx = if deep { FACE_PX * (l as i32 - lb as i32).max(1) } else { face_span(m.biome(tx, ty), l, lb) };
                 if l > 0 && dd <= fpx {
-                    // Hang (Natur) bzw. Mauer (Festung): vom Rand der Ebene nach unten
+                    // Hang (Natur) bzw. Mauer (Festung) bzw. Felsklippe: vom Rand der Ebene nach unten
                     let fy = (fpx - dd).max(0);
                     let top_mat = mat_at(m, en, px, py - fy - 3);
                     let below = mat_at(m, en, px, py + dd);
-                    face_pixel(m, mats, en, c, x, y, px, py, fy, fpx, l, lb, top_mat, below);
+                    face_pixel(m, mats, en, c, x, y, px, py, fy, fpx, l, lb, top_mat, below, deep);
                     continue;
                 }
                 let mt = g(x, y);
@@ -1443,7 +1482,7 @@ fn slope_pixel(mats: &mut Materials, en: &EdgeNoise, c: &mut Canvas, x: i32, y: 
 /// Ein Pixel einer Klippenwand: Säulenbasalt mit hellen Köpfen, Absätzen, Fugen, Moos
 /// und überhängender Graslippe.
 #[allow(clippy::too_many_arguments)]
-fn face_pixel<M: TerrainMap>(m: &M, mats: &mut Materials, en: &EdgeNoise, c: &mut Canvas, x: i32, y: i32, px: i32, py: i32, fy: i32, hgt: i32, lt: u8, lb: u8, top_mat: Mat, below: Mat) {
+fn face_pixel<M: TerrainMap>(m: &M, mats: &mut Materials, en: &EdgeNoise, c: &mut Canvas, x: i32, y: i32, px: i32, py: i32, fy: i32, hgt: i32, lt: u8, lb: u8, top_mat: Mat, below: Mat, deep: bool) {
     let tx = px.div_euclid(T);
     let ty = py.div_euclid(T);
     let b = m.biome(tx, ty);
@@ -1484,7 +1523,7 @@ fn face_pixel<M: TerrainMap>(m: &M, mats: &mut Materials, en: &EdgeNoise, c: &mu
         return;
     }
     let top_mat = if top_mat.transparent() { Mat::Rock } else { top_mat };
-    if b != Biome::Hub {
+    if b != Biome::Hub && !deep {
         hill_pixel(mats, en, c, x, y, px, py, fy, hgt, &bp, b, top_mat, ev_at(fy), below == Mat::Water);
         return;
     }
@@ -1531,7 +1570,7 @@ fn face_pixel<M: TerrainMap>(m: &M, mats: &mut Materials, en: &EdgeNoise, c: &mu
             return;
         }
     }
-    if b == Biome::Hub {
+    if b == Biome::Hub && !deep {
         masonry_pixel(c, x, y, px, fy, hgt, &bp, ev_at(fy), below == Mat::Water);
         return;
     }
@@ -1598,6 +1637,27 @@ fn face_pixel<M: TerrainMap>(m: &M, mats: &mut Materials, en: &EdgeNoise, c: &mu
     if lx == 0 {
         v = 0.12;
         rel -= 2.0;
+    }
+    if deep {
+        // hohe Abbruchkante: etwas heller, Säulenkanten fangen Mondlicht
+        v += 0.1;
+        if lx == 1 || lx == 2 {
+            v += 0.14;
+        }
+        // leuchtende Algen in den Fugen und nasse Rinnsale: Lichtinseln an der dunklen Wand
+        if lx <= 1 && hash(col_k, fy / 3, 51) % 23 == 0 {
+            let gc = hex(0x3AE0B0);
+            c.put(x, y, gc, 0.5);
+            c.glow(x, y, gc, 0.85);
+            let i = c.idx(x, y);
+            c.up[i] = 255;
+            c.ev[i] = ev;
+            return;
+        }
+        if hash(col_k, 9, 61) % 4 == 0 && (lx - wcol / 2).abs() <= 1 && fy > 20 {
+            v += 0.08;
+            c.spec(x, y, 200);
+        }
     }
     v += (bayer(px, py) - 0.5) * 0.08;
     let mut col = pickf(cl, v.clamp(0.0, 1.0));
@@ -1727,7 +1787,7 @@ fn path_pixel(c: &mut Canvas, x: i32, y: i32, px: i32, py: i32, en: &EdgeNoise, 
 #[allow(clippy::too_many_arguments)]
 fn masonry_pixel(c: &mut Canvas, x: i32, y: i32, px: i32, fy: i32, hgt: i32, bp: &BiomePal, ev: f32, water: bool) {
     static ST: std::sync::OnceLock<Vec<Rgba>> = std::sync::OnceLock::new();
-    let st = ST.get_or_init(|| pal(&[0x2A262C, 0x3C3640, 0x524A56, 0x6A6070, 0x847A88, 0xA0969E]));
+    let st = ST.get_or_init(|| pal(&[0x342E36, 0x48404C, 0x5E5562, 0x786C7C, 0x948898, 0xB4A8B2]));
     let mut v: f32;
     let mut rel: f32;
     let mut up = 255u8;
@@ -1761,13 +1821,53 @@ fn masonry_pixel(c: &mut Canvas, x: i32, y: i32, px: i32, fy: i32, hgt: i32, bp:
             }
         }
         // Schießscharten in manchen Feldern
-        let slit = hash(px.div_euclid(64), 5, 13) % 3 == 0 && (px.rem_euclid(64) - 32).abs() <= 1 && fy > 14 && fy < hgt - 14;
+        let slit = hash(px.div_euclid(64), 5, 13) % 3 == 0 && (px.rem_euclid(64) - 32).abs() <= 1 && fy > 14 && fy < hgt - 14 && (fy - 6).rem_euclid(FACE_PX) > 18;
         if slit {
             v = 0.04;
             rel = -2.0;
+            // hohe Mauern: manche Scharten sind erleuchtet (Lichtinseln in der dunklen Wand)
+            let lvl = (fy - 6).div_euclid(FACE_PX);
+            if hgt > FACE_PX && hash(px.div_euclid(64), lvl, 29) % 2 == 0 && (fy - 6).rem_euclid(FACE_PX) < 60 {
+                let gc = hex(0xF0A048);
+                c.put(x, y, gc, -2.0);
+                c.glow(x, y, gc, 0.9);
+                let i = c.idx(x, y);
+                c.up[i] = 255;
+                c.ev[i] = ev;
+                return;
+            }
+        }
+        // hohe Mauern (mehrere Ebenen): Gesimse je Ebene und Strebepfeiler gliedern die Fläche
+        if hgt > FACE_PX {
+            let lf = fy.rem_euclid(FACE_PX);
+            if fy > 8 && lf < 5 {
+                // Gesims: vorspringende Platte mit Licht oben, Schatten darunter
+                v = if lf < 2 { 0.84 } else if lf < 4 { 0.62 } else { 0.16 };
+                rel = if lf < 4 { 3.0 } else { 0.0 };
+                up = if lf < 2 { 80 } else { 255 };
+                mortar_line(&mut v, px, 22);
+            } else {
+                let pw = 160;
+                let lx = (px + 40).rem_euclid(pw);
+                if lx < 16 {
+                    // Strebepfeiler: links Licht, rechts Schatten, eigene Quaderfugen
+                    v = if lx < 3 { 0.74 } else if lx > 12 { 0.3 } else { 0.55 } + ((fy / 13) % 2) as f32 * 0.04;
+                    if fy % 13 == 0 {
+                        v = 0.18;
+                    }
+                    rel = 3.5;
+                }
+            }
         }
         let t = fy as f32 / hgt as f32;
-        v -= t * 0.18;
+        v -= t * if hgt > FACE_PX { 0.2 } else { 0.18 };
+        // unten am Wasser: Algen und nasse Streifen
+        if water && hgt - fy < 40 {
+            let k = 1.0 - (hgt - fy) as f32 / 40.0;
+            if hash(px, (fy + px) / 6, 91) % 4 == 0 || hgt - fy < 12 {
+                v -= 0.12 * k;
+            }
+        }
         if mortar && bx == 0 && hash(bk, row, 31) % 7 == 0 {
             if let Some(gc) = bp.crack_glow {
                 c.put(x, y, gc, 0.0);
@@ -1793,6 +1893,13 @@ fn masonry_pixel(c: &mut Canvas, x: i32, y: i32, px: i32, fy: i32, hgt: i32, bp:
     c.ev[i] = ev;
     if water && to_bottom < 10 {
         c.spec(x, y, 160);
+    }
+}
+
+/// Fugen in einer Gesimsplatte
+fn mortar_line(v: &mut f32, px: i32, w: i32) {
+    if px.rem_euclid(w) == 0 {
+        *v -= 0.25;
     }
 }
 

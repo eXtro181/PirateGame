@@ -190,8 +190,14 @@ fn setup(world: &mut bevy::ecs::world::World) {
                 s.last_fire = fire.clone();
                 s.lit_fires = vec![fire];
             }
-            // Testläufe ohne das Erwachen im Sarg (mit &intro zum Ansehen)
+            // Testläufe ohne das Erwachen im Sarg (mit &intro zum Ansehen) und ohne Prolog
+            // (mit &prolog im Wrackzwinger; &prolog&spider: die Spinne ist schon erschlagen)
             s.woke = !app.params.contains_key("intro");
+            s.prolog = app.params.contains_key("prolog");
+            s.spider = app.params.contains_key("spider");
+            if s.prolog && !app.params.contains_key("intro") {
+                s.play_time = 2.0;
+            }
             if app.params.contains_key("open") {
                 // alles erfüllt: Throne voll, Bossschiffe im See, Strudel offen
                 for k in ["fire", "ice", "wind", "earth"] {
@@ -229,6 +235,13 @@ fn setup(world: &mut bevy::ecs::world::World) {
                     g.cutscene = Some(game::Cut::Wake { t });
                 }
             }
+            if app.params.contains_key("die") {
+                // Testlauf: gleich sterben (z. B. im Prolog: Erwachen im Sarg prüfen)
+                if let Scene::Play(g) = &mut app.scene {
+                    g.player.hp = 0.0;
+                    g.player_died();
+                }
+            }
             if let Some(k) = app.params.get("boss").cloned() {
                 if let Scene::Play(g) = &mut app.scene {
                     g.debug_boss(&k, app.params.contains_key("phase2"));
@@ -241,7 +254,7 @@ fn setup(world: &mut bevy::ecs::world::World) {
                         Some((g.world.pier_end.0, g.world.pier_end.1 + 20.0))
                     } else if let Some(n) = pos.strip_prefix("isle").and_then(|n| n.parse::<usize>().ok()) {
                         // Testlauf: am Anleger der n-ten wilden Insel (pos=isle12)
-                        let key = format!("w{n}");
+                        let key = format!("i{n}");
                         g.world.docks.iter().find(|d| d.key == key).map(|d| (d.px, d.py))
                     } else if let Some(n) = pos.strip_prefix("mid").and_then(|n| n.parse::<usize>().ok()) {
                         // Testlauf: mitten auf der n-ten wilden Insel (pos=mid12)
@@ -282,6 +295,14 @@ fn setup(world: &mut bevy::ecs::world::World) {
                         g.ship.hull.y = wy + 40.0;
                         g.ship.hull.h = -std::f32::consts::FRAC_PI_2;
                         g.cam_f = (wx + 240.0, wy + 40.0);
+                    }
+                    if let Some(v) = app.params.get("pos").map(|p| p.split(',').filter_map(|x| x.parse::<f32>().ok()).collect::<Vec<f32>>()) {
+                        if v.len() == 2 {
+                            // Testlauf: das Schiff an eine Weltposition auf See setzen
+                            g.ship.hull.x = v[0];
+                            g.ship.hull.y = v[1];
+                            g.cam_f = (v[0], v[1]);
+                        }
                     }
                     if let Some(d) = app.params.get("hdg").and_then(|v| v.parse::<f32>().ok()) {
                         // Testlauf: Kurs in Grad (0 = Nord, im Uhrzeigersinn)

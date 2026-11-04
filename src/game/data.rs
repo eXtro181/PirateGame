@@ -393,6 +393,12 @@ pub struct Save {
     /// das Erwachen im Sarg ist gesehen
     #[serde(default)]
     pub woke: bool,
+    /// Prolog läuft noch (Wrackzwinger); alte Spielstände ohne das Feld haben ihn hinter sich
+    #[serde(default)]
+    pub prolog: bool,
+    /// die Riesige Meeresspinne ist erschlagen
+    #[serde(default)]
+    pub spider: bool,
     /// Schiffsausbauten beim Schiffsmeister (0..=10)
     #[serde(default)]
     pub ship_speed: i32,
@@ -497,7 +503,7 @@ pub fn upgrade_cost(lvl: i32) -> (i64, i32) {
 pub fn new_save(name: &str, look: LookIdx, origin: &str, gift: &str, now: f64) -> Save {
     let o = ORIGINS.iter().find(|x| x.id == origin).unwrap_or(&ORIGINS[0]);
     Save {
-        version: 5,
+        version: 6,
         name: name.to_string(),
         look,
         origin: o.id.into(),
@@ -528,6 +534,8 @@ pub fn new_save(name: &str, look: LookIdx, origin: &str, gift: &str, now: f64) -
         mounted: HashMap::new(),
         end_won: false,
         woke: false,
+        prolog: true,
+        spider: false,
         ship_speed: 0,
         ship_def: 0,
         ship_atk: 0,
@@ -593,7 +601,7 @@ pub fn chart_reveal(c: &mut Vec<u8>, tx: i32, ty: i32, r: i32) -> bool {
 /// Ältere/fehlerhafte Spielstände reparieren.
 pub fn migrate(s: &mut Save) {
     let old = s.version;
-    s.version = 5;
+    s.version = 6;
     if old < 4 {
         // v4: Karte vergrößert, alles um (80, 60) Kacheln verschoben
         if let Some(st) = s.stain.as_mut() {
@@ -628,6 +636,62 @@ pub fn migrate(s: &mut Save) {
                 }
             }
         }
+    }
+    if old < 6 {
+        // v6: die Inseln liegen strahlenförmig um die Glutwacht, die wilden Inseln sind neu
+        // (größer, Schlüssel „i<n>“ statt „w<n>“). Fleck und Fundstücke auf den festen Inseln
+        // ziehen mit ihrer Insel um; Spuren der alten wilden Inseln verfallen.
+        const OLD: [(&str, i32, i32, i32, i32); 6] = [
+            ("kueste", 888, 740, 46, 26),
+            ("hain", 888, 652, 36, 33),
+            ("asche", 996, 640, 42, 30),
+            ("frost", 784, 598, 44, 32),
+            ("raben", 784, 716, 44, 32),
+            ("mangroven", 996, 736, 42, 30),
+        ];
+        let moved = |tx: i32, ty: i32| -> Option<(i32, i32)> {
+            for (k, ox, oy, rx, ry) in OLD {
+                if (tx - ox).abs() <= rx + 8 && (ty - oy).abs() <= ry + 8 {
+                    let d = crate::world::ZONES.iter().find(|z| z.def().key == k)?.def();
+                    return Some((tx + d.cx - ox, ty + d.cy - oy));
+                }
+            }
+            None
+        };
+        let in_end = |tx: i32, ty: i32| tx >= crate::world::END_X0 - 8 && ty >= crate::world::END_Y0 - 8;
+        let ts = crate::world::TS as f32;
+        if let Some(st) = s.stain.as_mut() {
+            let (tx, ty) = ((st.x / ts).floor() as i32, (st.y / ts).floor() as i32);
+            if let Some((nx, ny)) = moved(tx, ty) {
+                st.x += (nx - tx) as f32 * ts;
+                st.y += (ny - ty) as f32 * ts;
+            }
+        }
+        s.picked = s
+            .picked
+            .iter()
+            .filter_map(|p| {
+                let (id, pos) = p.split_once('@')?;
+                let (a, b) = pos.split_once(',')?;
+                let (tx, ty) = (a.parse::<i32>().ok()?, b.parse::<i32>().ok()?);
+                if in_end(tx, ty) {
+                    return Some(p.clone());
+                }
+                moved(tx, ty).map(|(nx, ny)| format!("{id}@{nx},{ny}"))
+            })
+            .collect();
+        let wild = |k: &String| k.starts_with('w') && k[1..].chars().next().is_some_and(|c| c.is_ascii_digit());
+        s.lit_fires.retain(|f| !wild(f));
+        s.explored.retain(|k| !wild(k));
+        s.chests.retain(|c| !wild(c));
+        if wild(&s.last_fire) {
+            s.last_fire = "hain".into();
+        }
+        if wild(&s.ship_dock) {
+            s.ship_dock = "hain".into();
+        }
+        // die Seekarte neu aufdecken (beim Laden um die erkundeten festen Inseln)
+        s.chart.clear();
     }
     if s.weapon.is_empty() {
         s.weapon = "cutlass".into();
