@@ -55,7 +55,10 @@ fn decode_n(n: vec4<f32>) -> vec2<f32> {
 }
 
 fn noise_at(p: vec2<f32>) -> vec4<f32> {
-    return textureSampleLevel(t_noise, s_lin, p / 256.0, 0.0);
+    // auf eine Texturkachel zurückfalten: in der großen Welt lägen die Texturkoordinaten sonst in
+    // den Hunderten, und manche Mobil-GPUs filtern dann ungenau. Bei wiederholender Textur
+    // (s_lin: Repeat) ist fract() nahtlos.
+    return textureSampleLevel(t_noise, s_lin, fract(p / 256.0), 0.0);
 }
 
 fn mask_at(p: vec2<f32>) -> vec4<f32> {
@@ -140,7 +143,8 @@ fn water_s(p_in: vec2<f32>, shore_in: f32) -> GOut {
     }
     o.alb = vec4<f32>(c, 1.0);
     o.nrm = vec4<f32>(nxy * 0.5 + 0.5, 0.0, spec);
-    o.emi = vec4<f32>(em, 1.0);
+    // Alpha 0,5 im Leuchtpuffer kennzeichnet die Wasseroberfläche für den Licht-Pass (Glitzern)
+    o.emi = vec4<f32>(em, 0.5);
     return o;
 }
 
@@ -303,7 +307,7 @@ fn fs_gbuf(v: VOut) -> GOut {
         var w = water(v.world);
         let k = v.col.a * 0.85;
         w.alb = vec4<f32>(mix(w.alb.rgb, rgb, k), 1.0);
-        w.emi = vec4<f32>(w.emi.rgb * (1.0 - k * 0.6) + glow * 0.7, 1.0);
+        w.emi = vec4<f32>(w.emi.rgb * (1.0 - k * 0.6) + glow * 0.7, 0.5);
         return w;
     }
     let elev = n.b * 510.0 + v.prm.x;

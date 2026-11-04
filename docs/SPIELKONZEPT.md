@@ -266,7 +266,7 @@ Die vollständige Analyse mit allen Formeln, Farbwerten, Shadern und einer Schri
 - **Diorama-Kippung**: Das Endbild ist leicht gekippt. Unten ist die Welt näher und größer, oben ferner.
 - **Tilt-Shift-Tiefenschärfe** um den Fuß des Spielers, Bokeh-Staub.
 - **Licht**: 3D-Punktlichter mit Höhe, Schlagschatten der acht nächsten Lichter, Sonnenschatten, Randlicht, Lichtstrahlen je Zone, Umgebungsverdeckung aus dem Höhenpuffer, Bloom, Farbkorrektur, Farbsaum.
-- **Wasser** (Fotolook): Fresnel-Himmelsspiegelung, Wellenkämme, scharfer Sonnenglanz, pixelgenauer Uferschaum, großflächige Tiefen und Strömungsbänder auf hoher See, Spiegelbilder von Schiffen und Figuren.
+- **Wasser** (Fotolook): Fresnel-Himmelsspiegelung, Wellenkämme, Sonnen- bzw. Mondglanz als wandernder Lichtpfad mit funkelnden Glitzerpunkten (statt flächig weißer See bei Gegenlicht), pixelgenauer Uferschaum, großflächige Tiefen und Strömungsbänder auf hoher See, Spiegelbilder von Schiffen und Figuren.
 - **Wolkenschatten** ziehen langsam über Land und See.
 - **Nebel** in Bänken, Funken, Glühwürmchen, Asche, Schnee, Regen und Blitze je Gebiet.
 - Option „Sparsam“ lässt nur die Kippung an (für schwache Geräte).

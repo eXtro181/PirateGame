@@ -346,12 +346,12 @@ Renderziele in `low × rs` (ohne Tiefenpuffer, ohne Multisampling):
 |---|---|---|
 | `alb` | RGBA8 sRGB | Albedo |
 | `nrm` | RGBA8 | Normale xy, Höhe/510, Glanz (Löschwert 0,5/0,5/0/0) |
-| `emi` | RGBA16F (sonst RGBA8) | Leuchten |
+| `emi` | RGBA16F (sonst RGBA8) | Leuchten rgb, **Alpha 0,5 = Wasseroberfläche** (sonst 1) |
 | `lit` | HDR | beleuchtete Szene, **Alpha = Bodenzeile** |
 | `bright`, `blur_a`, `blur_b` | HDR, halbe Größe | Bloom |
 | `dof_a` (halbe Breite, volle Höhe), `dof_b` (halb) | HDR | Tiefenschärfe |
 
-Sampler: `s_near` (Nearest, Clamp) für Kunst, `s_lin` (Linear, Repeat) für Rauschen und Nachbearbeitung.
+Sampler: `s_near` (Nearest, Clamp) für Kunst, `s_lin` (Linear, Repeat) für Rauschen und Nachbearbeitung. Rauschkoordinaten werden vor dem Lesen mit `fract` auf eine Texturkachel zurückgefaltet (in der großen Welt lägen sie sonst in den Hunderten; manche Mobil-GPUs filtern dann ungenau) – bei Repeat ist das nahtlos.
 
 **Reihenfolge**:
 1. **G-Puffer**, Boden: `fs_gbuf`, 3 Ziele, ohne Mischen (Discard bei Alpha < 0,45).
@@ -381,6 +381,7 @@ Sampler: `s_near` (Nearest, Clamp) für Kunst, `s_lin` (Linear, Repeat) für Rau
 4. **Schaum**: Uferkante plus wandernde Schaumringe (`fract(ufer·6 − t·0,35)`) und in FullHD Gischt auf hohen Kämmen nahe der Küste.
 5. **Normale** aus dem Wellengradienten (×9 × Wellenstärke, begrenzt auf ±0,6).
 6. FullHD: **Himmelsspiegelung nach Fresnel** (`0,06 + 0,94·(1 − n·v)^5`), Horizont aus Nebel- und Umgebungsfarbe, Zenit aus Umgebung und Sonne, als Leuchten. Glanz 0,97. Pixel-Modus: Glitzerpunkte.
+7. Ausgabe mit **Alpha 0,5 im Leuchtpuffer** als Kennung „Wasser“ für den Licht-Shader (auch bei Spiegelungen, Flag 64).
 
 **Abgrund**: drei Felsebenen mit Parallaxe (Faktor 0,78 / 0,58 / 0,38, je tiefer nebliger), aufsteigender Nebel und Glutfunken.
 
@@ -399,6 +400,7 @@ Pro Pixel aus dem G-Puffer: Albedo, Normale (z rekonstruiert), Höhe `elev = b·
 5. **Randlicht** (Höhe > 3 px): `(ambient·1,6 + sonne·0,5) · (1 − n.z)² · clamp(−n.y·0,8 + |n.x|·0,35) · 0,55`.
 6. **Sonne/Mond**: `max(n·sonne, 0)`, Schatten per Strahl durch das Höhenfeld (12 Schritte à 5 px mit Pixelversatz gegen Streifen). Verdecker = höher als der Strahl + 3 px und am selben Bodenort (±22 px); weicher zum Ende hin. Beitrag `sonne · nd · schatten · (0,5 + 0,5·ao) · cloud`.
 7. **Glanz**: Blinn-Phong mit Blickrichtung `(0, 0,55, 0,85)`. FullHD: Exponent `mix(12, 220, glanz²)` mit Normierung `(exp + 8)/48`, Pixel-Modus 40.
+   **Wasser** (Alpha 0,5 im Leuchtpuffer) bekommt Sonne/Mond anders: Der Blick kommt aus einer Kamera schräg über der Bildmitte (`mitte + (0, 0,543·d, 0,84·d)`, `d = Bildhöhe·2,5`), sodass der Glanz einen **örtlichen Lichtpfad** bildet, der mit Sonne und Kamera wandert. Darin ein weicher Schimmer `(n·h)^70 · 0,3` und **Glitzerpunkte**: Zufall je Weltpixel (FullHD: halbe Pixel) aus dem Alphakanal der Rauschtextur per `textureLoad`, Sprung 7× je Sekunde, Punkt wenn `r > 1 − (n·h)^300 · 0,035`, Helligkeit 3,2 (Pixel-Modus 2,2). Alles × glanz × schatten × 0,6 × cloud².
 8. **Punktlichter** (bis 48): `ndl = max(n·l, 0)·0,85 + 0,15`. Abfall FullHD `(1 − x²)² / (1 + 7x²)` (natürlich mit langem Ausläufer), Pixel-Modus `(1 − x)²`. In FullHD werfen die **8 nächsten Lichter Schlagschatten** (10 Schritte zum Licht durch das Höhenfeld, Schatten 0,25–1). Flackern `1 + (sin(11t + 1,7i)·0,5 + sin(17t + i)·0,5)·flackern`. Beitrag `farbe · ndl · abfall · flackern · (0,6 + 0,4·ao) · schatten`.
 9. Pixel-Modus: Licht in 12 Stufen mit leichtem Dithering (Pixelkunst-Look).
 10. `c = albedo · licht + glanz + leuchten`.
@@ -573,6 +575,8 @@ Die Option **„Sparsam“** schaltet Tiefenschärfe, Verdeckung, Strahlen, Boke
 - Kamera-Ursprung auf ganze Pixel runden, sonst flimmert die Pixelkunst.
 - Boden-Chunks schrittweise backen (Zeitbudget je Bild), sonst ruckelt das Laufen.
 - Atlas beim Start in den Upload **verschieben**, nicht kopieren (Wasm-Speicher wächst nur).
+- **Sonnenglanz auf Wasser nie mit der überall gleichen Blickrichtung**: Steht die Sonne „hinter“ dem Bild (Norden, Gegenlicht) oder läuft eine Stimmungs-Überblendung durch diese Lage, liegt der Halbvektor nahe der Senkrechten, fast jede Wellenflanke fällt in den Glanzkegel und die See wird flächig weiß-fleckig. Für Wasser deshalb eine Kamera über der Bildmitte (Lichtpfad) und Glitzerpunkte mit begrenzter Dichte statt eines breiten Kegels. Beim Testen ruhig 40–60 s warten: das Schiff fährt vom Ufer weg, und erst dann blendet die Hochsee-Stimmung ein.
+- Texturkoordinaten für wiederholende Texturen mit `fract` zurückfalten, bevor sie riesig werden (Weltkoordinaten bis ~57 000 px).
 
 ---
 
@@ -689,7 +693,10 @@ fn decode_n(n: vec4<f32>) -> vec2<f32> {
 }
 
 fn noise_at(p: vec2<f32>) -> vec4<f32> {
-    return textureSampleLevel(t_noise, s_lin, p / 256.0, 0.0);
+    // auf eine Texturkachel zurückfalten: in der großen Welt lägen die Texturkoordinaten sonst in
+    // den Hunderten, und manche Mobil-GPUs filtern dann ungenau. Bei wiederholender Textur
+    // (s_lin: Repeat) ist fract() nahtlos.
+    return textureSampleLevel(t_noise, s_lin, fract(p / 256.0), 0.0);
 }
 
 fn mask_at(p: vec2<f32>) -> vec4<f32> {
@@ -774,7 +781,8 @@ fn water_s(p_in: vec2<f32>, shore_in: f32) -> GOut {
     }
     o.alb = vec4<f32>(c, 1.0);
     o.nrm = vec4<f32>(nxy * 0.5 + 0.5, 0.0, spec);
-    o.emi = vec4<f32>(em, 1.0);
+    // Alpha 0,5 im Leuchtpuffer kennzeichnet die Wasseroberfläche für den Licht-Pass (Glitzern)
+    o.emi = vec4<f32>(em, 0.5);
     return o;
 }
 
@@ -937,7 +945,7 @@ fn fs_gbuf(v: VOut) -> GOut {
         var w = water(v.world);
         let k = v.col.a * 0.85;
         w.alb = vec4<f32>(mix(w.alb.rgb, rgb, k), 1.0);
-        w.emi = vec4<f32>(w.emi.rgb * (1.0 - k * 0.6) + glow * 0.7, 1.0);
+        w.emi = vec4<f32>(w.emi.rgb * (1.0 - k * 0.6) + glow * 0.7, 0.5);
         return w;
     }
     let elev = n.b * 510.0 + v.prm.x;
@@ -1108,7 +1116,10 @@ fn fs_light(f: FOut) -> @location(0) vec4<f32> {
     let ip = vec2<i32>(f.uv * dim);
     let alb = textureLoad(t_a, ip, 0).rgb;
     let nr = textureLoad(t_b, ip, 0);
-    let em = textureLoad(t_c, ip, 0).rgb;
+    let emt = textureLoad(t_c, ip, 0);
+    let em = emt.rgb;
+    // Wasseroberfläche (Alpha 0,5 im Leuchtpuffer, siehe water_s)
+    let wet = abs(emt.a - 0.5) < 0.2;
     let nxy = nr.rg * 2.0 - 1.0;
     let n = vec3<f32>(nxy, sqrt(max(0.0, 1.0 - dot(nxy, nxy))));
     let elev = nr.b * 510.0;
@@ -1150,8 +1161,9 @@ fn fs_light(f: FOut) -> @location(0) vec4<f32> {
     var cloud = 1.0;
     if (G.hd2.x > 0.0) {
         let wq = vec2<f32>(sp.x, sp.y + elev) * 0.00042 + vec2<f32>(t_now() * 0.0062, t_now() * 0.0024);
-        let c1 = textureSampleLevel(t_d, s_lin, wq, 0.0).r;
-        let c2 = textureSampleLevel(t_d, s_lin, wq * 2.7 + vec2<f32>(0.37, 0.11), 0.0).b;
+        // zurückgefaltet: große Weltkoordinaten (siehe noise_at)
+        let c1 = textureSampleLevel(t_d, s_lin, fract(wq), 0.0).r;
+        let c2 = textureSampleLevel(t_d, s_lin, fract(wq * 2.7 + vec2<f32>(0.37, 0.11)), 0.0).b;
         cloud = 1.0 - smoothstep(0.5, 0.74, c1 * 0.72 + c2 * 0.34) * 0.4;
     }
     // Umgebung: Himmel von oben, Boden reflektiert etwas
@@ -1200,7 +1212,26 @@ fn fs_light(f: FOut) -> @location(0) vec4<f32> {
         sexp = mix(12.0, 220.0, spec_k * spec_k);
         spnorm = (sexp + 8.0) / 48.0;
     }
-    spec += G.sun_col.rgb * pow(max(dot(n, hv), 0.0), sexp) * spec_k * sh * G.sun_col.w * spnorm * cloud * cloud;
+    if (wet) {
+        // Wasser: Sonne/Mond nicht als großer Spiegelkegel. Mit dem überall gleichen Blick der
+        // Schrägsicht stünde bei Gegenlicht fast jede Wellenflanke darin und die See würde flächig
+        // weiß. Stattdessen blickt hier eine Kamera schräg über der Bildmitte: der Glanz bildet
+        // einen örtlichen Lichtpfad (wandert mit Sonne und Kamera), darin ein weicher Schimmer und
+        // funkelnde Glitzerpunkte (Zufall je Weltpixel aus dem Alphakanal der Rauschtextur,
+        // springt mehrmals je Sekunde; Dichte höchstens 3,5 %).
+        let cen = G.view.xy + G.view.zw * 0.5;
+        let cd = G.view.w * 2.5;
+        let vw = normalize(vec3<f32>(cen.x, cen.y + cd * 0.543, cd * 0.84) - p3);
+        let ndh = max(dot(n, normalize(sd + vw)), 0.0);
+        let lobe = pow(ndh, 70.0);
+        let gq = vec2<i32>(select(floor(sp), floor(sp * 2.0), hd));
+        let tk = i32(t_now() * 7.0);
+        let r = textureLoad(t_d, vec2<i32>((gq.x + tk * 37) & 255, (gq.y + tk * 59) & 255), 0).a;
+        let spark = step(1.0 - pow(ndh, 300.0) * 0.035, r) * select(2.2, 3.2, hd);
+        spec += G.sun_col.rgb * (lobe * 0.3 + spark) * (spec_k * 1.03) * sh * G.sun_col.w * cloud * cloud;
+    } else {
+        spec += G.sun_col.rgb * pow(max(dot(n, hv), 0.0), sexp) * spec_k * sh * G.sun_col.w * spnorm * cloud * cloud;
+    }
 
     // Punktlichter in 3D
     let nl = i32(G.counts.x);
@@ -1350,8 +1381,9 @@ fn light_rays(suv: vec2<f32>, sy: f32) -> f32 {
     let across = dot(wp, perp);
     let along = dot(wp, dir);
     let t = G.screen.z;
-    let n1 = textureSampleLevel(t_d, s_lin, vec2<f32>(across * 0.0035 + t * 0.004, 0.37), 0.0).r;
-    let n2 = textureSampleLevel(t_d, s_lin, vec2<f32>(across * 0.009 - t * 0.006, along * 0.0015 + 0.71), 0.0).r;
+    // zurückgefaltet (große Welt: sonst ungenaue Texturkoordinaten)
+    let n1 = textureSampleLevel(t_d, s_lin, fract(vec2<f32>(across * 0.0035 + t * 0.004, 0.37)), 0.0).r;
+    let n2 = textureSampleLevel(t_d, s_lin, fract(vec2<f32>(across * 0.009 - t * 0.006, along * 0.0015 + 0.71)), 0.0).r;
     let beam = smoothstep(0.56, 0.85, n1) * (0.4 + 0.6 * n2);
     let top = clamp(0.35 + (1.0 - sy) * 0.65, 0.0, 1.0);
     return beam * top * G.hd.w;

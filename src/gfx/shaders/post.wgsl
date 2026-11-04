@@ -36,7 +36,10 @@ fn fs_light(f: FOut) -> @location(0) vec4<f32> {
     let ip = vec2<i32>(f.uv * dim);
     let alb = textureLoad(t_a, ip, 0).rgb;
     let nr = textureLoad(t_b, ip, 0);
-    let em = textureLoad(t_c, ip, 0).rgb;
+    let emt = textureLoad(t_c, ip, 0);
+    let em = emt.rgb;
+    // Wasseroberfläche (Alpha 0,5 im Leuchtpuffer, siehe water_s)
+    let wet = abs(emt.a - 0.5) < 0.2;
     let nxy = nr.rg * 2.0 - 1.0;
     let n = vec3<f32>(nxy, sqrt(max(0.0, 1.0 - dot(nxy, nxy))));
     let elev = nr.b * 510.0;
@@ -78,8 +81,9 @@ fn fs_light(f: FOut) -> @location(0) vec4<f32> {
     var cloud = 1.0;
     if (G.hd2.x > 0.0) {
         let wq = vec2<f32>(sp.x, sp.y + elev) * 0.00042 + vec2<f32>(t_now() * 0.0062, t_now() * 0.0024);
-        let c1 = textureSampleLevel(t_d, s_lin, wq, 0.0).r;
-        let c2 = textureSampleLevel(t_d, s_lin, wq * 2.7 + vec2<f32>(0.37, 0.11), 0.0).b;
+        // zurückgefaltet: große Weltkoordinaten (siehe noise_at)
+        let c1 = textureSampleLevel(t_d, s_lin, fract(wq), 0.0).r;
+        let c2 = textureSampleLevel(t_d, s_lin, fract(wq * 2.7 + vec2<f32>(0.37, 0.11)), 0.0).b;
         cloud = 1.0 - smoothstep(0.5, 0.74, c1 * 0.72 + c2 * 0.34) * 0.4;
     }
     // Umgebung: Himmel von oben, Boden reflektiert etwas
@@ -128,7 +132,26 @@ fn fs_light(f: FOut) -> @location(0) vec4<f32> {
         sexp = mix(12.0, 220.0, spec_k * spec_k);
         spnorm = (sexp + 8.0) / 48.0;
     }
-    spec += G.sun_col.rgb * pow(max(dot(n, hv), 0.0), sexp) * spec_k * sh * G.sun_col.w * spnorm * cloud * cloud;
+    if (wet) {
+        // Wasser: Sonne/Mond nicht als großer Spiegelkegel. Mit dem überall gleichen Blick der
+        // Schrägsicht stünde bei Gegenlicht fast jede Wellenflanke darin und die See würde flächig
+        // weiß. Stattdessen blickt hier eine Kamera schräg über der Bildmitte: der Glanz bildet
+        // einen örtlichen Lichtpfad (wandert mit Sonne und Kamera), darin ein weicher Schimmer und
+        // funkelnde Glitzerpunkte (Zufall je Weltpixel aus dem Alphakanal der Rauschtextur,
+        // springt mehrmals je Sekunde; Dichte höchstens 3,5 %).
+        let cen = G.view.xy + G.view.zw * 0.5;
+        let cd = G.view.w * 2.5;
+        let vw = normalize(vec3<f32>(cen.x, cen.y + cd * 0.543, cd * 0.84) - p3);
+        let ndh = max(dot(n, normalize(sd + vw)), 0.0);
+        let lobe = pow(ndh, 70.0);
+        let gq = vec2<i32>(select(floor(sp), floor(sp * 2.0), hd));
+        let tk = i32(t_now() * 7.0);
+        let r = textureLoad(t_d, vec2<i32>((gq.x + tk * 37) & 255, (gq.y + tk * 59) & 255), 0).a;
+        let spark = step(1.0 - pow(ndh, 300.0) * 0.035, r) * select(2.2, 3.2, hd);
+        spec += G.sun_col.rgb * (lobe * 0.3 + spark) * (spec_k * 1.03) * sh * G.sun_col.w * cloud * cloud;
+    } else {
+        spec += G.sun_col.rgb * pow(max(dot(n, hv), 0.0), sexp) * spec_k * sh * G.sun_col.w * spnorm * cloud * cloud;
+    }
 
     // Punktlichter in 3D
     let nl = i32(G.counts.x);
@@ -278,8 +301,9 @@ fn light_rays(suv: vec2<f32>, sy: f32) -> f32 {
     let across = dot(wp, perp);
     let along = dot(wp, dir);
     let t = G.screen.z;
-    let n1 = textureSampleLevel(t_d, s_lin, vec2<f32>(across * 0.0035 + t * 0.004, 0.37), 0.0).r;
-    let n2 = textureSampleLevel(t_d, s_lin, vec2<f32>(across * 0.009 - t * 0.006, along * 0.0015 + 0.71), 0.0).r;
+    // zurückgefaltet (große Welt: sonst ungenaue Texturkoordinaten)
+    let n1 = textureSampleLevel(t_d, s_lin, fract(vec2<f32>(across * 0.0035 + t * 0.004, 0.37)), 0.0).r;
+    let n2 = textureSampleLevel(t_d, s_lin, fract(vec2<f32>(across * 0.009 - t * 0.006, along * 0.0015 + 0.71)), 0.0).r;
     let beam = smoothstep(0.56, 0.85, n1) * (0.4 + 0.6 * n2);
     let top = clamp(0.35 + (1.0 - sy) * 0.65, 0.0, 1.0);
     return beam * top * G.hd.w;
