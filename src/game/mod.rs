@@ -98,7 +98,7 @@ pub enum Cut {
     /// Prolog-Anfang: man liegt zwischen den Wracks und kommt zu sich
     Washed { t: f32 },
     /// Prolog-Ende nach dem Sieg: Anlauf, Sprung über die Klippe, Sturz ins Schwarze
-    Plunge { t: f32, x0: f32, y0: f32 },
+    Plunge { t: f32, x0: f32, y0: f32, jx: f32, jy: f32 },
 }
 
 /// Zeitplan des Erwachens (s): Dunkel mit Klopfen, Aufblenden, Deckel ruckelt, rutscht weg,
@@ -959,11 +959,10 @@ impl Game {
                     self.cutscene = Some(Cut::Washed { t });
                 }
             }
-            Cut::Plunge { t, x0, y0 } => {
+            Cut::Plunge { t, x0, y0, jx, jy } => {
                 let t0 = t;
                 let t = t + dt;
                 let crossed = |m: f32| t0 < m && t >= m;
-                let (jx, jy) = self.world.prolog_jump;
                 if t < 0.7 {
                     // Anlauf zur Kante
                     let k = t / 0.7;
@@ -993,7 +992,7 @@ impl Game {
                     self.cutscene = None;
                     self.end_prolog();
                 } else {
-                    self.cutscene = Some(Cut::Plunge { t, x0, y0 });
+                    self.cutscene = Some(Cut::Plunge { t, x0, y0, jx, jy });
                 }
             }
             Cut::Wake { t } => {
@@ -1213,8 +1212,12 @@ impl Game {
             out.extend(f(st.x, st.y, 36.0, "Perlen zurückholen", Use::Stain, None));
         }
         if s.prolog && s.spider {
-            let (jx, jy) = self.world.prolog_jump;
-            out.extend(f(jx, jy, 48.0, "In die Tiefe springen", Use::Plunge, None));
+            // überall an der Abbruchkante: der nächste Kantenpunkt zum Spieler
+            if let Some((ex, ey)) = self.world.prolog_edge_near(px) {
+                if (py - ey).abs() < 56.0 {
+                    out.extend(f(ex, ey, 48.0, "In die Tiefe springen", Use::Plunge, None));
+                }
+            }
         }
         out
     }
@@ -1290,7 +1293,10 @@ impl Game {
                 Use::Leave(i) => self.cutscene = Some(Cut::Door { t: 0.0, door: i, enter: false, moved: false }),
                 Use::Plunge => {
                     self.lock = None;
-                    self.cutscene = Some(Cut::Plunge { t: 0.0, x0: self.player.a.x, y0: self.player.a.y });
+                    let (x0, y0) = (self.player.a.x, self.player.a.y);
+                    // an der nächsten Stelle der Kante abspringen (ein Stück weiter, damit der Anlauf zur Kante führt)
+                    let (jx, jy) = self.world.prolog_edge_near(x0).unwrap_or(self.world.prolog_jump);
+                    self.cutscene = Some(Cut::Plunge { t: 0.0, x0, y0, jx, jy: jy + 6.0 });
                 }
             }
         }

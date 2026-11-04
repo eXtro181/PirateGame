@@ -1112,3 +1112,52 @@ pub fn chest_rig(open: bool) -> PropArt {
     let name = if open { "chestOpen" } else { "chest" };
     prop(name, &r, 52, 50, 6).shadow(20.0, 5.0).boxc(18.0, 6.0)
 }
+
+// ================================================================= Ringmauer der Glutwacht
+
+/// Ein Segment der Brüstung auf der runden Ringmauer: Mauerkappe mit Zinnen, `len` px lang, im
+/// echten Winkel `yaw` gerendert (Bogenmaß, Bildschirm: 0 = waagrecht, im Uhrzeigersinn), damit
+/// die Segmente lückenlos dem Kreis folgen. Anker = Segmentmitte.
+pub fn ring_wall_seg(name: &str, len: f32, yaw: f32, seed: u32) -> PropArt {
+    let mut r = Rig::new();
+    let m = mats(&mut r);
+    let moss = r.mat(mat(0x2E3A28).soft());
+    let half = len * 0.5;
+    let t = 4.5;
+    r.part();
+    r.cube(v(0.0, 0.0, 7.0), v(half + 0.4, t, 7.0), m.brick);
+    r.cube(v(0.0, 0.0, 14.5), v(half + 0.6, t + 0.6, 1.2), m.trim);
+    let n = ((len / 22.0).round() as i32).max(2);
+    for k in 0..n {
+        let x = -half + (k as f32 + 0.5) * len / n as f32;
+        let h = 9.0 - ((seed as i32 + k) % 3) as f32 * 1.3;
+        r.cube(v(x, 0.0, 15.5 + h * 0.5), v(5.5, t - 0.6, h * 0.5), m.brick_d);
+        r.cube(v(x, 0.0, 15.6 + h), v(6.0, t - 0.2, 0.9), m.trim);
+    }
+    for i in 0..((len / 8.0) as i32) {
+        let x = -half + 2.0 + ((i * 13 + seed as i32 * 7) as f32 % (len - 4.0));
+        r.dot(v(x, t + 0.3, 2.0 + ((i * 5) % 9) as f32), if i % 3 == 0 { 0x2A3A26 } else { 0x141216 }, 0.0, 1);
+    }
+    r.ell(v(-half * 0.6 + (seed % 3) as f32 * half * 0.5, t, 3.0), v(6.0, 1.0, 2.5), moss);
+    // Fläche des gedrehten Segments im Bild (Schrägsicht: Grundriss 1:1, Höhe nach oben)
+    let (s, c) = yaw.sin_cos();
+    let wx = len * c.abs() + 2.0 * t * s.abs();
+    let wy = len * s.abs() + 2.0 * t * c.abs();
+    let w = (wx + 12.0).ceil() as i32;
+    let foot = (wy * 0.5 + 6.0).ceil() as i32;
+    let h = (wy + 34.0 + 12.0).ceil() as i32;
+    let cv = render_oblique(&r, yaw, w, h, foot);
+    PropArt::new(name, cv, w / 2, h - foot).shadow(len * 0.4, 3.0)
+}
+
+/// Verbindungspfeiler zwischen zwei Brüstungssegmenten: verdeckt die Stöße (rund um gleich).
+pub fn ring_post() -> PropArt {
+    let mut r = Rig::new();
+    let m = mats(&mut r);
+    r.part();
+    r.cube(v(0.0, 0.0, 12.0), v(5.6, 5.6, 12.0), m.brick_d);
+    r.cube(v(0.0, 0.0, 24.6), v(6.6, 6.6, 1.4), m.trim);
+    r.cube(v(0.0, 0.0, 27.5), v(4.2, 4.2, 1.6), m.brick);
+    r.dot(v(-2.0, 5.8, 9.0), 0x141216, 0.0, 1);
+    prop("ringPost", &r, 26, 52, 10).shadow(7.0, 3.0)
+}

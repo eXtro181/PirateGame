@@ -144,7 +144,7 @@ fn setup(world: &mut bevy::ecs::world::World) {
     let mut f = world.remove_resource::<Frame>().unwrap_or_default();
     noise_texture(&mut f);
     let art = art::build(&mut f);
-    let infos: Infos = Arc::new(art.props.iter().map(|(k, d)| (k.clone(), PropInfo { circle: d.circle, boxc: d.boxc, big: d.big })).collect());
+    let infos: Infos = Arc::new(art.props.iter().map(|(k, d)| (k.clone(), world::collision(k, PropInfo { circle: d.circle, boxc: d.boxc, big: d.big }))).collect());
     let t0 = bevy::platform::time::Instant::now();
     let (w, v) = new_world(&infos, &mut f);
     info!("Welt erzeugt in {:?}: {} Requisiten, {} Deko", t0.elapsed(), w.props.len(), w.deco.len());

@@ -29,7 +29,7 @@ Stand: 1. November 2026 (Version 0.6, Zweig `perf`). Technische Kurzreferenz fü
 
 ## 2. Geschichte und Spielablauf
 
-0. **Prolog im Wrackzwinger**: Das Spiel beginnt auf einer abgelegenen Insel in der Nordwest-Ecke, von extrem hohen Mauern umschlossen, vollgestellt mit Schiffswracks, Netzen und Kokons. Im Süden bricht sie an einer Klippe ab, über die ein extrem tiefer Wasserfall stürzt; das Meer an seinem Fuß ist völlig schwarz. Hier lauert die **Riesige Meeresspinne**, der erste Boss – nicht schwer, besiegbar, aber nicht zwingend. Stirbt man im Kampf, erwacht man im ursprünglichen Sarg am Galgenstrand, und das reguläre Spiel beginnt. Wer sie besiegt, muss über die Klippe in den Wasserfall springen und kommt ebenfalls im Sarg wieder zu sich.
+0. **Prolog im Wrackzwinger**: Das Spiel beginnt auf einer abgelegenen Insel in der Nordwest-Ecke, von extrem hohen Mauern umschlossen, vollgestellt mit Schiffswracks, Netzen und Kokons. Im Süden bricht sie an einer Klippe ab, über die ein extrem tiefer Wasserfall stürzt; das Meer an seinem Fuß ist völlig schwarz. Hier lauert die **Riesige Meeresspinne**, der erste Boss – nicht schwer, besiegbar, aber nicht zwingend. Stirbt man im Kampf, erwacht man im ursprünglichen Sarg am Galgenstrand, und das reguläre Spiel beginnt. Wer sie besiegt, springt an einer beliebigen Stelle der Abbruchkante in die Tiefe und kommt ebenfalls im Sarg wieder zu sich.
 1. **Erwachen** (Galgenstrand): Klopfen im Dunkeln, der Sargdeckel ruckelt und wird weggeschoben, der Ertrunkene steigt heraus. Um ihn herum Galgen mit schwingenden Gehängten, Käfige, offene Gräber und über 70 Tote. Der Alte Galionsschnitzer erklärt die Lage.
 2. **Glutwacht**: Die Festung in der Mitte der Welt ist der Knotenpunkt. Hier brennt das Säbelfeuer, hier stehen vier leere Throne, hier arbeiten Schmied, Händlerin, Laternenmagd und Schiffsmeister.
 3. **Vier Könige** auf vier Inseln. Jeder hat zwei Gestalten. Besiegt hinterlässt er seine **Galionsfigur**, die auf seinen Thron in der Glutwacht gesetzt wird.
@@ -50,7 +50,8 @@ Stand: 1. November 2026 (Version 0.6, Zweig `perf`). Technische Kurzreferenz fü
 - Außerhalb der Festung sind Ebenenkanten **flache, sanfte Naturhänge** (nach Süden 168 px tief, seitlich 64 px, oben 20 px). Die Bodentextur läuft geneigt weiter, in flachen, gewellten Grasstufen, mit seltenen Felsausbissen, offener Erde, Halmen und Steinen; zum Fuß hin nur leicht im Schatten.
 - **Treppen** gibt es nur in Siedlungen und in der Festung – und nur dort, wo man wirklich hinauf oder hinunter will: Aufgänge ohne Ziel (zu leeren Plateaus) wurden entfernt, winzige Hochland-Inseln eingeebnet. In der Natur führen Wege im Gebietsstil über die Hänge (Schneepfad, Bohlen im Moor, Holz- und Steinstufen im Hang). Höhenunterschiede sind klar abgesetzt: helle Oberkanten, Schwellen und Stufennasen, Schlagschatten am Fuß der Hänge und Mauern.
 - Herunterspringen geht genau eine Ebene tief.
-- **Wasserfälle** sitzen an echten Hangkanten: Bach oben, Becken unten, Gischt.
+- **Wasserfälle** sitzen an echten Hangkanten mit genug ebenem Land darüber: Ein Bach entspringt einem kleinen Quellteich mit Felsrand und Schilf, schlängelt sich zur Kante und stürzt erst dort als Kaskade mit Schaumstufen den Hang hinab; unten ein Becken mit Gischt.
+- **Kollision**: Durch Büsche, Stauden, Farne und Schilf läuft man hindurch, über Kokons, sitzende Tote, Schädelhaufen und Knochensärge hinweg. Bäume halten nur ihren Stamm.
 
 ### 3.2 Inseln
 
@@ -78,7 +79,7 @@ Jede Siedlung hat Dorfbewohner, Hühner und Katzen, Rauch aus den Schornsteinen 
 Je weiter draußen, desto höher die **Gefahrenstufe** (0–3): Gegner haben mehr Leben (+35 % je Stufe), mehr Schaden (+12 %) und geben mehr Perlen (+40 %). Auf jeder vierten Insel brennt ein Säbelfeuer (Schnellreise).
 
 ### 3.3 Glutwacht im Detail
-Eine **kreisrunde Hafenfestung** nach dem Vorbild des Feuerband-Schreins, ganz im düsteren Piraten-Stil: extrem hohe Ringmauern mit Zinnen, Fackeln und Bannern umschließen mehrere Ringterrassen, die übereinander liegen und durch Treppen verbunden sind. In der Mitte ein See mit Steg zum Strudel, darum der Ring der brennenden Bossschiffe. Darüber die Feuerterrasse mit Säbelfeuer, vier Thronen, Schmied und Händlerin, höher der Schrein mit Bergfried und Wachgängen auf den Mauern. Im Osten ein Seetor-Kanal, im Süden der Anleger. Dort liegt die **Werft** von Schiffsmeister Brack: Plankenkai, Helling mit Rumpf, Kran, Taue, Fässer, Kanone, Laternen, Flagge und Wegweiser. Die Mauern bestehen aus Quadern, Ebenen sind hier echte Mauern mit Treppen.
+Eine **kreisrunde Hafenfestung** nach dem Vorbild des Feuerband-Schreins, ganz im düsteren Piraten-Stil: extrem hohe Ringmauern mit einer Zinnenbrüstung, die lückenlos dem Kreis folgt (jedes Segment im echten Winkel, Pfeiler an den Stößen, Türme darauf), Fackeln und Bannern umschließen mehrere Ringterrassen, die übereinander liegen und durch Treppen verbunden sind. In der Mitte ein See mit Steg zum Strudel, darum der Ring der brennenden Bossschiffe. Darüber die Feuerterrasse mit Säbelfeuer, vier Thronen, Schmied und Händlerin, höher der Schrein mit Bergfried und Wachgängen auf den Mauern. Im Osten ein Seetor-Kanal, im Süden der Anleger. Dort liegt die **Werft** von Schiffsmeister Brack: Plankenkai, Helling mit Rumpf, Kran, Taue, Fässer, Kanone, Laternen, Flagge und Wegweiser. Die Mauern bestehen aus Quadern, Ebenen sind hier echte Mauern mit Treppen.
 
 ### 3.4 Seegebiete
 | Gebiet | Element | Seeungeheuer → Schiff |

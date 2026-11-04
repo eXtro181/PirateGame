@@ -499,20 +499,52 @@ impl WorldView {
                 continue;
             }
             let q = |x: f32, y: f32, w: f32, h: f32, c: [u8; 4]| crate::gfx::Frame::quad_rect(x, y, w, h, c, modes::SOLID, 0);
-            // Fall über den Hang
+            // Kaskade über den Naturhang: das Wasser tritt an der Kante über und folgt dem Hang in
+            // Stufen (Schaumbänder), halb durchsichtig, damit der Hang durchscheint; Lichter ziehen abwärts
             let h = wf.bot - wf.top;
-            for k in 0..(wwid as i32 / 4) {
-                let xx = x0 + 4.0 + k as f32 * 3.6 * (wwid - 8.0) / wwid;
-                let ph = (t * 3.0 + k as f32 * 0.7).fract();
-                let col = if k % 3 == 0 { [235, 250, 255, 230] } else { [130, 210, 225, 205] };
-                frame.over(q(xx, wf.top + ph * 8.0 - 8.0, 4.0, h + 8.0, col), false);
+            let n = (wwid / 3.0) as i32;
+            for k in 0..n {
+                let u = k as f32 / (n - 1).max(1) as f32;
+                let edge = (u - 0.5).abs() * 2.0;
+                // zum Fuß hin etwas breiter auslaufend
+                let xx = x0 + 1.5 + u * (wwid - 4.5) + (t * 1.3 + k as f32 * 0.8).sin() * 0.6;
+                let a = (165.0 * (1.0 - edge * 0.5)) as u8;
+                let col = if k % 3 == 0 { [200, 236, 248, a] } else { [92, 164, 188, a] };
+                frame.over(q(xx, wf.top, 3.0, h, col), false);
+                for j in 0..2 {
+                    let f = (t * (1.05 + (k % 4) as f32 * 0.13) + k as f32 * 0.37 + j as f32 * 0.5).fract();
+                    frame.over(q(xx, wf.top + f * h, 3.0, 7.0 + f * 12.0, [236, 250, 255, (210.0 * (1.0 - f * 0.45)) as u8]), false);
+                }
             }
-            // Kante oben schäumt
-            frame.over(q(x0 + 2.0, wf.top - 3.0, wwid - 4.0, 5.0, [230, 248, 255, 220]), false);
-            // Gischt unten
+            // Schaumstufen den Hang hinab, jede ein wenig anders
+            let steps = ((h / 30.0).round() as i32).max(3);
+            for st in 0..steps {
+                let y = wf.top + (st as f32 + 0.6) / steps as f32 * h;
+                let wob = (t * 2.4 + st as f32 * 1.7).sin() * 1.2;
+                let inset = ((st * 5) % 3) as f32 * 2.0;
+                frame.over(q(x0 + 1.0 + inset, y + wob, wwid - 2.0 - inset * 2.0, 3.0, [236, 250, 255, 195]), false);
+                frame.over(q(x0 + 3.0 + inset, y + wob + 3.0, wwid - 6.0 - inset * 2.0, 2.0, [180, 226, 242, 120]), false);
+                frame.glow(x0 + (st as f32 * 0.37).fract() * wwid, y + wob, 8.0, [220, 245, 255, 60]);
+            }
+            // Kante oben: der Bach tritt schäumend über
+            frame.over(q(x0, wf.top - 3.0, wwid, 5.0, [236, 250, 255, 225]), false);
+            // Spritzer an den Seiten, Gischt und Nebel am Fuß
+            for k in 0..6 {
+                let f = (t * 0.9 + k as f32 * 0.17).fract();
+                let side = if k % 2 == 0 { x0 - 2.0 } else { x0 + wwid + 2.0 };
+                frame.glow(side + (t * 3.0 + k as f32).sin() * 2.0, wf.top + f * h, 2.5, [230, 248, 255, (150.0 * (1.0 - f)) as u8]);
+            }
             for k in 0..10 {
                 let a = t * 2.0 + k as f32;
                 frame.glow(x0 + wwid * (k as f32 / 10.0) + a.sin() * 6.0, wf.bot + 8.0 + (a * 1.3).cos() * 4.0, 16.0, [220, 250, 255, 90]);
+            }
+            // Quelle: das Wasser quillt aus dem Felsteich (sanfte Ringe)
+            if wf.src < wf.top - 5.0 * TS as f32 {
+                let (sx, sy) = (x0 + wwid / 2.0, wf.src + TS as f32 * 0.6);
+                for k in 0..3 {
+                    let f = (t * 0.5 + k as f32 / 3.0).fract();
+                    frame.glow(sx + (k as f32 * 2.1).sin() * 6.0, sy, 4.0 + f * 10.0, [210, 245, 255, (80.0 * (1.0 - f)) as u8]);
+                }
             }
             frame.light(LightDef { x: x0 + wwid / 2.0, y: wf.bot + 20.0, z: 20.0, r: 120.0, col: [0.3, 0.6, 0.7], flicker: 0.0 });
         }

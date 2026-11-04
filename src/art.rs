@@ -1020,9 +1020,16 @@ pub fn build(frame: &mut Frame) -> Art {
             list.push(stc::cocoon(i));
         }
         for i in 0..3 {
-            list.push(stc::battlement(i));
             list.push(stc::mast_pillar(i));
         }
+        // Brüstung der runden Ringmauer: 18 Winkel (2,5° + k·5°), die andere Hälfte gespiegelt;
+        // Länge = Sehne des 5°-Bogens auf dem Brüstungsradius
+        let r_px = (crate::world::hubgeo::OUT - 0.8) * 32.0;
+        let len = 2.0 * r_px * (2.5f32).to_radians().sin();
+        for k in 0..18u32 {
+            list.push(stc::ring_wall_seg(&format!("ringWall{k}"), len, (2.5 + 5.0 * k as f32).to_radians(), k));
+        }
+        list.push(stc::ring_post());
         for i in 0..3 {
             list.push(stc::sword_grave(i));
             list.push(stc::candles(i));

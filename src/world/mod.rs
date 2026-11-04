@@ -409,6 +409,31 @@ pub struct PropInfo {
     pub big: Option<(f32, f32)>,
 }
 
+/// Wer den Weg versperrt: Flora und kleiner Kram sind begehbar – durch Büsche, Stauden und Schilf
+/// läuft man hindurch, über Kokons, sitzende Tote, Schädelhaufen, Knochensärge und Sargdeckel
+/// hinweg. Bäume halten nur ihren Stamm (5 px), der Seelenbaum der Glutwacht seinen Wurzelstock.
+pub fn collision(kind: &str, mut inf: PropInfo) -> PropInfo {
+    let tree = kind != "hubTree" && (kind.contains("Tree") || kind.contains("Palm") || kind == "palm");
+    if passable_kind(kind) {
+        inf.circle = 0.0;
+        inf.boxc = (0.0, 0.0);
+    } else if tree {
+        inf.circle = inf.circle.min(5.0);
+    } else if kind == "hubTree" {
+        inf.circle = inf.circle.min(26.0);
+    }
+    inf
+}
+
+/// Flora (Büsche, Stauden, Farne, Schilf, Blumen, Kristalle) und kleiner Kram am Boden (Kokons,
+/// sitzende Tote, Schädelhaufen, Schwertgräber, Knochensärge, Sargdeckel, Gerippe, Netze)
+pub fn passable_kind(kind: &str) -> bool {
+    kind.starts_with("bush")
+        || kind.starts_with("crystal")
+        || matches!(kind, "banana" | "bigLeaf" | "fern" | "reedClump" | "cattail" | "glowFlower" | "flowerPot")
+        || ["cocoon", "sitDead", "skullpile", "swordGrave", "coffinBones", "coffinLid", "buried", "sharkSkel", "spiderWeb", "bones"].iter().any(|p| kind.starts_with(p))
+}
+
 pub struct World {
     pub ground: Vec<Mat>,
     pub biome: Vec<Biome>,
@@ -466,6 +491,9 @@ pub struct World {
     /// wie weit das schwarze Meer reicht
     pub prolog_start: (f32, f32),
     pub prolog_jump: (f32, f32),
+    /// begehbare Abbruchkante des Wrackzwingers: je 16 px ein Punkt (x, letzte begehbare Zeile),
+    /// nach x sortiert – überall dort kann man in die Tiefe springen
+    pub prolog_edge: Vec<(f32, f32)>,
     pub prolog_foot: f32,
     /// Häuser mit rauchendem Schornstein (Indizes in `props`)
     pub chimneys: Vec<usize>,
@@ -536,6 +564,7 @@ impl World {
             wake_coffin: (0.0, 0.0),
             prolog_start: (0.0, 0.0),
             prolog_jump: (0.0, 0.0),
+            prolog_edge: vec![],
             prolog_foot: 0.0,
             chimneys: vec![],
             cur: Zone::Kueste,
@@ -1292,7 +1321,7 @@ impl World {
                             && !self.stairs[i]
                             && !self.stairs[j]
                             && !matches!(self.ground[j], Mat::Water | Mat::Abyss | Mat::Plank)
-                            && (1..6).all(|r| self.level[idx(a, b - r)] == l && !matches!(self.ground[idx(a, b - r)], Mat::Water | Mat::Abyss))
+                            && (1..18).all(|r| inb(a, b - r) && self.level[idx(a, b - r)] == l && !matches!(self.ground[idx(a, b - r)], Mat::Water | Mat::Abyss))
                     }) && !self.in_settlement(((x + wf.w / 2) * TS) as f32, (y * TS) as f32);
                     if ok {
                         let d = (x - wf.tx).pow(2) + (y - wf.ty).pow(2);
@@ -1322,19 +1351,44 @@ impl World {
             wf.bot = bot as f32;
             wf.top = (bot - fpx) as f32;
             wf.src = wf.top - 4.0 * TS as f32;
-            // Bach auf der oberen Ebene bis an die Kante (Wasserkacheln in Ebenenhöhe)
+            // Bach auf der oberen Ebene bis an die Kante (Wasserkacheln in Ebenenhöhe): er kommt aus
+            // einer Quelle – einem kleinen Felsteich mit Schilf – und schlängelt sich zur Kante
             let ty_top = (bot - fpx).div_euclid(TS);
-            for r in 0..6 {
+            let free = |w: &World, xx: i32, yy: i32| inb(xx, yy) && w.level[idx(xx, yy)] == l && !w.stairs[idx(xx, yy)] && !matches!(w.ground[idx(xx, yy)], Mat::Plank | Mat::Abyss);
+            let sway_at = |r: i32| ((r as f32 * 0.9 + x as f32).sin() * 1.2).round() as i32;
+            let mut len = 0;
+            for r in 0..10 {
                 let yy = ty_top - r;
-                let sway = ((r as f32 * 0.9 + x as f32).sin() * 1.2).round() as i32;
+                let sway = sway_at(r);
                 let (a0, a1) = if r < 2 { (x, x + wf.w) } else { (x + sway + 1, x + sway + wf.w - 1).max((x + sway + 1, x + sway + 2)) };
+                if r >= 6 && !(a0 - 1..a1 + 1).all(|xx| free(self, xx, yy)) {
+                    break;
+                }
                 for xx in a0..a1 {
-                    if inb(xx, yy) && self.level[idx(xx, yy)] == l && !self.stairs[idx(xx, yy)] {
+                    if free(self, xx, yy) {
                         let i = idx(xx, yy);
                         self.ground[i] = Mat::Water;
                         self.path[i] = true;
                     }
                 }
+                len = r + 1;
+            }
+            // Quellteich (5 × 3, Felsrand) am oberen Ende des Bachs
+            let (qx, qy) = (x + wf.w / 2 + sway_at(len), ty_top - len);
+            if (-1..=1).all(|dy| (-2..=2).all(|dx| free(self, qx + dx, qy + dy))) {
+                for dy in -1..=1i32 {
+                    for dx in -2..=2i32 {
+                        let i = idx(qx + dx, qy + dy);
+                        self.ground[i] = if dx.abs() == 2 && dy != 0 { Mat::Rock } else { Mat::Water };
+                        self.path[i] = true;
+                    }
+                }
+                for (dx, dy) in [(-3, -1), (3, 0)] {
+                    if free(self, qx + dx, qy + dy) && self.ground[idx(qx + dx, qy + dy)] != Mat::Water {
+                        self.prop_t("reedClump", qx + dx, qy + dy);
+                    }
+                }
+                wf.src = ((qy - 1) * TS) as f32;
             }
             // Becken am Fuß
             let by = bot.div_euclid(TS);
@@ -1858,23 +1912,44 @@ impl World {
         for (x, y) in [(cx - 24, cy - 40), (cx + 24, cy - 40)] {
             self.prop_t("brazier", x, y);
         }
-        // ---- Ringmauer (Ebene 4): Zinnen an der Außenkante, Türme, Seetor; Bergfried dahinter
-        let mut k = 0;
-        let mut a = 0.0f32;
-        while a < std::f32::consts::TAU {
-            let (ca, sa) = (a.cos(), a.sin());
-            let (dx, dy) = (ca * (OUT - 0.8), sa * (OUT - 0.8));
-            // nur wo die Mauer quer im Bild liegt (an den Seiten stünden die Stücke übereinander)
-            if sa.abs() > 0.55 && !(dy > 0.0 && dx.abs() < GATE + 3.0) {
-                self.prop_x(&format!("battlement{}", k % 3), hx + dx * TS as f32, hy + dy * TS as f32, |_| {});
-                k += 1;
+        // ---- Ringmauer (Ebene 4): Brüstung rundherum aus 72 Segmenten, jedes im echten Winkel des
+        // Kreises gerendert (18 Winkel, die andere Hälfte gespiegelt) und genau so lang wie die Sehne,
+        // Pfeiler an jedem Stoß; die Türme sitzen auf der durchlaufenden Brüstung, das Seetor bleibt frei
+        let r_px = (OUT - 0.8) * TS as f32;
+        let towers: Vec<(f32, f32)> = (0..8)
+            .map(|i| {
+                let a = (22.5 + i as f32 * 45.0).to_radians();
+                (hx + a.cos() * (OUT - 1.4) * TS as f32, hy + a.sin() * (OUT - 1.4) * TS as f32)
+            })
+            .collect();
+        let gate = |x: f32, y: f32| y > hy && (x - hx).abs() < (GATE + 3.0) * TS as f32;
+        let near_tower = |x: f32, y: f32, d: f32| towers.iter().any(|t| (t.0 - x).hypot(t.1 - y) < d);
+        for i in 0..72 {
+            let deg = (i as f32 + 0.5) * 5.0;
+            let a = deg.to_radians();
+            let (x, y) = (hx + a.cos() * r_px, hy + a.sin() * r_px);
+            if gate(x, y) {
+                continue;
             }
-            a += 2.1 / OUT;
+            // Richtung der Tangente (0..180°): bis 90° direkt, darüber gespiegelt
+            let th = (deg + 90.0).rem_euclid(180.0);
+            let (k, flip) = if th <= 90.0 { ((th - 2.5) / 5.0, false) } else { ((180.0 - th - 2.5) / 5.0, true) };
+            self.prop_x(&format!("ringWall{}", (k.round() as i32).clamp(0, 17)), x, y, |p| {
+                p.flip = flip;
+                p.no_collide = true;
+            });
         }
-        for i in 0..8 {
-            let a = (22.5 + i as f32 * 45.0).to_radians();
-            let (dx, dy) = (a.cos() * (OUT - 1.4), a.sin() * (OUT - 1.4));
-            self.prop("fortTower", hx + dx * TS as f32, hy + dy * TS as f32);
+        for i in 0..72 {
+            let a = (i as f32 * 5.0).to_radians();
+            let (x, y) = (hx + a.cos() * r_px, hy + a.sin() * r_px);
+            // Pfeiler an jedem Stoß; an Türmen stehen die Türme selbst, am Seetor die Torbauten
+            if gate(x, y) || near_tower(x, y, 30.0) {
+                continue;
+            }
+            self.prop_x("ringPost", x, y, |p| p.no_collide = true);
+        }
+        for &(x, y) in &towers {
+            self.prop("fortTower", x, y);
         }
         for i in 0..16 {
             let a = (i as f32 * 22.5).to_radians();
@@ -1984,8 +2059,21 @@ impl World {
             k += 1;
             x += 4;
         }
+        // Felsgrund unter Mauern und Ecktürmen (sonst stünden die Ecken im Wasser)
+        for (ax0, ay0, ax1, ay1) in [(wx0 - 2, wy0 - 2, wx1 + 2, wy0 + 2), (wx0 - 2, wy0, wx0 + 2, cy + 26), (wx1 - 2, wy0, wx1 + 2, cy + 26)] {
+            for y in ay0..=ay1 {
+                for x in ax0..=ax1 {
+                    if inb(x, y) && y < cy + cliff(x - cx) && self.level[idx(x, y)] != 4 {
+                        let i = idx(x, y);
+                        self.ground[i] = Mat::Rock;
+                        self.level[i] = 4;
+                    }
+                }
+            }
+        }
+        // Seitenmauern lückenlos von der Nordmauer bis an die Ecktürme über der Klippe
         let mut y = wy0 + 4;
-        while y <= cy + 22 {
+        while y <= cy + 24 {
             self.prop("highWallV", (wx0 * TS) as f32 + 16.0, (y * TS) as f32);
             self.prop("highWallV", (wx1 * TS) as f32 + 16.0, (y * TS) as f32);
             y += 4;
@@ -2084,14 +2172,76 @@ impl World {
     fn prolog_fall(&mut self) {
         let d = Zone::Prolog.def();
         let (cx, cy) = (d.cx, d.cy);
-        // Kante: die unterste Reihe der Platte über dem Bach
-        let mut ty = cy + 10;
-        while ty < cy + 40 && self.level[idx(cx + 15, ty + 1)] == 4 {
-            ty += 1;
+        let (y_from, y_to) = ((cy + 12) * TS, (cy + 44) * TS);
+        // Abbruchkante: je Spalte die letzte begehbare Zeile der Platte (nach den Wänden berechnet,
+        // die Klippenwand liegt auf den letzten Reihen der Platte)
+        let mut edge = vec![];
+        let mut x = (cx - 49) * TS + 8;
+        while x <= (cx + 49) * TS {
+            let mut last = None;
+            let mut y = y_from;
+            while y < y_to {
+                let tile = idx(x.div_euclid(TS), y.div_euclid(TS));
+                if self.lpx(x, y) == 4 && self.px_walk(x, y).1 && self.ground[tile] != Mat::Water {
+                    last = Some(y);
+                } else if last.is_some() {
+                    break;
+                }
+                y += 4;
+            }
+            if let Some(ly) = last {
+                // nur, wo es danach wirklich in die Tiefe geht
+                if (1..6).any(|k| self.lpx(x, ly + k * 60) < 3) {
+                    edge.push((x as f32, ly as f32));
+                }
+            }
+            x += 16;
         }
-        let bot = ((ty + 1) * TS) as f32;
-        let w = 4;
-        self.waterfalls.push(Waterfall { tx: cx + 13, ty, w, x: ((cx + 13) * TS) as f32, src: bot - FACE_PX as f32 * 4.0 - 3.0 * TS as f32, top: bot - FACE_PX as f32 * 4.0, bot, deep: 520.0 });
+        self.prolog_edge = edge;
+        if let Some(ax) = self.arenas.get("prolog").map(|a| a.x) {
+            if let Some(p) = self.prolog_edge_near(ax) {
+                self.prolog_jump = p;
+            }
+        }
+        // der große Fall: genau dort, wo der Bach über den Klippenkopf tritt
+        let (w, tx0) = (4, cx + 13);
+        let fx = (tx0 * TS) + w * TS / 2;
+        let mut top = None;
+        let mut y = y_from;
+        while y < y_to {
+            if self.lpx(fx, y) == 4 && !self.px_walk(fx, y).1 {
+                top = Some(y);
+                break;
+            }
+            y += 2;
+        }
+        let top = top.unwrap_or((cy + 26) * TS);
+        let mut bot = top;
+        while bot < y_to + 400 && self.lpx(fx, bot) > 0 {
+            bot += 2;
+        }
+        // Bach bis an den Klippenkopf (die letzten Reihen der Platte sind Wand)
+        for yy in (top.div_euclid(TS) - 4)..=top.div_euclid(TS) {
+            for xx in tx0..tx0 + w {
+                if inb(xx, yy) && self.level[idx(xx, yy)] == 4 {
+                    self.ground[idx(xx, yy)] = Mat::Water;
+                }
+            }
+        }
+        self.waterfalls.push(Waterfall { tx: tx0, ty: top.div_euclid(TS), w, x: (tx0 * TS) as f32, src: (top - 3 * TS) as f32, top: top as f32, bot: bot as f32, deep: 520.0 });
+    }
+
+    /// Nächster Punkt der Abbruchkante des Wrackzwingers zu einer x-Position
+    pub fn prolog_edge_near(&self, x: f32) -> Option<(f32, f32)> {
+        let e = &self.prolog_edge;
+        if e.is_empty() {
+            return None;
+        }
+        let i = e.partition_point(|p| p.0 < x);
+        let a = i.saturating_sub(1);
+        let b = i.min(e.len() - 1);
+        let p = if (e[a].0 - x).abs() <= (e[b].0 - x).abs() { e[a] } else { e[b] };
+        ((p.0 - x).abs() < 24.0).then_some(p)
     }
 
     /// Treppe durch eine Mauerfront der Festung in den Spalten x0..=x1: sucht in jeder Spalte
@@ -2832,7 +2982,8 @@ impl World {
             // Inseln; Festung und Siedlungen sind von Hand gesetzt)
             if inb(tx, ty) && (self.stairs[idx(tx, ty)] || self.landing[idx(tx, ty)]) && self.biome[idx(tx, ty)] != Biome::Hub && !self.in_settlement(p.x, p.y) && !p.no_collide {
                 if let Some(inf) = (self.info)(&p.kind) {
-                    if inf.circle > 0.0 || inf.boxc.0 > 0.0 {
+                    // auch begehbare Büsche und Knochen nicht mitten auf die Stufen
+                    if inf.circle > 0.0 || inf.boxc.0 > 0.0 || passable_kind(&p.kind) {
                         self.props[pi].hidden = true;
                         continue;
                     }
