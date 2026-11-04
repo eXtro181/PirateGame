@@ -46,3 +46,8 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
+        with:
+          # GitHub Pages braucht manchmal länger als die vorgegebenen 10 Minuten. Bricht die Aktion
+          # vorher ab, bricht sie auch die Veröffentlichung ab – und Wiederholungen desselben Commits
+          # (gleiche Versionskennung) kommen danach nicht mehr in Gang. Daher 30 Minuten.
+          timeout: 1800000
