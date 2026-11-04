@@ -278,7 +278,12 @@ fn fs_gbuf(v: VOut) -> GOut {
         }
         discard;
     }
-    let n = sample_nrm(v.uv, v.ext.x, chunk);
+    var n = sample_nrm(v.uv, v.ext.x, chunk);
+    if (chunk && G.hd3.x > 0.5) {
+        // FullHD: feine Bodenstruktur (Körnung, kleine Unebenheiten) in der Normale, ortsfest in der Welt
+        let fq = noise_at(v.world * 0.73 + vec2<f32>(13.0, 7.0));
+        n = vec4<f32>(n.rg + (fq.rb - vec2<f32>(0.5)) * 0.09, n.b, n.a);
+    }
     var rgb = c.rgb * v.col.rgb;
     var glow = vec3<f32>(0.0);
     if (c.a < 0.995) {

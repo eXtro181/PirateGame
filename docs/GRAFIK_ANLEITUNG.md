@@ -181,10 +181,11 @@ Farbe = palette[round(v)],  Relief = sockel + höhe*nz
 1. Waffe hinter dem Körper (bei Blick nach hinten oder Ausholen von der Seite), Flügel.
 2. **Beine**: 5 px breit, Hosenrampe quer schattiert (links Stufe 4, rechts Stufe 1, Mitte 3 bzw. 2 für das hintere Bein). Untere 40 % = Stiefel (eigene Rampe 0E0A0C … 705E62) mit Glanzlinie. Relief 3.
 3. **Rumpf**: Mantel mit Schulterrundung, Schößen unterhalb der Hüfte (aufgeweitet), offener Hemdausschnitt vorn (38–62 % der Breite). Quer schattiert (links 4, Mitte 3, rechts 1, Schöße eine Stufe dunkler). Relief `3 + (1 − |rel−0,5|·2)·2` (Mitte gewölbt).
-4. Revers, Knöpfe, Gürtel, Schärpe, Sonderteile.
+4. Revers, Knöpfe, Gürtel, Schärpe, Sonderteile. **Kleidungsdetails für alle Menschen** (nicht bei Robe, Skelett, Sitzen): Paspeln an der Mantelöffnung bei 37 % und 63 % der Breite (Stufe 5 links, 2 rechts), Taschenklappen mit Messingknopf (C9A04A) unter dem Gürtel, Saum mit dunkler Kante (Stufe 1) und hellem Umschlag (Stufe 4), Bandelier von der Schulter zur Hüfte (Lederrampe 1A100A … 9A6A44, alle 3 px ein Glanzpunkt, Schnalle B88A3A/F0D080 bei 45 %), Gürteltasche; an den Händen helle Manschetten aus der Hemdrampe; Stiefel mit umgeschlagener Stulpe bei 62 % und Schnalle bei 80 %; ein Glanzpunkt (E8E4F0, 0,35) im Auge.
 5. **Arme** als Röhren, **Hände** als Kuppeln, **Kopf** als Kuppel mit Gesicht, Haar, Bart und Hut. Die Reihenfolge hängt von der Richtung ab: von hinten zuerst die Arme, dann der Kopf.
 6. Waffe vor dem Körper, Zusatzarme, Schädel, Aura (Leuchtpunkte auf der Figur).
-7. Zum Schluss `outline(true, 0.95)`.
+7. **Feinschliff** (`finish`, für jede Figur gleich): Formlicht – Pixel mit leerem Nachbarn oben/links ×1,1, unten/rechts ×0,87; Haare mit schrägen Strähnen (`(2x + y + seed) mod 5`: 0 → ×1,1, 3 → ×0,92); Haut glatt; alles andere als Gewebe `×(0,965 + n·0,07)` mit Köperbindung (`(x+y)` gerade ×1,02); Mantel mit senkrechten Falten (`sin((x − w/2)·1,35 + y·0,12 + seed·0,7)` > 0,84 → ×0,88, < −0,92 → ×1,07); Mikrorelief `rel += (n − 0,5)·0,9` außer Haut; ungesättigte helle Pixel (Stahl, Silber, Knochen) bekommen Glanz 150.
+8. Zum Schluss `outline(true, 0.95)`.
 
 **Posen** (`pose_for`): bob (Auf und Ab), Beinversatz, Armschwung, Neigung, Waffenwinkel. Beispiele:
 - walk: Schritt `[0, 1.5, 2.5, 0, −1.5, −2.5]`, bob `[0, −1, 0, 0, −1, 0]`
@@ -219,6 +220,8 @@ Strahl zur Kamera b = (0, cos P, sin P)
 l  = n_bild · LIGHT                       // n_bild = (n.x, n·unten, n·b)
 v  = (l*0.75 + 0.35 + bias)*(N-1) + muster(q) + (bayer-0.5)*0.55
 Innenkontur: Nachbar weiter hinten als d+1.2 (anderes Teil) oder d+5 → v -= 1.6
+Höhlenschatten: 12 Nachbarn in 2–3 px Abstand; jeder, der um dd > 1,5 näher liegt, verschattet → v -= 0.2 · Σ min(dd/6, 1)
+Glanzlicht (spec > 90): h = norm(LIGHT + (0,0,1)) → v += (n·h)^24 · 1.6 · spec/255
 Farbe = pal[round(v)] ;  Relief = (d - d_min)*0.6
 up = (1 - max(n.z, 0))*255 ;   Höhe über Grund = max(q.z * cos P, 0)
 Leuchten = Farbe × glow
@@ -322,7 +325,7 @@ Das Spiel füllt jedes Bild eine Sofortmodus-Struktur `Frame` mit **Vierecken**:
 
 **Vertex** (32 Byte): `pos f32×2` (Welt- bzw. UI-Pixel), `uv f32×2`, `col unorm8×4` (Tönung, a = Deckkraft), `ext u8×4` = (Atlasseite bzw. Chunk-Platz, **Modus**, **Wind**, **Flags**), `prm f32×2` = (Grundhöhe über Boden, Parameter). Ein Indexpuffer mit dem festen Muster `b, b+1, b+2, b, b+2, b+3` reicht für alle Vierecke.
 
-**Modi**: 0 Atlas-Sprite, 1 Boden-Chunk (durchsichtige Pixel: Wasser bzw. Abgrund aus der Normalen-Textur), 2 einfarbige Fläche, 3 Ersatz-Wasser (wo kein Chunk liegt; Abgrund laut Maske), 4 Abgrund, 5 Nebelbank, 6 weicher Fleck (Schatten, Glühen), 7 Seekarte (UI), 8 Zierschrift/weiche Bilder (UI, eigene bilineare Mischung aus vier Texeln, vormultipliziert).
+**Modi**: 0 Atlas-Sprite, 1 Boden-Chunk (durchsichtige Pixel: Wasser bzw. Abgrund aus der Normalen-Textur), 2 einfarbige Fläche, 3 Ersatz-Wasser (wo kein Chunk liegt; Abgrund laut Maske), 4 Abgrund, 5 Nebelbank, 6 weicher Fleck (Schatten, Glühen), 7 Seekarte (UI), 8 Zierschrift/weiche Bilder (UI, eigene bilineare Mischung aus vier Texeln, vormultipliziert), 10 PixelFX-Effekt (Überlagerung, siehe Abschnitt 18).
 **Flags**: 1 Aufblitzen (Treffer), 2 Umriss (Fokus), 4 Leuchten, 8 geisterhaft, 16 grau (UI), 32 Krone ausblenden, 64 Spiegelung.
 
 **Sprite-Viereck** (`quad_spr`): links oben = Fuß − Anker (gespiegelt: Anker von rechts), optional skaliert, gedreht (um den Fuß) und unten abgeschnitten (`cut_bottom`, z. B. bis zur Hüfte im Wasser; die Grundhöhe wird dann auf die sichtbare Unterkante bezogen).
@@ -501,9 +504,13 @@ Punktlichter: Farbe × Lichtfaktor × 1.5
 | sonst | 150, 190, 200 | 26 | 4 |
 
   Nebel = zwei wandernde Rauschlagen, `smoothstep(0,35, 0,85, n·0,6 + n2·0,5)`, weicher Rand am Viereck. Im Pixel-Modus 6 Stufen.
+- **PixelFX-Effekte** (`src/pfx.rs`, Bibliothek <https://github.com/patch-gg/pixelfx>, MIT): Der Original-Code läuft beim Start im Browser (`web/pfx.js`) und zeichnet jeden der 34 Effekte einmal Bild für Bild (Schleifen 8–12 Bilder, sonst rund 14 je Sekunde, große Effekte höchstens 12), ein Effekt je Bild des Spiels (~1,3 s zusammen). Jedes Bild ist `composite(farbe, licht)` über Transparenz: gerade Alpha, Licht als Deckkraft seiner hellsten Komponente – über dunklem Grund wirkt das wie additives Leuchten. Die Bilder werden auf die deckenden Pixel (Alpha > 3) zugeschnitten und mit einem Skyline-Packer (unten links) auf die Effektseite gelegt (79 % belegt). Paletten passend zur Welt: Säbelhieb Stahl (161A22 … FFFFFF), Doppelhieb Messing (24160C … FFFFFF), Seelen und Aufsammeln Türkis, Zersplittern Knochen, Staub und Rauch gedeckt grau-braun, Beutestrahl Gold, Fledermaus Leder. Effekte mit Darsteller (Seele, Heilung, Wiedergeburt, Zersplittern) bekommen die Gestalt der Spielerfigur bzw. eines Skeletts aus dem Figuren-Maler.
+  **Zeichnen** (Modus 10, Überlagerung nach dem Licht, vormultipliziert): `farbe · tönung · helligkeit · a`. Richtungseffekte zeigen nach rechts: `dir(a)` dreht (Senkrechte ×0,8 für die Schrägsicht), nach links gespiegelt statt kopfüber; Bogenhiebe `face(a)` spiegeln nur und neigen höchstens ±0,6 (bei steilem Blick nach oben/unten wie `dir`). Helle Effekte setzen ein Punktlicht mit Hüllkurve `min(t/0,05, 1)·(1 − t/dauer)²`.
+  **Verdeckung**: Der Überlagerungs-Durchgang bindet als Gruppe 2 die G-Puffer-Normale (b = Höhe/510) und das Leuchten (Alpha: 1 = Sprite, 0,875 = Boden-Chunk und Abgrund, 0,5 = Wasser). An Sprite-Pixeln gilt Bodenzeile `g = welt.y + höhe`; liegt sie vor dem Fuß des Effekts (`prm.x`), verschwindet er dort weich: `a *= 1 − smoothstep(fuß+1, fuß+7, g) · smoothstep(2, 6, höhe)`. Flacher Boden verdeckt nie; Hiebe schieben ihren Fuß 8 px vor den Angreifer.
 - **Partikel**: additive weiche Flecken (Modus 6): Funken über Feuern (aufsteigend, 3 je Feuer), Glut, Gischt, Glühwürmchen, Staub. Schimmer über Gegenständen am Boden in der Seltenheitsfarbe.
 - **Bodenschatten**: weiche Ellipse (Farbe 10, 12, 30; Deckkraft 0,42 bei Requisiten, 0,45 beim Spieler). Figuren: Radius 15·s, Höhe ⅓ davon. Requisiten: um (4, 1) versetzt.
 - **Spiegelungen im Wasser** (`reflect`): Der Teil über dem Fuß wird kopfüber unter die Wasserlinie gezeichnet, in 24 waagrechten Streifen wellig verschoben (`sin((y + a)·0,09 + t·1,8)·(1,5 + a·0,03)`). Im Shader mischt Flag 64 das Bild mit der Wasseroberfläche (`k = Deckkraft·0,85`).
+- **Feine Bodenstruktur** (FullHD): Die Normale der Boden-Chunks bekommt ortsfestes Rauschen `(rausch(welt·0,73).rb − 0,5)·0,09` – Körnung und kleine Unebenheiten im Streiflicht.
 - **Lichter** an Requisiten (Fackeln, Laternen, Feuer, Kristalle), an Figuren (der Spieler trägt ein schwaches warmes Licht: Höhe 70, Radius 180, 0,5/0,4/0,3), an Effekten (Treffer, Zauber, Explosionen).
 - **Innenräume**: Alles außerhalb der Wände wird mit fast schwarzen Flächen überdeckt.
 
@@ -645,6 +652,9 @@ fn tilt_src(uv: vec2<f32>) -> vec2<f32> {
 @group(1) @binding(4) var t_mask: texture_2d<f32>;
 @group(1) @binding(5) var t_noise: texture_2d<f32>;
 @group(1) @binding(6) var t_map: texture_2d<f32>;
+// nur in der Überlagerung: G-Puffer (Normale + Höhe, Leuchten) für die Verdeckung der Effekte
+@group(2) @binding(0) var t_gn: texture_2d<f32>;
+@group(2) @binding(1) var t_ge: texture_2d<f32>;
 
 struct VIn {
     @location(0) pos: vec2<f32>,
@@ -812,7 +822,7 @@ fn abyss(p_in: vec2<f32>) -> GOut {
     em += vec3<f32>(1.0, 0.45, 0.2) * spark * 0.8;
     o.alb = vec4<f32>(c, 1.0);
     o.nrm = vec4<f32>(0.5, 0.5, 0.0, 0.0);
-    o.emi = vec4<f32>(em, 1.0);
+    o.emi = vec4<f32>(em, 0.875);
     return o;
 }
 
@@ -913,7 +923,12 @@ fn fs_gbuf(v: VOut) -> GOut {
         }
         discard;
     }
-    let n = sample_nrm(v.uv, v.ext.x, chunk);
+    var n = sample_nrm(v.uv, v.ext.x, chunk);
+    if (chunk && G.hd3.x > 0.5) {
+        // FullHD: feine Bodenstruktur (Körnung, kleine Unebenheiten) in der Normale, ortsfest in der Welt
+        let fq = noise_at(v.world * 0.73 + vec2<f32>(13.0, 7.0));
+        n = vec4<f32>(n.rg + (fq.rb - vec2<f32>(0.5)) * 0.09, n.b, n.a);
+    }
     var rgb = c.rgb * v.col.rgb;
     var glow = vec3<f32>(0.0);
     if (c.a < 0.995) {
@@ -951,7 +966,8 @@ fn fs_gbuf(v: VOut) -> GOut {
     let elev = n.b * 510.0 + v.prm.x;
     o.alb = vec4<f32>(rgb, 1.0);
     o.nrm = vec4<f32>(n.rg, clamp(elev / 510.0, 0.0, 1.0), n.a);
-    o.emi = vec4<f32>(glow * v.col.a, 1.0);
+    // Alpha im Leuchtpuffer: 1 = Sprite (kann Effekte verdecken), 0,875 = Boden-Chunk, 0,5 = Wasser
+    o.emi = vec4<f32>(glow * v.col.a, select(1.0, 0.875, chunk));
     return o;
 }
 
@@ -1003,6 +1019,21 @@ fn fs_overlay(v: VOut) -> @location(0) vec4<f32> {
     }
     if (mode == 2u) {
         return vec4<f32>(v.col.rgb * v.col.a, v.col.a);
+    }
+    if (mode == 10u) {
+        // PixelFX-Effekt (Licht über Transparenz als Deckkraft, vormultipliziert gemischt)
+        let c = textureSampleLevel(t_acol, s_near, v.uv, i32(v.ext.x), 0.0);
+        var a = c.a * v.col.a;
+        if (a < 0.004) { discard; }
+        // Verdeckung: steht hier etwas Aufrechtes (Figur, Mauer, Requisit), dessen Bodenzeile vor dem
+        // Fuß des Effekts liegt (prm.x), liegt der Effekt dahinter. Boden und Wasser verdecken nie.
+        let ip = vec2<i32>(floor(v.clip.xy));
+        if (textureLoad(t_ge, ip, 0).a > 0.95) {
+            let e = textureLoad(t_gn, ip, 0).b * 510.0;
+            a *= 1.0 - smoothstep(v.prm.x + 1.0, v.prm.x + 7.0, v.world.y + e) * smoothstep(2.0, 6.0, e);
+            if (a < 0.004) { discard; }
+        }
+        return vec4<f32>(c.rgb * v.col.rgb * v.prm.y * a, a);
     }
     let c = textureSampleLevel(t_acol, s_near, v.uv, i32(v.ext.x), 0.0);
     if (c.a < 0.45) { discard; }

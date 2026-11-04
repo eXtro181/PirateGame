@@ -1346,6 +1346,9 @@ impl Game {
                                 self.fx.px.play(Px::Splash, s.x, s.y).scale(0.5);
                             } else if s.kind == "bullet" {
                                 self.fx.px.play(Px::Bullet, s.x, s.y).z(s.z).dir(s.vy.atan2(s.vx) + std::f32::consts::PI);
+                            } else if s.kind == "shard" && s.glow == Some([1.0, 1.0, 0.9]) {
+                                // Netz der Meeresspinne: zerreißt als weißer Wölkchen-Puff
+                                self.fx.px.play(Px::Poof, s.x, s.y + 1.0).scale(0.6);
                             } else if s.kind == "shard" {
                                 self.fx.px.play(Px::IceShatter, s.x, s.y + 1.0).scale(0.45);
                             } else if s.kind == "soul" {

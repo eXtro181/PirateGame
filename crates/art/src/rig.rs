@@ -737,6 +737,27 @@ fn render_full(rig: &Rig, yaw: f32, w: i32, h: i32, foot: i32, oblique: bool) ->
             let l = ns[0] * LIGHT[0] + ns[1] * LIGHT[1] + ns[2] * LIGHT[2];
             let nn = m.pal.len() as f32 - 1.0;
             let mut vv = (l * 0.75 + 0.35 + m.bias) * nn + pat_off(m.pat, hh.q) + (bayer(x, y) - 0.5) * 0.55;
+            // Höhlenschatten: nähere Teile ringsum verschatten Ansätze, Spalten und Kehlen
+            let mut occ = 0.0;
+            for (dx, dy) in [(2, 0), (-2, 0), (0, 2), (0, -2), (2, 2), (-2, 2), (2, -2), (-2, -2), (3, 0), (-3, 0), (0, 3), (0, -3)] {
+                let (xx, yy) = (x + dx, y + dy);
+                if xx < 0 || yy < 0 || xx >= w || yy >= h {
+                    continue;
+                }
+                if let Some(o) = &buf[(yy * w + xx) as usize] {
+                    let dd = o.d - hh.d;
+                    if dd > 1.5 {
+                        occ += (dd / 6.0).min(1.0);
+                    }
+                }
+            }
+            vv -= occ * 0.2;
+            // Glanzlicht auf Metall, Gold und Panzern (Blinn, Blick zur Kamera)
+            if m.spec > 90 {
+                let hv = norm([LIGHT[0], LIGHT[1], LIGHT[2] + 1.0]);
+                let nh = (ns[0] * hv[0] + ns[1] * hv[1] + ns[2] * hv[2]).max(0.0);
+                vv += nh.powi(24) * 1.6 * (m.spec as f32 / 255.0);
+            }
             // Innenkontur: weiter hinten liegender Pixel neben einem näheren Teil
             if m.contour {
                 for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {

@@ -932,8 +932,8 @@ pub fn build(frame: &mut Frame) -> Art {
         pr::haybale(),
         pr::cannon(),
         pr::flag_pole(),
-        pr::chest(false),
-        pr::chest(true),
+        sw_art::structures::chest_rig(false),
+        sw_art::structures::chest_rig(true),
         pr::skull_pile(),
         bd::figurehead_slot(),
         pr::fog_gate(),
@@ -1155,6 +1155,80 @@ pub fn build(frame: &mut Frame) -> Art {
         }
         c.outline(true, 0.7);
         a.add_trim("d:driftwood", &c, 17, 10);
+        // Piraten-Kleinkram am Boden: Rumflasche, Fischgräte, Taurest, Plankenreste, Münzen, Krabbenpanzer
+        let mut c = Canvas::new(18, 10);
+        c.standing = false;
+        let glass = ramp_n(hex(0x2E6A3A), 5, 1.1);
+        c.tube(&[(3.0, 6.0), (11.0, 5.0)], 2.6, 2.4, &glass, 1.6, 0.4);
+        c.tube(&[(11.0, 5.0), (15.0, 4.4)], 1.0, 0.9, &glass, 1.0, 0.6);
+        c.put(16, 4, hex(0x6A4A2A), 1.0);
+        c.lit(6, 4, hex(0xC8F0C8), 0.5);
+        c.lit(7, 4, hex(0xA8E0B0), 0.3);
+        c.outline(true, 0.6);
+        a.add_trim("d:bottle", &c, 9, 7);
+        let mut c = Canvas::new(22, 12);
+        c.standing = false;
+        let bone = ramp_n(hex(0xD8D0BC), 5, 1.0);
+        c.tube(&[(3.0, 6.0), (17.0, 6.0)], 0.9, 0.8, &bone, 0.6, 0.2);
+        for k in 0..6 {
+            let x = 6.0 + k as f32 * 2.0;
+            c.tube(&[(x, 6.0), (x - 1.0, 2.5)], 0.6, 0.4, &bone, 0.4, 0.2);
+            c.tube(&[(x, 6.0), (x - 1.0, 9.5)], 0.6, 0.4, &bone, 0.4, 0.2);
+        }
+        c.dome(18.5, 6.0, 2.6, 2.2, &bone, 1.0, 0.4, 0.2, 0.0);
+        c.put(19, 5, hex(0x1A1416), 1.0);
+        c.tube(&[(3.0, 6.0), (1.0, 3.5)], 0.8, 0.4, &bone, 0.3, 0.2);
+        c.tube(&[(3.0, 6.0), (1.0, 8.5)], 0.8, 0.4, &bone, 0.3, 0.2);
+        c.outline(true, 0.6);
+        a.add_trim("d:fishbones", &c, 11, 8);
+        let mut c = Canvas::new(18, 12);
+        c.standing = false;
+        let rope = ramp_n(hex(0x8A6A42), 5, 1.0);
+        for k in 0..3 {
+            let rr = 5.5 - k as f32 * 1.6;
+            let mut pts = vec![];
+            for j in 0..=14 {
+                let a = j as f32 / 14.0 * std::f32::consts::TAU;
+                pts.push((9.0 + a.cos() * rr, 6.0 + a.sin() * rr * 0.6));
+            }
+            c.tube(&pts, 1.1, 1.1, &rope, 0.8, 0.3 + k as f32 * 0.4);
+        }
+        c.tube(&[(14.0, 6.5), (17.0, 9.5)], 1.0, 0.8, &rope, 0.5, 0.2);
+        c.outline(true, 0.6);
+        a.add_trim("d:ropeBit", &c, 9, 8);
+        let mut c = Canvas::new(30, 14);
+        c.standing = false;
+        let pl = ramp_n(hex(0x5A4030), 5, 1.0);
+        for (x0, y0, x1, y1, w) in [(2.0f32, 8.0f32, 18.0f32, 6.0f32, 2.2f32), (8.0, 11.0, 27.0, 9.5, 2.0), (14.0, 3.5, 24.0, 4.5, 1.6)] {
+            c.tube(&[(x0, y0), (x1, y1)], w, w * 0.9, &pl, 0.8, 0.2);
+        }
+        for (x, y) in [(6, 7), (21, 10), (19, 4)] {
+            c.put(x, y, hex(0x2A2A30), 1.2);
+        }
+        c.outline(true, 0.6);
+        a.add_trim("d:plankBits", &c, 15, 10);
+        let mut c = Canvas::new(14, 8);
+        c.standing = false;
+        let gold = ramp_n(hex(0xC89A3A), 5, 1.2);
+        for (k, (x, y)) in [(4.0f32, 4.0f32), (8.0, 3.0), (6.5, 5.5), (10.5, 5.0)].iter().enumerate() {
+            c.dome(*x, *y, 1.8, 1.2, &gold, 0.6, 0.2, 0.0, 0.1);
+            if k % 2 == 0 {
+                c.lit(*x as i32, *y as i32 - 1, hex(0xFFF0B0), 0.6);
+            }
+        }
+        c.outline(true, 0.6);
+        a.add_trim("d:coins", &c, 7, 6);
+        let mut c = Canvas::new(16, 12);
+        c.standing = false;
+        let shell = ramp_n(hex(0xA84A2E), 5, 1.0);
+        c.dome(8.0, 6.0, 5.0, 3.6, &shell, 1.8, 0.4, 0.2, 0.1);
+        for (x0, y0, x1, y1) in [(3.0f32, 6.0f32, 0.5f32, 9.0f32), (13.0, 6.0, 15.5, 9.0), (4.0, 7.5, 2.0, 10.5), (12.0, 7.5, 14.0, 10.5)] {
+            c.tube(&[(x0, y0), (x1, y1)], 0.8, 0.5, &shell, 0.4, 0.2);
+        }
+        c.put(6, 4, hex(0x1A1012), 2.0);
+        c.put(10, 4, hex(0x1A1012), 2.0);
+        c.outline(true, 0.6);
+        a.add_trim("d:crabShell", &c, 8, 8);
         let mut c = Canvas::new(30, 14);
         c.standing = false;
         let root = ramp_n(hex(0x4E3A2A), 5, 1.0);

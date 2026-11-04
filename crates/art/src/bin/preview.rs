@@ -185,6 +185,27 @@ fn main() {
             }
             save_lit(&bg, &format!("{out}/malakor.png"), 2);
         }
+        "detail" => {
+            // Großansicht für Detailvergleiche: alte und neue Truhe, Säbelfeuer, Figuren und Gegner
+            use sw_art::chars::*;
+            let mut bg = bake_chunk(&Flat(Biome::Hub, Mat::Dirt), &mut mats, &en, 0, 0, 1280).crop(0, 0, 400, 200);
+            let old_c = sw_art::props::chest(false);
+            bg.place(&old_c.c, 40, 70, old_c.ax, old_c.ay);
+            for (k, open) in [false, true].iter().enumerate() {
+                let pa = sw_art::structures::chest_rig(*open);
+                bg.place(&pa.c, 100 + k as i32 * 60, 70, pa.ax, pa.ay);
+            }
+            let sf = sw_art::props::saberfire();
+            bg.place(&sf.c, 240, 74, sf.ax, sf.ay);
+            let pl = player_look(&[0, 1, 1, 5, 0, 0, 0, 0], "cutlass");
+            let mut x = 30;
+            for (l, s) in [(pl.clone(), 1.0)].into_iter().chain(["skeleton", "drowned", "stormSailor", "smith", "lanternMaid", "villagerA", "abyssPirate", "voodoo", "kingFire"].iter().map(|n| preset(n))) {
+                let fr = frame(&l, "down", "idle", 0, s);
+                bg.place(&fr, x, 180, fr.w / 2, fr.h - (4.0 * s) as i32);
+                x += 38;
+            }
+            save_lit(&bg, &format!("{out}/detail.png"), 3);
+        }
         "chars" => {
             use sw_art::chars::*;
             let mut bg = bake_chunk(&Flat(Biome::Hub, Mat::Grass), &mut mats, &en, 0, 0, 1280).crop(0, 0, 640, 360);

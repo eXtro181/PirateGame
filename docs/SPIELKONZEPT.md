@@ -29,6 +29,7 @@ Stand: 1. November 2026 (Version 0.6, Zweig `perf`). Technische Kurzreferenz fü
 
 ## 2. Geschichte und Spielablauf
 
+0. **Prolog im Wrackzwinger**: Das Spiel beginnt auf einer abgelegenen Insel in der Nordwest-Ecke, von extrem hohen Mauern umschlossen, vollgestellt mit Schiffswracks, Netzen und Kokons. Im Süden bricht sie an einer Klippe ab, über die ein extrem tiefer Wasserfall stürzt; das Meer an seinem Fuß ist völlig schwarz. Hier lauert die **Riesige Meeresspinne**, der erste Boss – nicht schwer, besiegbar, aber nicht zwingend. Stirbt man im Kampf, erwacht man im ursprünglichen Sarg am Galgenstrand, und das reguläre Spiel beginnt. Wer sie besiegt, muss über die Klippe in den Wasserfall springen und kommt ebenfalls im Sarg wieder zu sich.
 1. **Erwachen** (Galgenstrand): Klopfen im Dunkeln, der Sargdeckel ruckelt und wird weggeschoben, der Ertrunkene steigt heraus. Um ihn herum Galgen mit schwingenden Gehängten, Käfige, offene Gräber und über 70 Tote. Der Alte Galionsschnitzer erklärt die Lage.
 2. **Glutwacht**: Die Festung in der Mitte der Welt ist der Knotenpunkt. Hier brennt das Säbelfeuer, hier stehen vier leere Throne, hier arbeiten Schmied, Händlerin, Laternenmagd und Schiffsmeister.
 3. **Vier Könige** auf vier Inseln. Jeder hat zwei Gestalten. Besiegt hinterlässt er seine **Galionsfigur**, die auf seinen Thron in der Glutwacht gesetzt wird.
@@ -44,10 +45,10 @@ Stand: 1. November 2026 (Version 0.6, Zweig `perf`). Technische Kurzreferenz fü
 ## 3. Die Welt
 
 ### 3.1 Karte
-- 1776 × 1328 Kacheln à 32 Pixel (56 832 × 42 496 Weltpixel) – zehnmal die Fläche der ersten Karte. Der Archipel der sechs Hauptinseln liegt in der Mitte, das Ende der Welt in der Südost-Ecke, die vier Seegebiete weit draußen in den Himmelsrichtungen, dazwischen 72 wilde Inseln im weiten Ozean.
+- 1776 × 1328 Kacheln à 32 Pixel (56 832 × 42 496 Weltpixel) – zehnmal die Fläche der ersten Karte. **Strahlenförmig und ausgewogen**: die Glutwacht in der Mitte, der Galgenstrand gleich südlich davon, die vier Königsinseln in den vier Diagonalen (Frostgrotte im Nordwesten, Aschebucht im Nordosten, Rabenwacht im Südwesten, Fluchmangroven im Südosten), die vier Seegebiete weit draußen in den Himmelsrichtungen, dazwischen 64 große wilde Inseln. Das Ende der Welt liegt in der Südost-Ecke, die Prolog-Insel abseits in der Nordwest-Ecke.
 - Jede Insel hat Höhenstufen (Ebenen 0–4): Inselmitte und ein bis zwei Bergkuppen höher, Strände flach.
 - Außerhalb der Festung sind Ebenenkanten **flache, sanfte Naturhänge** (nach Süden 168 px tief, seitlich 64 px, oben 20 px). Die Bodentextur läuft geneigt weiter, in flachen, gewellten Grasstufen, mit seltenen Felsausbissen, offener Erde, Halmen und Steinen; zum Fuß hin nur leicht im Schatten.
-- **Treppen** gibt es nur in Siedlungen und in der Festung. In der Natur führen Wege im Gebietsstil über die Hänge (Schneepfad, Bohlen im Moor …).
+- **Treppen** gibt es nur in Siedlungen und in der Festung – und nur dort, wo man wirklich hinauf oder hinunter will: Aufgänge ohne Ziel (zu leeren Plateaus) wurden entfernt, winzige Hochland-Inseln eingeebnet. In der Natur führen Wege im Gebietsstil über die Hänge (Schneepfad, Bohlen im Moor, Holz- und Steinstufen im Hang). Höhenunterschiede sind klar abgesetzt: helle Oberkanten, Schwellen und Stufennasen, Schlagschatten am Fuß der Hänge und Mauern.
 - Herunterspringen geht genau eine Ebene tief.
 - **Wasserfälle** sitzen an echten Hangkanten: Bach oben, Becken unten, Gischt.
 
@@ -62,10 +63,11 @@ Stand: 1. November 2026 (Version 0.6, Zweig `perf`). Technische Kurzreferenz fü
 | **Hafen Rabenwacht** (`raben`) | Sturm | Fachwerk, Schiefer, Wind | Rabenwacht (Stadt) – Kartenhändler Orrin | Kapitän Rabensturm |
 | **Fluchmangroven** (`mangroven`) | Tiefe | Moor, Kanäle, Pfahlbauten | Moorhain – Kräuterhexe Mabel | Morgrim Korallenhand |
 | **Ende der Welt** (`ende`) | Ende | Gewitter, tote See | – | Malakor |
+| **Wrackzwinger** (`prolog`) | Prolog | Mauern, Wracks, schwarzer Abgrund | – | Riesige Meeresspinne |
 
 Jede Siedlung hat Dorfbewohner, Hühner und Katzen, Rauch aus den Schornsteinen und einen Laden mit **begehbarem Innenraum**. Gegner halten sich von Siedlungen fern.
 
-**Wilde Inseln**: 72 Eilande (klein, mittel, wenige große) mit Namen wie „Reifholm“, „Glutzahn“, „Moderwerder“, „Sturmklippe“ oder „Schädelriff“. Ihr Biom richtet sich nach der Himmelsrichtung (Frost im Norden, Glut im Osten, Sturm im Westen, Moder im Süden, dazwischen Galgeninseln). Jede hat einen Anleger zur Kartenmitte, einen Landeplatz und ein Herzstück:
+**Wilde Inseln**: 64 große Eilande (mittel, groß und einige sehr große; zu kleine gibt es nicht mehr), gleichmäßig zwischen Glutwacht, Königsinseln und Seegebieten verteilt, mit Namen wie „Reifholm“, „Glutzahn“, „Moderwerder“, „Sturmklippe“ oder „Schädelriff“. Ihr Biom richtet sich nach der nächsten Königsinsel bzw. dem nächsten Seegebiet. Jede hat einen Anleger zur Kartenmitte, einen Landeplatz und ein Herzstück:
 - **Piratenlager**: Zelte, Tafel, Kanonen, Fässer, Flagge, Truhe.
 - **Ruine**: Marmorplatz, Säulenring, Bogen, Wächterstatue, Kerzen, Schwertgrab, Truhe.
 - **Friedhof**: Galgen, Gräberreihen, Särge, Käfig, Fackeln, manchmal eine lebende Truhe.
@@ -76,7 +78,7 @@ Jede Siedlung hat Dorfbewohner, Hühner und Katzen, Rauch aus den Schornsteinen 
 Je weiter draußen, desto höher die **Gefahrenstufe** (0–3): Gegner haben mehr Leben (+35 % je Stufe), mehr Schaden (+12 %) und geben mehr Perlen (+40 %). Auf jeder vierten Insel brennt ein Säbelfeuer (Schnellreise).
 
 ### 3.3 Glutwacht im Detail
-Kompakt wie ein Schrein: in der Mitte ein See mit Steg zum Strudel, darum der Ring der brennenden Bossschiffe. Darüber die Feuerterrasse (Ebene 1) mit Säbelfeuer, vier Thronen, Schmied und Händlerin, dann der Schrein mit Bergfried (Ebene 2) und Wachplattformen (Ebene 3). Im Osten ein Seetor-Kanal, im Süden der Anleger. Dort liegt die **Werft** von Schiffsmeister Brack: Plankenkai, Helling mit Rumpf, Kran, Taue, Fässer, Kanone, Laternen, Flagge und Wegweiser. Die Mauern bestehen aus Quadern, Ebenen sind hier echte Mauern mit Treppen.
+Eine **kreisrunde Hafenfestung** nach dem Vorbild des Feuerband-Schreins, ganz im düsteren Piraten-Stil: extrem hohe Ringmauern mit Zinnen, Fackeln und Bannern umschließen mehrere Ringterrassen, die übereinander liegen und durch Treppen verbunden sind. In der Mitte ein See mit Steg zum Strudel, darum der Ring der brennenden Bossschiffe. Darüber die Feuerterrasse mit Säbelfeuer, vier Thronen, Schmied und Händlerin, höher der Schrein mit Bergfried und Wachgängen auf den Mauern. Im Osten ein Seetor-Kanal, im Süden der Anleger. Dort liegt die **Werft** von Schiffsmeister Brack: Plankenkai, Helling mit Rumpf, Kran, Taue, Fässer, Kanone, Laternen, Flagge und Wegweiser. Die Mauern bestehen aus Quadern, Ebenen sind hier echte Mauern mit Treppen.
 
 ### 3.4 Seegebiete
 | Gebiet | Element | Seeungeheuer → Schiff |
@@ -145,6 +147,9 @@ Alle Gegner haben dieselbe Grafikqualität und dieselben Animationen wie Spieler
 | Haie, Geisterschiffe (Fleisch-Geist-Schiff, Geister-Galeere-Chimäre), See-Kraken | auf See |
 
 Gegner können fernkämpfen, Flächenangriffe machen, anstürmen, brennen oder einfrieren. Elite-Varianten sind stärker. Gegner meiden Bossräume und Siedlungen.
+
+### 5.1b Die Riesige Meeresspinne (Prolog)
+Der erste Boss im Wrackzwinger: eine gewaltige, rostig gebänderte Meeresspinne mit Stacheln, Tang und einer Traube leuchtender Augen (3D-Rig). Sie erwacht, wenn man ihr Netz betritt („Eingesponnen“ statt einer Kälte-Anzeige), verschießt Netze (weißer Puff beim Aufprall) und lässt Säure einschlagen. Nicht schwer und nicht zwingend: Tod und Sieg führen beide zum Erwachen im Sarg.
 
 ### 5.2 Die vier Könige (je zwei Gestalten)
 | König | Insel | Zweite Gestalt | Leben |
@@ -269,19 +274,20 @@ Die vollständige Analyse mit allen Formeln, Farbwerten, Shadern und einer Schri
 - **Wasser** (Fotolook): Fresnel-Himmelsspiegelung, Wellenkämme, Sonnen- bzw. Mondglanz als wandernder Lichtpfad mit funkelnden Glitzerpunkten (statt flächig weißer See bei Gegenlicht), pixelgenauer Uferschaum, großflächige Tiefen und Strömungsbänder auf hoher See, Spiegelbilder von Schiffen und Figuren.
 - **Wolkenschatten** ziehen langsam über Land und See.
 - **Nebel** in Bänken, Funken, Glühwürmchen, Asche, Schnee, Regen und Blitze je Gebiet.
+- **Effekte aus PixelFX** (<https://github.com/patch-gg/pixelfx>, MIT): Säbelhiebe in Stahl, Doppelhieb in Messing, Stöße, Klauenhiebe, Trefferfunken, kritische Treffer, Paraden, dumpfe Treffer mit Staub, Landungen, Bodenschläge, Mündungsfeuer, Kugeleinschläge, Explosionen, Flammensäulen, Feuerringe, Frostnovas, Eissplitter, Blitzschläge, Blitztreffer, Erdstacheln, Säure, Platschen, Geysire, Heilung, aufsteigende Seelen in der Gestalt der Figur, zersplitternde Skelette, die Wiedergeburt am Säbelfeuer, Aufsammeln, Beutestrahlen über Fundstücken, Fackel- und Feuerschalenflammen, brennende Wracks und die Geisterflamme der Säbelfeuer. Sie ersetzen die früheren eigenen Hiebbögen, Druckringe und Flammenbilder, werfen Licht und werden von Figuren und Mauern davor verdeckt.
 - Option „Sparsam“ lässt nur die Kippung an (für schwache Geräte).
 
 ### 7.3 Prozedurale Kunst (alles aus Code)
 Jedes Bild ist eine **Leinwand mit vier Kanälen**: Farbe, Normale, Höhe über Grund und Leuchten/Glanz. So kann der Renderer jedes Pixel beleuchten und Schatten werfen lassen.
 
-- **Figuren-Maler** (`chars.rs`): Figuren 64 × 72 Pixel, drei Richtungen (vorn, Seite gespiegelt, hinten), alle Animationen. Über 40 Vorlagen: Gegner, NPCs, Crew, Dorfbewohner, Könige, Malakor (vier Arme, Tentakelbart, Korallenkrone). Bausteine wie Hüte, Mäntel, Bärte, Flügel, Schlangenhaar, Uhrwerk, Leuchtaugen, Auren.
-- **Kreaturen-Rig** (`rig.rs`, `beasts.rs`): Wesen bestehen aus Ellipsoiden, Quadern, Röhren, Häuten und Dreiecken im Raum. Ein Strahlenwerfer rendert sie aus der 3/4-Kamera (Neigung 0,55) mit Mustern (Schuppen, Fell, Nieten …), Innenkonturen und Umriss. Er schreibt die Höhe je Pixel, damit Schatten der Grundfläche folgen.
+- **Figuren-Maler** (`chars.rs`): Figuren 64 × 72 Pixel, drei Richtungen (vorn, Seite gespiegelt, hinten), alle Animationen. Über 40 Vorlagen: Gegner, NPCs, Crew, Dorfbewohner, Könige, Malakor (vier Arme, Tentakelbart, Korallenkrone). Bausteine wie Hüte, Mäntel, Bärte, Flügel, Schlangenhaar, Uhrwerk, Leuchtaugen, Auren. Für alle Menschen gleich: Paspeln an der Mantelöffnung, Saum mit Umschlag, Taschenklappen mit Knopf, Bandelier mit Messingschnalle, Gürteltasche, helle Manschetten, Stiefelstulpen mit Schnalle, Glanz in den Augen; ein Feinschliff je Bild setzt Formlicht an die Kanten, Gewebe- und Faltenstruktur, Haarsträhnen, Metallglanz und Mikrorelief für die Beleuchtung.
+- **Kreaturen-Rig** (`rig.rs`, `beasts.rs`): Wesen bestehen aus Ellipsoiden, Quadern, Röhren, Häuten und Dreiecken im Raum. Ein Strahlenwerfer rendert sie aus der 3/4-Kamera (Neigung 0,55) mit Mustern (Schuppen, Fell, Nieten …), Innenkonturen, Höhlenschatten in Ansätzen und Kehlen, Glanzlichtern auf Metall und Umriss. Er schreibt die Höhe je Pixel, damit Schatten der Grundfläche folgen.
 - **Schiffe** (`ships.rs`): ebenfalls als Rig. 16 Kurse (9 gerendert, der Rest gespiegelt), das eigene Schiff mit sichtbaren Ausbauten, vier Bossschiffe mit eigenem Entwurf und der Fliegende Holländer (Maßstab 6,9).
 - **Gelände** (`terrain.rs`): Der Boden wird in 256-Pixel-Stücken gebacken. Materialien wie Gras, Wiese, Sand, Erde, Pflaster, Marmor, Planken, Basalt, Asche, Schnee, Eis, Schlamm, Fels und Moos haben je Gebiet eigene Paletten. Dazu weiche Materialgrenzen, nasse Uferkanten, Ufersteine, Hänge, Festungsmauern aus Quadern und Naturwege.
-- **Requisiten** (`props.rs`, `flora.rs`, `buildings.rs`, `structures.rs`, `grave.rs`): Bäume mit Kronen, die durchsichtig werden, wenn man dahinter steht, Büsche, Fachwerkhäuser, Festung, Werft, Galgen mit schwingenden Gehängten, Särge, Wracks, Eisberge, Korallen.
-- **Atlas**: alles auf Seiten à 2048² (aktuell 5). Feste Streifen für Spieler, eigenes Schiff und den gerade aktiven Boss werden bei Bedarf neu gezeichnet.
+- **Requisiten** (`props.rs`, `flora.rs`, `buildings.rs`, `structures.rs`, `grave.rs`): Bäume mit Kronen, die durchsichtig werden, wenn man dahinter steht, Büsche, Fachwerkhäuser, Festung, Werft, Galgen mit schwingenden Gehängten, Särge, Wracks, Eisberge, Korallen, hohe Mauern mit Zinnen, Spinnennetze und Kokons. Die **Truhe** ist ein 3D-Modell (Plankenkorpus, gewölbter Deckel, Eisenbänder mit Nieten, Eckbeschläge, Messingschloss; offen mit glimmenden Münzen und Edelsteinen).
+- **Atlas**: alles auf Seiten à 2048² (aktuell gut 5) plus eine Effektseite für die PixelFX-Effekte, die beim Start in wenigen Sekunden Bild für Bild gezeichnet werden. Feste Streifen für Spieler, eigenes Schiff und den gerade aktiven Boss werden bei Bedarf neu gezeichnet.
 - **Schrift und UI**: eigene Pixelschrift mit Umlauten und Sonderzeichen für Fließtext, dazu eine **Zierschrift** (Antiqua-Versalien wie gemeißelt, aus Breitfeder-Strichen mit Keilserifen) für Titel, Banner, Ortsnamen, Fenstertitel und Knöpfe. Rahmen, Symbole.
-- **Boden-Deko** (Gras, Blumen, Klee, Farn, Steinchen, Zweige, Laub, Tang, Treibholz, Wurzeln, Pilze, Kristalle, Knochen, Glut) entsteht je 256-px-Eimer erst beim Zeichnen – mehrfach so dicht wie früher, ohne Speicher und Ladezeit.
+- **Boden-Deko** (Gras, Blumen, Klee, Farn, Steinchen, Zweige, Laub, Tang, Treibholz, Wurzeln, Pilze, Kristalle, Knochen, Glut und Piraten-Kleinkram: Rumflaschen, Fischgräten, Taureste, Plankenstücke, verstreute Münzen, Krabbenpanzer) entsteht je 256-px-Eimer erst beim Zeichnen – mehrfach so dicht wie früher, ohne Speicher und Ladezeit.
 
 ### 7.4 Zonenstimmung
 Jede Zone hat eine eigene Licht- und Farbstimmung (`env.rs`), die weich eingeblendet wird: Grundlicht, Sonne, Nebelfarbe, Wasserfarben, Belichtung, Lichtstrahlen. Stimmungen gibt es für Galgenstrand, Glutwacht, Aschebucht, Frostgrotte, Rabenwacht, Fluchmangroven, Ende der Welt, Innenräume, die Stille vor dem Endkampf, das Gewitter beim Holländer, den Meeresgrund und jedes Seegebiet.

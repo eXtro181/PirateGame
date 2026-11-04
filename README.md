@@ -6,9 +6,10 @@ Live: https://extro181.github.io/PirateGame/
 
 ## Das Spiel
 
-- Du erwachst in einem Sarg auf dem **Galgenstrand**, einem Piratenfriedhof. Von der Festung **Glutwacht** aus segelst du zu vier Inseln mit je einem Geisterkönig (zwei Gestalten) und weit hinaus in vier elementare Seegebiete mit je einem Seeboss, der bei halber Kraft zum Piratenschiff wird.
-- Ein riesiger Ozean (zehnmal die frühere Fläche) mit 72 wilden Inseln – Piratenlager, Ruinen, Friedhöfe, Wrackstrände, wilde Haine, Schatzinseln – und über 400 Seeungeheuern in zehn Arten. Die Seekarte deckt sich beim Erkunden auf.
+- Alles beginnt im **Wrackzwinger**, einer ummauerten Insel voller Schiffswracks über einem bodenlos tiefen Wasserfall, wo die **Riesige Meeresspinne** lauert. Ob du fällst oder sie besiegst und in die Tiefe springst – du erwachst in einem Sarg auf dem **Galgenstrand**, einem Piratenfriedhof. Von der kreisrunden Festung **Glutwacht** in der Mitte der Welt aus segelst du zu vier Inseln mit je einem Geisterkönig (zwei Gestalten) und weit hinaus in vier elementare Seegebiete mit je einem Seeboss, der bei halber Kraft zum Piratenschiff wird.
+- Ein riesiger Ozean (zehnmal die frühere Fläche), strahlenförmig um die Glutwacht angelegt, mit 64 großen wilden Inseln – Piratenlager, Ruinen, Friedhöfe, Wrackstrände, wilde Haine, Schatzinseln – und über 400 Seeungeheuern in zehn Arten. Die Seekarte deckt sich beim Erkunden auf.
 - Galionsfiguren der Könige auf die Throne, alle Seeungeheuer versenkt – dann öffnet sich der **Strudel**, Krakenarme ziehen dein Schiff hinab ans **Ende der Welt**: Seeschlacht gegen den Fliegenden Holländer und seinen roten Kraken, das Meer läuft über den Rand, und am Grund wartet **Malakor, der Ertrunkene König**. Danach Neues Spiel+.
+- Kampf-, Zauber- und Umgebungseffekte aus [PixelFX](https://github.com/patch-gg/pixelfx) (MIT), beim Start Bild für Bild gezeichnet.
 - Siedlungen mit begehbaren Läden, Crew mit eigenen Geschützen, Schiffsausbauten, Höhenebenen mit sanften Hängen und Naturwegen, Profile ohne Passwort (Spielstände im Browser).
 
 Das vollständige Spielkonzept (Idee, Welt, Systeme, Grafik, Klang, Technik) steht in [`docs/SPIELKONZEPT.md`](docs/SPIELKONZEPT.md), die Grafik bis ins Detail mit Nachbau-Anleitung in [`docs/GRAFIK_ANLEITUNG.md`](docs/GRAFIK_ANLEITUNG.md).

@@ -1041,3 +1041,74 @@ pub fn cocoon(seed: i32) -> PropArt {
     }
     prop(&format!("cocoon{seed}"), &r, 64, 56, 8).shadow(16.0, 5.0).circle(10.0)
 }
+
+// ================================================================= Truhe
+
+/// Schatztruhe als 3D-Modell: Plankenkorpus, gewölbter Deckel, Eisenbänder mit Nieten, Eckbeschläge,
+/// Messingschloss mit Schlüsselloch. Offen: Deckel nach hinten geklappt, darin glimmende Münzen und Steine.
+pub fn chest_rig(open: bool) -> PropArt {
+    let mut r = Rig::new();
+    let m = mats(&mut r);
+    let wood = r.mat(mat(0x4A2A16).pat(Pat::Planks(3.2)).spec(12));
+    let wood_d = r.mat(mat(0x2E1A10).pat(Pat::Planks(3.2)));
+    let band = r.mat(mat(0x2C2A30).pat(Pat::Rivets(3.0)).spec(160));
+    let brass = r.mat(mat(0xB88A3A).spec(230).bias(0.12));
+    let inner = r.mat(mat(0x120C0A).soft());
+    let coin = r.mat(mat(0xE0B04A).spec(240).bias(0.25).glow(0.35));
+    let (hx, hy, hz) = (15.5f32, 9.0f32, 7.5f32);
+    r.part();
+    // Korpus mit Sockelleiste
+    r.cube(v(0.0, 0.0, hz), v(hx, hy, hz), wood);
+    r.cube(v(0.0, 0.0, 0.9), v(hx + 0.6, hy + 0.6, 0.9), wood_d);
+    // Eisenbänder um den Korpus
+    for bx in [-9.8f32, 9.8] {
+        r.cube(v(bx, 0.0, hz + 0.2), v(1.2, hy + 0.35, hz + 0.25), band);
+    }
+    // Eckbeschläge unten vorn und hinten
+    for (cx, cy) in [(-hx, hy), (hx, hy), (-hx, -hy), (hx, -hy)] {
+        r.cube(v(cx * 0.97, cy * 0.97, 1.6), v(1.4, 1.4, 1.6), m.iron);
+    }
+    let top = hz * 2.0;
+    if open {
+        // Inneres: dunkler Hohlraum, darin Münzhaufen und Edelsteine
+        r.cube(v(0.0, 0.0, top - 0.6), v(hx - 1.2, hy - 1.2, 0.7), inner);
+        for i in 0..14 {
+            let a = i as f32 * 2.399;
+            let rr = 2.0 + (i % 5) as f32 * 1.7;
+            r.ell(v(a.cos() * rr * 0.9, a.sin() * rr * 0.45, top + 0.4 + (4 - (i % 5)) as f32 * 0.35), v(2.4, 1.8, 1.2), coin);
+        }
+        r.dot(v(-4.0, 1.0, top + 2.4), 0xE0303A, 1.2, 2);
+        r.dot(v(3.5, -1.0, top + 2.2), 0x3A9AE8, 1.2, 2);
+        r.dot(v(0.5, 2.5, top + 2.6), 0x4AE07A, 1.0, 1);
+        r.dot(v(6.0, 1.5, top + 1.8), 0xFFF0B0, 1.6, 1);
+        // Deckel hinten aufgeklappt: Innenseite zeigt nach vorn
+        r.part();
+        let (ly, lz) = (-hy - 1.2, top + hy * 0.85);
+        r.cube_rot(v(0.0, ly, lz), v(hx, 1.3, hy * 0.95), -0.22, 0.0, wood);
+        r.cube_rot(v(0.0, ly + 1.0, lz), v(hx - 1.4, 0.4, hy * 0.8), -0.22, 0.0, wood_d);
+        for bx in [-9.8f32, 9.8] {
+            r.cube_rot(v(bx, ly - 0.2, lz), v(1.1, 1.6, hy * 0.97), -0.22, 0.0, band);
+        }
+    } else {
+        // gewölbter Deckel (halber liegender Zylinder) mit Bändern
+        r.part();
+        let mk = r.mark();
+        r.clip(top, f32::MAX);
+        r.cyl(v(0.0, 0.0, -hx), hy, hy, hx * 2.0, wood);
+        for bx in [-9.8f32, 9.8] {
+            r.cyl(v(0.0, 0.0, bx - 1.1), hy + 0.35, hy + 0.35, 2.2, band);
+        }
+        r.noclip();
+        r.rotate_since(mk, 1, std::f32::consts::FRAC_PI_2, v(0.0, 0.0, 0.0));
+        r.shift_since(mk, v(0.0, 0.0, top));
+        // Schloss: Messingplatte mit Schlüsselloch und Überfall
+        r.part();
+        r.cube(v(0.0, hy + 0.45, top - 1.2), v(2.6, 0.5, 2.8), brass);
+        r.cube(v(0.0, hy + 0.9, top + 1.6), v(1.2, 0.5, 1.6), brass);
+        r.dot(v(0.0, hy + 1.0, top - 1.6), 0x0E0806, 0.0, 1);
+        r.dot(v(0.0, hy + 1.0, top - 2.6), 0x0E0806, 0.0, 1);
+        r.dot(v(-1.6, hy + 1.0, top + 0.4), 0xFFF0C0, 0.6, 1);
+    }
+    let name = if open { "chestOpen" } else { "chest" };
+    prop(name, &r, 52, 50, 6).shadow(20.0, 5.0).boxc(18.0, 6.0)
+}

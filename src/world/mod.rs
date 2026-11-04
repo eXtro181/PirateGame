@@ -226,7 +226,7 @@ fn flora(b: Biome) -> Flora {
         Biome::Coast => Flora {
             grove: &[("deadTree", 1)],
             bush: &["bushSwamp", "reedClump", "bushSwamp"],
-            deco: &["tuftDark", "tuftDark", "tuftDark", "tuftDark", "tuftDark", "tallgrass", "tallgrass", "tallgrass", "pebbles", "stones", "twigs", "roots", "bones", "skull"],
+            deco: &["tuftDark", "tuftDark", "tuftDark", "tuftDark", "tuftDark", "tallgrass", "tallgrass", "tallgrass", "pebbles", "stones", "twigs", "roots", "bones", "skull", "bottle", "ropeBit", "plankBits", "fishbones"],
         },
         Biome::Hub => Flora {
             grove: &[("deadTree", 4), ("emberTree0", 2)],
@@ -3485,11 +3485,14 @@ impl World {
                     if g == Mat::Meadow && rng.chance(0.5) {
                         dk = *rng.pick(&["flowersW", "flowersY", "flowersP", "flowersB", "clover"]);
                     }
-                    if matches!(g, Mat::Marble | Mat::Plank | Mat::Cobble) && !matches!(dk, "pebbles" | "stones" | "leaves") {
+                    if matches!(g, Mat::Marble | Mat::Plank | Mat::Cobble) && !matches!(dk, "pebbles" | "stones" | "leaves" | "bottle" | "ropeBit" | "coins" | "plankBits") {
                         continue;
                     }
                     if g == Mat::Sand && rng.chance(0.4) {
-                        dk = *rng.pick(&["shell", "pebbles", "seaweed", "driftwood", "shell"]);
+                        dk = *rng.pick(&["shell", "pebbles", "seaweed", "driftwood", "shell", "fishbones", "crabShell", "ropeBit", "plankBits", "bottle"]);
+                    }
+                    if matches!(g, Mat::Cobble | Mat::Plank) && rng.chance(0.06) {
+                        dk = *rng.pick(&["bottle", "ropeBit", "coins", "plankBits"]);
                     }
                     // auffällige Stücke selten (sonst ein Feld aus Schädeln und Laternen)
                     let keep = match dk {
@@ -3498,6 +3501,9 @@ impl World {
                         "lanternStalk" => 0.5,
                         "crystalS" => 0.6,
                         "shell" | "driftwood" => 0.6,
+                        "coins" => 0.3,
+                        "bottle" | "fishbones" | "crabShell" => 0.5,
+                        "ropeBit" | "plankBits" => 0.6,
                         "mushroomR" | "mushroomB" => 0.7,
                         _ => 1.0,
                     };
