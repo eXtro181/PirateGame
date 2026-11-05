@@ -1079,6 +1079,8 @@ impl Game {
             self.gain_pearls(SPIDER_PEARLS as i64, Some((x, y)));
             self.save.spider = true;
             self.save.shards += 1;
+            // erst jetzt erscheinen Sarg und Fackeln am Wasserfall
+            self.reveal_prolog_coffin(1.4);
             self.boss = None;
             self.persist(true);
             return;

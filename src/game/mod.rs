@@ -169,6 +169,11 @@ pub struct Game {
     pub cam_f: (f32, f32),
     /// Zwischensequenz hält die Kamera auf diesen Punkt
     pub cam_hold: Option<(f32, f32)>,
+    /// Tod im Prolog: die Sarg-Sequenz beginnt zu Beginn des nächsten Bilds (stirbt man durch einen
+    /// Hieb der Spinne, ist sie während ihres eigenen Zugs aus der Boss-Liste genommen)
+    pub coffin_due: bool,
+    /// Sarg und Fackeln am Wasserfall erscheinen (Sekunden seit Beginn; negativ = Wartezeit)
+    pub coffin_reveal: Option<f32>,
     pub cam: (f32, f32),
     pub shake_k: f32,
     pub flash_c: [f32; 4],
@@ -281,6 +286,8 @@ impl Game {
             critters: vec![],
             cam_f: (0.0, 0.0),
             cam_hold: None,
+            coffin_due: false,
+            coffin_reveal: None,
             cam: (0.0, 0.0),
             shake_k: 0.0,
             flash_c: [1.0, 1.0, 1.0, 0.0],
@@ -353,6 +360,8 @@ impl Game {
             sb.climb = 1.0;
         }
         g.bosses.push(sb);
+        // Sarg und Fackeln am Wasserfall gibt es erst, wenn der Kampf entschieden ist
+        g.prolog_coffin_props(g.save.prolog && !g.save.spider);
         let ar = g.world.arenas.get("ende").cloned().unwrap_or(crate::world::Arena { x: 0.0, y: 0.0, r: 100.0, ry: 80.0 });
         let mut mb = Boss::new("mega", &ar);
         if g.save.end_won {
@@ -737,6 +746,10 @@ impl Game {
                 self.respawn(art);
             }
         }
+        if std::mem::take(&mut self.coffin_due) {
+            self.start_coffin(true);
+        }
+        self.update_coffin_reveal(dt);
         self.update_cutscene(dt, art);
         if !modal && self.cutscene.is_none() {
             if self.input.pressed(Act::Menu) {
@@ -1212,6 +1225,9 @@ impl Game {
             // der Sarg am Wasserfall: erst nach dem Sieg über die Spinne steigt man hinein
             if let Some(ci) = self.world.prolog_coffin_prop {
                 let (x, y) = self.world.prolog_coffin;
+                if self.world.props[ci].hidden {
+                    return out;
+                }
                 let (label, act) = if s.spider { ("In den Sarg steigen", Use::Coffin) } else { ("Ein leerer Sarg", Use::CoffinEmpty) };
                 // Fokus in der Sargmitte: von vorn, von der Seite und vom Kopfende erreichbar
                 out.extend(f(x, y - 18.0, 58.0, label, act, Some(ci)));
@@ -1333,7 +1349,7 @@ impl Game {
             // Schriftzug steht nur kurz, damit man sieht, was sie tut
             self.ui.banner("DU BIST ERTRUNKEN", "", "death", 2.0);
             self.lock = None;
-            self.start_coffin(true);
+            self.coffin_due = true;
             return;
         }
         self.ui.banner("DU BIST ERTRUNKEN", "", "death", 3.4);

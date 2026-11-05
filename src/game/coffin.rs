@@ -26,6 +26,10 @@ const RUN_Y: f32 = 100.0;
 const DRAG_SPEED: f32 = 95.0;
 const LEAVE_DUR: f32 = 2.4;
 const DOWN_DUR: f32 = 2.8;
+/// Sarg und Fackeln erscheinen erst nach dem Kampf: Dauer des Einblendens, Zeitpunkte, zu denen
+/// sich die linke und die rechte Fackel entzünden (s ab Beginn)
+const REVEAL_DUR: f32 = 1.7;
+const REVEAL_LIT: [f32; 2] = [0.6, 0.95];
 
 /// Zeitplan einer Sarg-Sequenz (Sekunden ab Beginn).
 #[derive(Clone, Copy, Debug)]
@@ -234,12 +238,19 @@ impl Game {
             let i = spider.unwrap_or(0);
             let b = &mut self.bosses[i];
             if b.state == BS::Dormant || b.hidden {
-                // noch nicht erwacht: sie kommt aus dem Dunkel heran
+                // noch nicht erwacht: lauert sie in der Klippenwand, setzt sie mit einem Satz oben
+                // an der Kante auf, sonst kommt sie aus dem Dunkel heran
                 let (hx, hy) = b.home;
-                let d = (hx - x0).hypot(hy - y0).max(1.0);
-                let k = if d > 420.0 { 360.0 / d } else { 1.0 };
-                b.a.x = x0 + (hx - x0) * k;
-                b.a.y = y0 + (hy - y0) * k;
+                if b.climb > 0.0 && self.world.prolog_lurk_top > 0.0 {
+                    b.a.x = hx;
+                    b.a.y = self.world.prolog_lurk_top - 56.0;
+                    self.fx.burst("dust", hx, b.a.y, 14, BurstOpt { speed: Some(150.0), up: Some(50.0), ..Default::default() });
+                } else {
+                    let d = (hx - x0).hypot(hy - y0).max(1.0);
+                    let k = if d > 420.0 { 360.0 / d } else { 1.0 };
+                    b.a.x = x0 + (hx - x0) * k;
+                    b.a.y = y0 + (hy - y0) * k;
+                }
                 b.state = BS::Idle;
                 b.hidden = false;
             }
@@ -256,6 +267,13 @@ impl Game {
         } else {
             a = ((x0 - cx).hypot(y0 - (cy + STAND)) / 80.0).clamp(0.25, 4.0);
         }
+        if defeat {
+            // jetzt erst erscheinen Sarg und Fackeln, die Spinne bringt den Leichnam dorthin
+            self.reveal_prolog_coffin(0.3);
+        } else {
+            self.coffin_reveal = None;
+            self.prolog_coffin_props(false);
+        }
         bevy::log::info!("Prolog-Ende am Sarg ({}): Wege {a:.1} s / {c:.1} s", if defeat { "Niederlage" } else { "Sieg" });
         self.cutscene = Some(Cut::Coffin { t: 0.0, defeat, x0, y0, sx, sy, a, c });
     }
@@ -268,6 +286,9 @@ impl Game {
         if defeat {
             self.player.hp = 0.0;
             self.player_died();
+            if std::mem::take(&mut self.coffin_due) {
+                self.start_coffin(true);
+            }
         } else {
             self.save.spider = true;
             self.start_coffin(false);
@@ -275,8 +296,66 @@ impl Game {
         if let Some(Cut::Coffin { t: ref mut ct, .. }) = self.cutscene {
             *ct = t;
         }
+        if t > 1.0 {
+            self.coffin_reveal = None;
+            self.prolog_coffin_props(false);
+        }
         if t > 2.0 {
             self.ui.banners.clear();
+        }
+    }
+
+    /// Sarg, Deckel und die beiden Fackeln am Wasserfall verbergen bzw. zeigen (Requisiten; verborgen
+    /// sind sie auch nicht im Weg).
+    pub(super) fn prolog_coffin_props(&mut self, hidden: bool) {
+        let mut ids = self.world.prolog_torch_props.clone();
+        ids.extend(self.world.prolog_coffin_prop);
+        for i in ids {
+            self.world.props[i].hidden = hidden;
+        }
+    }
+
+    /// Der Kampf ist entschieden: nach `delay` s steigt Nebel auf, Sarg und Fackeln blenden ein, die
+    /// Fackeln entzünden sich nacheinander.
+    pub fn reveal_prolog_coffin(&mut self, delay: f32) {
+        let Some(ci) = self.world.prolog_coffin_prop else { return };
+        if self.coffin_reveal.is_some() || !self.world.props[ci].hidden {
+            return;
+        }
+        self.coffin_reveal = Some(-delay);
+    }
+
+    pub(super) fn update_coffin_reveal(&mut self, dt: f32) {
+        let Some(t0) = self.coffin_reveal else { return };
+        let t = t0 + dt;
+        let crossed = |m: f32| t0 < m && t >= m;
+        let (cx, cy) = self.world.prolog_coffin;
+        if crossed(0.0) {
+            // Nebel quillt auf, der Sarg schält sich heraus
+            self.sfx("rise");
+            self.shake(3.0);
+            self.fx.px.play(Px::Poof, cx, cy - 10.0).scale(1.8).tint([150, 160, 180, 255]);
+            self.fx.burst("smoke", cx, cy - 16.0, 18, BurstOpt { speed: Some(50.0), up: Some(26.0), ..Default::default() });
+            self.fx.rise("soul", cx, cy - 10.0, 10, 40.0, None);
+            for &(tx, ty) in &self.world.prolog_torches {
+                self.fx.burst("smoke", tx, ty - 30.0, 8, BurstOpt { speed: Some(40.0), up: Some(30.0), ..Default::default() });
+            }
+        }
+        for (k, &lt) in REVEAL_LIT.iter().enumerate() {
+            if crossed(lt) {
+                if let Some(&(tx, ty)) = self.world.prolog_torches.get(k) {
+                    self.sfx("kindle");
+                    let z = sw_art::pixellab::TORCH_FIRE;
+                    self.fx.burst("ember", tx, ty - z, 12, BurstOpt { speed: Some(90.0), up: Some(50.0), ..Default::default() });
+                    self.fx.px.play(Px::Pillar, tx, ty).z(z - 6.0).scale(0.35);
+                }
+            }
+        }
+        if t >= REVEAL_DUR {
+            self.prolog_coffin_props(false);
+            self.coffin_reveal = None;
+        } else {
+            self.coffin_reveal = Some(t);
         }
     }
 
@@ -553,26 +632,36 @@ impl Game {
             return;
         }
         let Some(lid) = art.map.get("x:lid") else { return };
-        // zwei sehr helle Piratenfackeln links und rechts (die Flamme zeichnet die Requisite) und
-        // warmes Licht im offenen Sarg, damit man ihn in der Dunkelheit am Fall sieht
-        let pulled = match self.cutscene {
-            Some(Cut::Coffin { t, defeat, a, c, .. }) => {
-                let p = plan(defeat, a, c);
-                t >= p.pull + PULL_DUR
+        // Sarg und Fackeln gibt es erst nach dem Kampf (solange verborgen, auch kein Licht)
+        let in_cut = matches!(self.cutscene, Some(Cut::Coffin { .. }));
+        let shown = self.world.prolog_coffin_prop.map(|i| !self.world.props[i].hidden).unwrap_or(true);
+        let revealing = self.coffin_reveal.is_some();
+        if let Some(rt) = self.coffin_reveal {
+            self.draw_coffin_reveal(art, f, rt);
+        } else if shown || in_cut {
+            // zwei sehr helle Piratenfackeln links und rechts (die Flamme zeichnet die Requisite)
+            // und warmes Licht im offenen Sarg, damit man ihn in der Dunkelheit am Fall sieht
+            let pulled = match self.cutscene {
+                Some(Cut::Coffin { t, defeat, a, c, .. }) => {
+                    let p = plan(defeat, a, c);
+                    t >= p.pull + PULL_DUR
+                }
+                _ => false,
+            };
+            for &(tx, ty) in &self.world.prolog_torches {
+                f.light(LightDef { x: tx, y: ty + 4.0, z: 70.0, r: 320.0, col: [2.3, 1.3, 0.56], flicker: 0.18 });
             }
-            _ => false,
-        };
-        for &(tx, ty) in &self.world.prolog_torches {
-            f.light(LightDef { x: tx, y: ty + 4.0, z: 70.0, r: 320.0, col: [2.3, 1.3, 0.56], flicker: 0.18 });
-        }
-        if !pulled {
-            f.light(LightDef { x: cx0, y: cy0 + 18.0, z: 46.0, r: 160.0, col: [1.15, 0.82, 0.5], flicker: 0.12 });
+            if !pulled {
+                f.light(LightDef { x: cx0, y: cy0 + 18.0, z: 46.0, r: 160.0, col: [1.15, 0.82, 0.5], flicker: 0.12 });
+            }
         }
         let (t, defeat, p0, a, c) = match self.cutscene {
             Some(Cut::Coffin { t, defeat, x0, y0, a, c, .. }) => (t, defeat, (x0, y0), a, c),
             _ => {
                 // wartet: offen, der Deckel lehnt daneben
-                f.sprite_z(lid, cx0 + 30.0, cy0 + 8.0, cy0 + 2.0, SprOpt { rot: 0.35, ..Default::default() });
+                if shown && !revealing {
+                    f.sprite_z(lid, cx0 + 30.0, cy0 + 8.0, cy0 + 2.0, SprOpt { rot: 0.35, ..Default::default() });
+                }
                 return;
             }
         };
@@ -597,7 +686,9 @@ impl Game {
         } else {
             (on.0, on.1, tilt, 10.0)
         };
-        f.sprite_z(lid, lx, ly, cy + 2.0, SprOpt { rot, ev, ..Default::default() });
+        if !revealing {
+            f.sprite_z(lid, lx, ly, cy + 2.0, SprOpt { rot, ev, ..Default::default() });
+        }
         if defeat {
             self.draw_coffin_cocoon(art, f, &p, t, p0, (cx, cy));
         } else {
@@ -608,6 +699,36 @@ impl Game {
             f.light(LightDef { x: cx, y: cy - 14.0, z: 70.0, r: 210.0, col: [0.55, 0.7, 0.78], flicker: 0.05 });
         }
         self.draw_coffin_arms(art, f, &p, t, (cx0, cy0), (cx, cy));
+    }
+
+    /// Sarg, Deckel und Fackeln blenden ein (die Requisiten selbst sind solange verborgen), die
+    /// Fackeln entzünden sich nacheinander.
+    fn draw_coffin_reveal(&self, art: &Art, f: &mut Frame, rt: f32) {
+        if rt < 0.0 {
+            return;
+        }
+        let (cx, cy) = self.world.prolog_coffin;
+        let a = smooth(rt / (REVEAL_DUR * 0.8));
+        let tint = [255, 255, 255, (a * 255.0) as u8];
+        let flip = |i: Option<usize>| i.map(|i| self.world.props[i].flip).unwrap_or(false);
+        if let Some(def) = art.prop("coffinEmpty") {
+            f.sprite_z(&def.spr, cx, cy, cy, SprOpt { flip: flip(self.world.prolog_coffin_prop), tint, ..Default::default() });
+        }
+        if let Some(lid) = art.map.get("x:lid") {
+            f.sprite_z(lid, cx + 30.0, cy + 8.0, cy + 2.0, SprOpt { rot: 0.35, tint, ..Default::default() });
+        }
+        f.light(LightDef { x: cx, y: cy + 18.0, z: 46.0, r: 160.0, col: [1.15 * a, 0.82 * a, 0.5 * a], flicker: 0.12 });
+        let Some(def) = art.prop("plTorch") else { return };
+        for (k, &(tx, ty)) in self.world.prolog_torches.iter().enumerate() {
+            f.sprite_z(&def.spr, tx, ty, ty, SprOpt { flip: flip(self.world.prolog_torch_props.get(k).copied()), tint, ..Default::default() });
+            let lit = rt - REVEAL_LIT[k.min(1)];
+            if lit > 0.0 {
+                let g = smooth(lit / 0.4);
+                let z = sw_art::pixellab::TORCH_FIRE + 9.0;
+                crate::pfx::draw_loop(f, &art.pfx, Px::Brazier, tx, ty, z, self.t + k as f32 * 0.7, (0.8 * g).max(0.1), [255; 4], 1.7);
+                f.light(LightDef { x: tx, y: ty + 4.0, z: 70.0, r: 320.0 * (0.3 + 0.7 * g), col: [2.3 * g, 1.3 * g, 0.56 * g], flicker: 0.18 });
+            }
+        }
     }
 
     /// Sieg: hineinsteigen, umdrehen, hinlegen (wie das Erwachen, nur rückwärts).

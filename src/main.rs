@@ -275,6 +275,12 @@ fn setup(world: &mut bevy::ecs::world::World) {
                     g.debug_coffin(app.params.contains_key("defeat"), t);
                 }
             }
+            if let Some(hp) = app.params.get("hp").and_then(|v| v.parse::<f32>().ok()) {
+                // Testlauf: mit so vielen Lebenspunkten beginnen (z. B. &hp=1: der erste Treffer tötet)
+                if let Scene::Play(g) = &mut app.scene {
+                    g.player.hp = hp.clamp(1.0, g.player.d.max_hp);
+                }
+            }
             if app.params.contains_key("die") {
                 // Testlauf: gleich sterben (z. B. im Prolog: Erwachen im Sarg prüfen)
                 if let Scene::Play(g) = &mut app.scene {

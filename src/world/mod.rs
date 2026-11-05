@@ -507,6 +507,8 @@ pub struct World {
     pub prolog_lurk: (f32, f32),
     pub prolog_lurk_top: f32,
     pub prolog_torches: Vec<(f32, f32)>,
+    /// die Requisiten der beiden Fackeln (erscheinen mit dem Sarg)
+    pub prolog_torch_props: Vec<usize>,
     /// Häuser mit rauchendem Schornstein (Indizes in `props`)
     pub chimneys: Vec<usize>,
     cur: Zone,
@@ -585,6 +587,7 @@ impl World {
             prolog_lurk: (0.0, 0.0),
             prolog_lurk_top: 0.0,
             prolog_torches: vec![],
+            prolog_torch_props: vec![],
             chimneys: vec![],
             cur: Zone::Kueste,
             cur_biome: Biome::Coast,
@@ -2287,9 +2290,11 @@ impl World {
         }
         // zwei sehr helle Piratenfackeln links und rechts des Sargs
         self.prolog_torches.clear();
+        self.prolog_torch_props.clear();
         for ox in [-56.0f32, 62.0] {
-            self.prop_x("plTorch", x + ox, y + 8.0, |_| {});
+            let i = self.prop_x("plTorch", x + ox, y + 8.0, |_| {});
             self.prolog_torches.push((x + ox, y + 8.0));
+            self.prolog_torch_props.push(i);
         }
     }
 
