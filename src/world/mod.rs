@@ -2284,7 +2284,10 @@ impl World {
             // Sarg, Stehplatz davor und der Streifen bis zur Kante, das Revier der Spinne westlich
             // davon (Kampf und Zwischensequenzen)
             let arena = dx > -560.0 && dx < 130.0 && dy > -300.0 && dy < 90.0;
-            if (dx.abs() < 76.0 && dy > -150.0 && dy < 90.0) || dx.hypot(dy) < 100.0 || arena {
+            // Kokons (sehen aus wie ein eingesponnener Leichnam) auch im weiteren Umkreis des
+            // Kampfes nicht, sonst hielte man einen für den eigenen
+            let cocoon = (p.kind == "plCocoon" || p.kind.starts_with("cocoon")) && dx > -800.0 && dx < 300.0 && dy > -520.0 && dy < 140.0;
+            if (dx.abs() < 76.0 && dy > -150.0 && dy < 90.0) || dx.hypot(dy) < 100.0 || arena || cocoon {
                 self.props[pi].hidden = true;
             }
         }

@@ -16,8 +16,10 @@ pub const GRAB_DUR: f32 = 1.3;
 pub const PULL_DUR: f32 = 4.8;
 /// Stehplatz vor dem Sarg (Süden), px vom Sargfuß
 const STAND: f32 = 24.0;
-/// Niederlage: Abstand der Spinne zur Leiche beim Einspinnen und Länge des Fadens beim Schleifen
+/// Niederlage: Abstand der Spinne zur Leiche beim Einspinnen; Länge des Fadens beim Schleifen (so
+/// lang, dass der Kokon hinter ihrem Hinterleib sichtbar bleibt)
 const SPIDER_REACH: f32 = 84.0;
+const DRAG_LEN: f32 = 135.0;
 /// Niederlage: so lange steht der Todesschriftzug, die Spinne faucht und wartet
 const SPIDER_WAIT: f32 = 1.8;
 /// Niederlage: Schleifweg zuletzt quer über dem Kopfende des Sargs (px nördlich des Sargfußes),
@@ -93,8 +95,8 @@ fn finish(mut p: Plan) -> Plan {
 
 /// Schleifweg der Niederlage (Punkte, Bogenlängen): vom Leichnam zum Haltepunkt der Spinne neben
 /// dem Kopfende des Sargs, zuletzt quer über das Kopfende hinweg – so liegt der Kokon, der an einem
-/// Faden der Länge `SPIDER_REACH` hinterherschleift, am Ende genau dort, und die Spinne steht auf
-/// der dem Leichnam abgewandten Seite (`side` 1 = östlich).
+/// Faden der Länge `DRAG_LEN` hinterherschleift, am Ende neben dem Kopfende, und die Spinne steht
+/// auf der dem Leichnam abgewandten Seite (`side` 1 = östlich).
 struct Drag {
     pts: Vec<(f32, f32)>,
     cum: Vec<f32>,
@@ -137,9 +139,13 @@ impl Drag {
         let u = ((s - self.cum[i - 1]) / l).clamp(0.0, 1.0);
         ((a.0 + (b.0 - a.0) * u, a.1 + (b.1 - a.1) * u), ((b.0 - a.0) / l, (b.1 - a.1) / l))
     }
-    /// Bogenlänge der Spinne bzw. des Kokons zur Zeit t
+    /// Bogenlänge der Spinne zur Zeit t
     fn spider_s(&self, p: &Plan, t: f32) -> f32 {
         SPIDER_REACH + (self.len() - SPIDER_REACH).max(0.0) * smooth(part(t, p.carry, p.lay))
+    }
+    /// Bogenlänge des Kokons: er rührt sich erst, wenn der Faden gespannt ist
+    fn cocoon_s(&self, p: &Plan, t: f32) -> f32 {
+        (self.spider_s(p, t) - DRAG_LEN).max(0.0)
     }
 }
 
@@ -270,6 +276,13 @@ impl Game {
         if defeat {
             // jetzt erst erscheinen Sarg und Fackeln, die Spinne bringt den Leichnam dorthin
             self.reveal_prolog_coffin(0.3);
+            // Kokons der Insel, die am Todesort liegen, sähen aus wie ein zweiter Leichnam, der
+            // liegen bleibt, wenn sie den echten fortschleift: weg damit
+            for p in self.world.props.iter_mut() {
+                if !p.hidden && (p.kind == "plCocoon" || p.kind.starts_with("cocoon")) && (p.x - x0).hypot(p.y - y0) < 170.0 {
+                    p.hidden = true;
+                }
+            }
         } else {
             self.coffin_reveal = None;
             self.prolog_coffin_props(false);
@@ -466,7 +479,7 @@ impl Game {
                 Some(((p0.0 + s.0) * 0.5, (p0.1 + s.1) * 0.5 - 20.0))
             } else if t < p.lay {
                 // zwischen Spinne und Kokon
-                let (q, _) = dr.at(dr.spider_s(&p, t) - SPIDER_REACH);
+                let (q, _) = dr.at(dr.cocoon_s(&p, t));
                 Some(((q.0 + s.0) * 0.5, (q.1 + s.1) * 0.5 - 10.0))
             } else if t < p.leave {
                 Some((cx + dr.side * 40.0, cy - 50.0))
@@ -588,7 +601,7 @@ impl Game {
         }
         if t > p.carry && t < p.lay {
             // der Kokon schleift über den Fels: Staub und Seidenfetzen
-            let (q, _) = dr.at(dr.spider_s(p, t) - SPIDER_REACH);
+            let (q, _) = dr.at(dr.cocoon_s(p, t));
             if rnd() < 0.35 {
                 self.fx.burst("dust", q.0 + rr(-10.0, 10.0), q.1 + 2.0, 1, BurstOpt { speed: Some(22.0), up: Some(8.0), ..Default::default() });
             }
@@ -776,7 +789,7 @@ impl Game {
         let lp = if t < p.carry {
             p0
         } else if t < p.lay {
-            dr.at(dr.spider_s(p, t) - SPIDER_REACH).0
+            dr.at(dr.cocoon_s(p, t)).0
         } else {
             inside
         };
@@ -807,7 +820,7 @@ impl Game {
         };
         if t < p.lay {
             // liegt bzw. schleift am Faden hinter der Spinne her
-            let s = if t < p.carry { 0.0 } else { dr.spider_s(p, t) - SPIDER_REACH };
+            let s = if t < p.carry { 0.0 } else { dr.cocoon_s(p, t) };
             let (q, d) = dr.at(s);
             let moving = t > p.carry && t < p.lay - 0.2;
             let wob = if moving { (t * 11.0).sin() * 0.05 } else { 0.0 };
@@ -825,7 +838,7 @@ impl Game {
             }
             return;
         }
-        let (q, d) = dr.at(len - SPIDER_REACH);
+        let (q, d) = dr.at((len - DRAG_LEN).max(0.0));
         let g = part(t, p.lay + 0.55, p.put);
         if g <= 0.0 {
             // sie dreht sich um, der Faden reißt
