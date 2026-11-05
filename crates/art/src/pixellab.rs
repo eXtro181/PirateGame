@@ -22,6 +22,8 @@ pub const FOREST: u8 = 2;
 pub const MUD: u8 = 0;
 pub const ROCK: u8 = 1;
 pub const MOSS: u8 = 2;
+/// Prolog: dunkles Gras (dritter Satz der Kette, totes Moos ↔ Gras)
+pub const PGRASS: u8 = 3;
 /// erster Satz der Kette: Schädelhorn bzw. Prolog
 pub const SET_ISLE: usize = 0;
 pub const SET_PROLOG: usize = 2;
@@ -31,11 +33,12 @@ pub const SET_PROLOG: usize = 2;
 const WANG: [(u8, u8); 16] = [(2, 1), (3, 1), (2, 2), (1, 2), (2, 0), (3, 2), (0, 1), (3, 3), (1, 1), (2, 3), (1, 0), (0, 2), (3, 0), (0, 0), (1, 3), (0, 3)];
 const TILE: i32 = 32;
 
-static SETS: [&[u8]; 4] = [
+static SETS: [&[u8]; 5] = [
     include_bytes!("../assets/pixellab/ts_sand_grass.png"),
     include_bytes!("../assets/pixellab/ts_grass_forest.png"),
     include_bytes!("../assets/pixellab/ts_mud_rock.png"),
     include_bytes!("../assets/pixellab/ts_rock_moss.png"),
+    include_bytes!("../assets/pixellab/ts_moss_grass.png"),
 ];
 
 /// Dekodiertes Bild (RGBA, Zeilen von oben)
@@ -90,13 +93,16 @@ impl Ground {
     /// Farbe am Kachelpixel (lx, ly) für die Ecken [NW, NE, SW, SE] in der Kette ab Satz `base`.
     /// Benachbarte Ecken unterscheiden sich höchstens um ein Terrain (unten grenzt nie an oben).
     pub fn texel(&self, base: usize, c: [u8; 4], lx: i32, ly: i32) -> Rgba {
+        // Kette aus zwei (Schädelhorn) bzw. drei Sätzen (Prolog); Satz k verbindet Terrain k und k+1
+        let n = if base == SET_PROLOG { 3 } else { 2 };
         let mn = *c.iter().min().unwrap_or(&0);
         let mx = (*c.iter().max().unwrap_or(&0)).min(mn + 1);
-        // reine Kachel: Sand und Gras aus dem ersten Satz, Wald als „oben“ des zweiten
+        // reine Kachel: das unterste Terrain als „unten“ des ersten Satzes, jedes andere als „oben“
+        // des Satzes darunter
         let (set, lo) = if mn == mx {
-            if mn >= FOREST { (1, GRASS) } else { (0, SAND) }
+            if mn == 0 { (0, 0) } else { ((mn as usize - 1).min(n - 1), mn - 1) }
         } else {
-            ((mn as usize).min(1), mn)
+            ((mn as usize).min(n - 1), mn)
         };
         let m = c.iter().enumerate().fold(0usize, |acc, (k, &v)| acc | (((v.min(mx) > lo) as usize) << (3 - k)));
         let (tx, ty) = WANG[m];
@@ -125,7 +131,7 @@ macro_rules! obj {
     };
 }
 
-pub fn objects() -> [Obj; 26] {
+pub fn objects() -> [Obj; 33] {
     [
         obj!("plDeadTree", "deadTree.png", (20.0, 6.0), 5.0, (0.0, 0.0), Some(0.62), 24),
         obj!("plCypress", "cypress.png", (20.0, 6.0), 5.0, (0.0, 0.0), Some(0.66), 34),
@@ -154,6 +160,14 @@ pub fn objects() -> [Obj; 26] {
         obj!("plTorch", "pTorch.png", (10.0, 4.0), 5.0, (0.0, 0.0), None, 0),
         obj!("plWebTree", "pWebTree.png", (20.0, 6.0), 5.0, (0.0, 0.0), Some(0.6), 20),
         obj!("plRocksP", "pRocks.png", (22.0, 7.0), 14.0, (0.0, 0.0), None, 0),
+        // Prolog: natürliche Vegetation und die Nordmauer
+        obj!("plGrass", "pGrass.png", (11.0, 3.5), 0.0, (0.0, 0.0), None, 22),
+        obj!("plLeafTree", "pLeafTree.png", (18.0, 6.0), 5.0, (0.0, 0.0), Some(0.62), 26),
+        obj!("plReeds", "pReeds.png", (10.0, 3.0), 0.0, (0.0, 0.0), None, 28),
+        obj!("plMushrooms", "pMushrooms.png", (10.0, 3.0), 0.0, (0.0, 0.0), None, 0),
+        obj!("plLog", "pLog.png", (32.0, 8.0), 0.0, (30.0, 8.0), None, 0),
+        obj!("plTree", "pTree.png", (28.0, 8.0), 6.0, (0.0, 0.0), Some(0.72), 20),
+        obj!("plWallH", "pWallH.png", (44.0, 8.0), 0.0, (45.0, 22.0), None, 0),
     ]
 }
 
@@ -246,6 +260,10 @@ pub fn prop_arts() -> Vec<PropArt> {
             if o.name == "plFirePit" {
                 // glimmende Glut: warmes, flackerndes Licht über der Feuerstelle
                 pa = pa.light(0.0, -8.0, 16.0, 170.0, [1.9, 0.9, 0.35], 0.3);
+            }
+            if o.name == "plMushrooms" {
+                // die Hüte schimmern schwach (kaltes Licht im Unterholz)
+                pa = pa.light(0.0, -6.0, 10.0, 70.0, [0.35, 0.55, 0.5], 0.08);
             }
             if o.name == "plTorch" {
                 // Piratenfackel: helles Feuer im Eisenkorb (die Flamme zeichnet PixelFX)

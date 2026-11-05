@@ -1052,8 +1052,6 @@ pub fn build(frame: &mut Frame) -> Art {
             stc::buoy(),
             stc::hull_arch(),
             stc::chain_post(),
-            stc::high_wall(0),
-            stc::high_wall(1),
             stc::high_wall_v(),
         ];
         for i in 0..2 {

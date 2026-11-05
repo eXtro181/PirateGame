@@ -31,6 +31,8 @@ pub const CORE: (i32, i32) = (648, 480);
 pub const HUB: (i32, i32) = (888, 640);
 /// Prolog-Insel in der Nordwest-Ecke (Kachelrahmen x0, y0, x1, y1): für Schiffe gesperrt
 pub const PROLOG: (i32, i32, i32, i32) = (16, 16, 236, 196);
+/// Wrackfriedhof des Prologs (Kacheln relativ zur Inselmitte)
+pub(super) const PROLOG_WRECKS: (i32, i32) = (-28, 3);
 /// Mitte des Titelbilds (offenes Meer nordöstlich der Glutwacht, Kacheln)
 pub const TITLE_T: (i32, i32) = (978, 532);
 /// Ende der Welt: 156 × 120 Kacheln in der Südost-Ecke
@@ -819,8 +821,8 @@ impl World {
             self.scatter(r, &mut rng);
         }
         // Prolog: Boden und Bewuchs aus PixelLab statt prozedural
-        self.pl_prolog_ground();
-        self.pl_prolog_props();
+        let nat = self.pl_prolog_ground();
+        self.pl_prolog_props(&nat);
         lap("Bewuchs", &mut t);
         self.settle_on_cliffs();
         self.clear_prolog_coffin();
@@ -2019,7 +2021,7 @@ impl World {
     /// tiefen Wasserfall. Überall Wracks – die Beute der Riesigen Meeresspinne, eingesponnen in
     /// Netze und Kokons. Ein Bach entspringt an der Nordmauer und stürzt im Süden über die Klippe.
     /// Am Abbruch liegt das Revier der Spinne; dahinter bleibt nur der Sprung.
-    fn layout_prolog(&mut self, rng: &mut Rng) {
+    fn layout_prolog(&mut self, _rng: &mut Rng) {
         let d = Zone::Prolog.def();
         let (cx, cy) = (d.cx, d.cy);
         let (x0, y0, x1, y1) = PROLOG;
@@ -2085,12 +2087,16 @@ impl World {
         }
         // ---- hohe Mauern: Norden, Westen, Osten; Türme an den Ecken und an der Klippe
         let (wx0, wx1, wy0) = (cx - 50, cx + 50, cy - 40);
-        let mut k = 0;
-        let mut x = wx0 + 2;
-        while x <= wx1 - 2 {
-            self.prop_x(&format!("highWall{}", k % 2), ((x * TS) as f32) + 16.0, (wy0 * TS) as f32 + 26.0, |_| {});
-            k += 1;
-            x += 4;
+        // Nordmauer aus dem PixelLab-Mauerstück (90 px breit, nahtlos aneinander), alle acht Stücke
+        // eine Fackel davor
+        let (xa, xb) = ((wx0 * TS) as f32 + 46.0, (wx1 * TS) as f32 - 14.0);
+        let n = ((xb - xa) / 90.0).ceil() as i32;
+        for k in 0..n {
+            let x = xa + 45.0 + k as f32 * 90.0;
+            self.prop_x("plWallH", x, (wy0 * TS) as f32 + 26.0, |_| {});
+            if k % 8 == 4 {
+                self.prop_x("plTorch", x, (wy0 * TS) as f32 + 46.0, |_| {});
+            }
         }
         // Felsgrund unter Mauern und Ecktürmen (sonst stünden die Ecken im Wasser)
         for (ax0, ay0, ax1, ay1) in [(wx0 - 2, wy0 - 2, wx1 + 2, wy0 + 2), (wx0 - 2, wy0, wx0 + 2, cy + 26), (wx1 - 2, wy0, wx1 + 2, cy + 26)] {
@@ -2124,71 +2130,21 @@ impl World {
         for (tx, ty, kind) in [(sx - 4, sy + 2, "plCargoWeb"), (sx + 7, sy + 3, "plCargo"), (sx - 6, sy - 1, "plRowboat"), (sx + 2, sy + 4, "plBones")] {
             self.prop_t(kind, tx, ty);
         }
-        // ---- das Wrackfeld: Schiffe, eingesponnen, Netze und Kokons ringsum
-        for (k, (dx, dy, flip)) in [(-30, -24, false), (32, -27, true), (-38, -4, false), (34, -6, true), (28, 13, false), (-36, 13, true), (-4, -22, true)].iter().enumerate() {
-            let (tx, ty) = (cx + dx, cy + dy);
-            self.prop_tf(if k % 2 == 0 { "plWreckA" } else { "plWreckB" }, tx, ty, *flip);
-            self.flat_areas.push((tx, ty, 6, 4));
-            self.prop_t("plWeb", tx + if *flip { -5 } else { 5 }, ty - 2);
-            for (ox, oy) in [(-4, 3), (5, 3), (2, -3)] {
-                if rng.chance(0.7) {
-                    self.prop_tf("plCocoon", tx + ox, ty + oy, rng.chance(0.5));
-                }
-            }
-            let junk = ["plCargoWeb", "plCargo", "plAnchor", "plEggs", "plSkeleton", "plBones", "plRocksP"];
-            for _ in 0..3 {
-                let (jx, jy) = (tx + rng.int(-6, 6), ty + rng.int(-4, 5));
-                if self.free_t(jx, jy, 0) {
-                    self.prop_t(junk[rng.int(0, junk.len() as i32 - 1) as usize], jx, jy);
-                }
-            }
+        // ---- der Wrackfriedhof im Westen: drei Schiffe im Morast, ein Mast, Anker, ein Netz, ein Toter
+        // (gezielt gesetzt statt Trümmer überall; der Bewuchs folgt in `pl_prolog_props`)
+        let (gx, gy) = (cx + PROLOG_WRECKS.0, cy + PROLOG_WRECKS.1);
+        for (dx, dy, kind, flip) in [(-5, -2, "plWreckA", false), (6, -4, "plWreckB", true), (1, 5, "plWreckA", true)] {
+            self.prop_tf(kind, gx + dx, gy + dy, flip);
+            self.flat_areas.push((gx + dx, gy + dy, 6, 4));
         }
-        // Rippenbogen und Masten als Wegmarken, Tote, Gräber
-        for (dx, dy) in [(-12, -12), (-22, -30), (22, -18), (-24, 4), (6, 4), (-16, -2)] {
-            self.prop_t("plMast", cx + dx, cy + dy);
-        }
-        let mut n = 0;
-        for _ in 0..120 {
-            if n >= 26 {
-                break;
-            }
-            let (tx, ty) = (cx + rng.int(-46, 46), cy + rng.int(-34, 14));
-            if !inb(tx, ty) || self.level[idx(tx, ty)] != 4 || self.ground[idx(tx, ty)] == Mat::Water || !self.free_t(tx, ty, 1) {
-                continue;
-            }
-            let kind = match rng.int(0, 7) {
-                0 | 7 => "plCocoon",
-                1 => "plSkeleton",
-                2 | 3 => "plBones",
-                4 => "plWeb",
-                5 => "plEggs",
-                _ => "plAnchor",
-            }
-            .to_string();
-            let flip = rng.chance(0.5);
-            self.prop_tf(&kind, tx, ty, flip);
-            n += 1;
+        for (dx, dy, kind) in [(-1, -8, "plMast"), (9, 3, "plAnchor"), (-10, 2, "plWeb"), (4, 1, "plCargoWeb"), (-3, 3, "plSkeleton")] {
+            self.prop_t(kind, gx + dx, gy + dy);
         }
         // ---- Fundstücke (Gegner gibt es hier keine außer der Spinne)
         self.item("pearls", cx + 30, cy - 33);
         self.item("bombs", cx - 41, cy + 8);
         self.item("pearls", cx - 19, cy - 35);
         self.item("bullets", cx + 38, cy + 8);
-        // ---- das Revier der Spinne am Abbruch: freie Fläche, Kokons am Rand, Fackeln
-        let (ax, ay) = (cx - 4, cy + 8);
-        self.flat_areas.push((ax, ay, 12, 9));
-        let (apx, apy) = tpos(ax, ay);
-        self.arenas.insert("prolog", Arena { x: apx, y: apy, r: 11.0 * TS as f32, ry: 8.0 * TS as f32 });
-        for k in 0..10 {
-            let a = k as f32 / 10.0 * std::f32::consts::TAU;
-            let (tx, ty) = (ax + (a.cos() * 13.0).round() as i32, ay + (a.sin() * 9.5).round() as i32);
-            if inb(tx, ty) && self.level[idx(tx, ty)] == 4 && self.ground[idx(tx, ty)] != Mat::Water && a.sin() < 0.6 {
-                self.prop_tf(if k % 3 == 0 { "plWeb" } else { "plCocoon" }, tx, ty, k % 2 == 0);
-            }
-        }
-        for (tx, ty) in [(ax - 12, ay - 6), (ax + 12, ay - 6)] {
-            self.prop_t("plTorch", tx, ty);
-        }
         self.prolog_foot = ((cy + 30) * TS) as f32;
         let _ = (x0, x1, y0, y1);
     }

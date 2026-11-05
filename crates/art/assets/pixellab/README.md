@@ -13,6 +13,7 @@ einzige Ausnahme von der Projektregel, dass alle Grafik aus Code entsteht, und w
 | `ts_grass_forest.png` | dunkles Moosgras (gleiche Grundkachel) | dunkler Waldboden mit Wurzeln, Laub und Moos | `30b41b02-2f9b-472a-a39e-455362f076d6` |
 | `ts_mud_rock.png` (Prolog) | nasser, fast schwarzer Schlamm mit Pfützen und Muschelbruch | dunkler, rissiger Schieferfels mit Kieseln und Seepocken | `a7e14674-6b3b-4b55-ad60-32f10e0fee49` |
 | `ts_rock_moss.png` (Prolog) | Schieferfels (gleiche Grundkachel) | verdorrtes, totes Moos und graues Gras | `b5f9959f-c26c-4f1d-862a-da1d3489de1f` |
+| `ts_moss_grass.png` (Prolog) | totes Moos (gleiche Grundkachel) | dunkle Wildgraswiese mit Unkraut und Klee | `459a8744-3dd0-4c8d-8e46-e4c8adda33bc` |
 
 Die Kachel je Eckmaske (NW·8 + NE·4 + SW·2 + SE·1, 1 = obere Fläche) steht als Tabelle `WANG` im Code.
 
@@ -61,3 +62,23 @@ Morast), bei `pAnchor.png` der Sandfleck in Schlamm und das Seegras in totes Moo
 die blauen Rinnen in nassen Fels, das Violett halb zum Schiefergrau und die Algen in totes Moos, bei
 `pBones.png` der grüne Fleck in totes Moos – jeweils Helligkeit auf die Rampe der passenden
 Bodenkachel abgebildet.
+
+## Prolog, natürliche Vegetation und Nordmauer (5.11.)
+
+| Datei | Größe | Beschreibung | Objekt |
+|---|---|---|---|
+| `pGrass.png` | 48×48 | clump of tall dark wild grass and weeds with a few seed heads, muted green, dark fantasy, night | `369d5faa-1428-442d-baf0-145b2d59efe1` |
+| `pLeafTree.png` | 64×64 | dense dark green shrub with small leaves and twigs, natural, dark fantasy, night | `3e27b29c-c1f0-4410-88fa-d541e0a5b140` |
+| `pReeds.png` | 48×64 | cluster of tall reeds and cattails growing at a muddy creek bank, muted green and brown, dark fantasy | `c2401bd3-85bb-4beb-80d8-80e2f50024c3` |
+| `pMushrooms.png` | 48×48 | small cluster of pale mushrooms with slightly glowing caps on mossy ground, dark fantasy | `6f300ee9-425d-4715-b003-8cbf355cac3c` |
+| `pLog.png` | 96×64 | fallen old tree log covered in moss and small fungi, dark fantasy | `77025f06-8b83-455e-9dff-67cd23a0f916` |
+| `pTree.png` | 128×160 | gnarled windswept tree with dense dark green foliage growing on a coastal cliff island, dark fantasy, night | `4645f9bd-182a-46db-81c8-75e7fa09f227` |
+| `pWallH.png` | 128×224 | straight section of a very tall dark weathered stone castle wall with battlements on top, seen from the front, the wall fills the full image width from edge to edge, moss and dark seaweed stains, dark fantasy | `c9b7eb2f-32ec-4ae8-b024-9b049663b920` |
+
+`pLeafTree.png` ist der als Busch bestellte, als kleiner Laubbaum gelieferte Entwurf. Bei `pTree.png` (Baum
+auf einem umspülten Felsen) ist nur der Baum oberhalb des Felsens übernommen, das Laub etwas
+gedämpft; bei `pLog.png` das grelle Hellgrün in dunkles Moos umgefärbt, bei `pMushrooms.png` das Rosa
+zurückgenommen, bei `pGrass.png` die dunklen Halme aufgehellt und die Samenstände gedämpft;
+`pWallH.png` ist auf die deckende Fläche zugeschnitten und die Umrissspalten links und rechts sind
+entfernt, damit die Stücke nahtlos aneinanderpassen. Die drei Prolog-Bodensätze sind um 20 %
+aufgehellt. Seitenmauer und Turm konnten nicht mehr erzeugt werden (Kontingent aufgebraucht).
