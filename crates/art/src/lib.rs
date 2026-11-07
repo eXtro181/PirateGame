@@ -20,3 +20,4 @@ pub mod font;
 pub mod throne;
 pub mod ui;
 pub mod pixellab;
+pub mod pixstyle;

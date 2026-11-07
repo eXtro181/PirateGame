@@ -327,24 +327,24 @@ impl World {
                 self.item(it, tx, ty);
             }
         }
-        // Wegmarken und Hinterlassenschaften (die PixelLab-Insel bekommt ihre eigenen)
-        for _ in 0..if pl { 0 } else { (area / 90).max(6) } {
-            let (tx, ty) = (cx + rng.int(-r.rx * 3 / 4, r.rx * 3 / 4), cy + rng.int(-r.ry * 3 / 4, r.ry * 3 / 4));
-            if !inb(tx, ty) || self.zone[idx(tx, ty)] != Some(Zone::Wild) || !self.free_t(tx, ty, 1) {
-                continue;
+        // Wegmarken: wenige, mit Absicht gesetzt – zwei alte Steine bzw. am Galgenstrand-Biom
+        // Gräber am Weg vom Landeplatz zum Herzstück (statt verstreuter Schädel, Säulen und
+        // Holzstapel überall; die PixelLab-Insel bekommt ihre eigenen)
+        if !pl {
+            let side = if k % 2 == 0 { (dy, -dx) } else { (-dy, dx) };
+            for (f, s) in [(0.35f32, 1), (0.7, -1)] {
+                let (mx, my) = (lx as f32 + (hx - lx) as f32 * f, ly as f32 + (hy - ly) as f32 * f);
+                let (tx, ty) = ((mx + (side.0 * 3 * s) as f32).round() as i32, (my + (side.1 * 3 * s) as f32).round() as i32);
+                if !inb(tx, ty) || self.zone[idx(tx, ty)] != Some(Zone::Wild) || !self.free_t(tx, ty, 1) {
+                    continue;
+                }
+                let kind = match r.biome {
+                    Biome::Coast => format!("grave{}", rng.int(0, 1)),
+                    _ => if rng.chance(0.5) { "stoneColumn".to_string() } else { "marbleStone".to_string() },
+                };
+                let flip = rng.chance(0.5);
+                self.prop_tf(&kind, tx, ty, flip);
             }
-            let kind = match (r.biome, rng.int(0, 5)) {
-                (_, 0) => "skullpile".to_string(),
-                (Biome::Coast, _) => format!("grave{}", rng.int(0, 1)),
-                (_, 1) => "stoneColumn".to_string(),
-                (_, 2) => "marbleStone".to_string(),
-                (Biome::Earth, _) => "swampTree".to_string(),
-                (Biome::Frost, _) => "crystalBlue".to_string(),
-                (_, 3) => format!("buried{}", rng.int(0, 2)),
-                _ => "logPile".to_string(),
-            };
-            let flip = rng.chance(0.5);
-            self.prop_tf(&kind, tx, ty, flip);
         }
         // Wasserfall (wird später an eine passende Hangkante gesetzt), auf sehr großen Inseln zwei
         if pl {

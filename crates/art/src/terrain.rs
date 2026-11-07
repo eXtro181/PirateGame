@@ -750,6 +750,8 @@ fn tex_moss(bp: &BiomePal, seed: u32) -> Canvas {
 /// wird je Pixel abgefragt).
 pub struct Materials {
     cache: Vec<Option<Canvas>>,
+    /// Pixelstil (wie PixelLab): Stufen und Pixelgruppen statt feinem Rauschen
+    pub pixel: bool,
 }
 impl Default for Materials {
     fn default() -> Self {
@@ -758,9 +760,10 @@ impl Default for Materials {
 }
 impl Materials {
     pub fn new() -> Self {
-        Materials { cache: (0..16 * 7).map(|_| None).collect() }
+        Materials { cache: (0..16 * 7).map(|_| None).collect(), pixel: true }
     }
     pub fn get(&mut self, m: Mat, b: Biome) -> &Canvas {
+        let pixel = self.pixel;
         self.cache[m as usize * 7 + b as usize].get_or_insert_with(|| {
             let bp = biome_pal(b);
             let s = 100 + m as u32 * 17 + b as u32 * 131;
@@ -781,7 +784,11 @@ impl Materials {
                 Mat::Moss => tex_moss(&bp, s),
                 Mat::Water | Mat::Abyss => Canvas::flat(TEX, TEX),
             };
-            grain(&mut c, s);
+            if pixel {
+                crate::pixstyle::pixel_tex(&mut c);
+            } else {
+                grain(&mut c, s);
+            }
             c
         })
     }

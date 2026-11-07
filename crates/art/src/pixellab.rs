@@ -131,7 +131,7 @@ macro_rules! obj {
     };
 }
 
-pub fn objects() -> [Obj; 33] {
+pub fn objects() -> [Obj; 41] {
     [
         obj!("plDeadTree", "deadTree.png", (20.0, 6.0), 5.0, (0.0, 0.0), Some(0.62), 24),
         obj!("plCypress", "cypress.png", (20.0, 6.0), 5.0, (0.0, 0.0), Some(0.66), 34),
@@ -168,6 +168,15 @@ pub fn objects() -> [Obj; 33] {
         obj!("plLog", "pLog.png", (32.0, 8.0), 0.0, (30.0, 8.0), None, 0),
         obj!("plTree", "pTree.png", (28.0, 8.0), 6.0, (0.0, 0.0), Some(0.72), 20),
         obj!("plWallH", "pWallH.png", (44.0, 8.0), 0.0, (45.0, 22.0), None, 0),
+        // natürlicher Bewuchs der übrigen Welt (je Biom)
+        obj!("plSnowPine", "bSnowPine.png", (18.0, 6.0), 4.0, (0.0, 0.0), Some(0.72), 18),
+        obj!("plPine", "bPine.png", (18.0, 6.0), 4.0, (0.0, 0.0), Some(0.72), 22),
+        obj!("plSnowBush", "bSnowBush.png", (24.0, 7.0), 0.0, (0.0, 0.0), None, 0),
+        obj!("plCharTree", "bCharTree.png", (24.0, 7.0), 5.0, (0.0, 0.0), Some(0.62), 0),
+        obj!("plDryGrass", "bDryGrass.png", (11.0, 3.5), 0.0, (0.0, 0.0), None, 26),
+        obj!("plOak", "bOak.png", (38.0, 10.0), 7.0, (0.0, 0.0), Some(0.6), 14),
+        obj!("plFlowers", "bFlowers.png", (11.0, 3.0), 0.0, (0.0, 0.0), None, 16),
+        obj!("plDriftwood", "bDriftwood.png", (22.0, 5.0), 0.0, (0.0, 0.0), None, 0),
     ]
 }
 
@@ -264,6 +273,10 @@ pub fn prop_arts() -> Vec<PropArt> {
             if o.name == "plMushrooms" {
                 // die Hüte schimmern schwach (kaltes Licht im Unterholz)
                 pa = pa.light(0.0, -6.0, 10.0, 70.0, [0.35, 0.55, 0.5], 0.08);
+            }
+            if o.name == "plCharTree" {
+                // Glut in den Rissen am Stammfuß
+                pa = pa.light(6.0, -6.0, 8.0, 90.0, [1.8, 0.65, 0.22], 0.35);
             }
             if o.name == "plTorch" {
                 // Piratenfackel: helles Feuer im Eisenkorb (die Flamme zeichnet PixelFX)

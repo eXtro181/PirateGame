@@ -1,4 +1,4 @@
-# PixelLab-Grafik (Insel Schädelhorn und Prolog-Insel Wrackzwinger)
+# PixelLab-Grafik (Insel Schädelhorn, Prolog-Insel Wrackzwinger, Bewuchs der übrigen Welt)
 
 Diese Bilder stammen aus [PixelLab](https://pixellab.ai) und wurden am 4.11. mit dem PixelLab-Konto
 des Projektinhabers erzeugt (Nutzungsbedingungen: https://pixellab.ai/termsofservice). Sie sind die
@@ -82,3 +82,23 @@ zurückgenommen, bei `pGrass.png` die dunklen Halme aufgehellt und die Samenstä
 `pWallH.png` ist auf die deckende Fläche zugeschnitten und die Umrissspalten links und rechts sind
 entfernt, damit die Stücke nahtlos aneinanderpassen. Die drei Prolog-Bodensätze sind um 20 %
 aufgehellt. Seitenmauer und Turm konnten nicht mehr erzeugt werden (Kontingent aufgebraucht).
+
+## Natürlicher Bewuchs der übrigen Welt (7.11., tägliche Bonus-Generierungen)
+
+| Datei | Größe | Beschreibung | Objekt |
+|---|---|---|---|
+| `bSnowPine.png` | 96×128 | snow-covered dark spruce tree, tall conifer with snow on its branches, winter, dark fantasy, night | `c441fe66-fc7b-4884-b58b-7373a63b9479` |
+| `bPine.png` | 96×128 | tall dark green pine tree, conifer with a straight trunk, natural, dark fantasy, night | `d597efd2-2f79-4f4f-9fe5-aa1ae27b5260` |
+| `bSnowBush.png` | 64×48 | low evergreen shrub covered in fresh snow, winter, dark fantasy | `c982f1f0-f368-4117-a6a8-0aea82878bb1` |
+| `bCharTree.png` | 96×128 | charred burnt dead tree with broken black branches and glowing embers in cracks, volcanic ash land, dark fantasy | `8941474e-6753-4056-ae40-0a77734535b5` |
+| `bDryGrass.png` | 48×48 | clump of dry yellow-brown grass, windswept, natural, dark fantasy | `24fb91c7-943f-4e26-b8a9-41e91d8a3be9` |
+| `bOak.png` | 128×128 | mangrove tree with tall arching stilt roots on muddy ground, dense dark green foliage, dark fantasy | `dda6b5b9-4479-4628-9002-464e1055bd8e` |
+| `bFlowers.png` | 48×32 | small clump of wild meadow flowers, white and yellow blossoms in green grass, natural, dark fantasy | `9f7c3826-a33f-4573-9760-62fd0c7c238e` |
+| `bDriftwood.png` | 64×32 | weathered pale grey driftwood log lying on the ground, natural, dark fantasy | `9587ae93-854e-4565-941a-6b054cce44c9` |
+
+Alle acht sind auf die deckenden Pixel zugeschnitten (1 px Rand). `bOak.png` wurde als Mangrove
+bestellt und als knorrige Eiche mit Wurzelwerk geliefert: Sie wächst jetzt als Eiche (`plOak`), der
+helle Erdfleck unter den Wurzeln ist in dunkle Erde umgefärbt und die gelbgrünen Lichter im Laub
+sind gedämpft. `bPine.png` ist für die Nacht um 45 % aufgehellt, `bDryGrass.png` etwas entsättigt und
+abgedunkelt, `bDriftwood.png` vom Rosa ins Graubraune gezogen, `bFlowers.png` um 10 % abgedunkelt,
+das Weiß des Schnees bei `bSnowPine.png`/`bSnowBush.png` auf höchstens 93 % Helligkeit begrenzt.

@@ -43,6 +43,9 @@ pub struct Atlas {
     pub nk: f32,
     /// nutzbare Breite (für Bilder, die später in einen schmaleren Streifen kopiert werden)
     pub lim: i32,
+    /// Bilder beim Einfügen in den Pixelstil umsetzen (`pixstyle`): Welt-Grafik ja, Oberfläche,
+    /// Schrift und fertige PixelLab-Bilder nein
+    pub style: bool,
 }
 
 impl Default for Atlas {
@@ -53,7 +56,7 @@ impl Default for Atlas {
 
 impl Atlas {
     pub fn new() -> Self {
-        let mut a = Atlas { pages: vec![Page::new()], map: HashMap::new(), x: 4, y: 4, row: 0, nk: 0.55, lim: PAGE };
+        let mut a = Atlas { pages: vec![Page::new()], map: HashMap::new(), x: 4, y: 4, row: 0, nk: 0.55, lim: PAGE, style: false };
         // weißes Texel für Flächen
         for j in 0..2 {
             for i in 0..2 {
@@ -102,6 +105,14 @@ impl Atlas {
     }
     /// Sprite einfügen; (ax, ay) = Fußpunkt.
     pub fn add(&mut self, name: &str, c: &Canvas, ax: i32, ay: i32) -> Spr {
+        if self.style {
+            // Pixelstil: Umriss rundherum, Fußpunkt rückt um (1, 1)
+            let sc = crate::pixstyle::pixel_style(c);
+            self.style = false;
+            let s = self.add(name, &sc, ax + 1, ay + 1);
+            self.style = true;
+            return s;
+        }
         assert!(c.w <= PAGE - 8 && c.h <= PAGE - 8, "zu groß: {name}");
         let (pi, px, py) = self.place(c.w, c.h);
         let nk = self.nk;
@@ -128,11 +139,8 @@ impl Atlas {
         match c.bounds() {
             Some((x0, y0, x1, y1)) => {
                 let cc = c.crop(x0, y0, x1 - x0 + 1, y1 - y0 + 1);
-                let mut s = self.add(name, &cc, ax - x0, ay - y0);
-                s.ax = (ax - x0) as i16;
-                s.ay = (ay - y0) as i16;
-                self.map.insert(name.to_string(), s);
-                s
+                // (der Fußpunkt steht schon richtig im Eintrag, im Pixelstil um (1, 1) verschoben)
+                self.add(name, &cc, ax - x0, ay - y0)
             }
             None => self.add(name, c, ax, ay),
         }

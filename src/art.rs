@@ -106,6 +106,8 @@ impl DynSlot {
     fn atlas(&self) -> Atlas {
         let mut a = Atlas::new();
         a.lim = self.w;
+        // Schiffe, Seebosse, Malakor und die Meeresspinne im Pixelstil wie die übrige Welt
+        a.style = true;
         a
     }
     fn fix(&self, s: &mut Spr) {
@@ -158,9 +160,12 @@ pub fn build_malakor(art: &mut Art, frame: &mut Frame) {
         ("mk:red".into(), a.add_trim("mk:red", &red, red.w / 2, red.h - 10)),
         ("mk:bone0".into(), a.add_trim("mk:bone0", &b0, b0.w / 2, b0.h - 20)),
         ("mk:bone1".into(), a.add_trim("mk:bone1", &b1, b1.w / 2, b1.h - 20)),
-        ("mk:rseg".into(), a.add("mk:rseg", &mk::tentacle_seg(0x8A1E16, 0x3A0A0A, 0xE8A08A), 20, 20)),
-        ("mk:vert".into(), a.add("mk:vert", &mk::vertebra(), 22, 20)),
     ];
+    // Armglieder und Wirbel werden zu Ketten gereiht: ohne Umriss (sonst Fugen)
+    a.style = false;
+    let mut v = v;
+    v.push(("mk:rseg".into(), a.add("mk:rseg", &mk::tentacle_seg(0x8A1E16, 0x3A0A0A, 0xE8A08A), 20, 20)));
+    v.push(("mk:vert".into(), a.add("mk:vert", &mk::vertebra(), 22, 20)));
     if !slot.upload(frame, &a) {
         return;
     }
@@ -183,6 +188,8 @@ pub fn build_title(art: &mut Art, frame: &mut Frame) {
     }
     let slot = art.boss_slot;
     let mut a = slot.atlas();
+    // das Titelbild bleibt weich gemalt (Schriftzug, verkleinerte Motive)
+    a.style = false;
     use sw_art::throne as th;
     // gemalt in voller Größe, verkleinert in den Atlas (ruhige Details beim Kameraschwenk)
     let throne = th::downscale(&th::throne(), 0.55);
@@ -679,8 +686,17 @@ impl Art {
     }
 }
 
+/// Requisiten, die nahtlos aneinanderstoßen (ein Umriss je Stück gäbe Fugen): ohne Pixelstil
+const TILED: [&str; 6] = ["fortWall", "highWall", "ringWall", "battlement", "fenceH", "bridge"];
+
 fn add_prop(a: &mut Atlas, props: &mut HashMap<String, PropDef>, pa: PropArt) {
+    let style = a.style;
+    if TILED.iter().any(|t| pa.name.starts_with(t)) {
+        a.style = false;
+    }
     let spr = a.add_trim(&format!("p:{}", pa.name), &pa.c, pa.ax, pa.ay);
+    // Flammenbilder bleiben weich (sie leuchten)
+    a.style = false;
     // Kronenzeile relativ zum beschnittenen Bild
     let trim_top = pa.ay - spr.ay as i32;
     let frames = pa
@@ -692,6 +708,7 @@ fn add_prop(a: &mut Atlas, props: &mut HashMap<String, PropDef>, pa: PropArt) {
             a.add_trim(&format!("p:{}:f{}", pa.name, i), f, f.w / 2, ay)
         })
         .collect();
+    a.style = style;
     let big = if pa.boxc.0 > 0.0 && pa.c.h > 120 { Some((pa.c.w as f32, pa.c.h as f32 * 0.8)) } else { None };
     props.insert(
         pa.name.clone(),
@@ -805,6 +822,7 @@ const BOSS_STRIP: i32 = 1520;
 /// (wird bei Änderungen des Aussehens neu gebaut und nur dieser Ausschnitt hochgeladen).
 pub fn build_player(art: &mut Art, frame: &mut Frame, l: &chars::Look) {
     let mut a = Atlas::new();
+    a.style = true;
     let mut sh = sheet(&mut a, "player", l, 1.0, chars::Role::Player);
     let (page, rx, ry) = art.player_slot;
     let (sw, shh) = (PAGE - 8, PLAYER_STRIP);
@@ -882,55 +900,18 @@ pub fn build(frame: &mut Frame) -> Art {
     a.add("ui:logo", &sw_art::ui::logo("THRONE OF THE DROWNED"), 0, 0);
     a.add("ui:corner", &sw_art::ui::panel_corner(), 0, 0);
 
+    // ab hier Welt-Grafik im Pixelstil (PixelLab nachgebildet): Umriss, gestufte Töne
+    a.style = true;
     // ---------------------------------------------------------------- Bäume
-    let trees: Vec<(&str, flora::TreeOut, f32)> = vec![
-        ("blossomTree0", flora::blossom_tree("blossom", Some("pink"), 0, 3), 12.0),
-        ("blossomTree1", flora::blossom_tree("blossom", Some("pink"), 1, 4), 15.0),
-        ("pinkTree0", flora::blossom_tree("pink", Some("violet"), 0, 5), 12.0),
-        ("violetTree0", flora::blossom_tree("violet", Some("violet"), 0, 6), 12.0),
-        ("violetTree1", flora::blossom_tree("violet", Some("blossom"), 1, 7), 15.0),
-        ("blueTree0", flora::blossom_tree("blue", None, 0, 8), 12.0),
-        ("blueTree1", flora::blossom_tree("blue", None, 1, 9), 15.0),
-        ("tealTree0", flora::blossom_tree("teal", None, 0, 10), 12.0),
-        ("tealTree1", flora::blossom_tree("teal", None, 1, 11), 15.0),
-        ("redTree0", flora::blossom_tree("red", None, 0, 12), 12.0),
-        ("greenTree0", flora::blossom_tree("green", None, 0, 13), 12.0),
-        ("berryTree0", flora::blossom_tree("berry", None, 0, 14), 12.0),
-        ("berryTree1", flora::blossom_tree("berry", Some("berry"), 1, 15), 15.0),
-        ("emberTree0", flora::dead_tree(16, true), 10.0),
-        ("snowTree0", flora::blossom_tree("snowy", None, 0, 17), 12.0),
-        ("snowTree1", flora::blossom_tree("snowy", None, 1, 18), 15.0),
-        ("deadTree", flora::dead_tree(19, false), 10.0),
-        ("swampTree", flora::swamp_tree(20), 14.0),
-        ("palm", flora::palm("palmleaf", 2), 8.0),
-        ("tealPalm", flora::palm("teal", 3), 8.0),
-    ];
-    for (n, t, r) in trees {
-        add_prop(&mut a, &mut props, tree_prop(n, t, r, 40));
-    }
-    // ---------------------------------------------------------------- Büsche und Pflanzen
-    for (n, p, w, h) in [
-        ("bushGreen", "green", 64, 50),
-        ("bushTeal", "teal", 60, 48),
-        ("bushBlue", "blue", 64, 50),
-        ("bushPink", "pink", 58, 46),
-        ("bushViolet", "violet", 60, 48),
-        ("bushRed", "red", 56, 44),
-        ("bushSnow", "snowy", 60, 46),
-        ("bushSwamp", "swamp", 66, 50),
-    ] {
-        let b = flora::bush(p, n.len() as i32 * 7, w, h);
-        let pa = PropArt::new(n, b, w / 2, h - 3).shadow(w as f32 * 0.4, 6.0).circle(w as f32 * 0.3).sway(16);
-        add_prop(&mut a, &mut props, pa);
-    }
+    // in der Natur wachsen die PixelLab-Arten (`world/nature.rs`); prozedural bleibt nur die
+    // Mangrove mit ihren Stelzwurzeln
+    add_prop(&mut a, &mut props, tree_prop("swampTree", flora::swamp_tree(20), 14.0, 40));
+    // ---------------------------------------------------------------- Pflanzen
     add_prop(&mut a, &mut props, PropArt::new("fern", flora::fern(1, "green"), 27, 37).shadow(16.0, 4.0).sway(24));
-    add_prop(&mut a, &mut props, PropArt::new("banana", flora::big_leaves(2, "palmleaf", 5), 35, 57).shadow(20.0, 5.0).circle(10.0).sway(24));
-    add_prop(&mut a, &mut props, PropArt::new("bigLeaf", flora::big_leaves(3, "teal", 6), 35, 57).shadow(20.0, 5.0).circle(10.0).sway(20));
     add_prop(&mut a, &mut props, PropArt::new("reedClump", flora::reeds(4), 17, 44).shadow(10.0, 3.0).sway(30));
     add_prop(&mut a, &mut props, PropArt::new("cattail", flora::reeds(5), 17, 44).shadow(10.0, 3.0).sway(30));
     add_prop(&mut a, &mut props, PropArt::new("crystalBlue", flora::crystal(hex(0x5FC8F2), 2), 17, 45).shadow(12.0, 4.0).circle(10.0).light(0.0, -24.0, 24.0, 110.0, [0.5, 1.2, 1.8], 0.0));
     let st = FPal::get("stone");
-    add_prop(&mut a, &mut props, PropArt::new("rock0", flora::rock(3, 60, 40, Some(&FPal::get("green")), &st), 30, 37).shadow(26.0, 6.0).circle(18.0));
     add_prop(&mut a, &mut props, PropArt::new("rock1", flora::rock(5, 46, 34, None, &st), 23, 31).shadow(20.0, 5.0).circle(14.0));
     add_prop(&mut a, &mut props, PropArt::new("rock2", flora::rock(7, 70, 52, Some(&FPal::get("teal")), &st), 35, 49).shadow(30.0, 7.0).circle(22.0));
 
@@ -1024,10 +1005,13 @@ pub fn build(frame: &mut Frame) -> Art {
         }
         let lid = gv::coffin_lid(0);
         a.add_trim("x:lid", &lid, 20, 56);
-        // PixelLab-Insel Schädelhorn: Bäume, Felsen, Wrack, Ruine, Feuerstelle, Kram, Büsche
+        // PixelLab-Insel Schädelhorn: Bäume, Felsen, Wrack, Ruine, Feuerstelle, Kram, Büsche (schon
+        // im PixelLab-Stil)
+        a.style = false;
         for pa in sw_art::pixellab::prop_arts() {
             add_prop(&mut a, &mut props, pa);
         }
+        a.style = true;
         // eingesponnene Leiche (Prolog-Niederlage): am Boden liegend und im Sarg
         a.add_trim("x:wrapH", &sw_art::structures::wrapped_body(false), 32, 26);
         a.add_trim("x:wrapV", &sw_art::structures::wrapped_body(true), 18, 58);
@@ -1348,6 +1332,8 @@ pub fn build(frame: &mut Frame) -> Art {
         let sh = beast_sheet(&mut a, k.key);
         chs.insert(k.key.to_string(), sh);
     }
+    // Kettenglieder, Tentakelbänder, Strudel: werden gedreht und gekachelt, bleiben weich
+    a.style = false;
     sea_monster_sprites(&mut a);
     let ships = HashMap::new();
     let wp = cr::whirlpool();

@@ -162,6 +162,11 @@ fn setup(world: &mut bevy::ecs::world::World) {
         if params.contains_key("prof") {
             prof::enable();
         }
+        // Draufsicht des Bewuchses eines Gebiets (PNG als Base64 in der Konsole)
+        if let Some(png) = params.get("floramap").and_then(|k| w.flora_map(k)) {
+            use base64::Engine;
+            info!("FLORAMAP {}", base64::engine::general_purpose::STANDARD.encode(png));
+        }
         if let Some(el) = web_sys::window().and_then(|w| w.document()).and_then(|d| d.get_element_by_id("load")) {
             el.remove();
         }

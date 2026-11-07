@@ -282,6 +282,39 @@ fn main() {
             }
             save_lit(&bg, &format!("{out}/humans.png"), 1);
         }
+        "ground" => {
+            // Bodenmaterialien: oben ohne, unten mit Pixelstil
+            let list = [
+                (Biome::Coast, Mat::Sand), (Biome::Hub, Mat::Grass), (Biome::Wind, Mat::Meadow), (Biome::Coast, Mat::Dirt),
+                (Biome::Earth, Mat::Mud), (Biome::Earth, Mat::Moss), (Biome::Frost, Mat::Rock), (Biome::Frost, Mat::Snow),
+                (Biome::Frost, Mat::Ice), (Biome::Fire, Mat::Ash), (Biome::Fire, Mat::Hex), (Biome::Hub, Mat::Cobble),
+            ];
+            let sz = 104;
+            let mut big = Canvas::new(sz * 6 + 14, sz * 4 + 10);
+            for (k, (b, m)) in list.iter().enumerate() {
+                for (row, px) in [(0, false), (1, true)] {
+                    let mut mm = Materials::new();
+                    mm.pixel = px;
+                    let c = bake_chunk(&Flat(*b, *m), &mut mm, &en, 0, 0, sz);
+                    let (ox, oy) = ((k % 6) as i32 * (sz + 2) + 2, ((k / 6) * 2 + row) as i32 * (sz + 2) + 2);
+                    big.blit(&c, ox, oy, false);
+                }
+            }
+            save_lit(&big, &format!("{out}/ground.png"), 2);
+            let t = std::time::Instant::now();
+            let mut mm = Materials::new();
+            for (b, m) in list.iter() {
+                mm.get(*m, *b);
+            }
+            eprintln!("{} Materialien mit Pixelstil in {:?}", list.len(), t.elapsed());
+            let t = std::time::Instant::now();
+            let mut mm = Materials::new();
+            mm.pixel = false;
+            for (b, m) in list.iter() {
+                mm.get(*m, *b);
+            }
+            eprintln!("{} Materialien ohne in {:?}", list.len(), t.elapsed());
+        }
         "budget" => {
             // Atlasfläche je Bogen (beschnittene Bilder, einzigartige Bilder)
             use sw_art::beasts::*;

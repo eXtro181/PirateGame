@@ -8,6 +8,7 @@
 //! Höhenebenen: Plateaus sind begehbar, ihre unteren zwei Reihen sind Basaltwände, Wege über
 //! Wände werden Treppen. Die Erzeugung ist deterministisch; Positionen sind Welt-Pixel.
 
+mod nature;
 mod plisle;
 pub mod view;
 mod wild;
@@ -15,6 +16,7 @@ mod wild;
 pub use wild::WildIsle;
 
 use std::collections::HashMap;
+use nature::flora;
 use sw_art::noise::{Noise, Rng};
 use crate::game::data::shop_def;
 use sw_art::terrain::{face_px, face_span, Biome, EdgeNoise, Mat, TerrainMap, BANK_PX, FACE_PX, FACE_ROWS, RIM_PX};
@@ -218,49 +220,6 @@ impl SeaRegion {
     }
 }
 
-/// Pflanzentabellen je Biom.
-struct Flora {
-    grove: &'static [(&'static str, u32)],
-    bush: &'static [&'static str],
-    deco: &'static [&'static str],
-}
-fn flora(b: Biome) -> Flora {
-    match b {
-        // Piratenfriedhof: tote Bäume, krumme Sumpfbäume, dürres Gras, Knochen
-        Biome::Coast => Flora {
-            grove: &[("deadTree", 1)],
-            bush: &["bushSwamp", "reedClump", "bushSwamp"],
-            deco: &["tuftDark", "tuftDark", "tuftDark", "tuftDark", "tuftDark", "tallgrass", "tallgrass", "tallgrass", "pebbles", "stones", "twigs", "roots", "bones", "skull", "bottle", "ropeBit", "plankBits", "fishbones"],
-        },
-        Biome::Hub => Flora {
-            grove: &[("deadTree", 4), ("emberTree0", 2)],
-            bush: &["lanternPole", "bushRed", "rock1"],
-            deco: &["tuftDark", "tuftDark", "tuftDark", "pebbles", "pebbles", "stones", "stones", "twigs", "ember", "ember", "skull", "bones", "lanternStalk"],
-        },
-        Biome::Fire => Flora {
-            grove: &[("berryTree0", 3), ("berryTree1", 1), ("emberTree0", 1), ("deadTree", 2)],
-            bush: &["bushViolet", "bushRed", "lanternPole", "lanternPole"],
-            deco: &["tuftDark", "tuftDark", "pebbles", "pebbles", "stones", "stones", "twigs", "ember", "ember", "flowersR", "skull", "lanternStalk"],
-        },
-        Biome::Frost => Flora {
-            grove: &[("snowTree0", 3), ("snowTree1", 1), ("tealTree0", 1), ("deadTree", 1)],
-            bush: &["bushSnow", "bushTeal", "crystalBlue", "crystalBlue"],
-            deco: &["snowtuft", "snowtuft", "snowtuft", "snowtuft", "snowtuft", "snowtuft", "pebbles", "stones", "flowersB", "crystalS", "twigs"],
-        },
-        Biome::Wind => Flora {
-            grove: &[("greenTree0", 2), ("tealTree0", 2), ("blueTree0", 1), ("violetTree0", 1)],
-            bush: &["bushGreen", "bushTeal", "bushBlue", "fern"],
-            deco: &["tuft", "tuft", "tuft", "tuftDark", "tuftDark", "tallgrass", "tallgrass", "flowersW", "flowersY", "clover", "fernS", "leaves", "stones", "pebbles"],
-        },
-        Biome::Earth => Flora {
-            grove: &[("swampTree", 4), ("greenTree0", 1), ("tealTree1", 1)],
-            bush: &["bigLeaf", "banana", "bushSwamp", "fern", "reedClump", "cattail"],
-            deco: &["tuftDark", "tuftDark", "tuftDark", "fernS", "fernS", "mushroomR", "mushroomB", "roots", "leaves", "leaves", "reeds", "flowersR"],
-        },
-        Biome::End => Flora { grove: &[("deadTree", 2), ("emberTree0", 1)], bush: &["lanternPole", "bushRed"], deco: &["ember", "skull", "bones", "stones", "pebbles", "pebbles", "lanternStalk"] },
-    }
-}
-
 #[derive(Clone, Debug, Default)]
 pub struct PropInst {
     pub kind: String,
@@ -449,6 +408,8 @@ pub struct World {
     pub path: Vec<bool>,
     /// Abstand zum Land in Kacheln (Wasser; 0 = Land, höchstens 31)
     pub shore: Vec<u8>,
+    /// Standort je Kachel (`nature::NAT_*`): Landabstand zum Wasser, Schatten, Hangfuß, Binnenwasser
+    pub nat: Vec<u8>,
     /// die wilden Inseln im weiten Ozean
     pub wild: Vec<WildIsle>,
     pub props: Vec<PropInst>,
@@ -547,6 +508,7 @@ impl World {
             stairs: vec![false; n],
             path: vec![false; n],
             shore: vec![31; n],
+            nat: vec![0; n],
             wild: vec![],
             props: vec![],
             deco: vec![],
@@ -804,11 +766,16 @@ impl World {
         self.compute_field();
         self.compute_shore();
         lap("Hänge und Ufer", &mut t);
+        self.compute_nat();
+        lap("Standorte", &mut t);
+        let (mut n_tree, mut n_under) = (0, 0);
         for z in ZONES {
             self.cur = z;
             self.cur_biome = z.def().biome;
             let mut rng = Rng::new(z.def().seed as u64 * 131);
-            self.scatter(z.region(), &mut rng);
+            let (a, b) = self.scatter(z.region(), &mut rng, None);
+            n_tree += a;
+            n_under += b;
         }
         for k in 0..self.wild.len() {
             if k == PL_ISLE {
@@ -818,14 +785,18 @@ impl World {
             let r = self.wild[k].r;
             self.cur_biome = r.biome;
             let mut rng = Rng::new(r.seed as u64 * 131 + 5);
-            self.scatter(r, &mut rng);
+            let (a, b) = self.scatter(r, &mut rng, Some(k));
+            n_tree += a;
+            n_under += b;
         }
+        bevy::log::info!("Welt: natürlicher Bewuchs {} Bäume, {} Sträucher, Gräser, Schilf und Steine", n_tree, n_under);
         // Prolog: Boden und Bewuchs aus PixelLab statt prozedural
         let nat = self.pl_prolog_ground();
         self.pl_prolog_props(&nat);
         lap("Bewuchs", &mut t);
         self.settle_on_cliffs();
         self.clear_prolog_coffin();
+        self.stamp_shade();
         self.chimneys = (0..self.props.len()).filter(|&i| {
             let k = &self.props[i].kind;
             k.starts_with("townhouse") || k == "tavern" || k == "forge"
@@ -1285,10 +1256,12 @@ impl World {
     fn grove(&mut self, cx: i32, cy: i32, r: f32, rng: &mut Rng, mut n: i32, table: Option<&[(&'static str, u32)]>) {
         let tbl: Vec<(&'static str, u32)> = match table {
             Some(t) => t.to_vec(),
-            None => flora(self.cur_biome).grove.to_vec(),
+            None => flora(self.cur_biome).wood.to_vec(),
         };
         let sum: u32 = tbl.iter().map(|t| t.1).sum();
         let mut i = 0;
+        // Stämme eines Hains halten Abstand (sonst wachsen Kronen ineinander)
+        let mut placed: Vec<(f32, f32)> = vec![];
         while i < n * 4 && n > 0 {
             i += 1;
             let a = rng.f() * std::f32::consts::TAU;
@@ -1310,6 +1283,10 @@ impl World {
             let (x, y) = tpos(tx, ty);
             let flip = rng.chance(0.5);
             let jx = rng.int(-6, 6) as f32;
+            if placed.iter().any(|&(px, py)| (px - x - jx).hypot((py - y) * 1.15) < 38.0) {
+                continue;
+            }
+            placed.push((x + jx, y));
             self.prop_x(kind, x + jx, y, |p| p.flip = flip);
             n -= 1;
         }
@@ -1920,7 +1897,8 @@ impl World {
         for (tx, ty) in [(fx - 3, fy - 1), (fx + 3, fy - 1)] {
             self.prop_t("brazier", tx, ty);
         }
-        self.prop_t("emberTree0", fx + 14, fy + 2);
+        // ein verkohlter Baum mit Glut in den Rissen neben dem Säbelfeuer
+        self.prop_t("plCharTree", fx + 14, fy + 2);
         for (x, y) in [(fx - 13, fy - 1), (fx + 13, fy - 2)] {
             self.prop_t("hoodedStatue", x, y);
         }
@@ -3567,142 +3545,6 @@ impl World {
         let (x0, y0, x1, y1) = self.end_rect;
         let (tx, ty) = ((x / TS as f32) as i32, (y / TS as f32) as i32);
         tx >= x0 && tx <= x1 && ty >= y0 && ty <= y1
-    }
-
-    /// Bewuchs eines Gebiets: Bäume, Büsche und Felsen (mit Kollision). Die kleine Boden-Deko
-    /// entsteht erst beim Zeichnen je 256-px-Eimer (`deco_bucket`), damit die große Welt weder
-    /// Speicher noch Ladezeit dafür braucht.
-    fn scatter(&mut self, r: Region, rng: &mut Rng) {
-        let z = r.zone;
-        let d = r;
-        let fl = flora(d.biome);
-        let (x0, y0, x1, y1) = r.bbox();
-        // nur Feuer, Figuren und Gegner dieses Gebiets prüfen (nicht die ganze Welt je Kachel)
-        let (bx0, by0, bx1, by1) = ((x0 * TS) as f32 - 120.0, (y0 * TS) as f32 - 120.0, ((x1 + 1) * TS) as f32 + 120.0, ((y1 + 1) * TS) as f32 + 120.0);
-        let inr = |x: f32, y: f32| x >= bx0 && x <= bx1 && y >= by0 && y <= by1;
-        let fires: Vec<(f32, f32)> = self.fires.iter().filter(|f| inr(f.x, f.y)).map(|f| (f.x, f.y)).collect();
-        let npcs: Vec<(f32, f32)> = self.npcs.iter().filter(|n| inr(n.x, n.y)).map(|n| (n.x, n.y)).collect();
-        let spawns: Vec<(f32, f32)> = self.spawns.iter().filter(|s| inr(s.x, s.y)).map(|s| (s.x, s.y)).collect();
-        for ty in y0..=y1 {
-            for tx in x0..=x1 {
-                if !inb(tx, ty) || self.zone[idx(tx, ty)] != Some(z) {
-                    continue;
-                }
-                let g = self.g(tx, ty);
-                let i = idx(tx, ty);
-                if g == Mat::Water || self.cliff[i] || g == Mat::Abyss || self.path[i] || g == Mat::Plank || self.landing[i] || self.stairs[i] {
-                    continue;
-                }
-                let (x, y) = tpos(tx, ty);
-                let near_fire = fires.iter().any(|f| (f.0 - x).hypot(f.1 - y) < 96.0);
-                let near_npc = npcs.iter().any(|n| (n.0 - x).hypot(n.1 - y) < 80.0);
-                let near_spawn = spawns.iter().any(|s| (s.0 - x).hypot(s.1 - y) < 40.0);
-                if near_fire || near_npc || near_spawn {
-                    continue;
-                }
-                let forest = self.nz.fbm(tx as f32 * 0.08 + d.seed as f32 * 3.0, ty as f32 * 0.08, 3);
-                let dense = if d.biome == Biome::Earth { 2.0 } else { 1.0 };
-                if forest > 0.12 && rng.chance(0.1 * dense) && self.free_t(tx, ty, 1) {
-                    self.grove(tx, ty, 0.1, rng, 1, Some(fl.grove));
-                    continue;
-                }
-                // doppelt so viel Unterholz und Geröll wie früher
-                if rng.chance((0.1 + forest.max(0.0) * 0.2) * dense) && self.free_t(tx, ty, 0) {
-                    let kind = *rng.pick(fl.bush);
-                    let flip = rng.chance(0.5);
-                    let jx = rng.int(-6, 6) as f32;
-                    self.prop_x(kind, x + jx, y, |p| p.flip = flip);
-                } else if d.biome != Biome::Coast && rng.chance(0.028) && self.free_t(tx, ty, 0) {
-                    let kind = *rng.pick(&["rock0", "rock1", "rock2"]);
-                    let flip = rng.chance(0.5);
-                    self.prop_x(kind, x, y, |p| p.flip = flip);
-                }
-            }
-        }
-    }
-
-    /// Boden-Deko eines 256-px-Eimers, aus der Karte abgeleitet (gleiches Ergebnis bei jedem
-    /// Aufruf): Gras, Blumen, Steinchen, Knochen, Glut, Schnee, Seerosen am Ufer.
-    pub fn deco_bucket(&self, bx: i32, by: i32) -> Vec<Deco> {
-        let mut out = vec![];
-        let k = (view::BK as i32) / TS;
-        for ty in by * k..(by + 1) * k {
-            for tx in bx * k..(bx + 1) * k {
-                if !inb(tx, ty) {
-                    continue;
-                }
-                let i = idx(tx, ty);
-                let Some(z) = self.zone[i] else { continue };
-                if z == Zone::Ende && !self.drained {
-                    continue;
-                }
-                // die PixelLab-Insel und der Prolog haben ihren Boden fertig gemalt
-                if self.pl.as_ref().is_some_and(|p| p.covers(tx, ty)) || self.plp.as_ref().is_some_and(|p| p.covers(tx, ty)) {
-                    continue;
-                }
-                let biome = self.biome[i];
-                let g = self.ground[i];
-                let mut rng = Rng::new(((tx as u64) << 21) ^ (ty as u64).wrapping_mul(0x9E37_79B9) ^ 0x5EED);
-                if g == Mat::Water {
-                    if self.shore[i] <= 1 && rng.chance(if biome == Biome::Earth { 0.4 } else { 0.1 }) {
-                        let k = *rng.pick(&["lily", "reeds", "lily"]);
-                        out.push(Deco { k, x: (tx * TS) as f32 + rng.int(4, 28) as f32, y: (ty * TS) as f32 + rng.int(6, 26) as f32, flip: rng.chance(0.5) });
-                    }
-                    continue;
-                }
-                if self.cliff[i] || g == Mat::Abyss {
-                    continue;
-                }
-                let fl = flora(biome);
-                let seed = (z as u32 + 1) * 7;
-                let dens = 0.3 + self.nz.fbm(tx as f32 * 0.15 + seed as f32, ty as f32 * 0.15, 2).max(0.0) * 0.6 + if g == Mat::Meadow { 0.35 } else { 0.0 };
-                // ein Vielfaches der früheren Dichte: bis zu sechs Stück je Kachel
-                let nd = (dens * 4.0 + rng.f() * 1.2) as i32;
-                for _ in 0..nd.min(6) {
-                    let mut dk = *rng.pick(fl.deco);
-                    if self.path[i] && g != Mat::Meadow {
-                        if rng.f() < 0.8 {
-                            continue;
-                        }
-                        dk = *rng.pick(&["pebbles", "tuft", "stones"]);
-                    }
-                    if g == Mat::Meadow && rng.chance(0.5) {
-                        dk = *rng.pick(&["flowersW", "flowersY", "flowersP", "flowersB", "clover"]);
-                    }
-                    if matches!(g, Mat::Marble | Mat::Plank | Mat::Cobble) && !matches!(dk, "pebbles" | "stones" | "leaves" | "bottle" | "ropeBit" | "coins" | "plankBits") {
-                        continue;
-                    }
-                    if g == Mat::Sand && rng.chance(0.4) {
-                        dk = *rng.pick(&["shell", "pebbles", "seaweed", "driftwood", "shell", "fishbones", "crabShell", "ropeBit", "plankBits", "bottle"]);
-                    }
-                    if matches!(g, Mat::Cobble | Mat::Plank) && rng.chance(0.06) {
-                        dk = *rng.pick(&["bottle", "ropeBit", "coins", "plankBits"]);
-                    }
-                    // auffällige Stücke selten (sonst ein Feld aus Schädeln und Laternen)
-                    let keep = match dk {
-                        "skull" => 0.25,
-                        "bones" => 0.35,
-                        "lanternStalk" => 0.5,
-                        "crystalS" => 0.6,
-                        "shell" | "driftwood" => 0.6,
-                        "coins" => 0.3,
-                        "bottle" | "fishbones" | "crabShell" => 0.5,
-                        "ropeBit" | "plankBits" => 0.6,
-                        "mushroomR" | "mushroomB" => 0.7,
-                        _ => 1.0,
-                    };
-                    if keep < 1.0 && !rng.chance(keep) {
-                        continue;
-                    }
-                    let (x, y) = ((tx * TS) as f32 + rng.int(2, 30) as f32, (ty * TS) as f32 + rng.int(4, 30) as f32);
-                    if !self.px_walk(x as i32, y as i32).1 {
-                        continue;
-                    }
-                    out.push(Deco { k: dk, x, y, flip: rng.chance(0.5) });
-                }
-            }
-        }
-        out
     }
 
     // ------------------------------------------------------------ Kollision mit Höhenebenen
