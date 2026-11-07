@@ -15,6 +15,7 @@ pub mod input;
 pub mod seaboss;
 pub mod seamon;
 pub mod ship;
+pub mod summon;
 
 pub use crate::art::{anim_index, Art, CharSheet};
 pub use crate::gfx::{flags, modes, Frame, LightDef, SprOpt};
@@ -56,6 +57,10 @@ pub enum Use {
     Slot(usize),
     Board(usize),
     Call(usize),
+    /// beim ersten Mal: das Flaschenschiff vom Steg ins Meer werfen
+    Bottle(usize),
+    /// noch kein Schiff (Flaschenschiff fehlt)
+    NoShip,
     Stain,
     /// Laden betreten / verlassen
     Enter(usize),
@@ -103,6 +108,9 @@ pub enum Cut {
     /// der Niederlage legt die Spinne den eingesponnenen Leichnam hinein; dann ziehen zwei Arme aus
     /// der Tiefe den Sarg hinab. (x0, y0) Spieler bzw. Leichnam, (sx, sy) Spinne, a/c Wegzeiten.
     Coffin { t: f32, defeat: bool, x0: f32, y0: f32, sx: f32, sy: f32, a: f32, c: f32 },
+    /// das Schiff am Steg rufen (`summon.rs`): Blasen, es steigt aus der Tiefe, Wasser läuft ab,
+    /// dann an Bord; `first` = beim ersten Mal wird vorher das Flaschenschiff ins Meer geworfen
+    Summon { t: f32, di: usize, first: bool },
 }
 
 /// Zeitplan des Erwachens (s): Dunkel mit Klopfen, Aufblenden, Deckel ruckelt, rutscht weg,
@@ -174,6 +182,10 @@ pub struct Game {
     pub coffin_due: bool,
     /// Sarg und Fackeln am Wasserfall erscheinen (Sekunden seit Beginn; negativ = Wartezeit)
     pub coffin_reveal: Option<f32>,
+    /// der Geisterkapitän löst sich auf, nachdem er das Flaschenschiff übergeben hat (1 → 0)
+    pub ghost_fade: f32,
+    /// Testlauf (`&freeze`): Zwischensequenzen stehen still (Bildschirmfotos)
+    pub freeze_cut: bool,
     pub cam: (f32, f32),
     pub shake_k: f32,
     pub flash_c: [f32; 4],
@@ -288,6 +300,8 @@ impl Game {
             cam_hold: None,
             coffin_due: false,
             coffin_reveal: None,
+            ghost_fade: 0.0,
+            freeze_cut: false,
             cam: (0.0, 0.0),
             shake_k: 0.0,
             flash_c: [1.0, 1.0, 1.0, 0.0],
@@ -664,7 +678,7 @@ impl Game {
         self.t += dt;
         // Schiffsbilder: eigenes Schiff mit Ausbauten, aktiver Seeboss (beides nur bei Änderung)
         let s = &self.save;
-        let u = sw_art::ships::Upg { speed: s.ship_speed.clamp(0, 10) as u8, def: s.ship_def.clamp(0, 10) as u8, atk: s.ship_atk.clamp(0, 10) as u8 };
+        let u = sw_art::ships::Upg { speed: s.ship_speed.clamp(0, SHIP_MAX) as u8, def: s.ship_def.clamp(0, SHIP_MAX) as u8, atk: s.ship_atk.clamp(0, SHIP_MAX) as u8 };
         crate::art::build_ship(art, frame, u);
         if let Some(i) = self.sea_boss {
             let d = self.sea_bosses[i].def();
@@ -750,6 +764,7 @@ impl Game {
             self.start_coffin(true);
         }
         self.update_coffin_reveal(dt);
+        self.update_ghost(dt);
         self.update_cutscene(dt, art);
         if !modal && self.cutscene.is_none() {
             if self.input.pressed(Act::Menu) {
@@ -986,6 +1001,15 @@ impl Game {
                     self.cutscene = Some(Cut::Washed { t });
                 }
             }
+            Cut::Summon { t, di, first } => {
+                // Testlauf &freeze: die Zeit steht, Blasen und Tropfen laufen weiter
+                let (t, nt) = if self.freeze_cut { (t - dt, t) } else { (t, t + dt) };
+                if self.update_summon(t, nt, di, first) {
+                    self.cutscene = None;
+                } else if matches!(self.cutscene, Some(Cut::Summon { .. })) {
+                    self.cutscene = Some(Cut::Summon { t: nt, di, first });
+                }
+            }
             Cut::Coffin { t, defeat, x0, y0, sx, sy, a, c } => {
                 let nt = t + dt;
                 if self.update_coffin(t, nt, defeat, (x0, y0), (sx, sy), a, c) {
@@ -1187,6 +1211,9 @@ impl Game {
             out.extend(f(fi.x, fi.y, 72.0, if s.lit_fires.contains(&fi.id) { "Rasten" } else { "Feuer entzünden" }, Use::Fire(i), Some(fi.prop)));
         }
         for (i, n) in self.npcs.iter().enumerate() {
+            if self.npc_gone(i) {
+                continue;
+            }
             out.extend(f(n.a.x, n.a.y, 72.0, "Sprechen", Use::Npc(i), None));
         }
         for (i, it) in self.items.iter().enumerate() {
@@ -1214,9 +1241,26 @@ impl Game {
             out.extend(f(d.x, d.y, 40.0, &format!("Laden in {} betreten", d.name), Use::Enter(i), None));
             out.extend(f(d.exit.0, d.exit.1, 40.0, "Hinausgehen", Use::Leave(i), None));
         }
+        let ship_busy = self.ship.sinking.is_some() || matches!(self.cutscene, Some(Cut::Summon { .. }));
         for (di, d) in self.world.docks.iter().enumerate() {
-            let here = (self.ship.hull.x - d.x).hypot(self.ship.hull.y - d.y) < 48.0;
-            out.extend(f(d.px, d.py, 60.0, if here { "An Bord gehen" } else { "Schiff rufen" }, if here { Use::Board(di) } else { Use::Call(di) }, None));
+            if ship_busy {
+                continue;
+            }
+            // das Schiff ruht in der Tiefe: beim ersten Mal das Flaschenschiff ins Meer werfen,
+            // danach an jedem Steg rufen
+            let here = !self.ship.sunk && self.ship.depth <= 0.0 && (self.ship.hull.x - d.x).hypot(self.ship.hull.y - d.y) < 48.0;
+            let (label, act) = if !s.ship_raised {
+                if s.bottle {
+                    ("Flaschenschiff ins Meer werfen", Use::Bottle(di))
+                } else {
+                    ("Ein verlassener Steg", Use::NoShip)
+                }
+            } else if here {
+                ("An Bord gehen", Use::Board(di))
+            } else {
+                ("Rufe dein Schiff", Use::Call(di))
+            };
+            out.extend(f(d.px, d.py, 60.0, label, act, None));
         }
         if let Some(st) = &s.stain {
             out.extend(f(st.x, st.y, 36.0, "Perlen zurückholen", Use::Stain, None));
@@ -1264,6 +1308,9 @@ impl Game {
             }
             if hover == Hover::None {
                 for (i, n) in self.npcs.iter().enumerate() {
+                    if self.npc_gone(i) {
+                        continue;
+                    }
                     if (m.x - n.a.x).abs() < 18.0 && m.y > n.a.y - 64.0 && m.y < n.a.y + 4.0 {
                         hover = Hover::Npc(i);
                     }
@@ -1301,7 +1348,9 @@ impl Game {
                 Use::Gate(gi) => self.enter_gate(gi),
                 Use::Slot(si) => self.use_slot(si),
                 Use::Board(di) => self.board(di),
-                Use::Call(di) => self.call_ship(di),
+                Use::Call(di) => self.summon_ship(di, false),
+                Use::Bottle(di) => self.summon_ship(di, true),
+                Use::NoShip => self.ui.toast("Kein Schiff weit und breit. Nur das schwarze Wasser unter den Planken."),
                 Use::Stain => self.take_stain(),
                 Use::Enter(i) => self.cutscene = Some(Cut::Door { t: 0.0, door: i, enter: true, moved: false }),
                 Use::Leave(i) => self.cutscene = Some(Cut::Door { t: 0.0, door: i, enter: false, moved: false }),
@@ -1444,6 +1493,11 @@ impl Game {
             self.ship.hull.h = d.heading;
             self.ship.hull.v = 0.0;
         }
+        // das Schiff ruht wieder in der Tiefe, bis man es ruft
+        self.ship.sunk = true;
+        self.ship.sinking = None;
+        self.ship.depth = 1.0;
+        self.ship.wet = 0.0;
         self.sailing = false;
         let lf = self.save.last_fire.clone();
         self.place_at_fire(&lf, false);
@@ -1541,6 +1595,7 @@ impl Game {
                 self.shop();
             }
             Cmd::ShopAt(id) => self.shop_at(id),
+            Cmd::TakeBottle => self.take_bottle(),
             Cmd::Buy(w, p) => self.buy(w, p),
             Cmd::RestMenu(i) => self.rest_menu(i),
             Cmd::TravelMenu(i) => self.travel_menu(i),
@@ -1577,13 +1632,13 @@ impl Game {
             Cmd::ShipUp(i) => {
                 let lvl = ship_level(&self.save, i);
                 let cost = ship_up_cost(lvl);
-                if lvl < 10 && self.save.pearls >= cost {
+                if lvl < SHIP_MAX && self.save.pearls >= cost {
                     self.save.pearls -= cost;
                     match i {
                         0 => self.save.ship_speed += 1,
                         1 => {
                             self.save.ship_def += 1;
-                            self.ship.max_hp = 120.0 + 24.0 * self.save.ship_def as f32;
+                            self.ship.max_hp = ship_hull(self.save.ship_def);
                             self.ship.hp = self.ship.max_hp;
                         }
                         _ => self.save.ship_atk += 1,
@@ -1834,7 +1889,7 @@ impl Game {
                 self.player.flasks += 1;
             }
             "stormCompass" => {
-                s.ship_speed = (s.ship_speed + 1).min(10);
+                s.ship_speed = (s.ship_speed + 1).min(SHIP_MAX);
                 s.items.insert(id.into(), true);
             }
             "fireball" => {
@@ -2015,18 +2070,6 @@ impl Game {
     }
 
     // ---------------------------------------------------------------- Segeln
-    fn call_ship(&mut self, di: usize) {
-        let d = self.world.docks[di].clone();
-        self.ship.hull.x = d.x;
-        self.ship.hull.y = d.y;
-        self.ship.hull.h = d.heading;
-        self.ship.hull.v = 0.0;
-        self.ship.rise = Some(0.0);
-        self.ship.hull.alpha = 0.0;
-        self.sfx("rise");
-        self.shake(5.0);
-        self.save.ship_dock = d.key.clone();
-    }
     /// Testlauf: mit dem Schiff am Ende der Welt ankommen (Seeschlacht gegen die Letzte Fahrt).
     pub fn debug_end(&mut self) {
         self.debug_board();
@@ -2118,14 +2161,16 @@ impl Game {
             da.partial_cmp(&db).unwrap()
         });
         if let Some(di) = di {
-            self.call_ship(di);
-            self.ship.rise = None;
-            self.ship.hull.alpha = 1.0;
+            self.place_ship(di);
+            self.save.ship_raised = true;
             self.board(di);
             self.cam_f = (self.ship.hull.x, self.ship.hull.y);
         }
     }
     fn board(&mut self, _di: usize) {
+        self.ship.sunk = false;
+        self.ship.sinking = None;
+        self.ship.depth = 0.0;
         self.sailing = true;
         self.player.state = PS::Ship;
         self.player.hidden = true;
@@ -2151,6 +2196,9 @@ impl Game {
         self.ship.sail = 0;
         self.save.ship_dock = d.key.clone();
         self.sfx("board");
+        // das Schiff kehrt in die Tiefe zurück, bis man es wieder ruft
+        self.ship.sinking = Some(0.0);
+        self.sfx("bubbles");
         self.persist(true);
     }
     fn sing_shanty(&mut self) {
@@ -2190,7 +2238,11 @@ impl Game {
         self.ship.hull.v = 0.0;
         self.ship.hull.alpha = 1.0;
         self.ship.sail = 1;
-        self.ship.rise = Some(0.0);
+        // aus dem Strudel aufgetaucht: triefend nass
+        self.ship.sunk = false;
+        self.ship.sinking = None;
+        self.ship.depth = 0.0;
+        self.ship.wet = summon::WET;
         self.cam_f = (ex, ey);
         self.ui.banner("DAS ENDE DER WELT", "Wo das Meer ins Nichts stürzt", "boss", 3.5);
         self.persist(true);

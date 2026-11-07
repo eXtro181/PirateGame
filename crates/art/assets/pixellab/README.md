@@ -102,3 +102,20 @@ helle Erdfleck unter den Wurzeln ist in dunkle Erde umgefärbt und die gelbgrün
 sind gedämpft. `bPine.png` ist für die Nacht um 45 % aufgehellt, `bDryGrass.png` etwas entsättigt und
 abgedunkelt, `bDriftwood.png` vom Rosa ins Graubraune gezogen, `bFlowers.png` um 10 % abgedunkelt,
 das Weiß des Schnees bei `bSnowPine.png`/`bSnowBush.png` auf höchstens 93 % Helligkeit begrenzt.
+
+## Dark Fantasy (7.11., tägliche Bonus-Generierungen)
+
+| Datei | Größe | Beschreibung | Objekt |
+|---|---|---|---|
+| `dWillow.png` | 128×128 | weeping willow tree with long drooping dark green branches hanging to the ground, gnarled trunk, swamp, gloomy, dark fantasy, night | `0ab40e6b-defa-4a48-9a99-f5681c955913` |
+| `dGlowShroom.png` | 64×64 | cluster of tall bioluminescent mushrooms with glowing cyan caps and thin pale stems on dark moss, eerie, dark fantasy | `14732ecd-166e-4c19-825e-d9d84be8d19a` |
+
+Beide auf die deckenden Pixel zugeschnitten; bei der Trauerweide ist das Laub um 20 % abgedunkelt
+und etwas kühler, bei den Leuchtpilzen der Moospolster darunter abgedunkelt.
+
+**Abwandlungen ohne neue Generierung** (`VARIANTS` in `crates/art/src/pixellab.rs`, beim Start aus
+den Vorlagen umgefärbt, keine eigenen Dateien): `plOakBlight` (Eiche mit verdorrtem, rostbraun-
+olivem Laub), `plLeafBlood` (Laubbaum mit blutrotem Laub), `plTreeDark` und `plPineDark`
+(nachtgrün, dunkler und kühler), `plGhostTree` (Totbaum knochenbleich), `plRimeTree` (Totbaum mit
+Raureif), `plGrassDead` (verwelktes Gras), `plFernDark` (dunkler Farn), `plFlowersBlood`
+(blutrote Blüten), `plFlowersGhost` (fahl geisterblaue Blüten mit schwachem Licht).

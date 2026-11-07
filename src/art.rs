@@ -686,6 +686,56 @@ impl Art {
     }
 }
 
+/// Flaschenschiff (liegend, Hals nach rechts), 26 × 14 px
+fn bottle_ship() -> Canvas {
+    let mut c = Canvas::new(26, 14);
+    let glass = [hex(0x2E5A50), hex(0x4A8A7A), hex(0x7ABCA8), hex(0xC8F0E0)];
+    // Bauch der Flasche: Ellipse 18 × 10, Hals 5 × 4, Korken
+    for y in 0..14 {
+        for x in 0..26 {
+            let (dx, dy) = ((x as f32 - 9.5) / 9.0, (y as f32 - 7.0) / 5.2);
+            let body = dx * dx + dy * dy <= 1.0;
+            let neck = (17..23).contains(&x) && (5..10).contains(&y);
+            let cork = (23..26).contains(&x) && (5..10).contains(&y);
+            if cork {
+                c.put(x, y, if y == 5 { hex(0xA87A4A) } else { hex(0x7A5230) }, 0.6);
+            } else if body || neck {
+                let edge = if body { dx * dx + dy * dy > 0.72 } else { y == 5 || y == 9 };
+                let shine = (y == 4 || y == 5) && (5..13).contains(&x);
+                let col = if shine { glass[3] } else if edge { glass[1] } else { glass[0] };
+                c.put(x, y, col, if edge { 1.0 } else { 0.4 });
+                if shine {
+                    c.spec(x, y, 220);
+                }
+            }
+        }
+    }
+    // das Schiff darin: schwarzer Rumpf, Masten, zwei schwarze Segel
+    for x in 4..15 {
+        c.put(x, 10, hex(0x141218), 0.8);
+        if (5..14).contains(&x) {
+            c.put(x, 9, hex(0x1E1A22), 0.8);
+        }
+    }
+    c.put(4, 9, hex(0x141218), 0.8);
+    c.put(15, 9, hex(0xC8963A), 0.8);
+    for (mx, top) in [(8, 3), (12, 4)] {
+        for y in top..9 {
+            c.put(mx, y, hex(0x3A2A1E), 0.6);
+        }
+        for y in top + 1..8 {
+            for x in mx - 2..mx + 2 {
+                if x != mx {
+                    c.put(x, y, hex(0x28242E), 0.5);
+                }
+            }
+        }
+    }
+    c.put(8, 2, hex(0x8A1A1C), 0.5);
+    c.outline(true, 0.7);
+    c
+}
+
 /// Requisiten, die nahtlos aneinanderstoßen (ein Umriss je Stück gäbe Fugen): ohne Pixelstil
 const TILED: [&str; 6] = ["fortWall", "highWall", "ringWall", "battlement", "fenceH", "bridge"];
 
@@ -1015,6 +1065,9 @@ pub fn build(frame: &mut Frame) -> Art {
         // eingesponnene Leiche (Prolog-Niederlage): am Boden liegend und im Sarg
         a.add_trim("x:wrapH", &sw_art::structures::wrapped_body(false), 32, 26);
         a.add_trim("x:wrapV", &sw_art::structures::wrapped_body(true), 18, 58);
+        // Flaschenschiff des Geisterkapitäns: grünliche Glasflasche mit Korken, darin ein kleines
+        // schwarzes Schiff mit Segeln
+        a.add_trim("x:bottle", &bottle_ship(), 12, 8);
     }
     // ---------------------------------------------------------------- Glutwacht und See (Rig)
     {
@@ -1084,11 +1137,12 @@ pub fn build(frame: &mut Frame) -> Art {
     // ---------------------------------------------------------------- Boden-Deko
     let hub = biome_pal(Biome::Hub);
     let deco: Vec<(&str, Canvas)> = vec![
-        ("flowersW", flora::flowers(hex(0xF6F2E4), 1)),
-        ("flowersY", flora::flowers(hex(0xF4D45C), 2)),
-        ("flowersP", flora::flowers(hex(0xEE94B4), 3)),
-        ("flowersB", flora::flowers(hex(0x9AC8F4), 4)),
-        ("flowersR", flora::flowers(hex(0xE85A4A), 5)),
+        // Dark Fantasy: knochenweiß, ocker, violett, geisterblau, blutrot
+        ("flowersW", flora::flowers(hex(0xD8D2C0), 1)),
+        ("flowersY", flora::flowers(hex(0xC09A3C), 2)),
+        ("flowersP", flora::flowers(hex(0x8A4CA8), 3)),
+        ("flowersB", flora::flowers(hex(0x8AAED0), 4)),
+        ("flowersR", flora::flowers(hex(0xA82A30), 5)),
         ("tuft", flora::tuft(&hub.grass, 1, false)),
         ("tuftDark", flora::tuft(&biome_pal(Biome::Earth).grass, 2, false)),
         ("tallgrass", flora::tuft(&hub.grass, 3, true)),

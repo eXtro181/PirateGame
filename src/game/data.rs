@@ -399,7 +399,14 @@ pub struct Save {
     /// die Riesige Meeresspinne ist erschlagen
     #[serde(default)]
     pub spider: bool,
-    /// Schiffsausbauten beim Schiffsmeister (0..=10)
+    /// Flaschenschiff vom Geisterkapitän am Galgenstrand (noch nicht ins Meer geworfen)
+    #[serde(default)]
+    pub bottle: bool,
+    /// das Schiff ist schon einmal aus der Tiefe gestiegen (danach ruft man es an jedem Steg);
+    /// Spielstände vor v7 hatten es von Anfang an
+    #[serde(default)]
+    pub ship_raised: bool,
+    /// Schiffsausbauten beim Schiffsmeister (0..=20, `SHIP_MAX`)
     #[serde(default)]
     pub ship_speed: i32,
     #[serde(default)]
@@ -489,6 +496,36 @@ pub fn shop_def(k: &str) -> &'static ShopDef {
 }
 /// Perlenstand bei „Unendlich Perlen“
 pub const INF_PEARLS: i64 = 999_999_999;
+
+/// Schiffsausbauten beim Schiffsmeister: höchste Stufe je Kategorie (Tempo, Verteidigung, Angriff).
+/// Bis Stufe 10 wirken die Stufen wie früher, darüber etwas schwächer.
+pub const SHIP_MAX: i32 = 20;
+fn ship_lo(l: i32) -> f32 {
+    l.clamp(0, 10) as f32
+}
+fn ship_hi(l: i32) -> f32 {
+    (l.clamp(0, SHIP_MAX) - 10).max(0) as f32
+}
+/// Fahrt: +6 % je Stufe bis 10, darüber +3 %
+pub fn ship_speed_mul(l: i32) -> f32 {
+    1.0 + 0.06 * ship_lo(l) + 0.03 * ship_hi(l)
+}
+/// Wendigkeit: +4 % je Stufe bis 10, darüber +2 %
+pub fn ship_turn_mul(l: i32) -> f32 {
+    1.0 + 0.04 * ship_lo(l) + 0.02 * ship_hi(l)
+}
+/// Rumpf: 120 + 24 je Stufe bis 10, darüber +16
+pub fn ship_hull(l: i32) -> f32 {
+    120.0 + 24.0 * ship_lo(l) + 16.0 * ship_hi(l)
+}
+/// Anteil des Schadens, den das Schiff nimmt: −4 % je Stufe bis 10, darüber −2 % (Stufe 20: 40 %)
+pub fn ship_dmg_taken(l: i32) -> f32 {
+    1.0 - 0.04 * ship_lo(l) - 0.02 * ship_hi(l)
+}
+/// Breitseiten und Crew-Geschütze: +12 % je Stufe bis 10, darüber +8 %
+pub fn ship_atk_mul(l: i32) -> f32 {
+    1.0 + 0.12 * ship_lo(l) + 0.08 * ship_hi(l)
+}
 /// Perlenstand als Text („unendlich“ beim Cheat)
 pub fn pearl_str(s: &Save) -> String {
     if s.inf_pearls.is_some() { "unendlich".into() } else { s.pearls.to_string() }
@@ -503,7 +540,7 @@ pub fn upgrade_cost(lvl: i32) -> (i64, i32) {
 pub fn new_save(name: &str, look: LookIdx, origin: &str, gift: &str, now: f64) -> Save {
     let o = ORIGINS.iter().find(|x| x.id == origin).unwrap_or(&ORIGINS[0]);
     Save {
-        version: 6,
+        version: 7,
         name: name.to_string(),
         look,
         origin: o.id.into(),
@@ -536,6 +573,8 @@ pub fn new_save(name: &str, look: LookIdx, origin: &str, gift: &str, now: f64) -
         woke: false,
         prolog: true,
         spider: false,
+        bottle: false,
+        ship_raised: false,
         ship_speed: 0,
         ship_def: 0,
         ship_atk: 0,
@@ -601,7 +640,7 @@ pub fn chart_reveal(c: &mut Vec<u8>, tx: i32, ty: i32, r: i32) -> bool {
 /// Ältere/fehlerhafte Spielstände reparieren.
 pub fn migrate(s: &mut Save) {
     let old = s.version;
-    s.version = 6;
+    s.version = 7;
     if old < 4 {
         // v4: Karte vergrößert, alles um (80, 60) Kacheln verschoben
         if let Some(st) = s.stain.as_mut() {
@@ -692,6 +731,11 @@ pub fn migrate(s: &mut Save) {
         }
         // die Seekarte neu aufdecken (beim Laden um die erkundeten festen Inseln)
         s.chart.clear();
+    }
+    if old < 7 {
+        // v7: das Schiff ruht in der Tiefe und steigt erst auf, wenn man das Flaschenschiff des
+        // Geisterkapitäns ins Meer wirft – ältere Fahrten hatten ihr Schiff schon
+        s.ship_raised = true;
     }
     if s.weapon.is_empty() {
         s.weapon = "cutlass".into();

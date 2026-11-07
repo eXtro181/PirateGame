@@ -624,6 +624,8 @@ pub fn sfx(name: &str) -> Vec<f32> {
     use Wave::*;
     let len = match name {
         "death" | "rise" | "bell" => 3.2,
+        "bubbles" => 1.6,
+        "glass" => 0.9,
         "kindle" | "roar" => 1.8,
         "cannon" | "crash" | "tide" | "level" | "pearls" | "chest" | "zap" | "fog" => 1.0,
         "slither" => 1.7,
@@ -633,6 +635,25 @@ pub fn sfx(name: &str) -> Vec<f32> {
     let mut x = Fx::new(len, name.bytes().map(|b| b as u32).sum::<u32>() + 3);
     match name {
         "swing" => x.noise(0.0, 900.0, 3200.0, 0.16, 0.35, Band, 1.5, false),
+        // Glas zerspringt: helles Klirren, rieselnde Scherben
+        "glass" => {
+            x.noise(0.0, 4200.0, 6500.0, 0.08, 0.5, Band, 4.0, false);
+            for k in 0..10 {
+                let t = k as f32 * 0.05 + x.rng.u() * 0.05;
+                let f = 2400.0 + x.rng.u() * 3400.0;
+                x.tone(t, Sine, f, f * 0.98, 0.14, 0.11);
+            }
+            x.noise(0.12, 3000.0, 3000.0, 0.4, 0.16, Band, 3.0, false);
+        }
+        // Blubbern: Blasen steigen aus der Tiefe auf und platzen
+        "bubbles" => {
+            for k in 0..16 {
+                let t = k as f32 * 0.085 + x.rng.u() * 0.06;
+                let (a, b) = (200.0 + x.rng.u() * 260.0, 520.0 + x.rng.u() * 520.0);
+                x.tone(t, Sine, a, b, 0.06, 0.1);
+            }
+            x.noise(0.0, 260.0, 260.0, 1.4, 0.3, Low, 1.0, false);
+        }
         // Spinnfaden: zischend, klebrig knisternd
         "silk" => {
             x.noise(0.0, 2400.0, 5200.0, 0.22, 0.22, Band, 3.0, false);

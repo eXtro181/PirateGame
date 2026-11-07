@@ -16,7 +16,7 @@ use crate::canvas::Canvas;
 use crate::rig::*;
 use std::f32::consts::{PI, TAU};
 
-/// Ausbaustufen des eigenen Schiffes (0..=10).
+/// Ausbaustufen des eigenen Schiffes (0..=20).
 #[derive(Clone, Copy, Default, PartialEq, Eq, Hash, Debug)]
 pub struct Upg {
     pub speed: u8,
@@ -173,8 +173,6 @@ pub fn ship_rig(style: &str) -> Rig {
 
 #[derive(Clone, Copy, PartialEq)]
 enum Sail {
-    /// Rahsegel, gebläht
-    Square,
     /// Rahsegel mit Löchern und ausgefranstem Rand
     Torn,
     /// schmale, hohe Schleiersegel
@@ -344,31 +342,31 @@ fn design(s: &str, u: Upg) -> Design {
             lamp: 0x9AFF6A,
         },
         _ => {
-            // eigenes Schiff: Segelstufen aus dem Tempo-Ausbau
-            let t_main = if u.speed >= 3 { 3 } else { 2 };
-            let t_fore = if u.speed >= 5 { 3 } else { 2 };
+            // eigenes Schiff (7.11.): schwarze Galeone; Segelstufen aus dem Tempo-Ausbau
+            let t_main = if u.speed >= 10 { 4 } else if u.speed >= 3 { 3 } else { 2 };
+            let t_fore = if u.speed >= 18 { 4 } else if u.speed >= 5 { 3 } else { 2 };
             Design {
-                l: 46.0,
-                b: 14.0,
-                d: 16.0,
-                castle: (9.0, 6.0),
-                fore: 4.5,
+                l: 47.0,
+                b: 14.5,
+                d: 16.5,
+                castle: (13.0, 7.0),
+                fore: 5.5,
                 masts: vec![
-                    m(22.0, 70.0 + if u.speed >= 5 { 10.0 } else { 0.0 }, 20.0, t_fore),
-                    m(-2.0, 86.0 + if u.speed >= 3 { 10.0 } else { 0.0 }, 24.0, t_main),
-                    Mast { lateen: true, ..m(-28.0, 62.0, 16.0, 1) },
+                    m(23.0, 76.0 + if u.speed >= 5 { 8.0 } else { 0.0 }, 20.0, t_fore),
+                    m(0.0, 92.0 + if u.speed >= 3 { 8.0 } else { 0.0 }, 24.0, t_main),
+                    Mast { lateen: true, ..m(-27.0, 70.0, 16.0, 1) },
                 ],
-                sail: Sail::Square,
-                ports: 5 + (u.atk as usize / 2).min(4),
-                hull: 0x5A3A24,
-                hull_pat: Pat::Planks(2.6),
-                wale: 0x7A2A22,
-                deck: 0x6A4E36,
-                sailc: if u.speed >= 10 { 0xF0E6CC } else { 0xE2D6BC },
-                sail_pat: Pat::Spots(6.0),
-                trim: 0xC9A04A,
-                flag: 0x16141A,
-                lamp: 0xFFC86A,
+                sail: Sail::Torn,
+                ports: 6 + (u.atk as usize / 3).min(4),
+                hull: 0x18151C,
+                hull_pat: Pat::Planks(2.0),
+                wale: 0x4E1216,
+                deck: 0x3A2E26,
+                sailc: 0x1E1B22,
+                sail_pat: Pat::Spots(4.5),
+                trim: 0xC8963A,
+                flag: 0x0B0A0E,
+                lamp: 0xFFB050,
             }
         }
     }
@@ -381,6 +379,10 @@ fn hull_half(d: &Design, y: f32, z: f32) -> f32 {
 }
 
 fn build(r: &mut Rig, st_name: &str, u: Upg) {
+    if st_name == "player" {
+        build_black(r, u);
+        return;
+    }
     let d = design(st_name, u);
     let boss = st_name != "player";
     let dz = d.d * 0.875; // Deckhöhe
@@ -992,4 +994,643 @@ fn boss_decor(r: &mut Rig, el: &str, d: &Design) {
             r.dot(add(c, v(sx, 0.8, 0.3)), d.flag, 0.0, 2);
         }
     }
+}
+
+/// Das eigene Schiff (7.11.): eine schwarze Galeone im Pixelstil. Schwarz lackierter Rumpf mit
+/// Plankenfugen, grünschwarzes Unterwasserschiff mit Seepocken und Tang, ochsenblutrotes Band mit
+/// den Stückpforten (rote Pfortendeckel), zwei Goldleisten und dunkles Schandeck; Vorschiff mit
+/// Goldlinie, Achterkastell und Hütte, Heckspiegel mit zwei Reihen leuchtender Fenster in
+/// Goldrahmen, Heckbalkon mit Balustern, Seitengalerien, Totenkopf mit gekreuzten Knochen und
+/// Goldschnitzwerk, drei Hecklaternen, Flaggenstock mit Totenkopfflagge. Masten mit Eisenringen,
+/// Marsplattformen, Saling und Toppen; schwarze, geflickte und zerfetzte Segel mit Fußpferden unter
+/// den Rahen, Besan als Gaffelsegel, lange rote Wimpel. Wanten mit Webeleinen und Jungfern an den
+/// Rüsten, Stage, Pardunen und Brassen. Kranbalken mit Ankern und Ketten, Bugspriet mit
+/// Klüverbaum und Stampfstock, Klüver, ein geflügelter Totenengel als Galion. An Deck Ankerspill,
+/// Steuerrad mit Kompasshaus, Grätinge, Fässer, Kisten, Taurollen, Schiffsglocke, Decklaternen.
+/// Ausbauten (je bis 20) bleiben sichtbar: Tempo = mehr und größere Segel, Leesegel, Bramsegel,
+/// Besantoppsegel, weitere Klüver, auf 20 geisterhaft schimmernde Säume; Verteidigung =
+/// Eisenbänder, Panzerplatten bis zur Wasserlinie, Goldkanten, Rammsporn, Eisenkappe am Bug,
+/// Dornen auf der Reling, gepanzertes Heck, Ketten, auf 20 leuchtende Runen; Angriff = mehr
+/// Stückpforten, zweite Batterie, Drehbassen, Mörser, Jagd- und Heckgeschütze, Karronaden an Deck,
+/// zweiter Mörser, goldbeschlagene Rohre.
+fn build_black(r: &mut Rig, u: Upg) {
+    let d = design("player", u);
+    let dz = d.d * 0.875;
+    let (l, b) = (d.l, d.b);
+    let (cl, ch) = d.castle;
+    let cy = -l + cl;
+    let bow_z = dz + d.fore;
+    // ---------------- Werkstoffe
+    let hull = r.mat(mat(0x18151C).pat(Pat::Planks(2.0)).spec(55));
+    let hull_lo = r.mat(mat(0x101618).pat(Pat::Planks(2.2)).spec(25));
+    let band = r.mat(mat(0x4E1216).pat(Pat::Planks(2.0)).spec(40));
+    let gold = r.mat(mat(0xC8963A).spec(230).bias(0.12));
+    let deck = r.mat(mat(0x3A2E26).pat(Pat::Deck(1.8)));
+    let wood = r.mat(mat(0x2C2018).pat(Pat::Grain));
+    let dark = r.mat(mat(0x15100E).pat(Pat::Grain));
+    let crate_m = r.mat(mat(0x4A3424).pat(Pat::Planks(1.0)));
+    let rope = r.mat(mat(0x3E3428).soft());
+    let sail = r.mat(mat(if u.speed >= 20 { 0x26222E } else { 0x1E1B22 }).pat(Pat::Spots(4.5)).bias(0.04));
+    let patch = r.mat(mat(0x3A3440).pat(Pat::Spots(2.0)).bias(0.06));
+    let iron = r.mat(mat(0x26262E).spec(180));
+    let port = r.mat(mat(0x070505).soft());
+    let lid = r.mat(mat(0x5E1416).pat(Pat::Planks(1.2)));
+    let lamp = r.mat(mat(0xFFB050).glow(1.9).bias(0.4).soft());
+    let win = r.mat(mat(0xFFA848).glow(1.5).bias(0.3).soft());
+    let bone = r.mat(mat(0xD6CDB6).spec(70));
+    let flagm = r.mat(mat(0x0B0A0E));
+    let red = r.mat(mat(0x7A1A1C));
+    let weed = r.mat(mat(0x2E4A26).soft());
+    let hw_at = |y: f32, z: f32| hull_half(&d, y, z);
+
+    // ---------------- Rumpf
+    r.part();
+    r.clip(f32::MIN, dz - 7.0);
+    r.ell(v(0.0, 0.0, dz), v(b, l, d.d), hull_lo);
+    r.clip(dz - 7.0, dz);
+    r.ell(v(0.0, 0.0, dz), v(b, l, d.d), hull);
+    r.clip(dz - 5.3, dz - 2.6);
+    r.ell(v(0.0, 0.0, dz), v(b + 0.25, l + 0.25, d.d + 0.1), band);
+    r.clip(dz - 6.1, dz - 5.4);
+    r.ell(v(0.0, 0.0, dz), v(b + 0.45, l + 0.45, d.d + 0.2), gold);
+    r.clip(dz - 2.5, dz - 1.9);
+    r.ell(v(0.0, 0.0, dz), v(b + 0.45, l + 0.45, d.d + 0.2), gold);
+    r.clip(dz - 0.8, dz);
+    r.ell(v(0.0, 0.0, dz), v(b + 0.3, l + 0.3, d.d + 0.1), dark);
+    r.noclip();
+    r.ell(v(0.0, 0.0, dz), v(b - 0.6, l - 0.6, 0.6), deck);
+    // Kiel und Ruder
+    r.cube(v(0.0, -l + 1.0, dz - d.d * 0.7), v(0.6, 2.2, 3.0), dark);
+    // Vorschiff mit Goldlinie
+    r.clip(f32::MIN, bow_z);
+    r.ell_dir(v(0.0, l * 0.7, dz), v(0.0, 1.0, 0.18), v(b * 0.72, l * 0.52, d.d), hull);
+    r.clip(bow_z - 1.5, bow_z - 0.9);
+    r.ell_dir(v(0.0, l * 0.7, dz), v(0.0, 1.0, 0.18), v(b * 0.72 + 0.3, l * 0.52 + 0.3, d.d + 0.1), gold);
+    r.noclip();
+    r.ell(v(0.0, l * 0.78, bow_z), v(b * 0.55, l * 0.35, 0.6), deck);
+    // Seepocken und Tang am Unterwasserschiff
+    for k in 0..46 {
+        let t = k as f32 / 46.0;
+        let y = -l * 0.85 + t * l * 1.7;
+        let z = 1.0 + ((k * 7) % 5) as f32 * 0.9;
+        let side = if k % 2 == 0 { 1.0 } else { -1.0 };
+        let hw = hw_at(y, z);
+        if hw > 1.0 {
+            r.dot(v(side * (hw + 0.1), y, z), if k % 3 == 0 { 0x9A968A } else { 0x6E6A60 }, 0.0, 1);
+        }
+    }
+    for (y, side) in [(l * 0.86, 1.0f32), (l * 0.9, -1.0), (-l * 0.8, 1.0), (-l * 0.84, -1.0), (l * 0.2, 1.0), (-l * 0.3, -1.0)] {
+        let hw = hw_at(y, 2.4);
+        r.curve(&[v(side * (hw + 0.2), y, 2.6), v(side * (hw + 0.6), y - 0.6, 1.2), v(side * (hw + 0.4), y + 0.4, -0.2)], 0.4, 0.3, weed);
+    }
+
+    // ---------------- Achterkastell, Hütte, Heckspiegel
+    r.part();
+    let cw = b * 0.92;
+    r.cube(v(0.0, cy, dz + ch * 0.5), v(cw, cl, ch * 0.5 + 0.2), hull);
+    r.cube(v(0.0, cy, dz + ch * 0.5 - 1.2), v(cw + 0.12, cl + 0.12, 0.7), band);
+    r.cube(v(0.0, cy, dz + ch - 0.4), v(cw + 0.25, cl + 0.25, 0.32), gold);
+    r.cube(v(0.0, cy, dz + 0.9), v(cw + 0.2, cl + 0.2, 0.3), gold);
+    r.cube(v(0.0, cy, dz + ch + 0.3), v(cw + 0.1, cl + 0.4, 0.6), deck);
+    let (pl, ph) = (6.0, 3.0);
+    let py = -l + pl;
+    r.cube(v(0.0, py, dz + ch + ph * 0.5 + 0.4), v(cw * 0.96, pl, ph * 0.5), hull);
+    r.cube(v(0.0, py, dz + ch + ph + 0.7), v(cw * 0.98, pl + 0.3, 0.45), deck);
+    r.cube(v(0.0, py, dz + ch + ph + 0.25), v(cw + 0.1, pl + 0.15, 0.28), gold);
+    // Tür von der Hütte aufs Achterdeck, Tür vom Kastell zum Hauptdeck
+    r.cube(v(0.0, py + pl + 0.1, dz + ch + 1.9), v(1.4, 0.3, 1.5), dark);
+    r.cube(v(0.0, cy + cl + 0.1, dz + 3.2), v(2.0, 0.35, 3.0), dark);
+    r.dot(v(0.9, cy + cl + 0.5, dz + 3.2), 0xC8963A, 0.0, 1);
+    // Heckspiegel: zwei Fensterreihen in Goldrahmen
+    let sy = -l - 0.25;
+    for (z, n, wdt) in [(dz + ch * 0.5, 5usize, 1.15f32), (dz + ch + ph * 0.5 + 0.4, 4, 1.0)] {
+        for k in 0..n {
+            let x = (k as f32 - (n - 1) as f32 / 2.0) * (cw * 1.75 / n as f32);
+            r.cube(v(x, sy, z), v(wdt + 0.25, 0.2, 1.45), gold);
+            r.cube(v(x, sy - 0.2, z), v(wdt, 0.15, 1.15), win);
+            r.cube(v(x, sy - 0.4, z), v(0.12, 0.1, 1.15), gold);
+            r.cube(v(x, sy - 0.4, z + 0.1), v(wdt, 0.1, 0.1), gold);
+        }
+    }
+    // Totenkopf mit gekreuzten Knochen über den Fenstern, Goldschnitzwerk, Wappenrahmen
+    let sk = v(0.0, sy - 0.5, dz + ch - 1.2);
+    r.ball(sk, 1.25, bone);
+    r.dot(add(sk, v(-0.45, -1.0, 0.15)), 0x140C0A, 0.0, 1);
+    r.dot(add(sk, v(0.45, -1.0, 0.15)), 0x140C0A, 0.0, 1);
+    r.tube(&[add(sk, v(-2.4, -0.3, -1.4)), add(sk, v(2.4, -0.3, 1.0))], 0.38, 0.38, bone);
+    r.tube(&[add(sk, v(2.4, -0.3, -1.4)), add(sk, v(-2.4, -0.3, 1.0))], 0.38, 0.38, bone);
+    for side in [-1.0f32, 1.0] {
+        r.curve(&[v(side * 2.2, sy - 0.3, dz + ch - 0.4), v(side * 4.4, sy - 0.3, dz + ch - 1.6), v(side * 6.4, sy - 0.3, dz + ch - 0.6), v(side * 8.2, sy - 0.3, dz + ch - 1.4)], 0.4, 0.3, gold);
+        r.curve(&[v(side * (cw - 0.4), sy - 0.2, dz + 0.8), v(side * (cw - 0.2), sy - 0.2, dz + ch * 0.5), v(side * (cw - 0.6), sy - 0.2, dz + ch + ph)], 0.45, 0.35, gold);
+    }
+    // Heckbalkon mit Balustern
+    let bz = dz + ch * 0.5 - 2.0;
+    r.cube(v(0.0, -l - 1.4, bz), v(cw * 0.95, 1.4, 0.3), dark);
+    let mut bal = vec![];
+    for k in 0..=14 {
+        let x = -cw * 0.92 + k as f32 * (cw * 1.84 / 14.0);
+        r.tube(&[v(x, -l - 2.6, bz + 0.3), v(x, -l - 2.6, bz + 2.0)], 0.28, 0.28, gold);
+        bal.push(v(x, -l - 2.6, bz + 2.1));
+    }
+    r.tube(&bal, 0.32, 0.32, gold);
+    // Seitengalerien mit Fenstern
+    for side in [-1.0f32, 1.0] {
+        let gx = side * (cw + 0.9);
+        let gy = -l + 5.5;
+        r.cube(v(gx, gy, dz + ch * 0.55), v(1.0, 3.4, ch * 0.42), hull);
+        r.ell(v(gx, gy, dz + ch * 0.55 + ch * 0.42), v(1.3, 3.6, 0.9), dark);
+        r.cube(v(gx + side * 1.05, gy, dz + ch * 0.55), v(0.1, 1.8, 1.1), win);
+        r.cube(v(gx + side * 1.12, gy, dz + ch * 0.55), v(0.08, 2.1, 1.35), gold);
+        r.spike(v(gx, gy, dz + ch * 0.55 - ch * 0.42), v(gx * 0.94, gy, dz - 1.0), 0.8, gold);
+    }
+    // Hecklaternen: zwei an den Ecken, eine große oben in der Mitte
+    for sx in [-cw * 0.95, cw * 0.95] {
+        r.tube(&[v(sx, -l + 0.6, dz + ch + ph + 0.8), v(sx * 1.06, -l - 1.6, dz + ch + ph + 4.6)], 0.5, 0.5, iron);
+        r.cyl(v(sx * 1.06, -l - 1.8, dz + ch + ph + 4.4), 1.3, 1.3, 2.6, lamp);
+        r.ell(v(sx * 1.06, -l - 1.8, dz + ch + ph + 7.2), v(1.5, 1.5, 0.7), iron);
+    }
+    r.tube(&[v(0.0, -l + 0.4, dz + ch + ph + 0.9), v(0.0, -l - 0.8, dz + ch + ph + 6.8)], 0.55, 0.5, iron);
+    r.cyl(v(0.0, -l - 1.0, dz + ch + ph + 6.4), 1.7, 1.7, 3.2, lamp);
+    r.ell(v(0.0, -l - 1.0, dz + ch + ph + 9.8), v(1.9, 1.9, 0.8), iron);
+    r.spike(v(0.0, -l - 1.0, dz + ch + ph + 10.4), v(0.0, -l - 1.0, dz + ch + ph + 12.6), 0.7, gold);
+    // Flaggenstock mit Totenkopfflagge
+    let fs0 = v(0.0, -l - 0.2, dz + ch + ph + 1.0);
+    let fs1 = v(0.0, -l - 6.0, dz + ch + ph + 13.0);
+    r.tube(&[fs0, fs1], 0.45, 0.35, wood);
+    let f0 = add(fs1, v(0.0, 0.0, -0.4));
+    r.quad(f0, add(f0, v(0.6, -8.0, 0.8)), add(f0, v(0.4, -8.4, -4.6)), add(f0, v(0.0, 0.0, -5.0)), flagm);
+    r.dot(add(f0, v(0.9, -3.6, -2.2)), 0xE8E0CC, 0.0, 2);
+    r.dot(add(f0, v(0.9, -2.6, -3.3)), 0xE8E0CC, 0.0, 1);
+    r.dot(add(f0, v(0.9, -4.6, -3.3)), 0xE8E0CC, 0.0, 1);
+
+    // ---------------- Reling mit Balustern, Rüsten, Kranbalken
+    r.part();
+    for side in [-1.0f32, 1.0] {
+        let mut pts = vec![];
+        let mut y = cy + cl;
+        let mut k = 0;
+        while y <= l * 0.74 {
+            let hw = hw_at(y, dz) - 0.5;
+            let z = if y > l * 0.42 { bow_z + 2.4 } else { dz + 2.4 };
+            pts.push(v(side * hw, y, z));
+            if k % 2 == 0 {
+                r.tube(&[v(side * hw, y, z - 2.4), v(side * hw, y, z)], 0.36, 0.36, dark);
+            }
+            y += 1.5;
+            k += 1;
+        }
+        r.tube(&pts, 0.6, 0.6, dark);
+        // Reling am Kastell und an der Hütte, mit Goldhandlauf
+        let mut cp = vec![];
+        let mut yy = -l + 0.6;
+        while yy <= cy + cl {
+            let x = side * (cw - 0.2);
+            r.tube(&[v(x, yy, dz + ch + 0.6), v(x, yy, dz + ch + 2.4)], 0.32, 0.32, dark);
+            cp.push(v(x, yy, dz + ch + 2.5));
+            yy += 1.6;
+        }
+        r.tube(&cp, 0.4, 0.4, gold);
+        // Rüsten mit Jungfern an den drei Masten
+        for mm in d.masts.iter() {
+            let base_z = if mm.y < cy + cl { dz + ch } else { dz };
+            for k in 0..5 {
+                let yy = mm.y - 2.6 + k as f32 * 1.3;
+                let hw = hw_at(yy, dz.min(base_z));
+                r.ball(v(side * (hw + 1.0), yy, base_z - 0.2), 0.55, dark);
+            }
+            let hw = hw_at(mm.y, dz.min(base_z));
+            r.cube(v(side * (hw + 0.6), mm.y, base_z - 0.9), v(0.7, 3.6, 0.25), dark);
+        }
+        // Kranbalken und Anker mit Kette
+        let ay = l * 0.6;
+        let ahw = hw_at(ay, bow_z - 1.0).max(4.0);
+        let ax = side * (ahw + 2.2);
+        r.tube(&[v(side * (ahw - 1.0), ay, bow_z + 0.6), v(ax, ay, bow_z + 0.8)], 0.6, 0.5, dark);
+        let top = v(ax, ay, bow_z - 0.4);
+        let bot = v(ax, ay + 0.4, bow_z - 8.6);
+        r.tube(&[top, bot], 0.55, 0.55, iron);
+        r.tube(&[add(top, v(0.0, -2.2, 0.2)), add(top, v(0.0, 2.2, 0.2))], 0.4, 0.4, dark);
+        r.curve(&[add(bot, v(0.0, -2.8, 1.6)), bot, add(bot, v(0.0, 2.8, 1.6))], 0.5, 0.5, iron);
+        r.spike(add(bot, v(0.0, -2.8, 1.6)), add(bot, v(0.0, -3.5, 2.9)), 0.8, iron);
+        r.spike(add(bot, v(0.0, 2.8, 1.6)), add(bot, v(0.0, 3.5, 2.9)), 0.8, iron);
+        let hawse = v(side * (hw_at(ay + 3.0, dz - 2.0) + 0.1), ay + 3.0, dz - 2.2);
+        r.curve(&[hawse, add(hawse, v(side * 1.2, -0.4, -2.6)), add(top, v(0.0, 0.2, 0.2))], 0.38, 0.38, iron);
+    }
+
+    // ---------------- Panzerung (Verteidigung)
+    if u.def > 0 {
+        r.part();
+        let plate = r.mat(mat(if u.def >= 10 { 0x4A4A52 } else { 0x34343C }).pat(Pat::Rivets(2.0)).spec(190));
+        let rows: &[f32] = if u.def >= 7 {
+            &[dz - 6.8, dz - 9.6, dz - 12.2]
+        } else if u.def >= 4 {
+            &[dz - 6.8, dz - 9.6]
+        } else {
+            &[dz - 6.8]
+        };
+        let rune = r.mat(mat(0x6AF2E0).glow(1.4).bias(0.3).soft());
+        for (ri, &z) in rows.iter().enumerate() {
+            let n = (7 + u.def as usize).min(16);
+            for i in 0..n {
+                let y = -l * 0.66 + i as f32 * (l * 1.36 / n as f32);
+                for side in [-1.0f32, 1.0] {
+                    let hw = hw_at(y, z);
+                    if hw < 2.0 {
+                        continue;
+                    }
+                    let hh = if u.def >= 4 { 1.2 } else { 0.5 };
+                    r.cube(v(side * (hw + 0.25), y, z), v(0.4, l * 0.6 / n as f32 * 1.6, hh), plate);
+                    if u.def >= 10 && ri == 0 {
+                        r.cube(v(side * (hw + 0.45), y, z + hh), v(0.25, l * 0.6 / n as f32 * 1.6, 0.25), gold);
+                    }
+                    if u.def >= 20 && i % 2 == 0 {
+                        r.dot(v(side * (hw + 0.7), y, z), 0x6AF2E0, 1.6, 1);
+                    }
+                }
+            }
+        }
+        if u.def >= 10 {
+            r.spike(v(0.0, l * 0.98, dz - 6.0), v(0.0, l * 1.24, dz - 7.0), 2.4, plate);
+            r.ball(v(0.0, l * 0.98, dz - 6.0), 2.2, gold);
+        }
+        if u.def >= 12 {
+            // Eisenkappe über dem Vorsteven
+            r.clip(dz - 8.0, bow_z);
+            r.ell_dir(v(0.0, l * 0.86, dz), v(0.0, 1.0, 0.18), v(b * 0.4, l * 0.2, d.d * 0.8), plate);
+            r.noclip();
+        }
+        if u.def >= 14 {
+            // Dornen auf der Reling
+            for side in [-1.0f32, 1.0] {
+                let mut y = -l * 0.4;
+                while y < l * 0.4 {
+                    let hw = hw_at(y, dz) - 0.5;
+                    r.spike(v(side * hw, y, dz + 2.9), v(side * (hw + 0.8), y, dz + 4.4), 0.45, iron);
+                    y += 3.0;
+                }
+            }
+        }
+        if u.def >= 16 {
+            // gepanzertes Heck
+            for side in [-1.0f32, 1.0] {
+                r.cube(v(side * (cw + 0.3), cy, dz + ch * 0.25), v(0.3, cl * 0.9, ch * 0.22), plate);
+            }
+            r.cube(v(0.0, -l - 0.5, dz + 1.4), v(cw * 0.9, 0.3, 1.0), plate);
+        }
+        if u.def >= 18 {
+            // schwere Ketten in Bögen am Rumpf
+            for side in [-1.0f32, 1.0] {
+                for k in 0..4 {
+                    let y0 = -l * 0.5 + k as f32 * l * 0.28;
+                    let y1 = y0 + l * 0.24;
+                    let ym = (y0 + y1) * 0.5;
+                    r.curve(&[v(side * (hw_at(y0, dz - 3.0) + 0.6), y0, dz - 2.2), v(side * (hw_at(ym, dz - 5.0) + 0.9), ym, dz - 4.6), v(side * (hw_at(y1, dz - 3.0) + 0.6), y1, dz - 2.2)], 0.35, 0.35, iron);
+                }
+            }
+        }
+        let _ = rune;
+    }
+
+    // ---------------- Stückpforten, Kanonen und weitere Geschütze (Angriff)
+    r.part();
+    let rows_guns: Vec<f32> = if u.atk >= 7 { vec![dz - 4.0, dz - 8.6] } else { vec![dz - 4.0] };
+    for &z in &rows_guns {
+        for side in [-1.0f32, 1.0] {
+            for i in 0..d.ports {
+                let y = -l * 0.44 + i as f32 * (l * 0.98 / d.ports as f32);
+                let hw = hw_at(y, z);
+                if hw < 2.0 {
+                    continue;
+                }
+                r.cube(v(side * (hw + 0.3), y, z), v(0.7, 1.35, 1.15), port);
+                let (a, bb) = (v(side * (hw + 0.5), y - 1.4, z + 1.2), v(side * (hw + 0.5), y + 1.4, z + 1.2));
+                r.quad(a, bb, add(bb, v(side * 1.6, 0.0, 1.1)), add(a, v(side * 1.6, 0.0, 1.1)), lid);
+                r.tube(&[v(side * (hw - 0.5), y, z), v(side * (hw + 2.9), y, z + 0.15)], 0.85, 0.72, iron);
+                r.ball(v(side * (hw + 2.9), y, z + 0.15), 0.85, iron);
+                if u.atk >= 20 {
+                    r.ball(v(side * (hw + 0.6), y, z + 0.05), 0.95, gold);
+                }
+            }
+        }
+    }
+    if u.atk >= 4 {
+        // Drehbassen auf der Reling
+        for side in [-1.0f32, 1.0] {
+            for k in 0..3 {
+                let y = -14.0 + k as f32 * 14.0;
+                let hw = hw_at(y, dz) - 0.5;
+                r.tube(&[v(side * hw, y, dz + 2.4), v(side * hw, y, dz + 3.4)], 0.3, 0.3, iron);
+                r.tube(&[v(side * hw, y - 1.0, dz + 3.6), v(side * (hw + 2.6), y + 0.6, dz + 4.0)], 0.6, 0.5, iron);
+            }
+        }
+    }
+    if u.atk >= 10 {
+        // Mörser mittschiffs, Jagdgeschütze am Bug
+        r.cyl(v(0.0, 10.0, dz + 0.4), 3.0, 3.0, 2.8, iron);
+        r.ell(v(0.0, 10.0, dz + 3.2), v(2.1, 2.1, 0.7), port);
+        for sx in [-2.8f32, 2.8] {
+            r.tube(&[v(sx, l * 0.62, bow_z + 1.0), v(sx * 1.1, l * 0.62 + 6.0, bow_z + 1.6)], 1.1, 0.95, iron);
+        }
+    }
+    if u.atk >= 13 {
+        // Heckgeschütze unter den Fenstern, Karronaden an Deck
+        for sx in [-cw * 0.5, cw * 0.5] {
+            r.cube(v(sx, -l - 0.2, dz + 1.8), v(0.9, 0.3, 0.9), port);
+            r.tube(&[v(sx, -l + 1.0, dz + 1.8), v(sx, -l - 2.4, dz + 1.9)], 0.8, 0.7, iron);
+        }
+        for side in [-1.0f32, 1.0] {
+            for k in 0..3 {
+                let y = -8.0 + k as f32 * 9.0;
+                let hw = hw_at(y, dz) - 2.6;
+                r.cube(v(side * hw, y, dz + 0.9), v(1.0, 1.2, 0.5), dark);
+                r.tube(&[v(side * (hw - 1.0), y, dz + 1.6), v(side * (hw + 2.4), y, dz + 1.9)], 0.9, 0.75, iron);
+            }
+        }
+    }
+    if u.atk >= 18 {
+        r.cyl(v(0.0, -10.0, dz + 0.4), 2.6, 2.6, 2.6, iron);
+        r.ell(v(0.0, -10.0, dz + 3.0), v(1.8, 1.8, 0.6), port);
+    }
+
+    // ---------------- Deck: Ankerspill, Steuerrad, Grätinge, Fässer, Kisten, Taurollen, Glocke
+    r.part();
+    // Ankerspill
+    r.cyl(v(0.0, -15.0, dz + 0.3), 1.5, 1.5, 2.6, dark);
+    r.cyl(v(0.0, -15.0, dz + 2.9), 1.9, 1.9, 0.5, wood);
+    for k in 0..6 {
+        let a = k as f32 / 6.0 * TAU;
+        r.tube(&[v(0.0, -15.0, dz + 3.2), v(a.cos() * 3.4, -15.0 + a.sin() * 3.4, dz + 3.3)], 0.32, 0.32, wood);
+    }
+    // Steuerrad mit Kompasshaus auf dem Achterdeck
+    let wc = v(0.0, -26.0, dz + ch + 3.0);
+    let ring: Vec<V3> = (0..=16).map(|k| {
+        let a = k as f32 / 16.0 * TAU;
+        add(wc, v(a.cos() * 2.3, 0.0, a.sin() * 2.3))
+    }).collect();
+    r.tube(&ring, 0.32, 0.32, wood);
+    for k in 0..8 {
+        let a = k as f32 / 8.0 * TAU;
+        r.tube(&[wc, add(wc, v(a.cos() * 3.1, 0.0, a.sin() * 3.1))], 0.24, 0.24, wood);
+        r.ball(add(wc, v(a.cos() * 3.2, 0.0, a.sin() * 3.2)), 0.36, gold);
+    }
+    r.ball(wc, 0.6, gold);
+    r.tube(&[add(wc, v(0.0, 0.6, -3.0)), add(wc, v(0.0, 0.6, -0.4))], 0.5, 0.5, dark);
+    r.cube(v(0.0, -23.4, dz + ch + 1.2), v(0.9, 0.9, 0.9), dark);
+    r.ell(v(0.0, -23.4, dz + ch + 2.2), v(0.95, 0.95, 0.45), gold);
+    // Grätinge im Hauptdeck
+    for gy in [6.0f32, 15.0] {
+        r.cube(v(0.0, gy, dz + 0.35), v(2.8, 2.0, 0.3), dark);
+        for k in 0..5 {
+            let x = -2.2 + k as f32 * 1.1;
+            r.tube(&[v(x, gy - 1.8, dz + 0.7), v(x, gy + 1.8, dz + 0.7)], 0.18, 0.18, iron);
+        }
+        for k in 0..4 {
+            let y = gy - 1.5 + k as f32 * 1.0;
+            r.tube(&[v(-2.5, y, dz + 0.7), v(2.5, y, dz + 0.7)], 0.18, 0.18, iron);
+        }
+    }
+    // Fässer und Kisten an den Masten, Taurollen
+    for (x, y) in [(-3.6f32, -2.6f32), (-3.6, -0.4), (3.8, 20.5), (4.0, 2.4), (-4.2, 25.0)] {
+        r.cyl(v(x, y, dz + 0.3), 1.05, 1.05, 2.2, wood);
+        r.cyl(v(x, y, dz + 0.8), 1.12, 1.12, 0.22, iron);
+        r.cyl(v(x, y, dz + 2.0), 1.12, 1.12, 0.22, iron);
+    }
+    for (x, y, s) in [(3.4f32, -3.0f32, 1.1f32), (3.2, -0.6, 0.9), (-3.4, 21.0, 1.0), (-2.6, 8.2, 0.8)] {
+        r.cube(v(x, y, dz + 0.3 + s), v(s, s, s), crate_m);
+    }
+    for (x, y) in [(2.6f32, 4.2f32), (-2.8, -6.0), (2.4, 26.6), (-2.2, -31.0)] {
+        let base_z = if y < cy + cl { dz + ch } else { dz };
+        let coil: Vec<V3> = (0..=12).map(|k| {
+            let a = k as f32 / 12.0 * TAU;
+            v(x + a.cos() * 1.0, y + a.sin() * 1.0, base_z + 0.45)
+        }).collect();
+        r.tube(&coil, 0.42, 0.42, rope);
+        r.ell(v(x, y, base_z + 0.4), v(0.5, 0.5, 0.3), rope);
+    }
+    // Schiffsglocke am Vorschiff und Decklaternen
+    let bgy = l * 0.42;
+    for sx in [-1.4f32, 1.4] {
+        r.tube(&[v(sx, bgy, bow_z), v(sx, bgy, bow_z + 3.2)], 0.3, 0.3, dark);
+    }
+    r.tube(&[v(-1.6, bgy, bow_z + 3.2), v(1.6, bgy, bow_z + 3.2)], 0.32, 0.32, dark);
+    r.ell(v(0.0, bgy, bow_z + 2.2), v(0.8, 0.8, 0.9), gold);
+    for (x, y) in [(-4.6f32, 3.0f32), (4.6, -19.0), (0.0, l * 0.58)] {
+        let base_z = if y > l * 0.42 { bow_z } else { dz };
+        r.tube(&[v(x, y, base_z), v(x, y, base_z + 4.2)], 0.3, 0.3, iron);
+        r.ball(v(x, y, base_z + 4.8), 0.95, lamp);
+    }
+
+    // ---------------- Masten, Marse, Segel, Wanten mit Webeleinen, Wimpel
+    let main = 1usize;
+    let mut tops: Vec<(f32, f32, f32, f32)> = vec![];
+    for (mi, mm) in d.masts.iter().enumerate() {
+        r.part();
+        let my = mm.y;
+        let base = if my < cy + cl { dz + ch } else { dz };
+        let top = dz + mm.h;
+        let z_top = base + (top - base) * 0.5;
+        let z_cross = base + (top - base) * 0.79;
+        r.tube(&[v(0.0, my, base), v(0.0, my, z_top + 1.0)], 1.85, 1.45, wood);
+        r.tube(&[v(0.0, my, z_top - 0.5), v(0.0, my, z_cross + 1.0)], 1.25, 0.95, wood);
+        r.tube(&[v(0.0, my, z_cross - 0.5), v(0.0, my, top)], 0.85, 0.5, wood);
+        for k in 1..4 {
+            r.cyl(v(0.0, my, base + k as f32 * (z_top - base) / 4.0), 1.95, 1.95, 0.32, iron);
+        }
+        r.ell(v(0.0, my, z_top), v(4.0, 3.0, 0.55), dark);
+        let rim: Vec<V3> = (0..=10).map(|k| {
+            let a = k as f32 / 10.0 * TAU;
+            v(a.cos() * 3.9, my + a.sin() * 2.9, z_top + 1.1)
+        }).collect();
+        r.tube(&rim, 0.28, 0.28, dark);
+        r.cube(v(0.0, my, z_cross), v(2.8, 0.35, 0.28), dark);
+        r.cube(v(0.0, my - 0.4, z_cross), v(0.35, 2.0, 0.28), dark);
+        r.ball(v(0.0, my, top + 0.3), 0.75, gold);
+        tops.push((my, z_top, z_cross, top));
+        // langer roter Wimpel
+        let wp = v(0.0, my, top + 0.6);
+        r.tri(wp, add(wp, v(0.4, -15.0, -1.4)), add(wp, v(0.0, -0.4, -1.9)), red);
+        if mm.lateen {
+            // Besan als Gaffelsegel mit Gaffel und Baum, Totenkopfflagge an der Gaffel
+            let g0 = v(0.0, my - 0.6, z_top + 1.6);
+            let g1 = v(0.0, my - 17.0, z_top + 8.0);
+            let b0 = v(0.0, my - 0.6, base + 4.0);
+            let b1 = v(0.0, my - 20.0, base + 4.6);
+            r.tube(&[g0, g1], 0.6, 0.5, wood);
+            r.tube(&[b0, b1], 0.7, 0.55, wood);
+            let sm = add(lerp3(lerp3(g0, g1, 0.5), lerp3(b0, b1, 0.5), 0.5), v(1.6, 0.0, 0.0));
+            r.tri(add(b0, v(0.0, -0.4, 0.4)), add(g0, v(0.0, -0.4, -0.3)), sm, sail);
+            r.tri(add(g0, v(0.0, -0.4, -0.3)), add(g1, v(0.0, 0.0, -0.4)), sm, sail);
+            r.tri(add(g1, v(0.0, 0.0, -0.4)), add(b1, v(0.0, 0.0, 0.5)), sm, sail);
+            r.tri(add(b1, v(0.0, 0.0, 0.5)), add(b0, v(0.0, -0.4, 0.4)), sm, sail);
+            // Flicken auf dem Besan
+            for (t, s2) in [(0.35f32, 0.3f32), (0.62, 0.55)] {
+                let c = add(lerp3(lerp3(g0, g1, t), lerp3(b0, b1, t), s2), v(1.4, 0.0, 0.0));
+                for o in [0.25f32, -0.25] {
+                    r.quad(add(c, v(o + 0.1, -1.6, 1.2)), add(c, v(o + 0.1, 1.6, 1.2)), add(c, v(o + 0.1, 1.6, -1.2)), add(c, v(o + 0.1, -1.6, -1.2)), patch);
+                }
+            }
+            let fl = add(g1, v(0.0, -0.4, 0.2));
+            r.quad(fl, add(fl, v(0.5, -7.0, 0.6)), add(fl, v(0.3, -7.3, -4.4)), add(fl, v(0.0, -0.2, -4.6)), flagm);
+            r.dot(add(fl, v(0.7, -3.4, -2.0)), 0xE8E0CC, 0.0, 2);
+            if u.speed >= 12 {
+                // Besantoppsegel
+                square_sail(r, &d, my, z_top + 3.0, z_cross - 0.6, mm.w * 0.7, sail, wood, 11);
+            }
+        } else {
+            let span = top - base - 14.0;
+            for t in 0..mm.tiers {
+                let f0 = t as f32 / mm.tiers as f32;
+                let f1 = (t + 1) as f32 / mm.tiers as f32;
+                let z0 = base + 14.0 + span * f0 * 0.98;
+                let z1 = base + 14.0 + span * f1 * 0.93;
+                let w = mm.w * (1.0 - f0 * 0.3);
+                square_sail(r, &d, my, z0, z1, w, sail, wood, mi + t * 3);
+                // Fußpferde unter der Rah
+                r.curve(&[v(-w - 1.2, my + 0.9, z1 - 0.7), v(0.0, my + 0.9, z1 - 1.7), v(w + 1.2, my + 0.9, z1 - 0.7)], 0.24, 0.24, rope);
+                // Flicken auf dem Tuch (beide Seiten)
+                let zm = (z0 + z1) * 0.5;
+                for (k, (fx, fz)) in [(-0.45f32, 0.3f32), (0.4, -0.25), (0.05, 0.05)].iter().enumerate() {
+                    if (mi + t + k) % 3 == 2 {
+                        continue;
+                    }
+                    let px = fx * w;
+                    let pz = zm + fz * (z1 - z0);
+                    let bel = 1.6 + 4.6 * (1.0 - fx.abs()) * (1.0 - ((pz - zm) / (z1 - z0)).abs() * 1.4).max(0.0);
+                    for o in [0.3f32, -0.3] {
+                        let yy = my + bel + o;
+                        r.quad(v(px - 2.0, yy, pz + 1.6), v(px + 2.0, yy, pz + 1.6), v(px + 2.0, yy, pz - 1.6), v(px - 2.0, yy, pz - 1.6), patch);
+                    }
+                }
+                if u.speed >= 20 {
+                    for k in 0..7 {
+                        let x = -w + k as f32 * (w / 3.0);
+                        r.dot(v(x, my + 3.4, z0 + 0.6), 0x8AF2E6, 1.6, 1);
+                    }
+                }
+            }
+            // Leesegel (Tempo 8+, am Fockmast ab 16)
+            if u.speed >= 8 && (mi == main || u.speed >= 16) {
+                let z0 = base + 14.0;
+                let z1 = base + 14.0 + span / mm.tiers as f32 * 0.93;
+                for side in [-1.0f32, 1.0] {
+                    let x0 = side * (mm.w + 2.0);
+                    let x1 = side * (mm.w + 9.0);
+                    r.tube(&[v(x0, my + 0.8, z1), v(x1, my + 0.8, z1)], 0.5, 0.5, wood);
+                    r.quad(v(x0, my + 1.6, z1), v(x1, my + 1.6, z1), v(x1, my + 3.0, z0 + 2.0), v(x0, my + 3.4, z0), sail);
+                }
+            }
+            if mi == main {
+                // Krähennest
+                let z = base + mm.h * 0.9;
+                r.ell(v(0.0, my, z), v(2.6, 2.6, 1.3), dark);
+                r.tube(&[v(-2.6, my, z + 1.6), v(2.6, my, z + 1.6)], 0.4, 0.4, dark);
+            }
+        }
+        // Wanten mit Webeleinen (untere vom Mars zur Rüste, obere von der Saling zum Mars)
+        for side in [-1.0f32, 1.0] {
+            let n = 5;
+            let mut lo: Vec<(V3, V3)> = vec![];
+            for k in 0..n {
+                let yy = my - 2.6 + k as f32 * 1.3;
+                let hw = hw_at(yy, dz.min(base)) + 1.0;
+                let a = v(side * hw, yy, base - 0.2);
+                let t = v(side * 3.6, my - 0.8 + k as f32 * 0.4, z_top);
+                r.tube(&[a, t], 0.3, 0.3, rope);
+                lo.push((a, t));
+            }
+            let nr = ((z_top - base) / 2.4) as usize;
+            for j in 1..nr {
+                let f = j as f32 / nr as f32;
+                let pts: Vec<V3> = lo.iter().map(|(a, t)| lerp3(*a, *t, f)).collect();
+                r.tube(&pts, 0.22, 0.22, rope);
+            }
+            let mut hi: Vec<(V3, V3)> = vec![];
+            for k in 0..3 {
+                let a = v(side * 3.4, my - 0.6 + k as f32 * 0.6, z_top + 0.8);
+                let t = v(side * 2.4, my - 0.2 + k as f32 * 0.2, z_cross);
+                r.tube(&[a, t], 0.24, 0.24, rope);
+                hi.push((a, t));
+            }
+            let nr2 = ((z_cross - z_top) / 2.6) as usize;
+            for j in 1..nr2 {
+                let f = j as f32 / nr2 as f32;
+                let pts: Vec<V3> = hi.iter().map(|(a, t)| lerp3(*a, *t, f)).collect();
+                r.tube(&pts, 0.2, 0.2, rope);
+            }
+            // Pardune von der Saling nach achtern an die Bordwand
+            let py2 = (my - 13.0).max(-l + 3.0);
+            let bz2 = if py2 < cy + cl { dz + ch } else { dz };
+            r.tube(&[v(side * 2.2, my, z_cross + 0.4), v(side * (hw_at(py2, dz) + 0.6), py2, bz2 + 0.6)], 0.24, 0.24, rope);
+        }
+    }
+    // Stage zwischen den Masten
+    if tops.len() >= 3 {
+        let (fy, fzt, fzc, _) = tops[0];
+        let (my, mzt, mzc, _) = tops[1];
+        let (zy, zzt, _, _) = tops[2];
+        r.tube(&[v(0.0, my, mzt), v(0.0, fy + 1.0, dz + 3.0)], 0.32, 0.32, rope);
+        r.tube(&[v(0.0, my, mzc), v(0.0, fy, fzt + 0.5)], 0.26, 0.26, rope);
+        r.tube(&[v(0.0, zy, zzt), v(0.0, my - 1.0, dz + d.masts[1].h * 0.42)], 0.26, 0.26, rope);
+        let _ = fzc;
+    }
+
+    // ---------------- Bugspriet, Klüverbaum, Stampfstock, Klüver, Galion
+    r.part();
+    let bs0 = v(0.0, l * 1.0, bow_z + 1.0);
+    let bs1 = v(0.0, l * 1.38, bow_z + 7.4);
+    let jb1 = v(0.0, l * 1.6, bow_z + 11.0);
+    r.tube(&[bs0, bs1], 1.35, 1.0, wood);
+    r.tube(&[sub(bs1, v(0.0, 3.0, 0.5)), jb1], 0.75, 0.5, wood);
+    for k in 0..3 {
+        r.cyl(lerp3(bs0, bs1, 0.25 + k as f32 * 0.25), 1.25, 1.25, 0.3, gold);
+    }
+    let ds = sub(bs1, v(0.0, 1.0, 4.4));
+    r.tube(&[sub(bs1, v(0.0, 1.0, 0.6)), ds], 0.35, 0.3, dark);
+    r.tube(&[ds, jb1], 0.22, 0.22, rope);
+    r.tube(&[ds, v(0.0, l * 1.02, dz - 2.0)], 0.22, 0.22, rope);
+    if let Some(&(fy, fzt, fzc, ftop)) = tops.first() {
+        // Stagsegel, Klüver, Außenklüver (Tempo 6+), Flieger (Tempo 14+)
+        let jibs: Vec<(V3, V3, V3)> = {
+            let mut j = vec![(v(0.0, fy + 1.5, fzt - 1.0), sub(bs1, v(0.0, 1.0, 0.8)), v(0.0, l * 0.98, bow_z + 3.2))];
+            j.push((v(0.0, fy + 1.0, fzc - 0.5), sub(jb1, v(0.0, 4.0, 2.2)), v(0.0, l * 1.12, bow_z + 3.6)));
+            if u.speed >= 6 {
+                j.push((v(0.0, fy + 0.8, (fzc + ftop) * 0.5), sub(jb1, v(0.0, 0.8, 0.5)), v(0.0, l * 1.24, bow_z + 5.6)));
+            }
+            if u.speed >= 14 {
+                j.push((v(0.0, fy + 0.6, ftop - 1.0), add(jb1, v(0.0, 2.6, 1.6)), v(0.0, l * 1.36, bow_z + 8.2)));
+            }
+            j
+        };
+        if u.speed >= 14 {
+            r.tube(&[jb1, add(jb1, v(0.0, 4.0, 2.4))], 0.4, 0.3, wood);
+        }
+        for (k, (top_p, out_p, low_p)) in jibs.iter().enumerate() {
+            r.tri(*top_p, *out_p, *low_p, sail);
+            r.tube(&[*top_p, *out_p], 0.26, 0.26, rope);
+            if k == 1 {
+                let c = lerp3(lerp3(*top_p, *out_p, 0.5), *low_p, 0.35);
+                for o in [0.3f32, -0.3] {
+                    r.quad(add(c, v(o, -1.4, 1.4)), add(c, v(o, 1.4, 1.0)), add(c, v(o, 1.6, -1.4)), add(c, v(o, -1.2, -1.2)), patch);
+                }
+            }
+        }
+    }
+    // Galion: geflügelter Totenengel unter dem Bugspriet
+    let gh = v(0.0, l * 1.13, bow_z - 2.2);
+    r.ell_dir(gh, v(0.0, 1.0, 0.75), v(1.9, 3.6, 2.0), bone);
+    let head = add(gh, v(0.0, 2.8, 3.4));
+    r.ball(head, 1.7, bone);
+    r.ell(add(head, v(0.0, -0.6, 0.7)), v(1.9, 1.8, 1.5), flagm);
+    r.dot(add(head, v(-0.55, 1.5, 0.1)), 0xFF5A3A, 1.4, 1);
+    r.dot(add(head, v(0.55, 1.5, 0.1)), 0xFF5A3A, 1.4, 1);
+    for side in [-1.0f32, 1.0] {
+        let sh = add(gh, v(side * 1.2, -0.4, 1.6));
+        for k in 0..5 {
+            let a = 0.35 + k as f32 * 0.22;
+            let tip = add(sh, v(side * (2.0 + a * 1.4), -3.0 - k as f32 * 1.6, 2.6 - k as f32 * 0.9));
+            r.tri(sh, tip, add(sh, v(side * 0.6, -1.4 - k as f32 * 1.4, -0.8)), flagm);
+        }
+        r.tube(&[add(gh, v(side * 1.4, 0.8, 1.2)), add(gh, v(side * 0.8, 3.4, 0.4))], 0.45, 0.4, bone);
+    }
+    r.ball(add(gh, v(0.0, 3.8, 0.6)), 0.75, lamp);
 }

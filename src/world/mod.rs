@@ -1568,7 +1568,9 @@ impl World {
         self.road(&[(cx + 26, cy - 2), (cx + 28, cy - 14), (cx + 30, cy - 18)], Mat::Dirt, 1);
         self.road(&[(cx - 10, cy + 4), (cx - 26, cy + 2), (cx - 32, cy - 6), (cx - 32, cy - 14)], Mat::Dirt, 1);
         self.road(&[(cx - 4, cy + 2), (cx + 4, cy + 8), (cx + 22, cy + 9)], Mat::Dirt, 1);
-        self.dock(Zone::Kueste, cx, cy - 22, 0, -1);
+        let (wx, wy) = self.dock_k(Zone::Kueste, "kueste".into(), cx, cy - 22, 0, -1);
+        // auf dem Steg wartet der Geisterkapitän mit dem Flaschenschiff
+        self.npc("ghostCaptain", wx + 1, wy - 2, "ghostCaptain", "Der Geisterkapitän", "ghostCaptain", false, None);
         // ebene Flächen: Gräberfeld, Massengrab, Galgenallee
         self.flat_areas.push((cx + 13, cy + 9, 12, 6));
         self.flat_areas.push((cx - 24, cy + 12, 8, 5));

@@ -30,101 +30,113 @@ pub(super) struct Flora {
     pub open: &'static [&'static str],
     /// Anteil der Wiesenflecken mit Blumen
     pub flowers: f32,
-    /// Blumenarten (je Wiesenfleck eine)
+    /// Blumenarten der Boden-Deko (je Wiesenfleck eine) und Blumenstauden (Requisiten)
     pub blooms: &'static [&'static str],
+    pub bloom_props: &'static [&'static str],
     /// Schilf am Ufer
     pub reeds: &'static [&'static str],
 }
 
+/// Pflanzen je Biom (7.11.: Dark Fantasy – gedämpftes Nachtgrün, verdorrte und blutrote Kronen,
+/// knochenbleiche Totbäume, Trauerweiden an stillen Ufern, Leuchtpilze als Lichtinseln, Blut-
+/// und Geisterblumen; alle aus den PixelLab-Vorlagen und ihren Abwandlungen)
 pub(super) fn flora(b: Biome) -> Flora {
     match b {
-        // Galgenstrand: windgebeugte Kiefern, Friedhofszypressen, tote Bäume, Dünengras
+        // Galgenstrand: Friedhofszypressen, tote und gebleichte Bäume, windgebeugte Kiefern
         Biome::Coast => Flora {
             cover: 0.1,
-            wood: &[("plCypress", 3), ("plDeadTree", 3), ("plPine", 2)],
-            high: &[("plPine", 3), ("plDeadTree", 1)],
-            wet: &[("plDeadTree", 2), ("plCypress", 1)],
+            wood: &[("plCypress", 3), ("plDeadTree", 3), ("plPineDark", 2), ("plGhostTree", 1)],
+            high: &[("plPineDark", 3), ("plDeadTree", 1), ("plGhostTree", 1)],
+            wet: &[("plDeadTree", 2), ("plWillow", 1), ("plCypress", 1)],
             beach: &[("plPalm", 1)],
-            under: &["plFern", "plGrass", "plThorns"],
-            edge: &["plThorns", "plDryGrass", "plGrass"],
-            open: &["plDryGrass", "plGrass", "plDryGrass"],
+            under: &["plFernDark", "plGrassDead", "plThorns", "plFern"],
+            edge: &["plThorns", "plDryGrass", "plGrassDead"],
+            open: &["plDryGrass", "plGrassDead", "plDryGrass"],
             flowers: 0.15,
-            blooms: &["flowersW", "flowersY"],
+            blooms: &["flowersW", "flowersR"],
+            bloom_props: &["plFlowersBlood"],
             reeds: &["plReeds", "reedClump"],
         },
         Biome::Hub => Flora {
             cover: 0.2,
-            wood: &[("plCypress", 2), ("plDeadTree", 2), ("plPine", 1)],
-            high: &[("plPine", 2), ("plCypress", 1)],
+            wood: &[("plCypress", 2), ("plDeadTree", 2), ("plPineDark", 1)],
+            high: &[("plPineDark", 2), ("plCypress", 1)],
             wet: &[("plCypress", 1), ("plDeadTree", 1)],
             beach: &[],
-            under: &["plFern", "plGrass"],
-            edge: &["plThorns", "plGrass"],
-            open: &["plGrass", "plDryGrass"],
+            under: &["plFernDark", "plGrassDead"],
+            edge: &["plThorns", "plGrassDead"],
+            open: &["plGrassDead", "plDryGrass"],
             flowers: 0.0,
             blooms: &[],
+            bloom_props: &[],
             reeds: &["plReeds"],
         },
-        // Aschebucht: verkohlte und tote Bäume, nur dürres Gras überlebt
+        // Aschebucht: verkohlte, tote und aschebleiche Bäume, nur dürres Gras überlebt
         Biome::Fire => Flora {
             cover: 0.14,
-            wood: &[("plCharTree", 5), ("plDeadTree", 3)],
-            high: &[("plCharTree", 3), ("plDeadTree", 2)],
-            wet: &[("plDeadTree", 2), ("plCharTree", 1), ("plPine", 1)],
+            wood: &[("plCharTree", 5), ("plDeadTree", 2), ("plGhostTree", 1)],
+            high: &[("plCharTree", 3), ("plDeadTree", 1), ("plGhostTree", 1)],
+            wet: &[("plDeadTree", 2), ("plCharTree", 1), ("plPineDark", 1)],
             beach: &[],
             under: &["plDryGrass"],
             edge: &["plDryGrass", "plThorns"],
             open: &["plDryGrass"],
             flowers: 0.0,
             blooms: &[],
+            bloom_props: &[],
             reeds: &[],
         },
-        // Frostgrotte: Schneefichten-Taiga, verschneite Büsche
+        // Frostgrotte: Schneefichten-Taiga, dazwischen bereifte Totbäume
         Biome::Frost => Flora {
             cover: 0.06,
-            wood: &[("plSnowPine", 6), ("plDeadTree", 1)],
-            high: &[("plSnowPine", 1)],
-            wet: &[("plSnowPine", 3), ("plDeadTree", 1)],
+            wood: &[("plSnowPine", 6), ("plRimeTree", 1)],
+            high: &[("plSnowPine", 3), ("plRimeTree", 1)],
+            wet: &[("plSnowPine", 3), ("plRimeTree", 1)],
             beach: &[],
             under: &["plSnowBush"],
             edge: &["plSnowBush"],
             open: &["plSnowBush"],
             flowers: 0.0,
             blooms: &[],
+            bloom_props: &[],
             reeds: &[],
         },
-        // Rabenwacht: Laubmischwald, Kiefern auf den Höhen, Wiesen mit Blumen
+        // Rabenwacht: düsterer Mischwald – nachtgrüne, verdorrte und vereinzelt blutrote Kronen,
+        // dunkle Kiefern auf den Höhen, Trauerweiden am Wasser, Geisterblumen auf Lichtungen
         Biome::Wind => Flora {
             cover: 0.04,
-            wood: &[("plOak", 3), ("plLeafTree", 3), ("plTree", 2), ("plPine", 2)],
-            high: &[("plPine", 4), ("plCypress", 1), ("plLeafTree", 1)],
-            wet: &[("plLeafTree", 2), ("plOak", 1), ("plCypress", 1)],
+            wood: &[("plOak", 2), ("plOakBlight", 2), ("plLeafTree", 2), ("plLeafBlood", 1), ("plTree", 1), ("plTreeDark", 2), ("plPineDark", 2), ("plDeadTree", 1)],
+            high: &[("plPineDark", 4), ("plPine", 1), ("plCypress", 1), ("plDeadTree", 1)],
+            wet: &[("plWillow", 3), ("plLeafTree", 1), ("plOakBlight", 1), ("plCypress", 1)],
             beach: &[],
-            under: &["plFern", "plFern", "plMushrooms", "fern"],
-            edge: &["plThorns", "plGrass", "plFern"],
-            open: &["plGrass", "plGrass", "plDryGrass"],
-            flowers: 0.6,
-            blooms: &["flowersW", "flowersY", "flowersP", "flowersB"],
+            under: &["plFernDark", "plFern", "plMushrooms", "plGlowShroom", "fern", "plFernDark"],
+            edge: &["plThorns", "plGrassDead", "plFernDark", "plGrass"],
+            open: &["plGrass", "plGrassDead", "plDryGrass"],
+            flowers: 0.45,
+            blooms: &["flowersW", "flowersR", "flowersP", "flowersB"],
+            bloom_props: &["plFlowersGhost", "plFlowersBlood", "plFlowers"],
             reeds: &["plReeds", "reedClump", "cattail"],
         },
-        // Fluchmangroven: Sumpfwald, Mangroven am Wasser, Farne und Pilze im Schatten
+        // Fluchmangroven: verfluchter Sumpfwald – Mangroven und Trauerweiden am Wasser, dunkle
+        // Kronen, viele Totbäume, Leuchtpilze im Unterholz
         Biome::Earth => Flora {
             cover: -0.04,
-            wood: &[("plTree", 2), ("plLeafTree", 2), ("swampTree", 2), ("plOak", 1), ("plDeadTree", 1)],
-            high: &[("plLeafTree", 2), ("plTree", 2), ("plPine", 1)],
-            wet: &[("swampTree", 5), ("plDeadTree", 1)],
+            wood: &[("plTreeDark", 3), ("plLeafTree", 1), ("swampTree", 2), ("plOakBlight", 1), ("plDeadTree", 2), ("plWillow", 1)],
+            high: &[("plTreeDark", 2), ("plLeafTree", 1), ("plPineDark", 1), ("plDeadTree", 1)],
+            wet: &[("swampTree", 4), ("plWillow", 3), ("plDeadTree", 1)],
             beach: &[],
-            under: &["plFern", "plMushrooms", "fern", "plFern"],
-            edge: &["plFern", "plGrass", "plReeds"],
-            open: &["plGrass"],
+            under: &["plFernDark", "plMushrooms", "plGlowShroom", "fern", "plGlowShroom", "plFern"],
+            edge: &["plFernDark", "plGrassDead", "plReeds"],
+            open: &["plGrass", "plGrassDead"],
             flowers: 0.25,
             blooms: &["flowersR", "flowersP"],
+            bloom_props: &["plFlowersGhost", "plFlowersBlood"],
             reeds: &["plReeds", "reedClump", "cattail", "plReeds"],
         },
         Biome::End => Flora {
             cover: 0.2,
-            wood: &[("plDeadTree", 2), ("plCharTree", 1)],
-            high: &[("plDeadTree", 1)],
+            wood: &[("plDeadTree", 2), ("plCharTree", 1), ("plGhostTree", 1)],
+            high: &[("plDeadTree", 1), ("plGhostTree", 1)],
             wet: &[("plDeadTree", 1)],
             beach: &[],
             under: &["plDryGrass"],
@@ -132,6 +144,7 @@ pub(super) fn flora(b: Biome) -> Flora {
             open: &["plDryGrass"],
             flowers: 0.0,
             blooms: &[],
+            bloom_props: &[],
             reeds: &[],
         },
     }
@@ -139,18 +152,19 @@ pub(super) fn flora(b: Biome) -> Flora {
 
 /// Spendet die Requisite Schatten wie ein Baum?
 pub fn is_tree(kind: &str) -> bool {
-    kind != "hubTree" && (kind.contains("Tree") || kind.contains("Pine") || kind.contains("Palm") || kind == "palm" || kind == "plOak" || kind == "plCypress")
+    kind != "hubTree" && (kind.contains("Tree") || kind.contains("Pine") || kind.contains("Palm") || kind == "palm" || kind.starts_with("plOak") || kind == "plCypress" || kind == "plWillow" || kind == "plLeafBlood")
 }
 
 /// Mindestabstand zwischen Stämmen (px): große Kronen brauchen mehr Platz
 fn spacing(kind: &str) -> f32 {
     match kind {
-        "plOak" => 72.0,
-        "plTree" => 66.0,
+        "plOak" | "plOakBlight" => 72.0,
+        "plTree" | "plTreeDark" => 66.0,
+        "plWillow" => 64.0,
         "swampTree" => 58.0,
-        "plLeafTree" | "plDeadTree" | "plCharTree" => 48.0,
+        "plLeafTree" | "plLeafBlood" | "plDeadTree" | "plCharTree" | "plGhostTree" | "plRimeTree" => 48.0,
         "plPalm" => 46.0,
-        "plPine" | "plSnowPine" => 40.0,
+        "plPine" | "plPineDark" | "plSnowPine" => 40.0,
         "plCypress" => 34.0,
         _ => 44.0,
     }
@@ -358,7 +372,7 @@ impl World {
         let mut pts = vec![];
         for p in &self.props {
             if !p.hidden && is_tree(&p.kind) {
-                pts.push((p.x, p.y, if p.kind.contains("Dead") || p.kind.contains("Char") { 1u8 } else { 3u8 }));
+                pts.push((p.x, p.y, if p.kind.contains("Dead") || p.kind.contains("Char") || p.kind.contains("Ghost") || p.kind.contains("Rime") { 1u8 } else { 3u8 }));
             }
         }
         for (x, y, s) in pts {
@@ -603,7 +617,7 @@ impl World {
                         // Schatten: Unterholz in Flecken, selten ein umgestürzter Stamm
                         if patch > -0.06 && rng.chance(0.3) {
                             let mut k = *rng.pick(fl.under);
-                            if k == "plMushrooms" && coast > 9 {
+                            if (k == "plMushrooms" || k == "plGlowShroom") && coast > 9 {
                                 k = fl.under[0];
                             }
                             out = Some(k);
@@ -618,8 +632,8 @@ impl World {
                     } else {
                         // Offenland: Gras in Horsten, Blumenkolonien auf Wiesenflecken
                         let meadow = self.nz.fbm(tx as f32 * 0.06 + 50.0 + seed, ty as f32 * 0.06 + 20.0, 2) + if g == Mat::Meadow { 0.12 } else { 0.0 };
-                        if meadow > 0.18 && fl.flowers > 0.0 && rng.chance(fl.flowers * 0.07) {
-                            out = Some("plFlowers");
+                        if meadow > 0.18 && !fl.bloom_props.is_empty() && rng.chance(fl.flowers * 0.07) {
+                            out = Some(*rng.pick(fl.bloom_props));
                             cluster = 2 + rng.int(0, 2);
                         } else if (meadow > 0.08 || patch > 0.15) && rng.chance(0.11) {
                             out = Some(*rng.pick(fl.open));
@@ -764,6 +778,10 @@ impl World {
                         }
                     }
                     Mat::Ash => {
+                        // verbrannte Erde: selten die Knochen eines Tiers
+                        if rng.chance(0.005) {
+                            put(*rng.pick(&["bones", "skull", "bones"]), 1, &mut rng);
+                        }
                         if scree || rng.chance(0.14) {
                             let s = stones(&mut rng);
                             put(s, 1, &mut rng);
@@ -835,6 +853,10 @@ impl World {
                             if scree && rng.chance(0.5) {
                                 let s = stones(&mut rng);
                                 put(s, 1, &mut rng);
+                            }
+                            // Galgenstrand, Aschebucht, Ende der Welt: hier und da bleiche Knochen
+                            if matches!(biome, Biome::Coast | Biome::Fire | Biome::End) && rng.chance(0.004) {
+                                put(*rng.pick(&["bones", "skull", "bones"]), 1, &mut rng);
                             }
                         }
                     }
@@ -928,6 +950,13 @@ impl World {
             let (c, r): ([u8; 3], i32) = if is_tree(k) {
                 let c = match k {
                     "plSnowPine" => [0, 120, 140],
+                    "plPineDark" => [10, 60, 50],
+                    "plWillow" => [70, 140, 110],
+                    "plOakBlight" => [140, 110, 40],
+                    "plLeafBlood" => [170, 30, 40],
+                    "plTreeDark" => [30, 100, 70],
+                    "plGhostTree" => [200, 200, 190],
+                    "plRimeTree" => [170, 200, 230],
                     "plPine" => [20, 80, 60],
                     "plCypress" => [30, 60, 30],
                     "plOak" | "plTree" => [40, 150, 40],
@@ -943,7 +972,9 @@ impl World {
                 let c = match k {
                     "plFern" | "fern" | "plGrass" => [150, 220, 90],
                     "plDryGrass" => [230, 210, 100],
-                    "plFlowers" => [255, 120, 220],
+                    "plFlowers" | "plFlowersBlood" | "plFlowersGhost" => [255, 120, 220],
+                    "plGlowShroom" => [80, 255, 255],
+                    "plFernDark" | "plGrassDead" => [150, 220, 90],
                     "plReeds" | "reedClump" | "cattail" => [80, 230, 230],
                     "plMushrooms" => [255, 60, 60],
                     "plSnowBush" => [255, 255, 255],

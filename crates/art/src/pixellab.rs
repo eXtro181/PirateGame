@@ -131,7 +131,7 @@ macro_rules! obj {
     };
 }
 
-pub fn objects() -> [Obj; 41] {
+pub fn objects() -> [Obj; 43] {
     [
         obj!("plDeadTree", "deadTree.png", (20.0, 6.0), 5.0, (0.0, 0.0), Some(0.62), 24),
         obj!("plCypress", "cypress.png", (20.0, 6.0), 5.0, (0.0, 0.0), Some(0.66), 34),
@@ -177,7 +177,103 @@ pub fn objects() -> [Obj; 41] {
         obj!("plOak", "bOak.png", (38.0, 10.0), 7.0, (0.0, 0.0), Some(0.6), 14),
         obj!("plFlowers", "bFlowers.png", (11.0, 3.0), 0.0, (0.0, 0.0), None, 16),
         obj!("plDriftwood", "bDriftwood.png", (22.0, 5.0), 0.0, (0.0, 0.0), None, 0),
+        // Dark Fantasy (7.11.): Trauerweide an stillen Ufern, Leuchtpilze als Lichtinseln im Wald
+        obj!("plWillow", "dWillow.png", (34.0, 9.0), 6.0, (0.0, 0.0), Some(0.62), 30),
+        obj!("plGlowShroom", "dGlowShroom.png", (14.0, 4.0), 0.0, (0.0, 0.0), None, 0),
     ]
+}
+
+/// Farbwandel für düstere Abwandlungen der PixelLab-Vorlagen
+#[derive(Clone, Copy)]
+enum Tint {
+    /// verdorrtes Laub: rostbraun bis oliv, dunkler
+    Blight,
+    /// blutrotes Laub
+    Blood,
+    /// dunkleres, kühleres Laub (Nachtgrün)
+    Dark,
+    /// gebleichter, knochenweißer Totbaum
+    Bone,
+    /// Raureif auf Ästen und Rinde
+    Rime,
+    /// verwelkt: graues, fahles Grün
+    Wither,
+    /// Blüten blutrot
+    BloodBloom,
+    /// Blüten fahl geisterblau (schimmern)
+    GhostBloom,
+}
+
+/// Düstere Abwandlungen der PixelLab-Vorlagen: (Name, Vorlage, Farbwandel). Gleiche Form, andere
+/// Farben – mehr Abwechslung, ohne neue Generierungen.
+const VARIANTS: [(&str, &str, Tint); 10] = [
+    ("plOakBlight", "plOak", Tint::Blight),
+    ("plLeafBlood", "plLeafTree", Tint::Blood),
+    ("plTreeDark", "plTree", Tint::Dark),
+    ("plPineDark", "plPine", Tint::Dark),
+    ("plGhostTree", "plDeadTree", Tint::Bone),
+    ("plRimeTree", "plDeadTree", Tint::Rime),
+    ("plGrassDead", "plGrass", Tint::Wither),
+    ("plFernDark", "plFern", Tint::Dark),
+    ("plFlowersBlood", "plFlowers", Tint::BloodBloom),
+    ("plFlowersGhost", "plFlowers", Tint::GhostBloom),
+];
+
+fn tint_px(t: Tint, p: Rgba) -> Rgba {
+    use crate::color::{from_hsl, to_hsl};
+    let [h, s, l] = to_hsl(p);
+    let green = (55.0..175.0).contains(&h) && s > 0.12;
+    let hsl = match t {
+        Tint::Blight if green => [32.0 + (h - 100.0) * 0.12, s * 0.62, l * 0.8],
+        Tint::Blood if green => [352.0, (s * 0.95).min(0.72), l * 0.68],
+        Tint::Dark if green => [h + 18.0, s * 0.85, l * 0.72],
+        Tint::Dark => [h, s * 0.9, l * 0.85],
+        Tint::Bone => [h, s * 0.12, 0.22 + l * 0.78],
+        Tint::Rime => {
+            if l > 0.32 {
+                let k = ((l - 0.32) * 2.2).min(1.0) * 0.65;
+                [h + (205.0 - h) * k, s * (1.0 - k) + 0.25 * k, l + (0.86 - l) * k]
+            } else {
+                [h + (215.0 - h) * 0.4, s * 0.6, l]
+            }
+        }
+        Tint::Wither if green => [48.0, s * 0.32, l * 0.86],
+        Tint::BloodBloom | Tint::GhostBloom => {
+            let petal = l > 0.55 && (s < 0.35 || (35.0..75.0).contains(&h));
+            if !petal {
+                [h, s * 0.9, l * 0.85]
+            } else if matches!(t, Tint::BloodBloom) {
+                [355.0, 0.72, l * 0.5]
+            } else {
+                [196.0, 0.4, (l * 1.02).min(0.9)]
+            }
+        }
+        _ => [h, s, l],
+    };
+    let c = from_hsl([hsl[0].rem_euclid(360.0), hsl[1].clamp(0.0, 1.0), hsl[2].clamp(0.0, 1.0)]);
+    [c[0], c[1], c[2], p[3]]
+}
+
+/// Requisiten aus allen Vorlagen und ihren düsteren Abwandlungen (Name, Werte, Bild)
+fn all_images() -> Vec<(&'static str, Obj, Img)> {
+    let objs = objects();
+    let mut out: Vec<(&'static str, Obj, Img)> = vec![];
+    for (name, base, t) in VARIANTS {
+        if let Some(o) = objs.iter().find(|o| o.name == base) {
+            let mut img = decode(o.png);
+            for p in img.px.iter_mut() {
+                if p[3] > 0 {
+                    *p = tint_px(t, *p);
+                }
+            }
+            out.push((name, Obj { name, ..*o }, img));
+        }
+    }
+    for o in objs {
+        let img = decode(o.png);
+        out.push((o.name, o, img));
+    }
+    out
 }
 
 /// Höhe des Feuerkorbs der Piratenfackel über ihrem Fuß (px)
@@ -211,10 +307,9 @@ fn foot(img: &Img) -> (i32, i32) {
 /// Requisiten aus den PixelLab-Bildern: Farbe 1:1, Relief aus geglätteter Helligkeit und einer
 /// Wölbung quer zum Objekt (damit Punktlichter es räumlich treffen)
 pub fn prop_arts() -> Vec<PropArt> {
-    objects()
+    all_images()
         .into_iter()
-        .map(|o| {
-            let img = decode(o.png);
+        .map(|(_, o, img)| {
             let mut c = Canvas::new(img.w, img.h);
             let lum = |x: i32, y: i32| -> f32 {
                 let p = img.at(x, y);
@@ -273,6 +368,13 @@ pub fn prop_arts() -> Vec<PropArt> {
             if o.name == "plMushrooms" {
                 // die Hüte schimmern schwach (kaltes Licht im Unterholz)
                 pa = pa.light(0.0, -6.0, 10.0, 70.0, [0.35, 0.55, 0.5], 0.08);
+            }
+            if o.name == "plGlowShroom" {
+                // Leuchtpilze: kaltes Licht, eine Lichtinsel im dunklen Wald
+                pa = pa.light(0.0, -16.0, 14.0, 120.0, [0.42, 1.25, 1.35], 0.12);
+            }
+            if o.name == "plFlowersGhost" {
+                pa = pa.light(0.0, -6.0, 8.0, 45.0, [0.3, 0.62, 0.72], 0.1);
             }
             if o.name == "plCharTree" {
                 // Glut in den Rissen am Stammfuß

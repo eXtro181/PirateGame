@@ -41,6 +41,8 @@ pub struct List {
 #[derive(Default)]
 pub struct Ui {
     pub banners: Vec<Banner>,
+    /// Testlauf (`&nobanner`): keine Banner (Bildschirmfotos)
+    pub mute_banners: bool,
     pub toast_t: f32,
     pub toast_text: String,
     pub dialog: Option<Dialog>,
@@ -76,6 +78,9 @@ impl Ui {
         self.dialog.is_some() || self.list.is_some() || self.map_open || self.legend_open
     }
     pub fn banner(&mut self, title: &str, sub: &str, kind: &'static str, dur: f32) {
+        if self.mute_banners {
+            return;
+        }
         // immer nur ein Banner: das neue ersetzt das alte (sonst überlagern sich die Schriften)
         self.banners.clear();
         self.banners.push(Banner { title: title.into(), sub: sub.into(), kind, dur, t: 0.0 });

@@ -226,6 +226,14 @@ fn setup(world: &mut bevy::ecs::world::World) {
                 }
                 s.pearls = 50000;
             }
+            if app.params.contains_key("bottle") {
+                // Flaschenschiff schon vom Geisterkapitän erhalten (Schiff noch nie gerufen)
+                s.bottle = true;
+                s.ship_raised = false;
+            }
+            if app.params.contains_key("raised") {
+                s.ship_raised = true;
+            }
             if app.params.contains_key("chart") {
                 // ganze Seekarte aufgedeckt
                 for y in 0..game::data::CHART_H {
@@ -251,6 +259,9 @@ fn setup(world: &mut bevy::ecs::world::World) {
                 if let Scene::Play(g) = &mut app.scene {
                     let p = if pos == "whirl" {
                         Some((g.world.pier_end.0, g.world.pier_end.1 + 20.0))
+                    } else if pos == "ghost" {
+                        // Testlauf: neben dem Geisterkapitän auf dem Steg des Galgenstrands
+                        g.npcs.iter().find(|n| n.def.id == "ghostCaptain").map(|n| (n.a.x - 34.0, n.a.y + 26.0))
                     } else if let Some(n) = pos.strip_prefix("isle").and_then(|n| n.parse::<usize>().ok()) {
                         // Testlauf: am Anleger der n-ten wilden Insel (pos=isle12)
                         let key = format!("i{n}");
@@ -270,6 +281,23 @@ fn setup(world: &mut bevy::ecs::world::World) {
                         g.player.a.y = y;
                         g.cam_f = (x, y);
                     }
+                }
+            }
+            if app.params.contains_key("nobanner") {
+                if let Scene::Play(g) = &mut app.scene {
+                    g.ui.mute_banners = true;
+                    g.ui.banners.clear();
+                    g.freeze_cut = app.params.contains_key("freeze");
+                }
+            }
+            if let Some(v) = app.params.get("summon").cloned() {
+                // Testlauf: am nächsten Steg das Schiff rufen (&summon) bzw. beim ersten Mal das
+                // Flaschenschiff ins Meer werfen (&summon=first)
+                if let Scene::Play(g) = &mut app.scene {
+                    // &summon=first,2.5: ab Sekunde 2,5 der Sequenz
+                    let first = v.starts_with("first");
+                    let t = v.rsplit(',').next().and_then(|x| x.parse::<f32>().ok()).unwrap_or(0.0);
+                    g.debug_summon(first, t);
                 }
             }
             // nach dem Versetzen (&pos), damit Sterben und Sarg-Sequenz am richtigen Ort beginnen

@@ -40,7 +40,15 @@ pub struct Ship {
     pub hp: f32,
     pub max_hp: f32,
     pub cool: [f32; 2],
-    pub rise: Option<f32>,
+    /// 0 = schwimmt, 1 = ganz unter Wasser (beim Auftauchen/Versinken wird das Bild an der
+    /// Wasserlinie abgeschnitten)
+    pub depth: f32,
+    /// so lange läuft noch Wasser am Schiff herab (s)
+    pub wet: f32,
+    /// ruht in der Tiefe (unsichtbar, bis man es an einem Steg ruft)
+    pub sunk: bool,
+    /// Versinken nach dem Anlegen läuft (s)
+    pub sinking: Option<f32>,
 }
 pub struct GhostShip {
     pub hull: Hull,
@@ -102,7 +110,7 @@ pub const KRAKEN_HOME: (f32, f32) = (crate::world::HUB.0 as f32 - 96.0, crate::w
 
 impl Ship {
     pub fn new(x: f32, y: f32, h: f32) -> Self {
-        Ship { hull: Hull::new(x, y, h), sail: 0, hp: 120.0, max_hp: 120.0, cool: [0.0; 2], rise: None }
+        Ship { hull: Hull::new(x, y, h), sail: 0, hp: 120.0, max_hp: 120.0, cool: [0.0; 2], depth: 1.0, wet: 0.0, sunk: true, sinking: None }
     }
 }
 
@@ -187,7 +195,7 @@ impl Game {
         let (fx, fy) = (h.h.sin(), -h.h.cos());
         let (nx, ny) = (h.h.cos() * side, h.h.sin() * side);
         // eigenes Schiff: mehr Kanonen mit dem Angriffs-Ausbau; Bossschiffe feuern fünf Kugeln
-        let n = if owner == Owner::Player { 3 + self.save.ship_atk / 3 } else { 5 };
+        let n = if owner == Owner::Player { 3 + self.save.ship_atk.clamp(0, SHIP_MAX) / 3 } else { 5 };
         let gap = if owner == Owner::Player { 20.0 } else { 26.0 };
         for i in 0..n {
             let i = i as f32 - (n - 1) as f32 / 2.0;
@@ -206,22 +214,12 @@ impl Game {
     }
 
     pub fn update_ship(&mut self, dt: f32, steer: bool) {
-        self.ship.max_hp = 120.0 + 24.0 * self.save.ship_def as f32;
+        self.ship.max_hp = ship_hull(self.save.ship_def);
         let mut h = self.ship.hull.clone();
         h.flash = (h.flash - dt).max(0.0);
         self.ship.cool[0] = (self.ship.cool[0] - dt).max(0.0);
         self.ship.cool[1] = (self.ship.cool[1] - dt).max(0.0);
-        if let Some(r) = self.ship.rise.as_mut() {
-            *r += dt;
-            h.alpha = (*r / 1.6).min(1.0);
-            if rnd() < 0.7 {
-                self.fx.burst("splash", h.x + rr(-84.0, 84.0), h.y, 2, BurstOpt { speed: Some(80.0), up: Some(120.0), ..Default::default() });
-            }
-            if *r > 1.8 {
-                self.ship.rise = None;
-                h.alpha = 1.0;
-            }
-        }
+        self.ship_water_fx(&h, dt);
         if !steer {
             h.v *= (1.0 - dt * 2.0).max(0.0);
             self.wake(&mut h, dt);
@@ -239,14 +237,14 @@ impl Game {
         let st = self.input.stick;
         if st.length() > 0.5 {
             let want = st.x.atan2(-st.y);
-            h.h = turn_to(h.h, want, 1.6 * dt * (1.0 + self.save.ship_speed as f32 * 0.04));
+            h.h = turn_to(h.h, want, 1.6 * dt * ship_turn_mul(self.save.ship_speed));
             self.ship.sail = self.ship.sail.max(2);
         } else {
             let ax = self.input.axis();
-            h.h = wrap(h.h + ax.x * dt * (0.7 + h.v / 120.0) * (1.0 + self.save.ship_speed as f32 * 0.04));
+            h.h = wrap(h.h + ax.x * dt * (0.7 + h.v / 120.0) * ship_turn_mul(self.save.ship_speed));
         }
         // je Segelstufe 74 px/s (die Welt ist zehnmal so groß wie früher)
-        let target = self.ship.sail as f32 * 74.0 * if self.shanty_t > 0.0 { 1.35 } else { 1.0 } * (1.0 + self.save.ship_speed as f32 * 0.06);
+        let target = self.ship.sail as f32 * 74.0 * if self.shanty_t > 0.0 { 1.35 } else { 1.0 } * ship_speed_mul(self.save.ship_speed);
         h.v += (target - h.v) * (dt * 0.8).min(1.0);
         let (fx, fy) = (h.h.sin(), -h.h.cos());
         let (nx, ny) = (h.x + fx * h.v * dt, h.y + fy * h.v * dt);
@@ -262,7 +260,7 @@ impl Game {
             }
         }
         self.wake(&mut h, dt);
-        let dmg = 40.0 * if self.save.origin == "kanonier" { 1.3 } else { 1.0 } * (1.0 + self.save.ship_atk as f32 * 0.12);
+        let dmg = 40.0 * if self.save.origin == "kanonier" { 1.3 } else { 1.0 } * ship_atk_mul(self.save.ship_atk);
         if self.input.pressed(Act::Attack) && self.ship.cool[0] <= 0.0 {
             self.broadside(&h, -1.0, dmg, Owner::Player);
             self.ship.cool[0] = 1.6;
@@ -277,7 +275,7 @@ impl Game {
     }
 
     pub fn ship_damage(&mut self, n: f32) {
-        let n = n * (1.0 - self.save.ship_def as f32 * 0.04) * ng_dmg(&self.save);
+        let n = n * ship_dmg_taken(self.save.ship_def) * ng_dmg(&self.save);
         self.ship.hp -= n;
         self.ship.hull.flash = 0.12;
         self.shake(5.0);
@@ -496,16 +494,36 @@ impl Game {
         let vis = |x: f32, y: f32, m: f32| x > vx - m && x < vx + vw + m && y > vy - m && y < vy + vh + m * 1.5;
         // eigenes Schiff
         let h = &self.ship.hull;
-        if vis(h.x, h.y, 200.0) {
+        let summoning = matches!(self.cutscene, Some(Cut::Summon { .. }));
+        let depth = self.ship.depth.clamp(0.0, 1.0);
+        if vis(h.x, h.y, 200.0) && (!self.ship.sunk || summoning) && depth < 0.999 {
             let (k, flip) = sw_art::ships::ship_dir(h.dir16());
             let s = art.ships.get("player").map(|v| v[k]).unwrap_or_default();
             let b = (h.bob.sin() * 2.0).round();
             let a = (h.alpha * 255.0) as u8;
             let fl = if h.flash > 0.0 { flags::FLASH } else { 0 } | if self.hover == Hover::Ship { flags::OUTLINE } else { 0 };
-            f.shadow(h.x, h.y + 6.0, 129.0, 36.0, 0.3);
-            f.sprite(&s, h.x, h.y + b, SprOpt { flip, tint: [255, 255, 255, a], flags: fl, ..Default::default() });
+            if depth < 0.6 {
+                f.shadow(h.x, h.y + 6.0, 129.0, 36.0, 0.3 * (1.0 - depth / 0.6));
+            }
+            // tropfnass nach dem Auftauchen: dunkler und kühler, trocknet ab
+            let wet = (self.ship.wet / summon::WET).clamp(0.0, 1.0);
+            let tint = [(255.0 - 80.0 * wet) as u8, (255.0 - 55.0 * wet) as u8, (255.0 - 20.0 * wet) as u8, a];
+            // beim Auftauchen/Versinken: das Bild um den untergetauchten Teil tiefer und an der
+            // Wasserlinie (Unterkante des Bildes) abgeschnitten – die Masten tauchen zuerst auf
+            let sub = depth * s.h as f32;
+            f.sprite(&s, h.x, h.y + b + sub, SprOpt { flip, tint, flags: fl, cut_bottom: depth, ..Default::default() });
+            if depth > 0.005 {
+                // Gischt, wo das Schiff die Oberfläche durchbricht
+                let wl = h.y + b + (s.h as f32 - s.ay as f32);
+                let w = s.w as f32 * 0.42;
+                for k in 0..14 {
+                    let fx = (k as f32 / 13.0 - 0.5) * 2.0;
+                    let jit = ((self.t * 7.0 + k as f32 * 1.7).sin() * 3.0).round();
+                    f.glow(h.x + fx * w, wl - 1.0 + jit * 0.4, 3.0 + (k % 3) as f32, [210, 230, 250, 150]);
+                }
+            }
             // Crew an Deck, der Kapitän am Steuer (nur wenn man segelt)
-            if self.sailing && h.alpha > 0.9 {
+            if self.sailing && h.alpha > 0.9 && depth <= 0.0 {
                 // Plätze an Deck in Modellmaßen, projiziert wie das Schiffsbild (gleicher Kurs,
                 // gleiche Kippung): Kapitän am Steuer auf dem Achterdeck, Crew mittschiffs
                 let d16 = h.dir16();
@@ -513,7 +531,7 @@ impl Game {
                 let (sx, sy) = (hd.sin(), -hd.cos());
                 // Blickrichtung der Figuren: wie der Bug
                 let (dir, flip) = if sx.abs() > sy.abs() * 0.8 { (2, sx < 0.0) } else if sy < 0.0 { (1, false) } else { (0, false) };
-                let mut deck: Vec<(&CharSheet, f32, f32, f32)> = vec![(&art.player, -36.0, 0.0, 6.0)];
+                let mut deck: Vec<(&CharSheet, f32, f32, f32)> = vec![(&art.player, -28.5, 0.0, 7.9)];
                 for (i, el) in self.save.crew.iter().enumerate() {
                     let key = match el.as_str() {
                         "fire" => "crewFire",

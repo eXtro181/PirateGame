@@ -92,7 +92,7 @@ impl Game {
         };
         let (sx, sy) = (self.ship.hull.x, self.ship.hull.y);
         let d = (tx - sx).hypot(ty - sy).max(1.0);
-        let atk = 1.0 + self.save.ship_atk as f32 * 0.12;
+        let atk = ship_atk_mul(self.save.ship_atk);
         // Mörser: hoher Bogenschuss, explodiert beim Aufschlag
         if n >= 1 && self.crew_guns.mortar <= 0.0 {
             self.crew_guns.mortar = 4.2;
@@ -162,7 +162,7 @@ impl Game {
             k.y += (ty - k.y) * (dt * 1.5).min(1.0);
             if k.hit <= 0.0 && k.life > 1.0 {
                 k.hit = 0.9;
-                let dmg = 45.0 * (1.0 + self.save.ship_atk as f32 * 0.08);
+                let dmg = 45.0 * (1.0 + (ship_atk_mul(self.save.ship_atk) - 1.0) * 0.67);
                 self.hurt_target(t, dmg, Target::Player, HurtOpt::default());
                 self.fx.px.play(Px::Splash, tx, ty).scale(1.5);
                 self.fx.px.play(Px::Blunt, tx, ty).z(16.0).scale(1.2).tint([200, 255, 210, 255]);

@@ -41,6 +41,8 @@ pub enum Cmd {
     DebugGive(&'static str, &'static str),
     /// Laden eines Siedlungshändlers
     ShopAt(&'static str),
+    /// das Flaschenschiff vom Geisterkapitän annehmen
+    TakeBottle,
 }
 
 #[derive(Clone)]
@@ -98,6 +100,20 @@ pub fn dialog_for(g: &mut Game, ni: usize) -> Script {
             },
             choices: vec![bye],
         },
+        "ghostCaptain" => Script {
+            pages: if first {
+                pages(&[
+                    "Noch einer, den die See nicht behalten wollte … Komm näher. Ich beiße nicht mehr. Dafür fehlt mir seit hundert Jahren das Fleisch.",
+                    "Ich war Kapitän, wie du einer werden wirst. Mein Schiff schläft dort unten auf dem Grund, schwarz wie die Nacht, in der es sank.",
+                    "Ich habe es in eine Flasche gebannt, als die Wellen über uns zusammenschlugen. Hier – nimm es.",
+                    "Wenn du zum ersten Mal in See stechen willst, wirf die Flasche vom Steg ins Meer. Das Glas wird brechen, und dein Schiff steigt aus der Tiefe.",
+                    "Danach musst du es nur noch rufen. An jedem Steg. Es kennt jetzt deine Stimme.",
+                ])
+            } else {
+                pages(&["Nimm das Schiff. Mich hält hier nichts mehr außer ihm.", "Wirf die Flasche vom Steg ins Meer, wenn du ablegen willst."])
+            },
+            choices: vec![ch("Das Flaschenschiff annehmen", Cmd::TakeBottle), bye],
+        },
         "herald" => {
             if first {
                 return Script {
@@ -107,7 +123,7 @@ pub fn dialog_for(g: &mut Game, ni: usize) -> Script {
                         "Um das Feuer stehen vier leere Throne. Vier Könige der Geisterflotte tragen ihre Galionsfiguren in sich: Glut, Frost, Sturm und Tiefe.",
                         "Und draußen auf der See schlafen vier Ungeheuer, die einst Schiffe waren. Versenk sie, dann brennen ihre Schiffe im See der Festung.",
                         "Erst wenn die Throne besetzt sind und vier Schiffe im See brennen, öffnet sich der Strudel zum Ende der Welt.",
-                        "Dein Schiff wartet am Steg. Es steigt aus der Tiefe, wenn du es rufst.",
+                        "Am Steg im Norden wartet ein Kapitän, der längst keiner mehr ist. Er hat etwas für dich – ohne Schiff kommst du hier nicht fort.",
                     ]),
                     choices: vec![bye],
                 };
@@ -167,7 +183,7 @@ pub fn dialog_for(g: &mut Game, ni: usize) -> Script {
         }
         "shipmaster" => Script {
             pages: if first {
-                pages(&["Brack. Schiffsmeister der Glutwacht, seit das Feuer brennt.", "Bring mir Perlen, und ich mache aus deinem Kahn etwas, vor dem selbst die Könige der See ausweichen. Segel, Panzer, Kanonen – bis zur zehnten Stufe."])
+                pages(&["Brack. Schiffsmeister der Glutwacht, seit das Feuer brennt.", "Bring mir Perlen, und ich mache aus deinem Kahn etwas, vor dem selbst die Könige der See ausweichen. Segel, Panzer, Kanonen – bis zur zwanzigsten Stufe."])
             } else {
                 pages(&["Na, was soll's sein? Schneller, härter oder lauter?"])
             },
@@ -239,14 +255,15 @@ fn crew_talk(s: &Save) -> Vec<String> {
     vec![format!("Du hast {} von 4 an Bord. {}.", s.crew.len(), names.join(", ")), "Eine volle Crew singt lauter. Und lautes Singen hält die Geister fern.".into()]
 }
 
-/// Schiffsausbauten: Tempo, Verteidigung, Angriff (je bis +10).
+/// Schiffsausbauten: Tempo, Verteidigung, Angriff (je bis +20, `SHIP_MAX`).
 pub const SHIP_UPS: [(&str, &str); 3] = [
-    ("Tempo", "Mehr Segel, schnelleres Wenden. Jede Stufe +6 % Fahrt."),
-    ("Verteidigung", "Eisenbänder und Panzerplatten. Jede Stufe +24 Rumpf, −4 % Schaden."),
-    ("Angriff", "Mehr Kanonen und Geschütze. Jede Stufe +12 % Schaden, mehr Kugeln je Breitseite."),
+    ("Tempo", "Mehr Segel, schnelleres Wenden. Bis Stufe 10 je +6 % Fahrt, darüber je +3 %."),
+    ("Verteidigung", "Eisenbänder und Panzerplatten. Bis Stufe 10 je +24 Rumpf und −4 % Schaden, darüber je +16 und −2 %."),
+    ("Angriff", "Mehr Kanonen und Geschütze. Bis Stufe 10 je +12 % Schaden, darüber je +8 %; mehr Kugeln je Breitseite."),
 ];
+/// Kosten der nächsten Stufe: bis 10 wie früher (×1,45 je Stufe), darüber ×1,16 je Stufe
 pub fn ship_up_cost(lvl: i32) -> i64 {
-    (1500.0 * 1.45f64.powi(lvl)).round() as i64
+    (1500.0 * 1.45f64.powi(lvl.min(10)) * 1.16f64.powi((lvl - 10).max(0))).round() as i64
 }
 pub fn ship_level(s: &Save, i: usize) -> i32 {
     [s.ship_speed, s.ship_def, s.ship_atk][i]
@@ -256,8 +273,8 @@ pub fn ship_entries(s: &Save) -> Vec<Entry> {
         .map(|i| {
             let lvl = ship_level(s, i);
             let cost = ship_up_cost(lvl);
-            let right = if lvl >= 10 { "+10 (voll)".to_string() } else { format!("+{lvl} → +{} · {cost}", lvl + 1) };
-            entry(SHIP_UPS[i].0, &right, SHIP_UPS[i].1, lvl >= 10 || s.pearls < cost, Cmd::ShipUp(i))
+            let right = if lvl >= SHIP_MAX { format!("+{SHIP_MAX} (voll)") } else { format!("+{lvl} → +{} · {cost}", lvl + 1) };
+            entry(SHIP_UPS[i].0, &right, SHIP_UPS[i].1, lvl >= SHIP_MAX || s.pearls < cost, Cmd::ShipUp(i))
         })
         .collect()
 }

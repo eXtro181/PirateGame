@@ -211,9 +211,20 @@ impl Game {
             if !vis(n.a.x, n.a.y, 80.0) {
                 continue;
             }
+            // der Geisterkapitän: durchscheinend, nach der Übergabe löst er sich auf
+            let ghost = n.def.id == "ghostCaptain";
+            let fade = if ghost && self.npc_gone(i) { self.ghost_fade } else { 1.0 };
+            if fade <= 0.0 {
+                continue;
+            }
             if let Some(sh) = art.chars.get(n.def.preset) {
-                let fl = if self.hover == Hover::Npc(i) { flags::OUTLINE } else { 0 };
-                draw_char(f, sh, &n.a, fl, [255; 4], 0.4);
+                let fl = if self.hover == Hover::Npc(i) { flags::OUTLINE } else { 0 } | if ghost { flags::GHOST } else { 0 };
+                let tint = if ghost { [220, 255, 250, (210.0 * fade) as u8] } else { [255; 4] };
+                draw_char(f, sh, &n.a, fl, tint, if ghost { 0.15 * fade } else { 0.4 });
+            }
+            if ghost {
+                // kaltes Licht der Geisterlaterne
+                f.light(LightDef { x: n.a.x, y: n.a.y, z: 40.0, r: 150.0 * fade, col: [0.45, 1.0, 0.92], flicker: 0.25 });
             }
         }
         for w in &self.walkers {
@@ -334,6 +345,7 @@ impl Game {
             self.flash_light = None;
         }
         self.draw_sea(art, f);
+        self.draw_summon(art, f);
         self.draw_sea_monsters(art, f);
         self.draw_sea_bosses(art, f);
         self.draw_crew(art, f);

@@ -41,7 +41,7 @@ pub enum Role {
 }
 /// Rolle einer Vorgabe (für `wants_anim`).
 pub fn preset_role(name: &str) -> Role {
-    if name.starts_with("villager") || matches!(name, "lanternMaid" | "smith" | "merchant" | "shipmaster" | "carver" | "smithIlka" | "furWendla" | "mapOrrin" | "witchMabel") {
+    if name.starts_with("villager") || matches!(name, "lanternMaid" | "smith" | "merchant" | "shipmaster" | "carver" | "smithIlka" | "furWendla" | "mapOrrin" | "witchMabel" | "ghostCaptain") {
         Role::Npc
     } else if name.starts_with("crew") {
         Role::Crew
@@ -1636,6 +1636,8 @@ pub fn preset(name: &str) -> (Look, f32) {
         "drowned" => Look { drowned: true, skin: 0x5C7454, hair_col: 0x1F4A4C, hair: 2, coat: 0x2E3A36, pants: 0x24302C, weapon: Some("trident"), ..d() },
         "drownedIce" => Look { drowned: true, skin: 0x8EA6B0, hair_col: 0xC9D6D8, hair: 2, coat: 0x3E4E5A, pants: 0x2E3A44, weapon: Some("trident"), eye_col: 0xB8FFE8, ..d() },
         "ashSkeleton" => Look { skeleton: true, rags: true, coat: 0x4A2A22, hat: 2, band_col: 0x8A3A1E, weapon: Some("cutlass"), eye_col: 0xF0642A, aura: Some(0xC2502E), ..d() },
+        // der Geisterkapitän am Steg des Galgenstrands: fahl, schwebend, mit Geisterlaterne
+        "ghostCaptain" => Look { drowned: true, skin: 0x9EC8C4, hair: 4, hair_col: 0xD8E4E0, beard: 2, hat: 4, hat_col: 0x18242A, coat: 0x26363E, pants: 0x1C262C, shirt: 0x7E9A9C, sash: Some(0x3E5A60), eye_col: 0x9AFFF0, aura: Some(0x7AE8E0), hold_lantern: Some(0x7AE8E0), hover: 4.0, weapon: None, ..d() },
         "stormSailor" => Look { skin: 0x8FA3A8, hair_col: 0x24394A, hair: 4, coat: 0x24394A, hat: 3, hood_glow: true, eye_col: 0xB8FFE8, weapon: Some("rapier"), drowned: true, ..d() },
         // Monster in Menschengestalt
         "abyssPirate" => {
@@ -1714,7 +1716,7 @@ pub fn preset(name: &str) -> (Look, f32) {
     (l, s)
 }
 
-pub const PRESET_NAMES: [&str; 40] = [
+pub const PRESET_NAMES: [&str; 41] = [
     "abyssPirate", "voodoo", "orcCaptain", "stormHarpy", "bellConstruct", "gorgonQueen", "clockStorm",
-    "skeleton", "skelBrute", "skelGunner", "drowned", "drownedIce", "ashSkeleton", "stormSailor", "lanternMaid", "smith", "merchant", "shipmaster", "carver", "crewFire", "crewIce", "crewWind", "crewEarth", "villagerA", "villagerB", "villagerC", "villagerD", "villagerE", "villagerF", "villagerG", "villagerH", "smithIlka", "furWendla", "mapOrrin", "witchMabel", "kingFire", "kingIce", "kingWind", "kingEarth", "malakor",
+    "skeleton", "skelBrute", "skelGunner", "drowned", "drownedIce", "ashSkeleton", "stormSailor", "lanternMaid", "smith", "merchant", "shipmaster", "carver", "crewFire", "crewIce", "crewWind", "crewEarth", "villagerA", "villagerB", "villagerC", "villagerD", "villagerE", "villagerF", "villagerG", "villagerH", "smithIlka", "furWendla", "mapOrrin", "witchMabel", "kingFire", "kingIce", "kingWind", "kingEarth", "malakor", "ghostCaptain",
 ];

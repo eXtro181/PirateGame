@@ -116,7 +116,7 @@ Ungeheuer zeigen eine Lebensleiste, sobald sie verwundet sind; die Crew zielt mi
 
 - **Spieler**: der Ertrunkene. Aussehen im Editor wählbar (Hautton, Haare, Bart, Mantel, Hut …), Herkunft und Geschenk zu Beginn.
 - **Glutwacht**: Laternenmagd (Stufenaufstieg, Neues Spiel+), Schmied Harrow (Waffen härten und kaufen), Händlerin Sabeth (Waren), Schiffsmeister Brack (Ausbauten), Crew an der Tafel.
-- **Start**: Alter Galionsschnitzer.
+- **Start**: Alter Galionsschnitzer; auf dem Steg der **Geisterkapitän** mit dem Flaschenschiff.
 - **Crew** (je mit Lied und Geschütz):
 
 | Crew | Element | Lied | Geschütz |
@@ -245,10 +245,12 @@ Der Schmied härtet Waffen mit **Gezeitensplittern** (aus Seelenblumen).
 Gegenstände am Boden schweben mit einem Schimmer in ihrer Seltenheitsfarbe. Mit Alt erscheinen alle Namen.
 
 ### 6.6 Seefahrt
-- Das Schiff steigt an jedem Steg aus der Tiefe, wenn man es ruft. An Bord gehen und anlegen mit E.
+- **Das Flaschenschiff**: Am Galgenstrand wartet auf dem Steg ein Geisterkapitän (durchscheinend, schwebend, mit Geisterlaterne). Er übergibt sein Schiff, das er beim Untergang in eine Flasche gebannt hat, und löst sich danach in Nebel auf. Beim ersten Ablegen wirft man die Flasche vom Steg ins Meer: Sie fliegt im Bogen, das Glas zerspringt in einem Lichtblitz mit Scherben und Gischt, das Wasser brodelt, und das Schiff steigt zum ersten Mal vom Grund auf.
+- **Rufe dein Schiff**: Danach ruht das Schiff in der Tiefe und kommt an jedem Steg, wenn man es ruft: Blasen steigen auf, ein dunkler Schatten wächst unter der Oberfläche, die Masten durchstoßen das Wasser (Masten zuerst, zuletzt der Rumpf, Gischt an der Wasserlinie), dann läuft triefend Wasser an Segeln, Wanten und Rumpf herab, und man geht an Bord. Beim Anlegen (E) versinkt es wieder in der Tiefe.
+- **Das Schiff**: eine schwarze Galeone – schwarzer Lack mit Goldleisten und ochsenblutrotem Band, geflickte, zerfetzte schwarze Segel, rote Wimpel, Totenkopfflagge, Heckgalerie mit leuchtenden Fenstern, Hecklaternen, Wanten mit Webeleinen, Anker, ein geflügelter Totenengel als Galion.
 - **Steuerung**: links/rechts wenden, hoch/runter Segelstufen (je Stufe 74 px/s). J/L feuern Breitseiten nach Backbord bzw. Steuerbord, C setzt das Crew-Geschütz ein, F stimmt das Shanty der Crew an (das Schiff wird schneller).
 - **Seekarte** (M): gezeichnet wie auf vergilbtem Papier, deckt sich beim Erkunden auf (Felder à 16 × 16 Kacheln). Drei Zoomstufen (Ganze Welt, Umgebung, Nah), schieben mit den Richtungstasten. Namen der wilden Inseln erscheinen, sobald man dort war.
-- **Ausbauten** beim Schiffsmeister, je bis Stufe 10: Tempo (+6 % Fahrt), Verteidigung (+24 Rumpf, −4 % Schaden), Angriff (+12 % Schaden, mehr Kugeln). Jede Stufe ist am Schiff sichtbar (Segel, Eisenbänder, Kanonen).
+- **Ausbauten** beim Schiffsmeister, je bis Stufe 20: Tempo (bis 10 je +6 % Fahrt, darüber je +3 %), Verteidigung (bis 10 je +24 Rumpf und −4 % Schaden, darüber je +16 und −2 %), Angriff (bis 10 je +12 % Schaden, darüber je +8 %, mehr Kugeln je Breitseite). Kosten bis 10 wie früher (×1,45 je Stufe), darüber ×1,16 je Stufe. Die Stufen sind am Schiff sichtbar: mehr und größere Segel, Leesegel, Bramsegel, Besantoppsegel, weitere Klüver, auf 20 geisterhaft schimmernde Säume; Eisenbänder, Panzerplatten bis zur Wasserlinie, Goldkanten, Rammsporn, Eisenkappe am Bug, Dornen auf der Reling, gepanzertes Heck, Ketten, auf 20 leuchtende Runen; mehr Stückpforten, zweite Batterie, Drehbassen, Mörser, Jagd- und Heckgeschütze, Karronaden, zweiter Mörser, goldbeschlagene Rohre.
 - Kapitän und Crew stehen an Deck und drehen sich mit dem Kurs.
 
 ### 6.7 Fortschritt, Neues Spiel+, Cheats
@@ -266,6 +268,7 @@ Die vollständige Analyse mit allen Formeln, Farbwerten, Shadern und einer Schri
 - **HD-Pixelart** mit dem Detailgrad der Beispielbilder: Blütenbäume mit Glyzinien, Basaltklippen, türkises Wasser, Fachwerkhäuser, eine Rotnebel-Zone.
 - **PixelLab-Stil überall** (Nutzerwunsch 7.11.): was nicht aus PixelLab stammt, wird nachgebildet – alle Sprites mit gestuften Tönen, geglätteten Pixelinseln und einem Umriss in einer Farbe, die Bodentexturen mit ruhigem Grund und kleiner Tonleiter wie die PixelLab-Kacheln.
 - **Natürliche Vegetation**: Pflanzen wachsen dort, wo sie auch auf der Erde wüchsen – keine bunten Fantasiebäume und keine wahllos verstreute Deko.
+- **Düster und abwechslungsreich** (Nutzerwunsch 7.11.): gedämpftes Nachtgrün, verdorrte und vereinzelt blutrote Kronen, knochenbleiche und bereifte Totbäume, Trauerweiden an stillen Ufern, Leuchtpilze als kalte Lichtinseln im Wald, Blut- und Geisterblumen; Blumen der Boden-Deko in knochenweiß, ocker, violett, geisterblau und blutrot.
 - **Dark Fantasy**: gedämpftes Licht, Lichtinseln, Nebel, eigene Stimmung je Zone.
 - **3D-Wirkung** an Hängen, Abgründen und Küsten (Normalen- und Höhenpuffer).
 - Kürzere Bildseite zeigt 540 Weltpixel. FullHD-Modus verdoppelt die interne Auflösung.
@@ -287,7 +290,7 @@ Jedes Bild ist eine **Leinwand mit vier Kanälen**: Farbe, Normale, Höhe über 
 
 - **Figuren-Maler** (`chars.rs`): Figuren 64 × 72 Pixel, drei Richtungen (vorn, Seite gespiegelt, hinten), alle Animationen. Über 40 Vorlagen: Gegner, NPCs, Crew, Dorfbewohner, Könige, Malakor (vier Arme, Tentakelbart, Korallenkrone). Bausteine wie Hüte, Mäntel, Bärte, Flügel, Schlangenhaar, Uhrwerk, Leuchtaugen, Auren. Für alle Menschen gleich: Paspeln an der Mantelöffnung, Saum mit Umschlag, Taschenklappen mit Knopf, Bandelier mit Messingschnalle, Gürteltasche, helle Manschetten, Stiefelstulpen mit Schnalle, Glanz in den Augen; ein Feinschliff je Bild setzt Formlicht an die Kanten, Gewebe- und Faltenstruktur, Haarsträhnen, Metallglanz und Mikrorelief für die Beleuchtung.
 - **Kreaturen-Rig** (`rig.rs`, `beasts.rs`): Wesen bestehen aus Ellipsoiden, Quadern, Röhren, Häuten und Dreiecken im Raum. Ein Strahlenwerfer rendert sie aus der 3/4-Kamera (Neigung 0,55) mit Mustern (Schuppen, Fell, Nieten …), Innenkonturen, Höhlenschatten in Ansätzen und Kehlen, Glanzlichtern auf Metall und Umriss. Er schreibt die Höhe je Pixel, damit Schatten der Grundfläche folgen.
-- **Schiffe** (`ships.rs`): ebenfalls als Rig. 16 Kurse (9 gerendert, der Rest gespiegelt), das eigene Schiff mit sichtbaren Ausbauten, vier Bossschiffe mit eigenem Entwurf und der Fliegende Holländer (Maßstab 6,9).
+- **Schiffe** (`ships.rs`): ebenfalls als Rig. 16 Kurse (9 gerendert, der Rest gespiegelt), das eigene Schiff als detailreiche schwarze Galeone im Pixelstil (`build_black`) mit sichtbaren Ausbauten bis Stufe 20, vier Bossschiffe mit eigenem Entwurf und der Fliegende Holländer (Maßstab 6,9).
 - **Gelände** (`terrain.rs`): Der Boden wird in 256-Pixel-Stücken gebacken. Materialien wie Gras, Wiese, Sand, Erde, Pflaster, Marmor, Planken, Basalt, Asche, Schnee, Eis, Schlamm, Fels und Moos haben je Gebiet eigene Paletten. Dazu weiche Materialgrenzen, nasse Uferkanten, Ufersteine, Hänge, Festungsmauern aus Quadern und Naturwege.
 - **Requisiten** (`props.rs`, `flora.rs`, `buildings.rs`, `structures.rs`, `grave.rs`): Bäume mit Kronen, die durchsichtig werden, wenn man dahinter steht (in der Natur die PixelLab-Arten: Eichen, Laubbäume, Kiefern, Schneefichten, Zypressen, tote und verkohlte Bäume, Palmen, dazu Mangroven), Büsche, Fachwerkhäuser, Festung, Werft, Galgen mit schwingenden Gehängten, Särge, Wracks, Eisberge, Korallen, hohe Mauern mit Zinnen, Spinnennetze und Kokons. Die **Truhe** ist ein 3D-Modell (Plankenkorpus, gewölbter Deckel, Eisenbänder mit Nieten, Eckbeschläge, Messingschloss; offen mit glimmenden Münzen und Edelsteinen).
 - **Atlas**: alles auf Seiten à 2048² (aktuell gut 5) plus eine Effektseite für die PixelFX-Effekte, die beim Start in wenigen Sekunden Bild für Bild gezeichnet werden. Feste Streifen für Spieler, eigenes Schiff und den gerade aktiven Boss werden bei Bedarf neu gezeichnet.

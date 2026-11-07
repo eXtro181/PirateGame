@@ -390,6 +390,23 @@ fn main() {
             eprintln!("Schiffe: {:?}", t.elapsed());
             save_lit(&bg, &format!("{out}/ships.png"), 1);
         }
+        "shipfit" => {
+            // passt das eigene Schiff (9 Kurse, Pixelstil +2 px) in den Schiffsstreifen (2040 × 300)?
+            use sw_art::ships::*;
+            for n in [0u8, 10, 20] {
+                let u = Upg { speed: n, def: n, atk: n };
+                let (_, h, foot) = ship_size("player");
+                let mut a = sw_art::atlas::Atlas::new();
+                a.lim = 2040;
+                a.style = true;
+                let t = std::time::Instant::now();
+                for k in 0..=8 {
+                    let c = ship_frame("player", k, u);
+                    a.add_trim(&format!("s{k}"), &c, c.w / 2, h - foot);
+                }
+                eprintln!("Stufe {n}: belegt {:.0} px von 300 ({:?})", a.used() * 2048.0, t.elapsed());
+            }
+        }
         "title" => {
             let t = std::time::Instant::now();
             let c = sw_art::ships::title_ship(3.2, 760, 700, 150);
