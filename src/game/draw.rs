@@ -35,6 +35,23 @@ pub fn draw_char(f: &mut Frame, sh: &CharSheet, a: &Actor, fl: u8, tint: [u8; 4]
     f.sprite(&s, a.x, a.y, SprOpt { flip: a.flip(), flags: fl, tint, ..Default::default() });
 }
 
+/// Silhouette einer Figur hinter Verdeckern (Überlagerung, Modus `SIL`): nur wo etwas Aufrechtes
+/// vor ihrem Fuß steht, als kühler, halb durchsichtiger Umriss
+pub fn draw_char_sil(f: &mut Frame, sh: &CharSheet, a: &Actor, col: [u8; 4]) {
+    if sh.f.is_empty() {
+        return;
+    }
+    let ai = anim_index(a.anim);
+    let dir = if a.anim == "dead" { 0 } else { a.dir() };
+    let n = sh.f[dir.min(2)][ai].len().max(1);
+    let fi = (a.frame.max(0.0) as usize) % n;
+    let s = sh.get(dir, ai, fi);
+    let mut q = Frame::quad_spr(&s, a.x, a.y, &SprOpt { flip: a.flip(), tint: col, ..Default::default() });
+    q.ext[1] = modes::SIL;
+    q.prm = [a.y, 0.0];
+    f.over(q, false);
+}
+
 /// Bossposen (Angriffsphasen) auf die Bilder des Bogens abbilden.
 fn boss_pose(a: &Actor, ph: &str) -> Actor {
     let mut b = *a;
@@ -68,12 +85,21 @@ impl Game {
     pub fn draw(&mut self, art: &Art, f: &mut Frame, dt: f32) {
         // Licht und Stimmung der Zone
         env::apply(&self.env_cur, &mut f.g, self.opt.dark, self.opt.exposure, self.opt.fx_high);
+        // Blitz: mit hohen Effekten hartes Licht mit scharfen Schatten im Licht-Pass, dazu etwas
+        // Himmelslicht; sonst wie früher nur aufhellen
         if self.lightning > 0.0 {
-            let k = self.lightning * 2.0;
+            let k = self.lightning * if self.opt.fx_high { 0.6 } else { 2.0 };
             for i in 0..3 {
                 f.g.ambient[i] += k;
             }
+            if self.opt.fx_high {
+                f.g.counts[1] = self.lightning * 2.2;
+            }
         }
+        // Wetter, Tageszeit, Belichtung, Bildwirkungen; Blenden laufen wie Tinte ins Bild
+        let pp = if self.sailing { (-1.0e6, -1.0e6) } else { (self.player.a.x, self.player.a.y) };
+        let ink = if self.opt.fx_high { self.ui.fade } else { 0.0 };
+        self.look.apply(&mut f.g, &self.env_cur, self.low_hp_k(), ink, pp, self.opt.fx_high);
         let focus_prop = self.focus.as_ref().and_then(|fo| fo.prop);
         let (fx, fy) = if self.sailing { (self.ship.hull.x, self.ship.hull.y) } else { (self.player.a.x, self.player.a.y) };
         self.view.draw(&self.world, art, f, (fx, fy), focus_prop, dt);
@@ -111,6 +137,8 @@ impl Game {
                 f.sprite_z(s, w.x, w.y, w.y - 60.0, SprOpt { flip: w.v & 2 != 0, scale: 0.75 + 0.25 * fin, tint: [236, 238, 230, (al * 235.0) as u8], ev: 6.0, ..Default::default() });
             }
         }
+        // Nachbilder, Ausholglanz
+        self.draw_feel(art, f);
         // Spieler
         let p = &self.player;
         if !p.hidden {
@@ -126,7 +154,9 @@ impl Game {
                 // auf dem Deck der hohen Brücke: so hoch wie das Deck, über der Brücke einsortiert
                 draw_char_lift(f, &art.player, &p.a, fl, [255, 255, 255, a], b.z(p.a.x), b.y + b.hw + 1.0);
             } else {
-                draw_char(f, &art.player, &p.a, fl, [255, 255, 255, a], 0.45);
+                draw_char(f, &art.player, &p.a, fl | flags::HERO, [255, 255, 255, a], 0.45);
+                // hinter Bäumen, Mauern und Dächern bleibt ihr Umriss sichtbar
+                draw_char_sil(f, &art.player, &p.a, [150, 196, 255, 255]);
             }
             // eingesponnen: ein Netz klebt über der Figur und zittert, solange man sich losreißt
             if self.web_t > 0.0 {
@@ -135,7 +165,8 @@ impl Game {
                     f.sprite_z(s, p.a.x, p.a.y - 15.0, p.a.y + 1.0, SprOpt { rot: 0.35 + wob, scale: 0.82, tint: [236, 238, 230, 228], ev: 6.0, ..Default::default() });
                 }
             }
-            f.light(LightDef { x: p.a.x, y: p.a.y + 4.0, z: 70.0, r: 180.0, col: [0.5, 0.4, 0.3], flicker: 0.0 });
+            // die Laterne zeigt das Leben: hell und warm bei vollem Leben, klein und rötlich bei wenig
+            f.light(self.player_lantern());
         }
         // Gegner
         for (i, e) in self.enemies.iter().enumerate() {
@@ -150,7 +181,13 @@ impl Game {
             if dead_a <= 0.0 || (e.state == ES::Dead && matches!(d.body, Body::Sheet(s) if s.contains("kel"))) {
                 continue;
             }
-            let tint = if e.elite { [255, 214, 200, (255.0 * dead_a) as u8] } else { [255, 255, 255, (255.0 * dead_a) as u8] };
+            let mut tint = if e.elite { [255, 214, 200, (255.0 * dead_a) as u8] } else { [255, 255, 255, (255.0 * dead_a) as u8] };
+            // sichtbare Wunden: je weniger Leben, desto dunkler und blutiger
+            if e.state != ES::Dead && e.max_hp > 0.0 {
+                let w = (1.0 - e.hp / e.max_hp).clamp(0.0, 1.0) * 0.35;
+                tint[1] = (tint[1] as f32 * (1.0 - w)) as u8;
+                tint[2] = (tint[2] as f32 * (1.0 - w * 1.1)) as u8;
+            }
             let (Body::Sheet(sname) | Body::Beast(sname)) = d.body;
             if let Some(sh) = art.chars.get(sname) {
                 draw_char(f, sh, &e.a, fl, tint, 0.4);
@@ -383,6 +420,16 @@ impl Game {
                     f.world_q(s.y + 0.1, Frame::quad_rect(s.x - 6.0, y - 7.0, 5.0, 4.0, [104, 112, 122, 255], modes::SOLID, 0));
                     f.world_q(s.y + 0.15, Frame::quad_rect(s.x - 4.5, y - 5.5, 2.5, 2.0, [165, 175, 186, 240], modes::SOLID, 0));
                     f.glow(s.x - s.vx * 0.03, y - s.vy * 0.03, 12.0, [130, 135, 140, 110]);
+                }
+                "bullet" => {
+                    // Kugel mit Leuchtspur
+                    let (dx, dy) = (s.vx * 0.022, s.vy * 0.022);
+                    for k in 0..4 {
+                        let t = k as f32 / 4.0;
+                        let a = (200.0 * (1.0 - t)) as u8;
+                        f.over(Frame::quad_rect(s.x - dx * t - 1.0, y - dy * t - 1.0, 2.0, 2.0, [255, 220, 150, a], modes::SOLID, 0), true);
+                    }
+                    f.glow(s.x, y, 4.0, [255, 210, 140, 200]);
                 }
                 "boneshard" => {
                     f.world_q(s.y, Frame::quad_rect(s.x - 5.0, y - 2.0, 10.0, 4.0, [216, 206, 176, 255], modes::SOLID, 0));

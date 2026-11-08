@@ -28,14 +28,27 @@ struct VOut {
 };
 
 @vertex
-fn vs_world(v: VIn) -> VOut {
+fn vs_world(v: VIn, @builtin(vertex_index) vid: u32) -> VOut {
     var o: VOut;
     var p = v.pos;
-    // Wind: obere Eckpunkte schwingen
-    if (v.ext.z > 0u) {
+    // Wind: die oberen Eckpunkte schwingen (Eckennummer aus dem Vertex-Index; die Windstärke steht
+    // auf allen vier Ecken, damit der Fragment-Shader Laub erkennt). Böen und Windrichtung kommen
+    // aus dem Wetter.
+    if (v.ext.z > 0u && (vid & 3u) < 2u) {
         let t = G.screen.z;
         let a = f32(v.ext.z) / 64.0;
-        p.x += (sin(t * 1.6 + v.pos.x * 0.031 + v.pos.y * 0.017) * 0.7 + sin(t * 2.9 + v.pos.x * 0.07) * 0.3) * a;
+        let wind = G.fx2.w;
+        let gust = 1.0 + wind * (0.7 + 0.7 * sin(t * 0.63 + v.pos.x * 0.0041 + v.pos.y * 0.0023));
+        p.x += (sin(t * 1.6 + v.pos.x * 0.031 + v.pos.y * 0.017) * 0.7 + sin(t * 2.9 + v.pos.x * 0.07) * 0.3) * a * gust;
+        p += G.fx5.zw * wind * a * (1.6 + 0.8 * sin(t * 0.9 + v.pos.x * 0.01));
+        // Halme, Farne und Schilf biegen sich vor der Spielfigur weg (hohe Kronen liegen zu weit oben)
+        let dp = vec2<f32>(p.x - G.fx5.x, (p.y - (G.fx5.y - 12.0)) * 1.25);
+        let dl = length(dp);
+        if (dl < 34.0) {
+            let bend = (1.0 - smoothstep(8.0, 34.0, dl)) * min(a * 2.6, 1.0) * 8.0;
+            p.x += sign(dp.x + 0.001) * bend;
+            p.y += bend * 0.35;
+        }
     }
     let rel = (p - G.view.xy) / G.view.zw;
     o.clip = vec4<f32>(rel.x * 2.0 - 1.0, 1.0 - rel.y * 2.0, 0.0, 1.0);
@@ -149,7 +162,12 @@ fn water_s(p_in: vec2<f32>, shore_in: f32) -> GOut {
         let r = reflect(-v, n);
         let horizon = G.fog.rgb * 1.15 + G.ambient.rgb * 0.42 + G.sun_col.rgb * 0.12;
         let zenith = G.ambient.rgb * 1.35 + G.sun_col.rgb * 0.08;
-        let sky = mix(horizon, zenith, clamp(r.z, 0.0, 1.0));
+        var sky = mix(horizon, zenith, clamp(r.z, 0.0, 1.0));
+        // ziehende Wolken spiegeln sich (dasselbe Feld wie die Wolkenschatten, von den Wellen verzerrt)
+        let wq = (p + nxy * 26.0) * 0.00042 + vec2<f32>(t * 0.0062 + 0.21, t * 0.0024 + 0.43);
+        let cl = textureSampleLevel(t_noise, s_lin, fract(wq), 0.0).r * 0.72 + textureSampleLevel(t_noise, s_lin, fract(wq * 2.7), 0.0).b * 0.34;
+        let cov = G.fx6.x;
+        sky = mix(sky, G.fog.rgb * 1.4 + G.ambient.rgb * 0.7 + G.sun_col.rgb * 0.1, smoothstep(0.58 - cov * 0.25, 0.85 - cov * 0.25, cl) * 0.55);
         let fres = 0.05 + 0.95 * pow(1.0 - clamp(dot(n, v), 0.0, 1.0), 5.0);
         em += sky * clamp(fres * 2.35 + 0.07, 0.0, 0.65) * (1.0 - foam * 0.85);
         spec = mix(0.98, 0.22, foam);
@@ -356,8 +374,12 @@ fn fs_gbuf(v: VOut) -> GOut {
     let elev = n.b * 510.0 + v.prm.x;
     o.alb = vec4<f32>(rgb, 1.0);
     o.nrm = vec4<f32>(n.rg, clamp(elev / 510.0, 0.0, 1.0), n.a);
-    // Alpha im Leuchtpuffer: 1 = Sprite (kann Effekte verdecken), 0,875 = Boden-Chunk, 0,5 = Wasser
-    o.emi = vec4<f32>(glow * v.col.a, select(1.0, 0.875, chunk));
+    // Alpha im Leuchtpuffer: 1 = Sprite (kann Effekte verdecken), 0,98 = Laub (schwingt im Wind:
+    // Lichtflecken unter Kronen), 0,96 = Spielfigur (Randlicht), 0,875 = Boden-Chunk, 0,5 = Wasser
+    var kind = select(1.0, 0.875, chunk);
+    if (!chunk && v.ext.z > 0u) { kind = 0.98; }
+    if ((flags & 128u) != 0u) { kind = 0.96; }
+    o.emi = vec4<f32>(glow * v.col.a, kind);
     return o;
 }
 
@@ -403,7 +425,8 @@ fn fs_overlay(v: VOut) -> @location(0) vec4<f32> {
             let pf = v.world * 0.5;
             let n = noise_at(pf * 0.25 + vec2<f32>(t * v.prm.y, t * v.prm.y * 0.3)).r;
             let n2 = noise_at(pf * 0.12 - vec2<f32>(t * v.prm.y * 0.6, 0.0)).b;
-            let n3 = noise_at(pf * 0.52 + vec2<f32>(-t * v.prm.y * 0.35, t * v.prm.y * 0.45)).g;
+            // dritte Lage aus dem weichen Rauschkanal (der Worley-Kanal g zeichnete ein Liniennetz)
+            let n3 = noise_at(pf * 0.52 + vec2<f32>(-t * v.prm.y * 0.35 + 17.0, t * v.prm.y * 0.45 + 5.0)).b;
             a = smoothstep(0.33, 0.86, n * 0.52 + n2 * 0.42 + n3 * 0.22) * v.col.a * edge * 0.84;
         }
         return vec4<f32>(v.col.rgb * a, a);
@@ -431,6 +454,28 @@ fn fs_overlay(v: VOut) -> @location(0) vec4<f32> {
             if (a < 0.004) { discard; }
         }
         return vec4<f32>(c.rgb * v.col.rgb * v.prm.y * a, a);
+    }
+    if (mode == 11u) {
+        // Silhouette der Spielfigur hinter Verdeckern (Bäume, Mauern, Dächer): nur wo etwas
+        // Aufrechtes vor ihrem Fuß (prm.x) steht, als kühler, halb durchsichtiger Umriss
+        let c = textureSampleLevel(t_acol, s_near, v.uv, i32(v.ext.x), 0.0);
+        if (c.a < 0.45) { discard; }
+        let ip = vec2<i32>(floor(v.clip.xy));
+        let ek = textureLoad(t_ge, ip, 0).a;
+        if (ek < 0.95 || abs(ek - 0.96) < 0.01) { discard; }
+        let e = textureLoad(t_gn, ip, 0).b * 510.0;
+        let occ = smoothstep(v.prm.x + 3.0, v.prm.x + 10.0, v.world.y + e) * smoothstep(4.0, 9.0, e);
+        if (occ < 0.05) { discard; }
+        // Rand heller als die Fläche (Lesbarkeit), sanft pulsierend
+        let ts = 1.0 / vec2<f32>(textureDimensions(t_acol).xy);
+        let l = i32(v.ext.x);
+        let nb = textureSampleLevel(t_acol, s_near, v.uv + vec2<f32>(ts.x, 0.0), l, 0.0).a
+            * textureSampleLevel(t_acol, s_near, v.uv - vec2<f32>(ts.x, 0.0), l, 0.0).a
+            * textureSampleLevel(t_acol, s_near, v.uv + vec2<f32>(0.0, ts.y), l, 0.0).a
+            * textureSampleLevel(t_acol, s_near, v.uv - vec2<f32>(0.0, ts.y), l, 0.0).a;
+        let rim = 1.0 - step(0.45, nb);
+        let a = (0.22 + rim * 0.5) * occ * v.col.a * (0.85 + 0.15 * sin(G.screen.z * 3.0));
+        return vec4<f32>(v.col.rgb * a, a);
     }
     let c = textureSampleLevel(t_acol, s_near, v.uv, i32(v.ext.x), 0.0);
     if (c.a < 0.45) { discard; }

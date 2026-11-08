@@ -122,22 +122,25 @@ struct OptStore {
     touch: u8,
     #[serde(default)]
     pixel: bool,
+    /// Kamera nah (Zoomstufe)
+    #[serde(default)]
+    near: bool,
 }
 fn load_opts() -> Options {
     let s: Option<OptStore> = save::load_options().and_then(|s| serde_json::from_str(&s).ok());
     match s {
-        Some(o) => Options { dark: o.dark, fx_high: o.fx_high, exposure: o.exposure, volume: o.volume, shake: o.shake, touch: o.touch, hd: !o.pixel },
-        None => Options { dark: false, fx_high: true, exposure: 1.0, volume: 0.8, shake: true, touch: 0, hd: true },
+        Some(o) => Options { dark: o.dark, fx_high: o.fx_high, exposure: o.exposure, volume: o.volume, shake: o.shake, touch: o.touch, hd: !o.pixel, near: o.near },
+        None => Options { dark: false, fx_high: true, exposure: 1.0, volume: 0.8, shake: true, touch: 0, hd: true, near: false },
     }
 }
 fn store_opts(o: &Options) {
-    let s = OptStore { dark: o.dark, fx_high: o.fx_high, exposure: o.exposure, volume: o.volume, shake: o.shake, touch: o.touch, pixel: !o.hd };
+    let s = OptStore { dark: o.dark, fx_high: o.fx_high, exposure: o.exposure, volume: o.volume, shake: o.shake, touch: o.touch, pixel: !o.hd, near: o.near };
     if let Ok(j) = serde_json::to_string(&s) {
         save::store_options(&j);
     }
 }
 fn copy_opts(o: &Options) -> Options {
-    Options { dark: o.dark, fx_high: o.fx_high, exposure: o.exposure, volume: o.volume, shake: o.shake, touch: o.touch, hd: o.hd }
+    Options { dark: o.dark, fx_high: o.fx_high, exposure: o.exposure, volume: o.volume, shake: o.shake, touch: o.touch, hd: o.hd, near: o.near }
 }
 
 fn setup(world: &mut bevy::ecs::world::World) {
@@ -304,6 +307,15 @@ fn setup(world: &mut bevy::ecs::world::World) {
                     g.ui.mute_banners = true;
                     g.ui.banners.clear();
                     g.freeze_cut = app.params.contains_key("freeze");
+                }
+            }
+            // Testlauf: Tageszeit (&day=0.5 = tiefe Nacht) und Wetterfront (&weather=1 = volle Front)
+            if let Scene::Play(g) = &mut app.scene {
+                if let Some(d) = app.params.get("day").and_then(|v| v.parse::<f32>().ok()) {
+                    g.look.day = d.fract();
+                }
+                if let Some(w) = app.params.get("weather").and_then(|v| v.parse::<f32>().ok()) {
+                    g.look.force_front(w.clamp(0.0, 1.0));
                 }
             }
             if let Some(v) = app.params.get("summon").cloned() {

@@ -119,6 +119,10 @@ pub struct Boss {
     /// Meeresspinne an der Klippenwand: 0 = auf der Platte, 1 = an der Wand (Kopf oben),
     /// 2 = an der Wand kopfüber hinab
     pub climb: f32,
+    /// Haltung: füllt sich mit Treffern; voll = der Boss taumelt (Gegenstoß möglich)
+    pub posture: f32,
+    /// Zeit seit dem letzten Treffer (danach erholt sich die Haltung)
+    pub posture_t: f32,
 }
 
 /// PixelFX-Effekt für einen Flächenangriff im Element des Bosses (Ring um den Boss oder Einschlag)
@@ -268,6 +272,8 @@ impl Boss {
             h: 100.0,
             cine: false,
             climb: 0.0,
+            posture: 0.0,
+            posture_t: 0.0,
         };
         b.set_body(key != "spider");
         b
@@ -370,6 +376,10 @@ impl Game {
         let n = self.bosses[i].name.clone();
         let sub = if self.bosses[i].mega { "Herr des Fliegenden Holländers" } else if self.bosses[i].key == "spider" { "Wächterin des Wrackzwingers" } else { "Geisterkönig" };
         self.ui.banner(&n, sub, "boss", 3.0);
+        // Auftritt: Kinobalken, die Kamera rückt heran, Druckwelle beim Erscheinen
+        self.boss_intro_t = 2.6;
+        self.look.zoom_in(1.12, 2.2);
+        self.shockwave(x, y - 20.0, 0.9);
     }
 
     fn boss_pick(&self, b: &Boss) -> (AK, AO) {
@@ -1068,6 +1078,10 @@ impl Game {
             self.ui.banner("MALAKOR FÄLLT", "", "big", 2.0);
             self.sfx("death");
             self.shake(12.0);
+            self.impact_frame(0.07);
+            self.slow_mo(1.0, 0.3);
+            self.look.zoom_in(1.15, 1.2);
+            self.shockwave(x, y - by * 0.5, 1.4);
             return;
         }
         if self.bosses[i].hp <= 0.0 {
@@ -1084,6 +1098,11 @@ impl Game {
             self.sfx("roar");
             self.shake(8.0);
             self.ui.banner(&t, "", "boss", 1.6);
+            // Verwandlung: Aufprallbild, Druckwelle, Kamera nah heran
+            self.impact_frame(0.06);
+            self.shockwave(x, y - by * 0.5, 1.2);
+            self.look.zoom_in(1.1, 1.0);
+            self.boss_intro_t = self.boss_intro_t.max(1.4);
         }
     }
 
@@ -1110,6 +1129,12 @@ impl Game {
         self.flash([1.0, 1.0, 1.0], 1.0);
         self.shake(20.0);
         self.sfx("death");
+        // der letzte Hieb: Aufprallbild, lange Zeitlupe, die Kamera rückt heran, Kinobalken
+        self.impact_frame(0.08);
+        self.slow_mo(1.5, 0.22);
+        self.look.zoom_in(1.16, 1.6);
+        self.shockwave(x, y - 30.0, 1.5);
+        self.boss_intro_t = self.boss_intro_t.max(2.4);
         if key == "spider" {
             // Prolog: Beute, dann führt der Weg hinaus über den Sarg am Wasserfall
             self.ui.banner("DIE MEERESSPINNE IST ERSCHLAGEN", "Am Wasserfall wartet ein Sarg", "big", 5.0);

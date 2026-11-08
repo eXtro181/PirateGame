@@ -613,7 +613,7 @@ impl Menu {
     fn options(&mut self, f: &mut Frame, art: &Art, inp: &Input, o: &mut Options, sfx: &mut Vec<&'static str>) -> MenuOut {
         let (w, h) = f.ui_size();
         let pw = (w - 12.0).min(380.0);
-        let ph = 200.0;
+        let ph = 216.0;
         let px = (w / 2.0 - pw / 2.0).round();
         let py = (h / 2.0 - ph / 2.0).round();
         Self::panel_title(f, art, px, py, pw, ph, "Optionen");
@@ -660,6 +660,12 @@ impl Menu {
         let d = self.cycler(f, art, inp, x, y, cw, "Touch-Steuerung", ["Automatisch", "Immer", "Nie"][o.touch as usize % 3]);
         if d != 0 {
             o.touch = ((o.touch as i32 + d).rem_euclid(3)) as u8;
+            changed = true;
+        }
+        y += 16.0;
+        let d = self.cycler(f, art, inp, x, y, cw, "Kamera", if o.near { "Nah" } else { "Normal" });
+        if d != 0 {
+            o.near = !o.near;
             changed = true;
         }
         if changed {

@@ -112,6 +112,10 @@ pub struct Player {
     pub look_key: String,
     /// Sprung eine Ebene tiefer: (von x, von y, nach x, nach y, Fortschritt 0..1)
     pub jump: Option<(f32, f32, f32, f32, f32)>,
+    /// Laufschwung: aktuelle Geschwindigkeit (folgt der Eingabe mit kurzer Beschleunigung)
+    pub mv: (f32, f32),
+    /// Eingabepuffer: zu früh gedrückte Aktion (0 Rolle, 1 Hieb, 2 schwerer Hieb) und ihre Restzeit
+    pub buf: Option<(u8, f32)>,
     /// wie lange schon gegen eine Kante gelaufen wird
     pub edge_t: f32,
 }
@@ -151,6 +155,8 @@ pub struct Enemy {
     pub valid: bool,
     /// Mob einer feindlichen Siedlung (Schlüssel), verschwindet nach der Buße
     pub folk: Option<&'static str>,
+    /// Rückstoß nach einem Treffer (px/s, klingt rasch ab)
+    pub kb: (f32, f32),
 }
 
 pub struct Npc {
@@ -286,6 +292,8 @@ impl Player {
             look_key: String::new(),
             jump: None,
             edge_t: 0.0,
+            mv: (0.0, 0.0),
+            buf: None,
         }
     }
     pub fn use_st(&mut self, n: f32) -> bool {
@@ -449,6 +457,23 @@ impl Game {
         let ax = self.input.axis();
         let lock_t = self.lock.and_then(|t| self.target_pos(t).map(|q| (q.0, q.1)));
         let moving = ax.length() > 0.15;
+        // Eingabepuffer: kurz vor dem Ende einer Aktion gedrückt, wird es danach ausgeführt
+        if let Some(b) = p.buf.as_mut() {
+            b.1 -= dt;
+        }
+        if p.buf.is_some_and(|b| b.1 <= 0.0) {
+            p.buf = None;
+        }
+        if !matches!(p.state, PS::Free | PS::Sit | PS::Talk) {
+            let inp = &self.input;
+            if inp.pressed(Act::Roll) {
+                p.buf = Some((0, 0.32));
+            } else if p.state != PS::Attack && inp.pressed(Act::Heavy) {
+                p.buf = Some((2, 0.32));
+            } else if p.state != PS::Attack && inp.pressed(Act::Attack) {
+                p.buf = Some((1, 0.32));
+            }
+        }
         match p.state {
             PS::Free if self.web_t > 0.0 => {
                 // eingesponnen: festgehalten; Angreifen oder Ausweichen reißt an den Fäden
@@ -468,29 +493,40 @@ impl Game {
             }
             PS::Free => {
                 let sp = (60.0 + self.save.stats.dex as f32 * 0.8) * S * if self.slow_t > 0.0 { 0.6 } else { 1.0 } * if self.web_slow > 0.0 { 0.42 } else { 1.0 };
-                if moving {
+                // Laufschwung: kurze Beschleunigung, rascheres Abbremsen (kein Ruck beim Anlaufen)
+                let (tvx, tvy) = if moving { (ax.x * sp, ax.y * sp) } else { (0.0, 0.0) };
+                let kk = 1.0 - (-dt * if moving { 15.0 } else { 24.0 }).exp();
+                p.mv.0 += (tvx - p.mv.0) * kk;
+                p.mv.1 += (tvy - p.mv.1) * kk;
+                let spd = p.mv.0.hypot(p.mv.1);
+                if moving || spd > 6.0 {
                     let mut a = p.a;
-                    self.move_actor(&mut a, ax.x * sp * dt, ax.y * sp * dt);
-                    // gegen eine Kante gelaufen: nach kurzem Drücken eine Ebene tiefer springen
-                    let moved = (a.x - p.a.x).hypot(a.y - p.a.y);
-                    if moved < sp * dt * 0.25 {
-                        p.edge_t += dt;
-                        if p.edge_t > 0.15 {
-                            if let Some((tx, ty)) = self.jump_target(p.a.x, p.a.y, ax.x, ax.y) {
-                                p.jump = Some((p.a.x, p.a.y, tx, ty, 0.0));
-                                p.edge_t = 0.0;
-                                p.a.face(ax.x, ax.y);
-                                return;
+                    self.move_actor(&mut a, p.mv.0 * dt, p.mv.1 * dt);
+                    if moving {
+                        // gegen eine Kante gelaufen: nach kurzem Drücken eine Ebene tiefer springen
+                        let moved = (a.x - p.a.x).hypot(a.y - p.a.y);
+                        if moved < sp * dt * 0.25 {
+                            p.edge_t += dt;
+                            if p.edge_t > 0.15 {
+                                if let Some((tx, ty)) = self.jump_target(p.a.x, p.a.y, ax.x, ax.y) {
+                                    p.jump = Some((p.a.x, p.a.y, tx, ty, 0.0));
+                                    p.edge_t = 0.0;
+                                    p.mv = (0.0, 0.0);
+                                    p.a.face(ax.x, ax.y);
+                                    return;
+                                }
                             }
+                        } else {
+                            p.edge_t = 0.0;
                         }
-                    } else {
-                        p.edge_t = 0.0;
+                        p.a.face(ax.x, ax.y);
                     }
-                    p.a = a;
-                    p.a.face(ax.x, ax.y);
+                    let (fx, fy) = (p.a.fx, p.a.fy);
+                    p.a = Actor { fx, fy, ..a };
                     p.a.anim = "walk";
                     p.a.frame = p.a.at * 10.0;
                 } else {
+                    p.mv = (0.0, 0.0);
                     p.a.anim = "idle";
                     p.a.frame = p.a.at * 2.5;
                 }
@@ -501,17 +537,19 @@ impl Game {
                     return;
                 }
                 let inp = &self.input;
-                if inp.pressed(Act::Roll) && p.use_st(18.0) {
+                let bufd = p.buf.take().map(|b| b.0);
+                if (inp.pressed(Act::Roll) || bufd == Some(0)) && p.use_st(18.0) {
                     p.state = PS::Roll;
                     p.st_t = 0.0;
                     if moving {
                         p.a.face(ax.x, ax.y);
                     }
                     p.roll_dir = (p.a.fx, p.a.fy);
+                    self.dodge_ok = true;
                     self.sfx("roll");
-                } else if inp.pressed(Act::Attack) && p.use_st(weapon(&self.save.weapon).stam) {
+                } else if (inp.pressed(Act::Attack) || bufd == Some(1)) && p.use_st(weapon(&self.save.weapon).stam) {
                     self.start_attack(p, false, false);
-                } else if inp.pressed(Act::Heavy) && p.use_st(weapon(&self.save.weapon).stam * 1.6) {
+                } else if (inp.pressed(Act::Heavy) || bufd == Some(2)) && p.use_st(weapon(&self.save.weapon).stam * 1.6) {
                     self.start_attack(p, true, false);
                 } else if inp.pressed(Act::Parry) && p.use_st(10.0) {
                     p.state = PS::Parry;
@@ -598,6 +636,8 @@ impl Game {
                 }
                 if p.st_t >= t_end {
                     p.state = PS::Free;
+                    // aus der Rolle heraus weiterlaufen statt stehen zu bleiben
+                    p.mv = (p.roll_dir.0 * 60.0 * S, p.roll_dir.1 * 60.0 * S);
                 }
             }
             PS::Attack => {
@@ -620,6 +660,20 @@ impl Game {
                 }
                 if k > 0.55 && (self.input.pressed(Act::Attack) || self.input.pressed(Act::Heavy)) {
                     p.queued = Some(self.input.pressed(Act::Heavy));
+                }
+                // im Nachschwung lässt sich der Hieb durch eine Rolle abbrechen
+                if k > 0.7 && p.hit_done && p.buf.is_some_and(|b| b.0 == 0) && p.use_st(18.0) {
+                    p.buf = None;
+                    p.state = PS::Roll;
+                    p.st_t = 0.0;
+                    if moving {
+                        p.a.face(ax.x, ax.y);
+                    }
+                    p.roll_dir = (p.a.fx, p.a.fy);
+                    p.combo = 0;
+                    self.dodge_ok = true;
+                    self.sfx("roll");
+                    return;
                 }
                 if k >= 1.0 {
                     let w = weapon(&self.save.weapon);
@@ -728,6 +782,7 @@ impl Game {
     fn start_attack(&mut self, p: &mut Player, heavy: bool, chained: bool) {
         p.state = PS::Attack;
         p.st_t = 0.0;
+        p.mv = (0.0, 0.0);
         p.heavy = heavy;
         p.hit_done = false;
         p.queued = None;
@@ -782,13 +837,36 @@ impl Game {
                 continue;
             }
             let d = (dmg * (0.9 + rnd() * 0.2)).round();
-            self.hurt_target(t, d, Target::Player, HurtOpt { push: (p.a.fx * 12.0, p.a.fy * 12.0), poise: Some(if p.heavy { dmg * 2.0 } else { dmg }), ..Default::default() });
+            // Gegenstoß auf einen taumelnden Gegner (nach Parade oder gebrochener Haltung)
+            let riposte = match t {
+                Target::Enemy(i) => self.enemies[i].state == ES::Stagger,
+                Target::Boss(i) => self.bosses[i].state == BS::Stagger,
+                _ => false,
+            };
+            let push = if p.heavy { 22.0 } else { 12.0 };
+            self.hurt_target(t, d, Target::Player, HurtOpt { push: (p.a.fx * push, p.a.fy * push), poise: Some(if p.heavy { dmg * 2.0 } else { dmg }), heavy: p.heavy, ..Default::default() });
+            if let Target::Boss(i) = t {
+                self.boss_posture(i, if p.heavy { d * 1.7 } else { d });
+            }
             hit = true;
-            let hk = if p.heavy { Px::Crit } else if blunt { Px::Blunt } else { Px::Hit };
+            let hk = if p.heavy || riposte { Px::Crit } else if blunt { Px::Blunt } else { Px::Hit };
             self.fx.px.play(hk, tx, ty).z(by).dir(ang).scale(if p.heavy { 0.8 } else { 1.0 }).front(2.0);
+            // Stofflichkeit: Knochen splittern, Wesen bluten, Metall und Stein sprühen Funken
+            self.material_hit(t, tx, ty - by, ang);
+            if riposte {
+                // Hinrichtung: Aufprallbild, Kamera nah heran, kurze Zeitlupe
+                self.impact_frame(0.06);
+                self.look.zoom_in(1.14, 0.45);
+                self.slow_mo(0.32, 0.3);
+                self.hit_stop(0.12);
+                self.shake(9.0);
+            }
         }
         if hit {
             self.shake(if p.heavy { 6.0 } else { 3.0 });
+            // Trefferstopp und gerichteter Kamerastoß: der Hieb hat Gewicht
+            self.hit_stop(if p.heavy { 0.085 } else { 0.045 });
+            self.kick(p.a.fx, p.a.fy, if p.heavy { 4.5 } else { 2.5 });
         }
     }
 
@@ -864,6 +942,10 @@ impl Game {
     pub fn explode(&mut self, x: f32, y: f32, r: f32, dmg: f32) {
         self.fx.px.play(Px::Boom, x, y).scale((r / 80.0).clamp(0.45, 1.6)).gain(1.2);
         self.shake(6.0);
+        // Druckwelle und Brandspur
+        self.shockwave(x, y - 10.0, (r / 90.0).clamp(0.5, 1.4));
+        self.fx.scorch(x, y, (r * 0.35).clamp(10.0, 34.0));
+        self.fx.burst("smoke", x, y - 8.0, 10, BurstOpt { speed: Some(60.0), up: Some(50.0), life: Some(1.6), ..Default::default() });
         self.sfx("cannon");
         self.flash_light = Some((x, y, 0.25));
         for t in self.hittables() {
@@ -898,13 +980,22 @@ impl Game {
             self.fx.px.play(Px::Muzzle, mx, my).z(26.0).dir(ang).front(6.0).gain(1.2);
             self.sfx("pistol");
             self.shake(3.0);
+            // Mündungsblitz erhellt die Umgebung, Pulverdampf, Rückstoß der Kamera
+            self.flash_light = Some((mx, my, 0.08));
+            self.fx.burst("smoke", mx, my - 24.0, 6, BurstOpt { speed: Some(40.0), up: Some(30.0), life: Some(1.2), ..Default::default() });
+            self.kick(-ang.cos(), -ang.sin(), 2.5);
         }
     }
 
     pub fn hurt_player(&mut self, dmg: f32, from: Target, o: HurtOpt) -> bool {
         let parryable = self.parryable(from);
         let p = &mut self.player;
+        // perfektes Ausweichen: ein Treffer geht im ersten Augenblick der Rolle ins Leere
+        let perfect = p.state == PS::Roll && p.iframes > 0.0 && p.st_t < 0.24 && self.dodge_ok;
         if p.state == PS::Dead || p.state == PS::Ship || p.iframes > 0.0 {
+            if perfect {
+                self.perfect_dodge();
+            }
             return false;
         }
         if p.parry_t > 0.0 && !o.unparryable && parryable {
@@ -922,6 +1013,12 @@ impl Game {
         let from_a = o.push.1.atan2(o.push.0);
         self.fx.px.play(if o.heavy { Px::Blunt } else { Px::Hit }, x, y).z(22.0).dir(from_a).tint([255, 150, 140, 255]).front(2.0);
         self.shake(if o.heavy { 8.0 } else { 4.0 });
+        self.hit_stop(if o.heavy { 0.09 } else { 0.055 });
+        if o.push != (0.0, 0.0) {
+            self.kick(o.push.0, o.push.1, if o.heavy { 6.0 } else { 3.5 });
+        }
+        // Blutspritzer am Boden
+        self.fx.splat(x, y, 1.0);
         self.sfx("hurt");
         if o.push != (0.0, 0.0) {
             let mut a = self.player.a;
@@ -945,11 +1042,18 @@ impl Game {
         self.sfx("parried");
         self.flash([1.0, 1.0, 1.0], 0.25);
         self.shake(4.0);
+        // Parade: Funkenregen, Aufprallbild, Trefferstopp und eine Atempause in Zeitlupe
+        self.impact_frame(0.05);
+        self.hit_stop(0.1);
+        self.slow_mo(0.4, 0.3);
+        self.look.zoom_in(1.07, 0.35);
         if let Some((x, y, _, _)) = self.target_pos(from) {
             let (px, py) = (self.player.a.x, self.player.a.y);
             // zwischen den Klingen
             let (mx, my) = (px + (x - px) * 0.45, py + (y - py) * 0.45);
             self.fx.px.play(Px::Parry, mx, my).z(26.0).dir((y - py).atan2(x - px)).front(4.0).gain(1.2);
+            self.fx.burst("spark", mx, my - 26.0, 14, BurstOpt { speed: Some(190.0), up: Some(90.0), ..Default::default() });
+            self.flash_light = Some((mx, my, 0.25));
         }
         self.ui.toast("Pariert! Jetzt zustechen.");
     }
@@ -997,6 +1101,7 @@ impl Game {
             h,
             valid: true,
             folk: None,
+            kb: (0.0, 0.0),
         }
     }
 
@@ -1008,6 +1113,13 @@ impl Game {
 
     fn enemy_logic(&mut self, idx: usize, e: &mut Enemy, dt: f32) {
         let (px, py) = (self.player.a.x, self.player.a.y);
+        if e.kb.0.abs() + e.kb.1.abs() > 2.0 {
+            let mut a = e.a;
+            self.move_enemy(&mut a, e.kb.0 * dt, e.kb.1 * dt);
+            e.a = a;
+            let k = (-dt * 11.0).exp();
+            e.kb = (e.kb.0 * k, e.kb.1 * k);
+        }
         let pstate = self.player.state;
         let d = &self.edefs[e.def];
         let (speed, aggro, reach, windup, recover, dmg, ranged, aoe, charge, burn, chill, shot, volley) = (d.speed, d.aggro, d.reach, d.windup, d.recover, d.dmg * (1.0 + 0.12 * e.lvl as f32), d.ranged, d.aoe, d.charge, d.burn, d.chill, d.shot, d.volley);
@@ -1248,10 +1360,15 @@ impl Game {
             }
         }
         if o.push != (0.0, 0.0) && poise_def < 50.0 {
+            // Rückstoß: ein kurzer Ruck, dann gleitet der Gegner aus (schwere Hiebe weiter)
             let mut a = e.a;
-            self.move_enemy(&mut a, o.push.0, o.push.1);
-            self.enemies[i].a = a;
+            self.move_enemy(&mut a, o.push.0 * 0.4, o.push.1 * 0.4);
+            let e = &mut self.enemies[i];
+            e.a = a;
+            e.kb = (o.push.0 * 7.0, o.push.1 * 7.0);
         }
+        // Wunde: Blut bzw. Knochenstaub am Boden
+        self.fx.splat(x, y, if skel { 0.0 } else { 0.8 });
     }
 
     fn enemy_die(&mut self, i: usize) {
@@ -1264,6 +1381,7 @@ impl Game {
             (e.a.x, e.a.y, d.pearls * (1.0 + 0.4 * e.lvl as f32), matches!(d.body, Body::Sheet(s) if s.contains("kel")))
         };
         self.sfx(if skel { "bones" } else { "crush" });
+        self.hit_stop(0.07);
         // PixelFX: Skelette zersplittern in ihrer Gestalt, Figuren geben ihre Seele frei, Bestien verpuffen
         let beast = matches!(self.edefs[self.enemies[i].def].body, Body::Beast(_));
         if skel {

@@ -128,6 +128,10 @@ pub struct Fx {
     pub marks: Vec<Mark>,
     /// Fußspuren: x, y, Rest, Farbe (Sand, Schnee, Asche, Schlamm)
     pub prints: Vec<(f32, f32, f32, [u8; 4])>,
+    /// Flecken am Boden (Blut, Knochenstaub, Brandspuren): x, y, Rest (s), Größe, Farbe, Muster
+    pub splats: Vec<(f32, f32, f32, f32, [u8; 4], u32)>,
+    /// Regentropfen schlagen auf: x, y, Alter (s)
+    pub drops: Vec<(f32, f32, f32)>,
     pub t: f32,
     /// laufende PixelFX-Effekte
     pub px: crate::pfx::Pfx,
@@ -139,6 +143,8 @@ impl Fx {
         self.bolts.clear();
         self.marks.clear();
         self.prints.clear();
+        self.splats.clear();
+        self.drops.clear();
         self.px.clear();
     }
     pub fn p(&mut self, p: P) {
@@ -240,11 +246,13 @@ impl Fx {
                     }
                 }
                 5 => {
-                    let e = rnd() < 0.35;
-                    self.p(P { x, y: y - 80.0, z: 60.0, vx: 20.0 + rnd() * 20.0, vy: 12.0, vz: -20.0, life: 4.0, col: if e { c::EMBER } else { [0.35, 0.32, 0.32, 1.0] }, glow: if e { 0.8 } else { 0.0 }, wobble: 12.0, ..Default::default() });
+                    // Glut steigt auf; graue Asche fällt mit dem Wetter
+                    if rnd() < 0.4 {
+                        self.p(P { x, y: y - 80.0, z: 60.0, vx: 20.0 + rnd() * 20.0, vy: 12.0, vz: -20.0, life: 4.0, col: c::EMBER, glow: 0.8, wobble: 12.0, ..Default::default() });
+                    }
                 }
-                3 => self.p(P { x, y: y - 120.0, z: 120.0, vx: 12.0, vy: 8.0, vz: -32.0, life: 4.0, col: c::SNOW, wobble: 10.0, ..Default::default() }),
-                2 => self.p(P { x: x + 60.0, y: y - 160.0, z: 160.0, vx: -80.0, vy: 60.0, vz: -240.0, life: 0.8, col: c::RAIN, size: 2.0, rain: true, ..Default::default() }),
+                // Schnee und Regen kommen aus dem Wetter (Fronten, Wind), siehe `weather`
+                3 | 2 => {}
                 4 => self.p(P { x, y, z: 12.0 + rnd() * 20.0, vz: 6.0, life: 3.0, col: c::SPORE, glow: 0.9, wobble: 16.0, ..Default::default() }),
                 6 => self.p(P { x, y: y + 40.0, z: 0.0, vz: 36.0, vx: 8.0, life: 3.0, col: if rnd() < 0.5 { c::EMBER } else { [0.6, 0.1, 0.15, 1.0] }, glow: 1.3, wobble: 8.0, ..Default::default() }),
                 _ => {
@@ -256,13 +264,58 @@ impl Fx {
         }
     }
 
+    /// Wetter um die Kamera: Regen (schräg im Wind, schlägt mit Spritzern auf), Schnee und
+    /// Asche (treiben im Wind, beleuchtet in der Szene)
+    pub fn weather(&mut self, dt: f32, view: (f32, f32, f32, f32), rain: f32, snow: f32, ash: f32, wind: (f32, f32), wk: f32) {
+        let (wx, wy) = (wind.0 * wk, wind.1 * wk);
+        let area = view.2 * view.3 / (480.0 * 270.0);
+        let mut n = rain * 330.0 * area * dt + rnd();
+        while n > 1.0 && self.parts.len() < 1300 {
+            n -= 1.0;
+            let (x, y) = (view.0 + rnd() * (view.2 + 120.0) - 60.0 - wx * 70.0, view.1 + rnd() * (view.3 + 160.0) - 40.0);
+            let z = 150.0 + rnd() * 60.0;
+            let fall = 420.0 + rnd() * 90.0;
+            self.p(P { x, y, z, vx: wx * 130.0 - 20.0, vy: wy * 50.0 + 30.0, vz: -fall, life: z / fall + 0.05, col: c::RAIN, size: 2.0, rain: true, ..Default::default() });
+        }
+        let mut n = snow * 120.0 * area * dt + rnd();
+        while n > 1.0 && self.parts.len() < 1300 {
+            n -= 1.0;
+            let (x, y) = (view.0 + rnd() * (view.2 + 160.0) - 80.0 - wx * 120.0, view.1 + rnd() * view.3);
+            self.p(P { x, y, z: 70.0 + rnd() * 100.0, vx: wx * 40.0 + rr(-6.0, 6.0), vy: 6.0 + wy * 14.0, vz: -24.0 - rnd() * 12.0, life: 5.0, col: c::SNOW, size: if rnd() < 0.3 { 3.0 } else { 2.0 }, wobble: 12.0, ph: rnd() * 6.0, ..Default::default() });
+        }
+        let mut n = ash * 70.0 * area * dt + rnd();
+        while n > 1.0 && self.parts.len() < 1300 {
+            n -= 1.0;
+            let (x, y) = (view.0 + rnd() * (view.2 + 160.0) - 80.0 - wx * 120.0, view.1 + rnd() * view.3);
+            let ember = rnd() < 0.12;
+            self.p(P { x, y, z: 60.0 + rnd() * 90.0, vx: wx * 46.0 + rr(-8.0, 8.0), vy: 4.0 + wy * 12.0, vz: -16.0 - rnd() * 10.0, life: 5.5, col: if ember { c::EMBER } else { [0.33, 0.31, 0.3, 1.0] }, glow: if ember { 0.7 } else { 0.0 }, size: 2.0, wobble: 16.0, ph: rnd() * 6.0, ..Default::default() });
+        }
+    }
+
     pub fn update(&mut self, dt: f32) {
         self.t += dt;
+        // Regentropfen, die den Boden erreichen, spritzen auf
+        for p in self.parts.iter_mut() {
+            if p.rain && p.z + p.vz * dt <= 0.0 && p.life > 0.0 {
+                p.life = 0.0;
+                if self.drops.len() < 260 {
+                    self.drops.push((p.x, p.y, 0.0));
+                }
+            }
+        }
+        for d in self.drops.iter_mut() {
+            d.2 += dt;
+        }
+        self.drops.retain(|d| d.2 < 0.28);
         self.px.update(dt);
         for p in self.prints.iter_mut() {
             p.2 -= dt;
         }
         self.prints.retain(|p| p.2 > 0.0);
+        for p in self.splats.iter_mut() {
+            p.2 -= dt;
+        }
+        self.splats.retain(|p| p.2 > 0.0);
         let t = self.t;
         for p in self.parts.iter_mut() {
             p.life -= dt;
@@ -302,9 +355,48 @@ impl Fx {
         [(c[0].min(1.0) * 255.0) as u8, (c[1].min(1.0) * 255.0) as u8, (c[2].min(1.0) * 255.0) as u8, (c[3] * a).clamp(0.0, 1.0).mul_add(255.0, 0.0) as u8]
     }
 
+    /// Blutspritzer (k = Blutmenge 0..1; 0 = grauer Knochenstaub) am Boden, bleibt eine Weile
+    pub fn splat(&mut self, x: f32, y: f32, k: f32) {
+        if self.splats.len() > 90 {
+            self.splats.remove(0);
+        }
+        let col = if k > 0.0 { [70, 6, 10, (150.0 + 70.0 * k.min(1.0)) as u8] } else { [150, 146, 136, 120] };
+        let seed = (self.t * 977.0) as u32 ^ ((x as i32 as u32).wrapping_mul(73856093)) ^ ((y as i32 as u32).wrapping_mul(19349663));
+        self.splats.push((x + rr(-6.0, 6.0), y + rr(-3.0, 4.0), 24.0, 5.0 + 4.0 * k.max(0.3), col, seed));
+    }
+    /// Brandspur einer Explosion (Krater): dunkler Fleck mit Ruß
+    pub fn scorch(&mut self, x: f32, y: f32, r: f32) {
+        if self.splats.len() > 90 {
+            self.splats.remove(0);
+        }
+        let seed = (self.t * 613.0) as u32 ^ (x as i32 as u32).wrapping_mul(2654435761);
+        self.splats.push((x, y, 40.0, r, [16, 12, 10, 200], seed));
+    }
+
     /// Telegraphen auf den Boden (unter den Figuren).
     pub fn draw_under(&self, f: &mut Frame) {
         let (vx, vy, vw, vh) = f.view();
+        for &(x, y, rest, sz, c, seed) in &self.splats {
+            if x < vx - 40.0 || x > vx + vw + 40.0 || y < vy - 30.0 || y > vy + vh + 30.0 {
+                continue;
+            }
+            let a = (rest / 6.0).min(1.0);
+            // ein großer Fleck und Tropfen ringsum (Muster aus dem Samen)
+            let mut h = seed.wrapping_mul(2654435761) | 1;
+            let mut nx = || {
+                h ^= h << 13;
+                h ^= h >> 17;
+                h ^= h << 5;
+                (h % 1000) as f32 / 1000.0
+            };
+            f.decals.push(Frame::quad_rect(x - sz, y - sz * 0.45, sz * 2.0, sz * 0.9, [c[0], c[1], c[2], (c[3] as f32 * a) as u8], modes::SOFT, 0));
+            for _ in 0..5 {
+                let (ang, d) = (nx() * std::f32::consts::TAU, sz * (0.7 + nx() * 1.2));
+                let r = sz * (0.18 + nx() * 0.3);
+                let (px, py) = (x + ang.cos() * d, y + ang.sin() * d * 0.45);
+                f.decals.push(Frame::quad_rect(px - r, py - r * 0.5, r * 2.0, r, [c[0], c[1], c[2], (c[3] as f32 * a * 0.85) as u8], modes::SOFT, 0));
+            }
+        }
         for &(x, y, rest, c) in &self.prints {
             if x < vx - 16.0 || x > vx + vw + 16.0 || y < vy - 16.0 || y > vy + vh + 16.0 {
                 continue;
@@ -458,8 +550,11 @@ impl Fx {
                 f.glow(p.x, y, p.size * 1.6, Self::c8([p.col[0] * k, p.col[1] * k, p.col[2] * k, 1.0], 1.0));
                 f.over(Frame::quad_rect(p.x - p.size * 0.5, y - p.size * 0.5, p.size, p.size, Self::c8(p.col, a), modes::SOLID, 0), true);
             } else if p.rain {
-                for k in 0..3 {
-                    f.over(Frame::quad_rect(p.x - k as f32 * 2.0, y + k as f32 * 3.0, 1.0, 3.0, Self::c8(p.col, a), modes::SOLID, 0), false);
+                // Strich entlang der Fallrichtung (Wind schräg)
+                let (sx, sy) = (p.vx * 0.016, (p.vy - p.vz) * 0.016);
+                for k in 0..4 {
+                    let t = k as f32 / 4.0;
+                    f.over(Frame::quad_rect(p.x - sx * t, y - sy * t, 1.0, 2.0, Self::c8(p.col, a * (1.0 - t * 0.6)), modes::SOLID, 0), false);
                 }
             } else {
                 // beleuchtete Partikel in der Szene
@@ -468,6 +563,19 @@ impl Fx {
                 q.prm[0] = p.z;
                 f.world_q(p.y + 1.0, q);
             }
+        }
+        // Spritzer: kleiner Ring und zwei springende Tröpfchen
+        for &(x, y, t) in &self.drops {
+            if x < vx - 8.0 || x > vx + vw + 8.0 || y < vy - 8.0 || y > vy + vh + 8.0 {
+                continue;
+            }
+            let k = t / 0.28;
+            let r = 1.0 + k * 3.5;
+            let a = ((1.0 - k) * 150.0) as u8;
+            f.over(Frame::quad_rect(x - r, y - r * 0.45, r * 2.0, r * 0.9, [190, 205, 215, a], modes::SOFT, 0), false);
+            let h = (k * std::f32::consts::PI).sin() * 3.0;
+            f.over(Frame::quad_rect(x - 1.0 - k * 2.0, y - h, 1.0, 1.0, [210, 225, 235, a], modes::SOLID, 0), false);
+            f.over(Frame::quad_rect(x + k * 2.0, y - h * 0.8, 1.0, 1.0, [210, 225, 235, a], modes::SOLID, 0), false);
         }
         for b in &self.bolts {
             let fade = (1.0 - b.t / b.dur).clamp(0.0, 1.0);

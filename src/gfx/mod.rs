@@ -57,6 +57,23 @@ pub struct Globals {
     pub hd2: [f32; 4],
     /// FullHD: weiche Normalen (0/1), interne Auflösungsstufe, frei, frei
     pub hd3: [f32; 4],
+    /// Bildwirkungen: Aufprallbild, wenig Leben, Tinten-Übergang, Kinobalken (je 0..1)
+    pub fx0: [f32; 4],
+    /// Druckwelle: Weltort x, y, Radius (px), Stärke
+    pub fx1: [f32; 4],
+    /// Wetter: Nässe, Schnee, Asche (je 0..1), Windstärke
+    pub fx2: [f32; 4],
+    /// Hitzeflimmern, Nacht (0..1), Zoom (1 = keiner), Sterne über dem Wasser
+    pub fx3: [f32; 4],
+    /// Licht: Rückstrahlung, leuchtende Flächen als Lichtquellen, Randlicht der Lichter, Lesbarkeit der Spielfigur
+    pub fx4: [f32; 4],
+    /// Spieler (Weltort) für Pflanzen, die sich wegbiegen; Windrichtung
+    pub fx5: [f32; 4],
+    /// Wolken: Bedeckung (0..1), frei, frei, frei
+    pub fx6: [f32; 4],
+    /// Farbtrennung: Faktoren für Schatten und Lichter (1 = neutral)
+    pub tone_lo: [f32; 4],
+    pub tone_hi: [f32; 4],
     pub lights: [GLight; MAX_LIGHTS],
 }
 impl Default for Globals {
@@ -79,6 +96,15 @@ impl Default for Globals {
             hd: [TILT, 1.0, 0.5, 0.5],
             hd2: [1.0, 0.6, 0.5, 0.6],
             hd3: [0.0, 1.0, 0.0, 0.0],
+            fx0: [0.0; 4],
+            fx1: [0.0; 4],
+            fx2: [0.0; 4],
+            fx3: [0.0, 0.0, 1.0, 0.0],
+            fx4: [0.2, 0.6, 0.8, 1.0],
+            fx5: [0.0, 0.0, 1.0, 0.0],
+            fx6: [0.35, 0.0, 0.0, 0.0],
+            tone_lo: [1.0, 1.0, 1.0, 0.0],
+            tone_hi: [1.0, 1.0, 1.0, 0.0],
             lights: [GLight::default(); MAX_LIGHTS],
         }
     }
@@ -142,6 +168,8 @@ pub mod modes {
     pub const TEXT: u8 = 8;
     /// Überlagerung: PixelFX-Effekt (prm = Bodenzeile für die Verdeckung, Helligkeit)
     pub const FX: u8 = 10;
+    /// Überlagerung: Silhouette einer verdeckten Figur (prm.x = Bodenzeile ihres Fußes)
+    pub const SIL: u8 = 11;
 }
 pub mod flags {
     pub const FLASH: u8 = 1;
@@ -150,6 +178,8 @@ pub mod flags {
     pub const GHOST: u8 = 8;
     /// Spiegelung im Wasser: mit der Wasseroberfläche gemischt (nur Bodenliste)
     pub const REFLECT: u8 = 64;
+    /// Spielfigur: Randlicht für die Lesbarkeit im Dunkeln
+    pub const HERO: u8 = 128;
 }
 
 /// Optionen für ein Sprite.
@@ -230,14 +260,22 @@ impl Frame {
         let (w, h) = (self.low.0 as f32, self.low.1 as f32);
         self.g.view = [(cx - w * 0.5).round(), (cy - h * 0.5).round(), w, h];
     }
+    /// Zoom des Endbilds (1 = keiner, siehe `fs_final`)
+    fn zoom(&self) -> f32 {
+        self.g.fx3[2].max(0.5)
+    }
     /// Schrägsicht: Low-Res-Bild (0..1) → Bildschirm (0..1). Gleiche Formel wie `tilt_src` im Shader, umgekehrt.
     pub fn src_to_screen(&self, sx: f32, sy: f32) -> (f32, f32) {
         let c = self.g.hd[0];
         let v = sy / (1.0 + c - c * sy);
-        (0.5 + (sx - 0.5) * (1.0 + c * v), v)
+        let (u, v) = (0.5 + (sx - 0.5) * (1.0 + c * v), v);
+        let z = self.zoom();
+        ((u - 0.5) * z + 0.5, (v - 0.5) * z + 0.5)
     }
     /// Schrägsicht: Bildschirm (0..1) → Low-Res-Bild (0..1).
     pub fn screen_to_src(&self, u: f32, v: f32) -> (f32, f32) {
+        let z = self.zoom();
+        let (u, v) = ((u - 0.5) / z + 0.5, (v - 0.5) / z + 0.5);
         let c = self.g.hd[0];
         let d = 1.0 + c * v;
         (0.5 + (u - 0.5) / d, v * (1.0 + c) / d)
@@ -246,7 +284,9 @@ impl Frame {
     pub fn world_to_screen(&self, x: f32, y: f32) -> (f32, f32, f32) {
         let (vx, vy, vw, vh) = self.view();
         let (u, v) = self.src_to_screen((x - vx) / vw, (y - vy) / vh);
-        (u, v, (1.0 + self.g.hd[0] * v) / (1.0 + self.g.hd[0] * 0.5))
+        let z = self.zoom();
+        let v0 = (v - 0.5) / z + 0.5;
+        (u, v, (1.0 + self.g.hd[0] * v0) / (1.0 + self.g.hd[0] * 0.5) * z)
     }
     pub fn screen_to_world(&self, u: f32, v: f32) -> (f32, f32) {
         let (vx, vy, vw, vh) = self.view();
@@ -431,11 +471,11 @@ pub struct Packed {
 }
 
 fn push_q(v: &mut Vec<Vtx>, q: &Q) {
+    // Windstärke auf allen vier Ecken: der Vertex-Shader schwenkt nur die oberen (Eckennummer aus
+    // dem Vertex-Index), der Fragment-Shader erkennt daran Laub und Halme
+    let mut ext = q.ext;
+    ext[2] = q.sway;
     for i in 0..4 {
-        let mut ext = q.ext;
-        if i < 2 {
-            ext[2] = q.sway;
-        }
         v.push(Vtx { pos: q.p[i], uv: q.uv[i], col: q.col, ext, prm: q.prm });
     }
 }
