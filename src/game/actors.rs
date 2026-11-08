@@ -1038,6 +1038,7 @@ impl Game {
         }
         if self.player.hp <= 0.0 {
             self.player.hp = 0.0;
+            self.folk_kill = matches!(from, Target::Enemy(_)) && self.cur_folk;
             self.player_died();
             return true;
         }
@@ -1118,7 +1119,10 @@ impl Game {
 
     pub fn update_enemy(&mut self, i: usize, dt: f32) {
         let mut e = std::mem::take(&mut self.enemies[i]);
+        // der Mob der Ertrunkenen von Stillwasser: wer von ihm erschlagen wird, kommt an den Galgen
+        self.cur_folk = e.folk == Some(super::gallows::TOWN);
         self.enemy_logic(i, &mut e, dt);
+        self.cur_folk = false;
         self.enemies[i] = e;
     }
 

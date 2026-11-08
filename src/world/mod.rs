@@ -498,6 +498,8 @@ pub struct World {
     pub prolog_dusk: (f32, f32),
     /// Prolog: Grenzen der Bereiche Dorf | Galgenweg | Spinnenschlund (px)
     pub prolog_areas: (f32, f32),
+    /// Prolog: an diesem Galgen hängt statt des mittleren Gehängten der Spieler (Galgen-Sequenz)
+    pub hang_free: Option<usize>,
     /// begehbare Abbruchkante des Wrackzwingers: je 16 px ein Punkt (x, letzte begehbare Zeile),
     /// nach x sortiert
     pub prolog_edge: Vec<(f32, f32)>,
@@ -590,6 +592,7 @@ impl World {
             prolog_door: (0.0, 0.0),
             prolog_dusk: (0.0, 1.0),
             prolog_areas: (0.0, 0.0),
+            hang_free: None,
             prolog_edge: vec![],
             prolog_foot: 0.0,
             prolog_coffin: (0.0, 0.0),

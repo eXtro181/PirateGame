@@ -1614,3 +1614,333 @@ pub fn ring_post() -> PropArt {
     r.dot(v(-2.0, 5.8, 9.0), 0x141216, 0.0, 1);
     prop("ringPost", &r, 26, 52, 10).shadow(7.0, 3.0)
 }
+
+// ================================================================= Kneipe „Zur Letzten Flut“ (Prolog)
+
+/// Holz, Messing, Glas und Kerzen für die Möbel der Kneipe
+struct TavernMats {
+    wood: u16,
+    wood_d: u16,
+    top: u16,
+    brass: u16,
+    iron: u16,
+    wax: u16,
+    flame: u16,
+    pewter: u16,
+    glass: [u16; 4],
+}
+fn tavern_mats(r: &mut Rig) -> TavernMats {
+    TavernMats {
+        wood: r.mat(mat(0x3E2616).pat(Pat::Planks(4.0)).spec(10)),
+        wood_d: r.mat(mat(0x26160E).pat(Pat::Grain)),
+        top: r.mat(mat(0x5A3820).pat(Pat::Grain).spec(60)),
+        brass: r.mat(mat(0xB8893A).spec(230).bias(0.12)),
+        iron: r.mat(mat(0x26262C).spec(160)),
+        wax: r.mat(mat(0xD8CCB0).spec(50)),
+        flame: r.mat(mat(0xFFB04A).glow(1.9).bias(0.45).soft()),
+        pewter: r.mat(mat(0x8A8C90).spec(180)),
+        glass: [
+            r.mat(mat(0x2E5A2A).spec(240).bias(0.1)),
+            r.mat(mat(0x6A3A14).spec(240).bias(0.1)),
+            r.mat(mat(0x5A1418).spec(240).bias(0.1)),
+            r.mat(mat(0x8AA0A0).spec(250).bias(0.2)),
+        ],
+    }
+}
+/// Flasche (Glas, Hals, Korken) bei p
+fn bottle(r: &mut Rig, m: &TavernMats, p: V3, k: usize, hgt: f32) {
+    let g = m.glass[k % 4];
+    r.cyl(p, 1.6, 1.6, hgt, g);
+    r.cyl(add(p, v(0.0, 0.0, hgt)), 0.7, 0.7, hgt * 0.45, g);
+    r.ball(add(p, v(-0.5, 0.5, hgt * 0.55)), 0.5, m.glass[3]);
+    r.cyl(add(p, v(0.0, 0.0, hgt * 1.45)), 0.8, 0.8, 0.9, m.wood_d);
+}
+/// Humpen aus Zinn mit Henkel
+fn tankard(r: &mut Rig, m: &TavernMats, p: V3) {
+    r.cyl(p, 1.9, 1.9, 3.6, m.pewter);
+    r.tube(&[add(p, v(2.0, 0.0, 3.0)), add(p, v(3.2, 0.0, 2.2)), add(p, v(2.0, 0.0, 0.8))], 0.5, 0.5, m.pewter);
+    r.dot(add(p, v(-0.6, 0.6, 3.8)), 0xE8D8B0, 0.0, 1);
+}
+/// Kerze mit Flamme
+fn candle(r: &mut Rig, m: &TavernMats, p: V3, hgt: f32) {
+    r.cyl(p, 0.9, 0.9, hgt, m.wax);
+    r.ball(add(p, v(0.0, 0.0, hgt + 1.0)), 0.9, m.flame);
+    r.dot(add(p, v(0.0, 0.0, hgt + 1.6)), 0xFFE0A0, 2.0, 1);
+}
+
+/// Langer Tresen: Bretterfront mit Leisten, Messing-Fußstange, Platte mit Humpen, Flaschen und
+/// einer Kerze. Fußpunkt = Mitte der Vorderkante.
+pub fn tavern_counter() -> PropArt {
+    let mut r = Rig::new();
+    let m = tavern_mats(&mut r);
+    let (hx, hy, hz) = (100.0f32, 11.0f32, 12.0f32);
+    r.part();
+    r.cube(v(0.0, 0.0, hz), v(hx, hy, hz), m.wood);
+    // Sockel und Leisten in der Front
+    r.cube(v(0.0, hy - 0.3, 1.2), v(hx + 0.5, 0.9, 1.2), m.wood_d);
+    for k in 0..9 {
+        let x = -hx + 10.0 + k as f32 * (2.0 * hx - 20.0) / 8.0;
+        r.cube(v(x, hy + 0.3, hz), v(1.2, 0.6, hz - 1.0), m.wood_d);
+    }
+    // Platte mit Überstand
+    r.part();
+    r.cube(v(0.0, 0.5, hz * 2.0 + 1.0), v(hx + 2.0, hy + 2.0, 1.0), m.top);
+    // Messing-Fußstange
+    r.tube(&[v(-hx + 2.0, hy + 4.0, 4.0), v(hx - 2.0, hy + 4.0, 4.0)], 0.9, 0.9, m.brass);
+    for x in [-hx + 6.0, -30.0, 30.0, hx - 6.0] {
+        r.tube(&[v(x, hy + 0.5, 4.0), v(x, hy + 4.0, 4.0)], 0.6, 0.6, m.brass);
+    }
+    // auf der Platte
+    let zt = hz * 2.0 + 2.0;
+    for (i, x) in [-78.0f32, -52.0, -20.0, 14.0, 46.0, 80.0].iter().enumerate() {
+        if i % 2 == 0 {
+            tankard(&mut r, &m, v(*x, 2.0 + (i as f32 * 1.7).sin() * 3.0, zt));
+        } else {
+            bottle(&mut r, &m, v(*x, -2.0, zt), i, 6.0);
+        }
+    }
+    candle(&mut r, &m, v(-4.0, -4.0, zt), 4.0);
+    r.ell(v(64.0, 3.0, zt + 0.4), v(4.0, 2.6, 0.5), m.pewter);
+    prop("tvCounter", &r, 214, 72, 14).shadow(96.0, 8.0).boxc(100.0, 16.0).light(-4.0, -4.0, 30.0, 90.0, [1.2, 0.8, 0.4], 0.25)
+}
+
+/// Wandregal hinter dem Tresen: drei Bretter voller Flaschen, Humpen, ein Schädel, Kerzen.
+pub fn tavern_shelf(seed: i32) -> PropArt {
+    let mut r = Rig::new();
+    let m = tavern_mats(&mut r);
+    let (hx, hy) = (30.0f32, 5.0f32);
+    r.part();
+    // Rückwand und Seiten
+    r.cube(v(0.0, -hy + 0.8, 36.0), v(hx, 0.8, 36.0), m.wood_d);
+    for sx in [-hx, hx] {
+        r.cube(v(sx, 0.0, 36.0), v(1.4, hy, 36.0), m.wood);
+    }
+    let boards = [2.0f32, 24.0, 46.0, 68.0];
+    for z in boards {
+        r.cube(v(0.0, 0.0, z), v(hx, hy, 1.0), m.top);
+    }
+    r.part();
+    let mut k = seed as usize * 3;
+    for (bi, z) in boards[..3].iter().enumerate() {
+        let mut x = -hx + 5.0;
+        while x < hx - 4.0 {
+            k += 1;
+            let kind = (k * 7 + bi * 3 + seed as usize) % 6;
+            match kind {
+                0 | 1 | 2 => bottle(&mut r, &m, v(x, 0.5, z + 1.0), k, 7.0 + (k % 3) as f32 * 1.6),
+                3 => tankard(&mut r, &m, v(x, 1.0, z + 1.0)),
+                4 if bi == 1 => {
+                    // Schädel (Andenken eines Gastes, der nicht zahlte)
+                    let bone = r.mat(mat(0xD8CCB0).spec(40));
+                    r.ell(v(x, 0.5, z + 5.0), v(3.2, 3.0, 3.6), bone);
+                    r.dot(v(x - 1.2, 3.4, z + 5.4), 0x140C08, 0.0, 1);
+                    r.dot(v(x + 1.2, 3.4, z + 5.4), 0x140C08, 0.0, 1);
+                    candle(&mut r, &m, v(x, 0.5, z + 8.6), 2.0);
+                }
+                _ => candle(&mut r, &m, v(x, 1.0, z + 1.0), 3.0 + (k % 2) as f32),
+            }
+            x += 6.0 + (k % 3) as f32;
+        }
+    }
+    prop(&format!("tvShelf{seed}"), &r, 72, 92, 6).shadow(28.0, 4.0).boxc(28.0, 6.0)
+}
+
+/// Barhocker: runder Sitz, drei Beine, Fußring.
+pub fn tavern_stool() -> PropArt {
+    let mut r = Rig::new();
+    let m = tavern_mats(&mut r);
+    for k in 0..3 {
+        let a = k as f32 * TAU / 3.0 + 0.5;
+        r.tube(&[v(a.cos() * 5.0, a.sin() * 3.6, 0.0), v(a.cos() * 2.6, a.sin() * 1.9, 15.0)], 0.8, 0.7, m.wood_d);
+    }
+    let ring: Vec<V3> = (0..=16).map(|j| {
+        let a = j as f32 / 16.0 * TAU;
+        v(a.cos() * 3.8, a.sin() * 2.8, 6.0)
+    }).collect();
+    r.tube(&ring, 0.5, 0.5, m.iron);
+    r.cyl(v(0.0, 0.0, 15.0), 5.5, 4.4, 2.2, m.top);
+    prop("tvStool", &r, 20, 30, 6).shadow(6.0, 2.5).circle(4.0)
+}
+
+/// Stuhl mit Lehne: `back` 0 = Lehne hinten (Blick zum Betrachter), 1 = Lehne vorn, 2 = Lehne links.
+pub fn tavern_chair(back: i32) -> PropArt {
+    let mut r = Rig::new();
+    let m = tavern_mats(&mut r);
+    for (lx, ly) in [(-5.0f32, -4.0f32), (5.0, -4.0), (-5.0, 4.0), (5.0, 4.0)] {
+        r.cube(v(lx, ly, 6.5), v(0.8, 0.8, 6.5), m.wood_d);
+    }
+    r.cube(v(0.0, 0.0, 13.6), v(6.4, 5.4, 1.0), m.top);
+    let (bx, by, ex, ey) = match back {
+        0 => (0.0, -4.6, 6.0, 0.8),
+        1 => (0.0, 4.6, 6.0, 0.8),
+        _ => (-5.6, 0.0, 0.8, 5.0),
+    };
+    r.part();
+    r.cube(v(bx, by, 22.0), v(ex, ey, 7.5), m.wood);
+    r.cube(v(bx, by, 29.6), v(ex + 0.6, ey + 0.4, 1.0), m.wood_d);
+    let name = ["tvChairN", "tvChairS", "tvChairW"][back.clamp(0, 2) as usize];
+    prop(name, &r, 24, 44, 8).shadow(8.0, 3.0).circle(4.0)
+}
+
+/// Runder Tisch auf einem Fuß: Humpen, Flasche, Kerze, Würfel.
+pub fn tavern_round_table(seed: i32) -> PropArt {
+    let mut r = Rig::new();
+    let m = tavern_mats(&mut r);
+    r.cyl(v(0.0, 0.0, 0.0), 8.0, 6.0, 1.6, m.wood_d);
+    r.cyl(v(0.0, 0.0, 1.6), 2.2, 2.2, 18.0, m.wood_d);
+    r.part();
+    r.cyl(v(0.0, 0.0, 19.6), 16.0, 12.0, 2.2, m.top);
+    let zt = 21.9;
+    tankard(&mut r, &m, v(-7.0, 2.0, zt));
+    tankard(&mut r, &m, v(6.0, -3.0, zt));
+    bottle(&mut r, &m, v(1.0, -5.0, zt), seed as usize + 1, 6.0);
+    candle(&mut r, &m, v(-1.0, 3.0, zt), 3.0 + seed as f32);
+    let bone = r.mat(mat(0xE8DCC0).spec(30));
+    r.cube(v(9.0, 4.0, zt + 0.9), v(0.9, 0.9, 0.9), bone);
+    r.cube(v(11.0, 2.6, zt + 0.9), v(0.9, 0.9, 0.9), bone);
+    prop(&format!("tvTable{seed}"), &r, 40, 48, 10).shadow(15.0, 5.0).circle(12.0).light(-1.0, 3.0, 28.0, 70.0, [1.1, 0.75, 0.4], 0.3)
+}
+
+/// Kamin aus Feldstein: Feuer mit Scheiten, Kessel am Haken, Sims mit Kerzen und einem Schädel,
+/// Rauchfang bis unter die Decke.
+pub fn tavern_hearth() -> PropArt {
+    let mut r = Rig::new();
+    let m = tavern_mats(&mut r);
+    let stone = r.mat(mat(0x4A4652).pat(Pat::Bricks(5.0)).spec(15));
+    let soot = r.mat(mat(0x120E0E).soft());
+    let ember = r.mat(mat(0xC2341E).glow(1.3).bias(0.15));
+    r.part();
+    // Wangen, Sturz, Rauchfang
+    for sx in [-22.0f32, 22.0] {
+        r.cube(v(sx, 0.0, 20.0), v(6.0, 8.0, 20.0), stone);
+    }
+    r.cube(v(0.0, 0.0, 44.0), v(28.0, 9.0, 4.5), stone);
+    r.cube(v(0.0, -2.0, 70.0), v(20.0, 6.0, 22.0), stone);
+    // Feueröffnung: Ruß, Herdplatte
+    r.cube(v(0.0, -6.0, 20.0), v(16.0, 2.0, 20.0), soot);
+    r.cube(v(0.0, 2.0, 1.0), v(17.0, 6.0, 1.0), stone);
+    // Scheite und Glut
+    r.part();
+    r.cube_rot(v(-4.0, 1.0, 4.0), v(9.0, 1.8, 1.8), 0.0, 0.35, m.wood_d);
+    r.cube_rot(v(4.0, 0.0, 4.4), v(9.0, 1.8, 1.8), 0.0, -0.4, m.wood_d);
+    r.ell(v(0.0, 1.0, 3.6), v(8.0, 3.0, 1.4), ember);
+    // Kessel am Eisenhaken
+    r.tube(&[v(0.0, -4.0, 38.0), v(0.0, -1.0, 24.0)], 0.5, 0.5, m.iron);
+    r.ell(v(0.0, -1.0, 18.0), v(5.0, 4.0, 4.2), m.iron);
+    // Sims
+    r.cube(v(0.0, 2.0, 49.5), v(30.0, 10.0, 1.0), m.top);
+    candle(&mut r, &m, v(-20.0, 4.0, 50.5), 4.0);
+    candle(&mut r, &m, v(18.0, 5.0, 50.5), 3.0);
+    let bone = r.mat(mat(0xD8CCB0).spec(40));
+    r.ell(v(-4.0, 4.0, 54.0), v(3.0, 2.8, 3.4), bone);
+    r.dot(v(-5.2, 6.8, 54.4), 0x140C08, 0.0, 1);
+    r.dot(v(-2.8, 6.8, 54.4), 0x140C08, 0.0, 1);
+    bottle(&mut r, &m, v(8.0, 4.0, 50.5), 2, 6.0);
+    prop("tvHearth", &r, 72, 108, 12).shadow(30.0, 6.0).boxc(28.0, 10.0).light(0.0, -2.0, 14.0, 190.0, [1.7, 0.85, 0.36], 0.4)
+}
+
+/// Fassgestell an der Wand: drei liegende Rumfässer mit Messinghähnen, darunter Tropfschalen.
+pub fn tavern_kegs() -> PropArt {
+    let mut r = Rig::new();
+    let m = tavern_mats(&mut r);
+    let staves = r.mat(mat(0x4A2C16).pat(Pat::Planks(2.2)).spec(15));
+    // Gestell
+    for sx in [-26.0f32, 26.0] {
+        r.cube(v(sx, 0.0, 14.0), v(1.6, 7.0, 14.0), m.wood_d);
+    }
+    r.cube(v(0.0, 0.0, 12.0), v(27.0, 7.0, 1.0), m.wood_d);
+    for (i, (x, z)) in [(-13.0f32, 20.0f32), (13.0, 20.0), (0.0, 34.0)].iter().enumerate() {
+        r.part();
+        let mk = r.mark();
+        r.cyl(v(0.0, 0.0, -9.0), 7.5, 7.5, 18.0, staves);
+        for bz in [-6.5f32, 6.5] {
+            r.cyl(v(0.0, 0.0, bz - 0.8), 7.9, 7.9, 1.6, m.iron);
+        }
+        r.rotate_since(mk, 0, std::f32::consts::FRAC_PI_2, v(0.0, 0.0, 0.0));
+        r.shift_since(mk, v(*x, 0.0, *z));
+        // Hahn vorn
+        r.tube(&[v(*x, 9.0, *z - 2.0), v(*x, 11.0, *z - 2.0), v(*x, 11.0, *z - 4.5)], 0.7, 0.6, m.brass);
+        r.dot(v(*x - 2.0, 9.4, *z + 3.0), 0xE8C070, 0.0, 1);
+        let _ = i;
+    }
+    prop("tvKegs", &r, 64, 64, 10).shadow(26.0, 5.0).boxc(26.0, 8.0)
+}
+
+/// Kronleuchter: Wagenrad aus Eisen an Ketten, mit Kerzen; hängt hoch über dem Boden.
+pub fn tavern_chandelier() -> PropArt {
+    let mut r = Rig::new();
+    let m = tavern_mats(&mut r);
+    let z0 = 74.0;
+    let ring: Vec<V3> = (0..=20).map(|j| {
+        let a = j as f32 / 20.0 * TAU;
+        v(a.cos() * 16.0, a.sin() * 9.0, z0)
+    }).collect();
+    r.tube(&ring, 1.1, 1.1, m.iron);
+    for k in 0..6 {
+        let a = k as f32 / 6.0 * TAU + 0.3;
+        let p = v(a.cos() * 16.0, a.sin() * 9.0, z0 + 1.0);
+        candle(&mut r, &m, p, 3.0);
+        if k % 2 == 0 {
+            r.tube(&[p, v(0.0, 0.0, z0 + 26.0)], 0.35, 0.35, m.iron);
+        }
+    }
+    r.tube(&[v(0.0, 0.0, z0 + 26.0), v(0.0, 0.0, z0 + 44.0)], 0.5, 0.5, m.iron);
+    prop("tvLamp", &r, 40, 130, 4).light(0.0, 0.0, 76.0, 210.0, [1.3, 0.85, 0.45], 0.2).overhead(112)
+}
+
+/// Aushangbrett mit Steckbriefen und Zetteln an der Wand.
+pub fn tavern_notice() -> PropArt {
+    let mut r = Rig::new();
+    let m = tavern_mats(&mut r);
+    let paper = r.mat(mat(0xC8B890).pat(Pat::Grain).spec(5));
+    let paper_d = r.mat(mat(0xA89870).pat(Pat::Grain));
+    r.part();
+    r.cube(v(0.0, -1.0, 34.0), v(16.0, 1.4, 13.0), m.wood);
+    r.cube(v(0.0, 0.0, 47.4), v(17.0, 2.0, 1.0), m.wood_d);
+    r.part();
+    r.quad(v(-13.0, 0.6, 44.0), v(-3.0, 0.6, 44.0), v(-3.0, 0.6, 30.0), v(-13.0, 0.6, 30.0), paper);
+    r.quad(v(-1.0, 0.6, 43.0), v(7.0, 0.6, 43.0), v(7.0, 0.6, 33.0), v(-1.0, 0.6, 33.0), paper_d);
+    r.quad(v(8.0, 0.6, 45.0), v(14.0, 0.6, 45.0), v(14.0, 0.6, 36.0), v(8.0, 0.6, 36.0), paper);
+    r.quad(v(2.0, 0.6, 31.0), v(12.0, 0.6, 31.0), v(12.0, 0.6, 24.0), v(2.0, 0.6, 24.0), paper_d);
+    // Steckbrief: Kopf, Schrift
+    r.dot(v(-8.0, 0.9, 39.0), 0x2A1C14, 0.0, 2);
+    for k in 0..3 {
+        r.dot(v(-11.0 + k as f32 * 3.0, 0.9, 33.0), 0x3A2A1E, 0.0, 1);
+    }
+    for (x, z) in [(-8.0f32, 44.0f32), (3.0, 43.0), (11.0, 45.0), (7.0, 31.0)] {
+        r.dot(v(x, 1.0, z - 0.6), 0x8A8C90, 0.0, 1);
+    }
+    prop("tvNotice", &r, 40, 56, 4).boxc(16.0, 4.0)
+}
+
+/// Teppich vor dem Kamin (flach; Fußpunkt an der Hinterkante, damit Figuren darauf darüber
+/// gezeichnet werden).
+pub fn tavern_rug() -> PropArt {
+    let mut r = Rig::new();
+    let cloth = r.mat(mat(0x5A1A18).pat(Pat::Stripes(5.0)).soft());
+    let edge = r.mat(mat(0xA8803A).soft());
+    r.quad(v(-34.0, 0.0, 0.4), v(34.0, 0.0, 0.4), v(34.0, 30.0, 0.4), v(-34.0, 30.0, 0.4), cloth);
+    r.quad(v(-34.0, 0.0, 0.5), v(34.0, 0.0, 0.5), v(34.0, 2.0, 0.5), v(-34.0, 2.0, 0.5), edge);
+    r.quad(v(-34.0, 28.0, 0.5), v(34.0, 28.0, 0.5), v(34.0, 30.0, 0.5), v(-34.0, 30.0, 0.5), edge);
+    for k in 0..12 {
+        let x = -32.0 + k as f32 * 5.8;
+        r.dot(v(x, 31.0, 0.6), 0xA8803A, 0.0, 1);
+        r.dot(v(x + 2.0, -1.0, 0.6), 0xA8803A, 0.0, 1);
+    }
+    prop("tvRug", &r, 72, 40, 36)
+}
+
+/// Tragpfosten aus dunklem Holz mit Kopfband und einer Laterne am Haken.
+pub fn tavern_post() -> PropArt {
+    let mut r = Rig::new();
+    let m = tavern_mats(&mut r);
+    r.part();
+    r.cube(v(0.0, 0.0, 50.0), v(4.0, 4.0, 50.0), m.wood);
+    r.cube(v(0.0, 0.0, 1.5), v(5.5, 5.5, 1.5), m.wood_d);
+    r.cube_rot(v(-6.0, 0.0, 92.0), v(7.0, 1.6, 1.6), 0.0, 0.0, m.wood_d);
+    // Laterne
+    r.tube(&[v(3.0, 0.0, 62.0), v(8.0, 0.0, 62.0), v(8.0, 0.0, 58.0)], 0.5, 0.5, m.iron);
+    r.cube(v(8.0, 0.0, 53.0), v(2.4, 2.4, 3.6), m.iron);
+    r.cube(v(8.0, 0.4, 53.0), v(1.8, 2.2, 2.8), m.flame);
+    prop("tvPost", &r, 28, 112, 6).shadow(5.0, 2.0).circle(4.0).light(8.0, 0.0, 53.0, 120.0, [1.3, 0.8, 0.4], 0.25)
+}

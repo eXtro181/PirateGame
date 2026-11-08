@@ -185,6 +185,11 @@ pub fn enemies() -> Vec<EnemyDef> {
         en("mobA", "Aufgebrachter Dorfbewohner", 70.0, 11.0, 40.0, 150.0, 22.0, 0.55, 0.7, 25.0, Sheet("mobA"), 14.0),
         en("mobB", "Aufgebrachter Dorfbewohner", 64.0, 13.0, 38.0, 150.0, 26.0, 0.6, 0.7, 25.0, Sheet("mobB"), 12.0),
         en("mobC", "Aufgebrachte Dorfbewohnerin", 56.0, 10.0, 46.0, 150.0, 18.0, 0.42, 0.6, 25.0, Sheet("mobC"), 10.0),
+        // die Ertrunkenen von Stillwasser (Prolog), wenn man sie angreift: viel zu stark, sie
+        // erschlagen jeden und hängen ihn am Galgenweg auf (`gallows.rs`); keine Beute
+        en("drownMobA", "Zorniger Ertrunkener", 520.0, 46.0, 50.0, 260.0, 26.0, 0.42, 0.5, 0.0, Sheet("mobA"), 999.0),
+        en("drownMobB", "Zorniger Ertrunkener", 480.0, 52.0, 46.0, 260.0, 30.0, 0.5, 0.55, 0.0, Sheet("mobB"), 999.0),
+        en("drownMobC", "Zornige Ertrunkene", 440.0, 40.0, 54.0, 260.0, 24.0, 0.38, 0.5, 0.0, Sheet("mobC"), 999.0),
         EnemyDef { aoe: 52.0, ..en("skelBrute", "Ankerträger", 150.0, 32.0, 28.0, 100.0, 28.0, 0.95, 1.0, 180.0, Sheet("skelBrute"), 60.0) },
         EnemyDef { ranged: true, ..en("skelGunner", "Musketen-Gerippe", 45.0, 20.0, 30.0, 150.0, 130.0, 0.9, 1.2, 80.0, Sheet("skelGunner"), 10.0) },
         EnemyDef { burn: true, ..en("ashSkeleton", "Aschegänger", 80.0, 20.0, 42.0, 120.0, 22.0, 0.45, 0.5, 110.0, Sheet("ashSkeleton"), 25.0) },

@@ -21,6 +21,7 @@ pub fn town_name(key: &str) -> &'static str {
         "frost" => "Reifstein",
         "raben" => "Rabenwacht",
         "mangroven" => "Moorhain",
+        "stillwasser" => "Stillwasser",
         _ => "Die Siedlung",
     }
 }
@@ -40,6 +41,9 @@ impl Game {
         if k == "hain" {
             return Some("hain");
         }
+        if k == super::gallows::TOWN {
+            return Some(super::gallows::TOWN);
+        }
         self.world.settlement_keys.iter().find(|s| **s == k).copied()
     }
     /// Siedlung einer Figur (Crew und Geisterkapitän gehören nirgends dazu; Händler in ihren
@@ -52,19 +56,33 @@ impl Game {
         if let Some(k) = n.def.id.strip_prefix("shop_") {
             return self.static_town(k);
         }
+        if let Some(k) = self.prolog_town(n.def.x, n.def.y) {
+            return Some(k);
+        }
         self.world.settlement_of(n.def.x, n.def.y)
     }
     pub(super) fn walker_town(&self, i: usize) -> Option<&'static str> {
         let w = &self.walkers[i];
         let (x, y) = w.pts.first().copied().unwrap_or((w.a.x, w.a.y));
+        if let Some(k) = self.prolog_town(x, y) {
+            return Some(k);
+        }
         self.world.settlement_of(x, y)
+    }
+    /// Prolog: das Dorf Stillwasser (nördlich des Galgenwegs) und die Kneipe gehören zusammen
+    fn prolog_town(&self, x: f32, y: f32) -> Option<&'static str> {
+        if self.world.zone_at(x, y) != Zone::Prolog {
+            return None;
+        }
+        (self.world.interior_at(x, y).is_some() || y < self.world.prolog_areas.0).then_some(super::gallows::TOWN)
     }
     fn town_hostile(&self, k: Option<&str>) -> bool {
         k.is_some_and(|k| self.save.hostile.iter().any(|h| h == k))
     }
     /// Dorfbewohner einer feindlichen Siedlung sind zum Mob geworden (die friedliche Figur fehlt)
     pub fn npc_mobbed(&self, i: usize) -> bool {
-        self.npcs[i].def.preset.starts_with("villager") && self.town_hostile(self.npc_town(i))
+        let pr = self.npcs[i].def.preset;
+        (pr.starts_with("villager") || pr.starts_with("drown")) && self.town_hostile(self.npc_town(i))
     }
     /// benannte Figur einer feindlichen Siedlung: redet und handelt nicht mehr
     pub fn npc_refuses(&self, i: usize) -> bool {
@@ -126,6 +144,14 @@ impl Game {
         }
         self.save.hostile.push(k.to_string());
         self.hostile_dirty = true;
+        if k == super::gallows::TOWN {
+            // Stillwasser: die Ertrunkenen erheben sich – gegen sie kommt man nicht an
+            self.ui.banner("STILLWASSER ERHEBT SICH", "Die Ertrunkenen kennen keine Gnade", "boss", 3.6);
+            self.sfx("bell");
+            self.sfx("roar");
+            self.shake(5.0);
+            return;
+        }
         self.ui.banner(&format!("{} ist dir feindlich gesinnt", town_name(k)), "Die Sündenstatue der Glutwacht nimmt Buße an", "big", 3.6);
         self.sfx("bell");
         self.persist(true);
@@ -161,14 +187,15 @@ impl Game {
                     continue;
                 }
                 let d = &self.npcs[i].def;
-                if d.preset.starts_with("villager") {
+                if d.preset.starts_with("villager") || d.preset.starts_with("drown") {
                     spots.push((d.x, d.y));
                 } else if sk == "hain" {
                     spots.push((d.x + 34.0, d.y + 26.0));
                 }
             }
+            let drowned = sk == super::gallows::TOWN;
             for (n, (x, y)) in spots.iter().enumerate() {
-                let kind = ["mobA", "mobB", "mobC"][n % 3];
+                let kind = if drowned { ["drownMobA", "drownMobB", "drownMobC"][n % 3] } else { ["mobA", "mobB", "mobC"][n % 3] };
                 let sp = crate::world::Spawn { kind, x: *x, y: *y, elite: false, lvl: 0 };
                 let mut e = self.make_enemy(&sp, art);
                 e.folk = Some(sk);

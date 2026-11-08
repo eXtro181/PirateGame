@@ -347,6 +347,12 @@ fn setup(world: &mut bevy::ecs::world::World) {
                     g.debug_coffin(app.params.contains_key("defeat"), t);
                 }
             }
+            if let Some(t) = app.params.get("gallows").and_then(|v| v.parse::<f32>().ok()) {
+                // Testlauf (mit &prolog): von den Ertrunkenen erschlagen, am Galgen ab Sekunde t
+                if let Scene::Play(g) = &mut app.scene {
+                    g.debug_gallows(t);
+                }
+            }
             if let Some(hp) = app.params.get("hp").and_then(|v| v.parse::<f32>().ok()) {
                 // Testlauf: mit so vielen Lebenspunkten beginnen (z. B. &hp=1: der erste Treffer tötet)
                 if let Scene::Play(g) = &mut app.scene {

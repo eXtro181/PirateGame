@@ -1089,6 +1089,22 @@ pub fn build(frame: &mut Frame) -> Art {
             stc::hull_arch(),
             stc::chain_post(),
             stc::high_wall_v(),
+            // Kneipe „Zur Letzten Flut“ (Prolog)
+            stc::tavern_counter(),
+            stc::tavern_shelf(0),
+            stc::tavern_shelf(1),
+            stc::tavern_stool(),
+            stc::tavern_chair(0),
+            stc::tavern_chair(1),
+            stc::tavern_chair(2),
+            stc::tavern_round_table(0),
+            stc::tavern_round_table(1),
+            stc::tavern_hearth(),
+            stc::tavern_kegs(),
+            stc::tavern_chandelier(),
+            stc::tavern_notice(),
+            stc::tavern_rug(),
+            stc::tavern_post(),
         ];
         for i in 0..2 {
             list.push(stc::spider_web(i));

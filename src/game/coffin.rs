@@ -32,6 +32,10 @@ const DOWN_DUR: f32 = 2.8;
 /// sich die linke und die rechte Fackel entzünden (s ab Beginn)
 const REVEAL_DUR: f32 = 1.7;
 const REVEAL_LIT: [f32; 2] = [0.6, 0.95];
+/// Niederlage mit langem Schleifweg (vom Galgenweg bis zum Sarg): ab dieser Länge (px) springt die
+/// Sequenz im Schwarz auf einen Punkt so weit (px) vor dem Sarg
+const HOP_LEN: f32 = 1000.0;
+const HOP_NEAR: f32 = 460.0;
 
 /// Zeitplan einer Sarg-Sequenz (Sekunden ab Beginn).
 #[derive(Clone, Copy, Debug)]
@@ -494,8 +498,40 @@ impl Game {
         } else {
             None
         };
-        self.ui.fade = smooth(part(t, p.pull + PULL_DUR - 1.9, p.pull + PULL_DUR));
+        // langer Schleifweg: kurz nach dem Losschleifen wird es schwarz (Sprung nah an den Sarg,
+        // `coffin_hop_at`), danach blendet es wieder auf
+        let long = defeat && Drag::new(p0, c0).len() > HOP_LEN;
+        let hop_out = if long { smooth(part(t, p.carry + 0.35, p.carry + 0.95)) } else { 0.0 };
+        let hop_in = (self.coffin_hop / 0.7).clamp(0.0, 1.0);
+        self.ui.fade = smooth(part(t, p.pull + PULL_DUR - 1.9, p.pull + PULL_DUR)).max(hop_out).max(hop_in);
         t >= p.end
+    }
+
+    /// Langer Schleifweg (Niederlage weit vom Sarg, z. B. nach dem Galgen): im Schwarz wird der
+    /// Ausgangspunkt nah an den Sarg verlegt und die Zeit auf den Beginn des Schleifens gestellt.
+    /// Liefert (Zeit, neuer Ausgangspunkt, neue Schleifdauer).
+    pub(super) fn coffin_hop_at(&mut self, t0: f32, t: f32, defeat: bool, p0: (f32, f32), a: f32, c: f32) -> Option<(f32, f32, f32, f32)> {
+        if !defeat {
+            return None;
+        }
+        let c0 = self.world.prolog_coffin;
+        if Drag::new(p0, c0).len() <= HOP_LEN {
+            return None;
+        }
+        let m = plan(true, a, c).carry + 1.0;
+        if !(t0 < m && t >= m) {
+            return None;
+        }
+        let (dx, dy) = (c0.0 - p0.0, c0.1 - p0.1);
+        let d = dx.hypot(dy).max(1.0);
+        let np = (c0.0 - dx / d * HOP_NEAR, c0.1 - dy / d * HOP_NEAR);
+        let c2 = ((Drag::new(np, c0).len() - SPIDER_REACH).max(0.0) / DRAG_SPEED).clamp(0.8, 7.0);
+        self.coffin_hop = 0.7;
+        bevy::log::info!("Prolog: der Kokon ist weit vom Sarg – Sprung auf {HOP_NEAR} px heran");
+        self.player.a.x = np.0;
+        self.player.a.y = np.1;
+        self.cam_f = np;
+        Some((plan(true, a, c2).carry, np.0, np.1, c2))
     }
 
     /// Niederlage: die Spinne kommt, spinnt den Leichnam ein, schleift den Kokon an einem Faden zum
@@ -670,7 +706,7 @@ impl Game {
                 _ => false,
             };
             for &(tx, ty) in &self.world.prolog_torches {
-                f.light(LightDef { x: tx, y: ty + 4.0, z: 70.0, r: 320.0, col: [2.3, 1.3, 0.56], flicker: 0.18 });
+                f.light(LightDef { x: tx, y: ty + 4.0, z: 70.0, r: 320.0, col: [1.7, 0.96, 0.42], flicker: 0.18 });
             }
             if !pulled {
                 f.light(LightDef { x: cx0, y: cy0 + 18.0, z: 46.0, r: 160.0, col: [1.15, 0.82, 0.5], flicker: 0.12 });
@@ -747,7 +783,7 @@ impl Game {
                 let g = smooth(lit / 0.4);
                 let z = sw_art::pixellab::TORCH_FIRE + 9.0;
                 crate::pfx::draw_loop(f, &art.pfx, Px::Brazier, tx, ty, z, self.t + k as f32 * 0.7, (0.8 * g).max(0.1), [255; 4], 1.7);
-                f.light(LightDef { x: tx, y: ty + 4.0, z: 70.0, r: 320.0 * (0.3 + 0.7 * g), col: [2.3 * g, 1.3 * g, 0.56 * g], flicker: 0.18 });
+                f.light(LightDef { x: tx, y: ty + 4.0, z: 70.0, r: 320.0 * (0.3 + 0.7 * g), col: [1.7 * g, 0.96 * g, 0.42 * g], flicker: 0.18 });
             }
         }
     }
