@@ -135,6 +135,8 @@ impl Game {
         self.draw_sealife(art, f);
         self.draw_wake(art, f);
         self.draw_prolog_coffin(art, f);
+        // Prolog: der Gehängte am Galgenweg und die stumme Menge
+        self.draw_gallows(art, f);
         // Laternen und Feuerschalen der hohen Brücke über dem Hafenbecken
         if let Some(b) = self.world.bridge {
             if vis((b.x0 + b.x1) * 0.5, b.y, (b.x1 - b.x0) * 0.5 + 100.0) {
@@ -208,6 +210,10 @@ impl Game {
                 continue;
             }
             let mut tint = if e.elite { [255, 214, 200, (255.0 * dead_a) as u8] } else { [255, 255, 255, (255.0 * dead_a) as u8] };
+            // der Mob von Stillwasser: fahl meergrün wie die Ertrunkenen
+            if e.folk == Some(super::gallows::TOWN) {
+                tint = [150, 208, 192, tint[3]];
+            }
             // sichtbare Wunden: je weniger Leben, desto dunkler und blutiger
             if e.state != ES::Dead && e.max_hp > 0.0 {
                 let w = (1.0 - e.hp / e.max_hp).clamp(0.0, 1.0) * 0.35;

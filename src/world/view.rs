@@ -707,6 +707,10 @@ impl WorldView {
             if kind == "brazier" {
                 crate::pfx::draw_loop(frame, &art.pfx, crate::pfx::Px::Brazier, p.x, p.y, 25.0, t + ph, 0.5, [255; 4], 1.15);
             }
+            if kind == "tvHearth" {
+                // Kaminfeuer der Kneipe: Flammen über den Scheiten
+                crate::pfx::draw_loop(frame, &art.pfx, crate::pfx::Px::Brazier, p.x, p.y - 2.0, 6.0, t + ph, 0.7, [255, 230, 200, 255], 1.25);
+            }
             if kind == "plTorch" {
                 // PixelLab-Piratenfackel: lodernde Flamme im Eisenkorb, Funken darüber
                 let z = sw_art::pixellab::TORCH_FIRE + 9.0;
@@ -724,6 +728,10 @@ impl WorldView {
                 let sx = if p.flip { -1.0 } else { 1.0 };
                 let spots: &[(f32, f32)] = if kind.starts_with("gallows") { &[(-38.0, -117.0), (0.0, -118.0), (38.0, -117.0)] } else { &[(42.0, -137.0)] };
                 for (k, &(ox, oy)) in spots.iter().enumerate() {
+                    // Galgen-Sequenz: am mittleren Haken hängt der Spieler (gezeichnet von gallows.rs)
+                    if k == 1 && w.hang_free == Some(pi) && kind.starts_with("gallows") {
+                        continue;
+                    }
                     let ph = t * (0.9 + k as f32 * 0.13) + pi as f32 * 1.7 + k as f32 * 2.1;
                     let a = ph.sin() * 0.8 + (ph * 2.3).sin() * 0.2;
                     let fi = (((a * 0.5 + 0.5) * (n - 1) as f32).round() as usize).min(n - 1);

@@ -282,33 +282,96 @@ impl World {
             }
         }
         let mx = ix0 + w / 2;
-        // der Tresen und der Wirt dahinter
-        for x in mx - 3..=mx + 3 {
-            self.prop_t("table", x, iy0 + 5);
-        }
-        self.prop_tn("candles0", mx - 2, iy0 + 5);
-        self.prop_tn("candles1", mx + 2, iy0 + 5);
+        // Lage in Kacheln ab der linken oberen Ecke des Raums (Bruchteile erlaubt), Fußpunkt in px
+        let at = |tx: f32, ty: f32| ((ix0 as f32 + tx) * TS as f32, (iy0 as f32 + ty) * TS as f32);
+        let wall = 3.35;
+        // ---- Rückwand: Kamin mit Teppich, Aushang, Regale, Fassgestell hinter dem Wirt, Fackel,
+        // Kisten und Fässer in der Ecke
+        let (x, y) = at(2.0, wall);
+        self.prop("tvHearth", x, y);
+        let (x, y) = at(2.0, wall + 0.75);
+        self.prop_x("tvRug", x, y, |p| p.no_collide = true);
+        let (x, y) = at(3.85, wall);
+        self.prop("tvNotice", x, y);
+        let (x, y) = at(5.45, wall);
+        self.prop("tvShelf0", x, y);
+        let (x, y) = at(w as f32 / 2.0, wall + 0.05);
+        self.prop("tvKegs", x, y);
+        let (x, y) = at(9.55, wall);
+        self.prop("tvShelf1", x, y);
+        let (x, y) = at(10.9, wall + 0.2);
+        self.prop("torch", x, y);
+        let (x, y) = at(12.3, wall + 0.45);
+        self.prop("crates", x, y);
+        let (x, y) = at(14.0, wall + 0.5);
+        self.prop("barrels", x, y);
+        // ---- der Tresen, der Wirt dahinter, Hocker davor
+        let (x, y) = at(w as f32 / 2.0, 5.4);
+        self.prop("tvCounter", x, y);
         self.npc("prologKeeper", mx, iy0 + 4, "drownKeeper", "Wirt Klaas", "prologKeeper", false, None);
-        // Rumfässer und Kisten an der Rückwand, Fackeln hinter dem Tresen, eine Kanone, die Flagge,
-        // Netze und ein Anker als Zierde
-        self.prop_t("barrels", ix0 + 1, iy0 + 4);
-        self.prop_t("crates", ix0 + 3, iy0 + 4);
-        self.prop_t("crates", ix0 + w - 4, iy0 + 4);
-        self.prop_t("barrels", ix0 + w - 2, iy0 + 4);
-        self.prop_t("barrels", ix0 + 1, iy0 + 6);
-        self.prop_t("barrels", ix0 + w - 2, iy0 + 6);
-        self.prop_t("torch", mx - 4, iy0 + 3);
-        self.prop_t("torch", mx + 4, iy0 + 3);
-        self.prop_t("cannon", ix0 + w - 2, iy0 + 8);
-        self.prop_t("flag", ix0 + 1, iy0 + 7);
-        self.prop_tn("nets", ix0 + 1, iy0 + 9);
-        self.prop_tn("anchorDeco", ix0 + w - 3, iy0 + 9);
-        // zwei Tische mit Gästen
-        self.prop_t("table", ix0 + 3, iy0 + 8);
-        self.prop_tn("candles1", ix0 + 3, iy0 + 8);
-        self.npc("prologGuest", ix0 + 2, iy0 + 8, "drownD", "Ertrunkene Zecherin", "prologGuest", true, None);
-        self.prop_t("table", ix0 + w - 4, iy0 + 8);
-        self.npc("prologGuest2", ix0 + w - 5, iy0 + 8, "drownB", "Ertrunkener Zecher", "prologGuest2", true, None);
+        for sx in [4.9f32, 6.3, 9.0, 10.3] {
+            let (x, y) = at(sx, 6.1);
+            self.prop("tvStool", x, y);
+        }
+        // ein Zecher steht am Tresen
+        let (x, y) = at(8.0, 6.25);
+        self.npcs.push(NpcDef { id: "prologDrinker", x, y, preset: "drownA", name: "Ertrunkener am Tresen", dialog: "prologDrinker", sit: false, crew: None });
+        // ---- links: runder Tisch mit drei Stühlen, die Zecherin sitzt dahinter
+        let (x, y) = at(2.6, 7.9);
+        self.prop("tvTable0", x, y);
+        let (x, y) = at(2.6, 7.15);
+        self.prop("tvChairN", x, y);
+        let (x, y) = at(1.25, 7.95);
+        self.prop("tvChairW", x, y);
+        let (x, y) = at(2.65, 8.8);
+        self.prop("tvChairS", x, y);
+        let (x, y) = at(2.6, 7.2);
+        self.npcs.push(NpcDef { id: "prologGuest", x, y, preset: "drownD", name: "Ertrunkene Zecherin", dialog: "prologGuest", sit: true, crew: None });
+        // ---- rechts: runder Tisch mit drei Stühlen, der Zecher sitzt dahinter
+        let (x, y) = at(12.4, 7.9);
+        self.prop("tvTable1", x, y);
+        let (x, y) = at(12.4, 7.15);
+        self.prop("tvChairN", x, y);
+        let (x, y) = at(13.75, 7.95);
+        self.prop_x("tvChairW", x, y, |p| p.flip = true);
+        let (x, y) = at(12.35, 8.8);
+        self.prop("tvChairS", x, y);
+        let (x, y) = at(12.4, 7.2);
+        self.npcs.push(NpcDef { id: "prologGuest2", x, y, preset: "drownB", name: "Ertrunkener Zecher", dialog: "prologGuest2", sit: true, crew: None });
+        // ---- vorn links: langer Tisch mit Bank, darüber ein schlafender Trinker
+        let (x, y) = at(3.9, 9.4);
+        self.prop("table", x, y);
+        let (x, y) = at(3.9, 8.75);
+        self.npcs.push(NpcDef { id: "prologDrunk", x, y, preset: "drownC", name: "Schlafender Trinker", dialog: "prologDrunk", sit: true, crew: None });
+        let (x, y) = at(3.9, 10.25);
+        self.prop("bench", x, y);
+        // ---- Tragpfosten mit Laternen beiderseits des Gangs zur Tür, Kronleuchter darüber
+        for sx in [5.55f32, 9.45] {
+            let (x, y) = at(sx, 8.3);
+            self.prop("tvPost", x, y);
+        }
+        let (x, y) = at(w as f32 / 2.0, 9.4);
+        self.prop_x("tvLamp", x, y, |p| p.no_collide = true);
+        // ---- vorn rechts: noch ein runder Tisch mit zwei Stühlen und einem Würfelspieler
+        let (x, y) = at(11.0, 9.75);
+        self.prop("tvTable1", x, y);
+        let (x, y) = at(9.75, 9.8);
+        self.prop("tvChairW", x, y);
+        let (x, y) = at(12.3, 9.8);
+        self.prop_x("tvChairW", x, y, |p| p.flip = true);
+        let (x, y) = at(11.0, 9.05);
+        self.npcs.push(NpcDef { id: "prologDicer", x, y, preset: "drownA", name: "Würfelspieler", dialog: "prologDicer", sit: true, crew: None });
+        let (x, y) = at(11.0, 9.0);
+        self.prop("tvChairN", x, y);
+        // ---- Zierde an den Seiten: Flagge, Netze, Kanone, Anker
+        let (x, y) = at(0.7, 5.9);
+        self.prop("flag", x, y);
+        let (x, y) = at(0.6, 10.1);
+        self.prop_x("nets", x, y, |p| p.no_collide = true);
+        let (x, y) = at(14.1, 9.9);
+        self.prop("cannon", x, y);
+        let (x, y) = at(14.2, 6.0);
+        self.prop_x("anchorDeco", x, y, |p| p.no_collide = true);
     }
 
     /// Galgenweg: Bannpfähle mit Schädeln, Galgen und Käfige am Weg, ein Gräberfeld im Westen, tote

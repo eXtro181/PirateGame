@@ -145,6 +145,36 @@ pub fn dialog_for(g: &mut Game, ni: usize) -> Script {
             },
             choices: vec![bye],
         },
+        "prologDrinker" => Script {
+            pages: if first {
+                pages(&[
+                    "Noch einen? Klaas schenkt aus, bis die Flut kommt. Die Flut kommt nie – also schenkt er ewig.",
+                    "Komisch. Der Rum schmeckt nach Salz. Seit ich hier bin, schmeckt alles nach Salz.",
+                ])
+            } else {
+                pages(&["Prost, Fremder. Auf die Letzte Flut."])
+            },
+            choices: vec![bye],
+        },
+        "prologDicer" => Script {
+            pages: if first {
+                pages(&[
+                    "Würfelst du mit? Ich setze meinen Atem. Hab ihn eh nicht mehr gebraucht, seit das Schiff gesunken ist.",
+                    "Merkwürdig: Ich werfe immer eine Sechs. Immer. Seit hundert Jahren. Es macht keinen Spaß mehr.",
+                ])
+            } else {
+                pages(&["Sechs. Schon wieder. Natürlich."])
+            },
+            choices: vec![bye],
+        },
+        "prologDrunk" => Script {
+            pages: if first {
+                pages(&["Zzz … nur noch ein Glas … zzz … Mutter, die Segel … die Segel sind ganz schwarz …"])
+            } else {
+                pages(&["… zzz …"])
+            },
+            choices: vec![bye],
+        },
         "prologWife" => Script {
             pages: if first {
                 pages(&[

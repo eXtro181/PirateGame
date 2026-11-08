@@ -364,6 +364,30 @@ pub fn env(zone: &str, sailing_open_sea: bool) -> Env {
             wind: 0.3,
             ..base
         },
+        // Galgennacht im Prolog: der Mond hinter Wolken, schwarzer Nebel, nur Fackeln und Pilze
+        // leuchten (nachdem die Ertrunkenen jemanden gehängt haben)
+        "galgen" => Env {
+            rays: 0.2,
+            ambient: l(0x4A5878, 0.5),
+            sky: 0.4,
+            sun: l(0x8898C0, 0.5),
+            sun_dir: n3([0.4, -0.3, 0.8]),
+            shadow: 0.62,
+            fog: l(0x10161E, 1.0),
+            fog_k: 0.17,
+            lift: [0.008, 0.012, 0.024],
+            gain: [0.92, 0.97, 1.06],
+            sat: 0.68,
+            water_a: l(0x0C161C, 1.0),
+            water_b: l(0x010203, 1.0),
+            water_c: l(0x5A6870, 1.0),
+            light_k: 1.2,
+            tone_lo: [0.92, 0.97, 1.12],
+            tone_hi: [0.97, 1.0, 1.05],
+            stars: 0.8,
+            wind: 0.35,
+            ..base
+        },
         // Ladenräume: warmes Kerzen- und Fackellicht, kein Nebel
         "innen" => Env {
             rays: 0.0,

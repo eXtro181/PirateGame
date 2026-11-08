@@ -21,6 +21,7 @@ pub mod prolog;
 pub mod look;
 pub mod feel;
 pub mod sealife;
+pub mod gallows;
 
 pub use crate::art::{anim_index, Art, CharSheet};
 pub use crate::gfx::{flags, modes, Frame, LightDef, SprOpt};
@@ -118,6 +119,9 @@ pub enum Cut {
     /// das Schiff am Steg rufen (`summon.rs`): Blasen, es steigt aus der Tiefe, Wasser läuft ab,
     /// dann an Bord; `first` = beim ersten Mal wird vorher das Flaschenschiff ins Meer geworfen
     Summon { t: f32, di: usize, first: bool },
+    /// Prolog: von den Ertrunkenen erschlagen und am Galgen `pi` aufgehängt, die Nacht sinkt herab,
+    /// die Spinne holt den Leichnam (`gallows.rs`); (x0, y0) = Todesort
+    Gallows { t: f32, pi: usize, x0: f32, y0: f32 },
 }
 
 /// Zeitplan des Erwachens (s): Dunkel mit Klopfen, Aufblenden, Deckel ruckelt, rutscht weg,
@@ -253,6 +257,13 @@ pub struct Game {
     pub hud_idle: f32,
     /// Bildzeit in Echtzeit (Trefferstopp und Zeitlupe verlangsamen nur das Spiel)
     pub real_dt: f32,
+    /// Prolog: der tödliche Hieb kam vom Mob der Ertrunkenen (→ Galgen statt Spinne); der gerade
+    /// handelnde Gegner gehört zu diesem Mob; die Galgennacht bleibt bis zum Ende des Prologs
+    pub folk_kill: bool,
+    pub cur_folk: bool,
+    pub gallows_night: bool,
+    /// Sarg-Sequenz: Aufblenden nach dem Sprung über einen langen Schleifweg (Restzeit, s)
+    pub coffin_hop: f32,
     pub focus: Option<Focus>,
     pub hover: Hover,
     pub stain_t: f32,
@@ -386,6 +397,10 @@ impl Game {
             hud_a: 1.0,
             hud_idle: 0.0,
             real_dt: 0.016,
+            folk_kill: false,
+            cur_folk: false,
+            gallows_night: false,
+            coffin_hop: 0.0,
             focus: None,
             hover: Hover::None,
             stain_t: 0.0,
@@ -833,6 +848,7 @@ impl Game {
         self.flash_c[3] = (self.flash_c[3] - dt * 2.5).max(0.0);
         self.slow_t = (self.slow_t - dt).max(0.0);
         self.boss_intro_t = (self.boss_intro_t - dt).max(0.0);
+        self.coffin_hop = (self.coffin_hop - dt).max(0.0);
         self.update_webs(dt);
         self.shanty_t = (self.shanty_t - dt).max(0.0);
         self.lightning = (self.lightning - dt).max(0.0);
@@ -889,7 +905,12 @@ impl Game {
             }
         }
         if std::mem::take(&mut self.coffin_due) {
-            self.start_coffin(true);
+            // von den Ertrunkenen erschlagen: sie hängen einen am Galgenweg auf
+            if self.folk_kill && self.save.hostile.iter().any(|h| h == gallows::TOWN) {
+                self.start_gallows();
+            } else {
+                self.start_coffin(true);
+            }
         }
         self.update_coffin_reveal(dt);
         self.update_ghost(dt);
@@ -1168,7 +1189,32 @@ impl Game {
                     self.cutscene = None;
                     self.end_prolog();
                 } else if matches!(self.cutscene, Some(Cut::Coffin { .. })) {
-                    self.cutscene = Some(Cut::Coffin { t: nt, defeat, x0, y0, sx, sy, a, c });
+                    // langer Schleifweg (vom Galgenweg bis zum Sarg): im Schwarz ein Sprung nah an den Sarg
+                    if let Some((jt, jx, jy, jc)) = self.coffin_hop_at(t, nt, defeat, (x0, y0), a, c) {
+                        self.cutscene = Some(Cut::Coffin { t: jt, defeat, x0: jx, y0: jy, sx, sy, a, c: jc });
+                    } else {
+                        self.cutscene = Some(Cut::Coffin { t: nt, defeat, x0, y0, sx, sy, a, c });
+                    }
+                }
+            }
+            Cut::Gallows { t, pi, x0, y0 } => {
+                let nt = t + dt;
+                match self.update_gallows(t, nt, pi, (x0, y0)) {
+                    gallows::Step::Go => {
+                        if matches!(self.cutscene, Some(Cut::Gallows { .. })) {
+                            self.cutscene = Some(Cut::Gallows { t: nt, pi, x0, y0 });
+                        }
+                    }
+                    gallows::Step::Coffin => {
+                        // die Spinne übernimmt: einspinnen, zum Sarg schleifen, hinein, Arme
+                        self.gallows_night = true;
+                        self.cutscene = None;
+                        self.start_coffin(true);
+                    }
+                    gallows::Step::End => {
+                        self.cutscene = None;
+                        self.end_prolog();
+                    }
                 }
             }
             Cut::Wake { t } => {
@@ -1303,7 +1349,10 @@ impl Game {
             if a != self.prolog_area {
                 self.prolog_area = a;
                 self.zone_name = self.place_name();
-                self.zone_t = 4.0;
+                // in den Zwischensequenzen am Galgen und am Sarg kein Ortsname
+                if !matches!(self.cutscene, Some(Cut::Gallows { .. }) | Some(Cut::Coffin { .. })) {
+                    self.zone_t = 4.0;
+                }
             }
         }
         // erkundet ist eine Insel erst, wenn man an ihr ist (nicht schon beim Vorbeisegeln weit draußen)
@@ -1328,8 +1377,25 @@ impl Game {
         } else if z == Zone::Ende {
             env::env(self.end.env_key(), false)
         } else if z == Zone::Prolog {
-            // vom hellen Dorf durch die Dämmerung des Galgenwegs ins Dunkel des Spinnenschlunds
-            env::mix(&env::env("prolog_dorf", false), &env::env("prolog", false), self.prolog_dark())
+            // vom hellen Dorf durch die Dämmerung des Galgenwegs ins Dunkel des Spinnenschlunds;
+            // nach dem Urteil der Ertrunkenen sinkt die Galgennacht über alles
+            let e = env::mix(&env::env("prolog_dorf", false), &env::env("prolog", false), self.prolog_dark());
+            let nk = match self.cutscene {
+                Some(Cut::Gallows { t, .. }) => gallows::night_k(t),
+                // die Galgennacht liegt über dem Galgenweg; im Spinnenschlund (am Sarg mit seinen
+                // hellen Fackeln) gilt wieder dessen eigene Stimmung – der Wechsel fällt in den
+                // schwarzen Sprung an den Sarg
+                _ if self.gallows_night => {
+                    let k = ((self.prolog_dark() - 0.8) / 0.2).clamp(0.0, 1.0);
+                    1.0 - k * k * (3.0 - 2.0 * k)
+                }
+                _ => 0.0,
+            };
+            if nk > 0.0 {
+                env::mix(&e, &env::env("galgen", false), nk)
+            } else {
+                e
+            }
         } else {
             env::env(self.env_key(), self.sailing && !on_island)
         };
@@ -1384,7 +1450,7 @@ impl Game {
         }
         self.env_cur = env::mix(&self.env_cur, &target, (dt * 1.5).min(1.0));
         // Kinobalken in erzählten Zwischensequenzen (nicht beim Reisen und an Türen)
-        let story = matches!(self.cutscene, Some(Cut::Wake { .. } | Cut::Washed { .. } | Cut::Coffin { .. } | Cut::Summon { .. } | Cut::Whirl { .. }));
+        let story = matches!(self.cutscene, Some(Cut::Wake { .. } | Cut::Washed { .. } | Cut::Coffin { .. } | Cut::Summon { .. } | Cut::Whirl { .. } | Cut::Gallows { .. }));
         let intro = self.boss_intro_t > 0.0;
         self.look.base_zoom = if self.opt.near && !self.sailing && self.cutscene.is_none() { 1.22 } else { 1.0 };
         self.look.update(self.real_dt, &self.env_cur, inside, story, intro);
@@ -1407,6 +1473,10 @@ impl Game {
         if let Some(Cut::Coffin { t, defeat, a, c, .. }) = self.cutscene {
             // erst Stille, dann der tiefe Gesang, wenn die Arme kommen
             mood = if t < coffin::plan(defeat, a, c).quiet { "silence" } else { "tiefe" };
+        }
+        if matches!(self.cutscene, Some(Cut::Gallows { .. })) {
+            // am Galgen schweigt die Musik; man hört nur die Glocke, die Menge und die Spinne
+            mood = "silence";
         }
         self.mood = mood;
     }
@@ -1630,7 +1700,7 @@ impl Game {
 
     // ---------------------------------------------------------------- Tod
     pub fn player_died(&mut self) {
-        if self.death_t.is_some() || matches!(self.cutscene, Some(Cut::Coffin { .. })) {
+        if self.death_t.is_some() || matches!(self.cutscene, Some(Cut::Coffin { .. } | Cut::Gallows { .. })) {
             return;
         }
         self.player.state = PS::Dead;
@@ -1641,7 +1711,11 @@ impl Game {
         if self.save.prolog {
             // im Wrackzwinger holt sich die Spinne den Leichnam (kein Perlenfleck); der
             // Schriftzug steht nur kurz, damit man sieht, was sie tut
-            self.ui.banner("DU BIST ERTRUNKEN", "", "death", 2.0);
+            if self.folk_kill {
+                self.ui.banner("GERICHTET", "Die Ertrunkenen von Stillwasser", "death", 2.0);
+            } else {
+                self.ui.banner("DU BIST ERTRUNKEN", "", "death", 2.0);
+            }
             self.lock = None;
             self.coffin_due = true;
             return;
@@ -1662,6 +1736,12 @@ impl Game {
     /// Spiel beginnt.
     pub fn end_prolog(&mut self) {
         self.save.prolog = false;
+        // Stillwasser liegt hinter einem: Feindschaft, Galgen und Galgennacht vergessen
+        self.save.hostile.retain(|h| h != gallows::TOWN);
+        self.world.hang_free = None;
+        self.gallows_night = false;
+        self.folk_kill = false;
+        self.coffin_hop = 0.0;
         self.save.woke = false;
         self.save.last_fire = "kueste".into();
         if !self.save.lit_fires.iter().any(|f| f == "kueste") {
