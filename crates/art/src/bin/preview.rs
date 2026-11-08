@@ -21,9 +21,9 @@ impl TerrainMap for Steps {
     fn size(&self) -> (i32, i32) { (64, 64) }
     fn mat(&self, _tx: i32, _ty: i32) -> Mat { self.1 }
     fn level(&self, _tx: i32, ty: i32) -> u8 { if ty < 10 { 1 } else { 0 } }
-    fn lpx(&self, px: i32, py: i32) -> u8 { if (py as f32) < 300.0 + (px as f32 / 37.0).sin() * 14.0 { 1 } else { 0 } }
+    fn lpx(&self, px: i32, py: i32) -> u8 { if (py as f32) < 300.0 + (px as f32 / 37.0).sin() * 14.0 && px > 40 && px < 216 && py > 60 { 1 } else { 0 } }
     fn face(&self, _tx: i32, _ty: i32) -> Option<(i32, i32, u8, u8)> { None }
-    fn stairs(&self, _tx: i32, _ty: i32) -> bool { false }
+    fn stairs(&self, tx: i32, ty: i32) -> bool { (tx == 4 || tx == 5) && (7..=9).contains(&ty) }
     fn biome(&self, _tx: i32, _ty: i32) -> Biome { self.0 }
 }
 
@@ -232,7 +232,7 @@ fn main() {
             }
             let sf = sw_art::props::saberfire();
             bg.place(&sf.c, 240, 74, sf.ax, sf.ay);
-            let pl = player_look(&[0, 1, 1, 5, 0, 0, 0, 0], "cutlass");
+            let pl = player_look(&[0, 1, 1, 5, 0, 0, 0, 0, 0], "cutlass");
             let mut x = 30;
             for (l, s) in [(pl.clone(), 1.0)].into_iter().chain(["skeleton", "drowned", "stormSailor", "smith", "lanternMaid", "villagerA", "abyssPirate", "voodoo", "kingFire"].iter().map(|n| preset(n))) {
                 let fr = frame(&l, "down", "idle", 0, s);
@@ -244,7 +244,7 @@ fn main() {
         "chars" => {
             use sw_art::chars::*;
             let mut bg = bake_chunk(&Flat(Biome::Hub, Mat::Grass), &mut mats, &en, 0, 0, 1280).crop(0, 0, 640, 360);
-            let pl = player_look(&[0, 1, 1, 5, 0, 0, 0, 0], "cutlass");
+            let pl = player_look(&[0, 1, 1, 5, 0, 0, 0, 0, 0], "cutlass");
             let mut x = 30;
             for (anim, n) in ANIMS.iter() {
                 for f in 0..*n {
@@ -278,13 +278,30 @@ fn main() {
                 x += 80;
             }
             for (i, hat) in [1, 2, 3, 4].iter().enumerate() {
-                let l = player_look(&[i as i32 % 2, i as i32, 2 + i as i32 % 3, i as i32, i as i32, *hat, i as i32 + 1, (i % 2) as i32], "rapier");
+                let l = player_look(&[i as i32 % 2, i as i32, 2 + i as i32 % 3, i as i32, i as i32, *hat, i as i32 + 1, (i % 2) as i32, (i / 2 % 2) as i32], "rapier");
                 let fr = frame(&l, "down", "idle", 0, 1.0);
                 bg.place(&fr, 380 + i as i32 * 40, 345, fr.w / 2, fr.h - 4);
                 let fr = frame(&l, "side", "atk", 3, 1.0);
                 bg.place(&fr, 380 + i as i32 * 40, 290, fr.w / 2, fr.h - 4);
             }
             save_lit(&bg, &format!("{out}/chars.png"), 2);
+        }
+        "sexes" => {
+            // Spielfigur als Mann und Frau mit verschiedenen Haaren, Hüten und Mänteln (vorn, Seite, hinten)
+            use sw_art::chars::*;
+            let mut bg = Canvas::new(560, 230);
+            let floor = sw_art::color::hex(0x3A3440);
+            for y in 0..bg.h { for x in 0..bg.w { let i = bg.idx(x, y); bg.col[i] = floor; } }
+            for k in 0..8 {
+                let female = (k % 2) as i32;
+                let v = [k as i32 / 4, k as i32 % 4, [1, 2, 3, 4][k / 2], (k as i32 * 2) % 6, if female == 1 { 0 } else { 2 }, [0, 1, 2, 4][k / 2], k as i32 % 6, 0, female];
+                let l = player_look(&v, "cutlass");
+                for (j, (dir, anim)) in [("down", "idle"), ("side", "walk"), ("up", "idle")].iter().enumerate() {
+                    let fr = frame(&l, dir, anim, 1, 1.0);
+                    bg.place(&fr, 34 + k as i32 * 66, 70 + j as i32 * 74, fr.w / 2, fr.h - 4);
+                }
+            }
+            save_lit(&bg, &format!("{out}/sexes.png"), 2);
         }
         "beasts" => {
             use sw_art::creatures::*;
@@ -486,7 +503,7 @@ fn main() {
         "playerfit" => {
             // passt der Spieler-Bogen (alle Richtungen und Animationen, Pixelstil) in den Spielerstreifen (2040 × 208)?
             use sw_art::chars::*;
-            let l = player_look(&[0, 0, 0, 0, 0, 0, 0, 0], "cutlass");
+            let l = player_look(&[0, 0, 0, 0, 0, 0, 0, 0, 0], "cutlass");
             let mut a = sw_art::atlas::Atlas::new();
             a.lim = 2040;
             a.style = true;

@@ -13,11 +13,12 @@ pub const FACE_ROWS: i32 = 3; // Klippenwand = 3 Kachelreihen
 pub const LEVEL_H: f32 = 96.0; // Höhe einer Ebene in px
 /// Höhe einer Klippenwand im Bild (px)
 pub const FACE_PX: i32 = FACE_ROWS * T;
-/// Tiefe eines Hangs in der Natur (px): viel flacher als die Festungsmauern
-pub const SLOPE_PX: i32 = 168;
-/// Breite der seitlichen Böschung und des Randes oben (px)
-pub const BANK_PX: i32 = 64;
-pub const RIM_PX: i32 = 20;
+/// Höhe einer Naturkante (px): wie in A Link to the Past eine klare Felswand, so hoch wie eine
+/// Festungsstufe (früher 168 px flacher Hang – Bild und Begehbarkeit waren schwer zu lesen)
+pub const SLOPE_PX: i32 = FACE_PX;
+/// Breite der seitlichen Felswand (schmal, von der Seite gesehen) und der Kante oben (px)
+pub const BANK_PX: i32 = 22;
+pub const RIM_PX: i32 = 10;
 /// Tiefe der Kante nach Süden: Festungsmauer steil, Naturhang flach
 pub fn face_px(b: Biome) -> i32 {
     if b == Biome::Hub {
@@ -925,7 +926,7 @@ pub struct ChunkOut {
 /// Rand der Vorberechnung: Materialraster, seitlich (Böschungen), oben (Ränder), unten (Hänge)
 const PAD: i32 = 4;
 const MX: i32 = BANK_PX + 4;
-const MN: i32 = RIM_PX + 34;
+const MN: i32 = SHADOW_PX + 8;
 /// Länge des Schlagschattens einer Wand auf der tieferen Ebene (px, ≤ MN)
 const SHADOW_PX: i32 = 46;
 const MS: i32 = SLOPE_PX + 2;
@@ -1455,16 +1456,15 @@ pub fn bake_chunk<M: TerrainMap>(m: &M, mats: &mut Materials, en: &EdgeNoise, x0
 fn slope_pixel(mats: &mut Materials, en: &EdgeNoise, c: &mut Canvas, x: i32, y: i32, px: i32, py: i32, mt: Mat, b: Biome, d: f32, dir: (f32, f32), ramp: bool, town: bool) -> bool {
     // Hangbreite schwankt leicht entlang der Kante
     let along = if dir.0 != 0.0 { py } else { px };
-    let mut band = (BANK_PX - 4) as f32 + en.at(along * 2, 11) * 5.0 + en.at(along * 7, 16) * 1.5;
+    let mut band = (BANK_PX - 2) as f32 + en.at(along * 2, 11) * 2.0;
     if dir.1 != 0.0 {
-        band *= 0.7;
+        band = RIM_PX as f32;
     }
     let d = d / band;
     if d >= 1.0 {
         return false;
     }
     let bp = biome_pal(b);
-    let grassy = matches!(mt, Mat::Grass | Mat::Meadow | Mat::Moss | Mat::Snow);
     if ramp && !town {
         path_pixel(c, x, y, px, py, en, &bp, b, 1.0 - d, 0.0);
         let along = if dir.0 != 0.0 { px } else { py };
@@ -1501,46 +1501,61 @@ fn slope_pixel(mats: &mut Materials, en: &EdgeNoise, c: &mut Canvas, x: i32, y: 
         c.ev[i] = 0.0;
         return true;
     }
-    // sanfte Böschung: die Oberfläche läuft geneigt weiter, zur tieferen Seite dunkler,
-    // Licht von links oben (Westhänge im Schatten, Osthänge heller)
+    // seitliche Felswand und Nordkante wie in A Link to the Past: ein schmaler, steiler Streifen
+    // (von der Seite gesehen), oben eine helle Graskante, unten eine dunkle Fuge; Licht von links
+    // oben – nach Westen zeigende Wände hell, nach Osten zeigende im Schatten
     let surf = match mt {
         Mat::Hex | Mat::Marble | Mat::Cobble | Mat::Plank => if b == Biome::Fire { Mat::Ash } else { Mat::Dirt },
         m => m,
     };
     let stex = mats.get(surf, b);
     let si = stex.idx(px.rem_euclid(TEX), py.rem_euclid(TEX));
-    let n = en.at(px * 3 + 17, py * 3 + 3);
+    let base = stex.col[si];
     let n2 = en.at(px * 7 + 5, py * 7);
-    let side = if dir.0 < 0.0 { -0.05 } else if dir.0 > 0.0 { 0.04 } else { 0.03 };
-    let e = 1.0 - d;
-    // sanfte Böschung: kaum dunkler zum Fuß, selten Fels, eher offene Erde
-    let mut col = shade(stex.col[si], 0.97 - e * e * 0.3 + side * 1.8 + n2 * 0.04);
-    let mut rel = d * 13.0;
-    if d > 0.93 {
-        col = shade(stex.col[si], 0.8);
-    } else if d > 0.82 {
-        col = shade(stex.col[si], 1.13);
-        rel += 1.0;
-    } else if n > 0.52 - (1.0 - (d - 0.5).abs() * 2.0) * 0.08 {
-        col = pickf(&bp.cliff, (0.5 + n * 0.3 + n2 * 0.2 + side).clamp(0.0, 1.0));
-        rel += 2.0;
-    } else if n > 0.4 {
-        col = mix(col, pickf(&bp.path[0..4], 0.4 + n2 * 0.3), 0.4);
-    }
-    if (!grassy && hash(px / 3, py / 3, 91) % 37 == 0) || hash(px / 4, py / 4, 93) % 71 == 0 {
-        col = pickf(&bp.stone, 0.65);
-        rel += 1.5;
-    }
-    if d < 0.16 {
-        col = shade(col, 0.76 + d * 1.5);
+    let (col, rel, up);
+    if dir.1 != 0.0 {
+        // Nordkante: die Wand selbst sieht man nicht, nur eine Lippe über der tieferen Ebene
+        if d < 0.3 {
+            col = shade(base, 0.55);
+            rel = -0.5;
+            up = 120u8;
+        } else if d < 0.65 {
+            col = shade(base, 1.22);
+            rel = 3.0;
+            up = 50;
+        } else {
+            col = shade(base, 1.06);
+            rel = 1.5;
+            up = 10;
+        }
+    } else if d > 0.8 {
+        // Graskante oben (fängt Licht)
+        col = shade(base, 1.2 + n2 * 0.04);
+        rel = 3.5;
+        up = 60;
+    } else if d < 0.12 {
+        // Fuge am Fuß der Wand
+        col = shade(pickf(&bp.cliff, 0.2), 0.8);
+        rel = -1.0;
+        up = 220;
+    } else {
+        // Fels wie an der Südwand, je nach Seite heller oder dunkler
+        let lit = if dir.0 < 0.0 { 0.12 } else { -0.14 };
+        let sc = 1.0 / 13.0;
+        let (wx, wy) = (px as f32 * sc * 1.6, py as f32 * sc);
+        let (d1, d2, id) = worley(wx, wy, 0, 43);
+        let seam = d2 - d1 < 0.08;
+        let v = if seam { 0.14 } else { 0.5 + lit + (id % 5) as f32 * 0.03 - (0.8 - d) * 0.12 + n2 * 0.04 };
+        col = pickf(&bp.cliff, v.clamp(0.0, 1.0));
+        rel = if seam { -1.0 } else { 2.5 };
+        up = 200;
     }
     c.put(x, y, col, rel);
     let i = c.idx(x, y);
-    c.up[i] = (20.0 + e * 70.0) as u8;
+    c.up[i] = up;
     c.ev[i] = 0.0;
     true
 }
-
 
 /// Ein Pixel einer Klippenwand: Säulenbasalt mit hellen Köpfen, Absätzen, Fugen, Moos
 /// und überhängender Graslippe.
@@ -1554,8 +1569,9 @@ fn face_pixel<M: TerrainMap>(m: &M, mats: &mut Materials, en: &EdgeNoise, c: &mu
     let bot_ev = 0.0;
     let ev_at = |f: i32| top_ev + (bot_ev - top_ev) * (f as f32 / hgt as f32);
     if m.stairs(tx, ty) {
-        if b == Biome::Hub || m.town(tx, ty) {
-            // Wangen nur an den Rändern des Treppenlaufs (nicht an jeder Kachelgrenze)
+        // überall klare Steintreppen mit Wangen an den Rändern des Laufs (wie in A Link to the
+        // Past: jeder Aufgang ist sofort zu erkennen)
+        if b == Biome::Hub || m.town(tx, ty) || !deep {
             let lx = px.rem_euclid(T);
             let edge = if !m.stairs(tx - 1, ty) && lx < 4 { lx } else if !m.stairs(tx + 1, ty) && lx > T - 5 { T - 1 - lx } else { -1 };
             stairs_pixel(c, x, y, px, fy, hgt, &bp, ev_at(fy), edge);
@@ -1793,7 +1809,7 @@ fn hill_pixel(mats: &mut Materials, en: &EdgeNoise, c: &mut Canvas, x: i32, y: i
     // je Spalte schwankend: Tiefe der Lippe und wie weit der Bewuchs hinabreicht
     let lip = 3.0 + (en.at(px * 2, 501) * 0.5 + 0.5) * 5.0 + ((px as f32 * 0.45).sin() * 1.2);
     let green = matches!(surf, Mat::Grass | Mat::Meadow | Mat::Moss | Mat::Snow | Mat::Sand | Mat::Ash | Mat::Dirt);
-    let shoulder = lip + 8.0 + (en.at(px * 3 + 7, 733) * 0.5 + 0.5) * 22.0;
+    let shoulder = lip + 5.0 + (en.at(px * 3 + 7, 733) * 0.5 + 0.5) * 12.0;
     let fyf = fy as f32;
     let (col, mut rel, up);
     if fy == 0 {

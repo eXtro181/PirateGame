@@ -45,6 +45,9 @@ pub struct Ui {
     pub mute_banners: bool,
     pub toast_t: f32,
     pub toast_text: String,
+    /// Gedanke/Vorahnung: leise Zeile in der Bildmitte, die auf- und wieder abblendet
+    pub whisper_t: f32,
+    pub whisper_text: String,
     pub dialog: Option<Dialog>,
     pub list: Option<List>,
     pub map_open: bool,
@@ -64,6 +67,9 @@ pub struct Ui {
     pub map_pan: (f32, f32),
     map_rect: [f32; 4],
 }
+
+/// Dauer eines Gedankens (`Ui::whisper`) in Sekunden
+const WHISPER: f32 = 4.4;
 
 /// Seekarte: zwei Kacheln je Bildpunkt
 pub const MAP_W: i32 = MW / 2;
@@ -89,6 +95,10 @@ impl Ui {
         self.toast_text = s.into();
         self.toast_t = 2.6;
     }
+    pub fn whisper(&mut self, s: &str) {
+        self.whisper_text = s.into();
+        self.whisper_t = WHISPER;
+    }
     pub fn open_dialog(&mut self, name: &str, pages: Vec<String>, choices: Vec<Choice>) {
         self.dialog = Some(Dialog { name: name.into(), pages, choices, page: 0, chars: 0.0, sel: 0 });
     }
@@ -105,6 +115,7 @@ impl Ui {
         }
         self.banners.retain(|b| b.t < b.dur);
         self.toast_t -= dt;
+        self.whisper_t -= dt;
         let (mx, my, click) = (inp.mouse.x, inp.mouse.y, inp.click);
         if self.legend_open {
             if inp.pressed(Act::Legend) || inp.pressed(Act::Menu) || inp.pressed(Act::Interact) || inp.pressed(Act::Confirm) || click {
@@ -279,6 +290,14 @@ impl Ui {
                     }
                 }
             }
+        }
+        if self.whisper_t > 0.0 {
+            // blendet langsam auf, steht, verklingt; fahle Schrift auf einem Hauch von Schatten
+            let a = ((WHISPER - self.whisper_t) / 0.8).min(self.whisper_t / 1.3).clamp(0.0, 1.0);
+            let y = h * 0.64;
+            let tw = text::width(art, &self.whisper_text) + 28.0;
+            Self::rect(f, w / 2.0 - tw / 2.0, y - 5.0, tw, 15.0, [4, 6, 10, (120.0 * a) as u8]);
+            text::tc(f, art, &self.whisper_text, w / 2.0, y, text::a([200, 212, 216, 255], a));
         }
         if self.toast_t > 0.0 {
             let a = (self.toast_t * 2.0).min(1.0);

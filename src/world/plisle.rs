@@ -243,17 +243,18 @@ impl World {
         }
     }
 
-    /// Prolog (Wrackzwinger): natürlich gegliederter Boden statt Zufallsflecken – Fels an Mauern,
-    /// Klippe und auf den ausgetretenen Pfaden, Schlamm am Bach und um die Wracks, dazwischen totes
-    /// Moos, im geschützten Inneren dunkles Gras. Benachbarte Ecken unterscheiden sich höchstens um
-    /// eine Stufe (Schlamm – Fels – Moos – Gras), sonst gäbe es keine passende Wang-Kachel.
+    /// Prolog: natürlich gegliederter Boden nach den drei Bereichen – im Dorf Pflaster auf Platz
+    /// und Wegen, sonst Gras mit Moosflecken; im Galgenweg totes Moos und Fels, nach Norden noch
+    /// etwas Gras; im Spinnenschlund nackter Fels und Schlamm. Am Bach und um die Wracks Schlamm.
+    /// Benachbarte Ecken unterscheiden sich höchstens um eine Stufe (Schlamm – Fels – Moos – Gras),
+    /// sonst gäbe es keine passende Wang-Kachel.
     pub(super) fn pl_prolog_ground(&mut self) -> PrologNature {
         let nat = self.prolog_nature();
         let (x0, y0, x1, y1) = PROLOG;
         let d = Zone::Prolog.def();
         let (cx, cy) = (d.cx, d.cy);
-        let (wx0, wx1, wy0) = (cx - 50, cx + 50, cy - 40);
-        let st = ((self.prolog_start.0 / TS as f32) as i32, (self.prolog_start.1 / TS as f32) as i32);
+        let (wx0, wx1, wy0) = (cx - prolog::WALL_X, cx + prolog::WALL_X, cy + prolog::WALL_Y);
+        let sq = prolog::SQUARE;
         let wr = (cx + PROLOG_WRECKS.0, cy + PROLOG_WRECKS.1);
         let land = |w: &World, tx: i32, ty: i32| -> bool {
             inb(tx, ty) && w.zone[idx(tx, ty)] == Some(Zone::Prolog) && w.level[idx(tx, ty)] == 4 && !matches!(w.ground[idx(tx, ty)], Mat::Water | Mat::Abyss | Mat::Plank)
@@ -272,17 +273,38 @@ impl World {
                 let n1 = self.nz.fbm(vx as f32 * 0.06 + 11.0, vy as f32 * 0.06 - 4.0, 3);
                 let n2 = self.nz.fbm(vx as f32 * 0.13 - 7.0, vy as f32 * 0.13 + 2.0, 2);
                 let wreck = ((vx - wr.0) as f32).hypot((vy - wr.1) as f32 * 1.3);
-                let t = if (vx - st.0).abs() <= 4 && (vy - st.1).abs() <= 3 {
+                let ry = vy - cy;
+                let square = vx >= cx + sq.0 && vx <= cx + sq.2 + 1 && vy >= cy + sq.1 && vy <= cy + sq.3 + 1;
+                let t = if square {
                     ROCK
                 } else if creek <= 1 || (creek <= 3 && n2 < -0.22) || (wreck < 7.0 && n2 < 0.12) {
                     MUD
-                } else if edge <= 2 || wall <= 2 || trail <= 1 || n1 > 0.42 || nat.arena(vx, vy) {
-                    ROCK
+                } else if ry < prolog::VIL_Y {
+                    // Dorf: Pflaster auf den Wegen und am Mauerfuß, Moos in Flecken, sonst Gras
+                    if trail <= 1 || wall <= 1 {
+                        ROCK
+                    } else if wall <= 3 || trail == 2 || n1 > 0.4 {
+                        MOSS
+                    } else {
+                        PGRASS
+                    }
+                } else if ry < prolog::CAVE_Y {
+                    // Galgenweg: totes Moos, Fels auf dem Weg und in Flecken; das Gras verliert sich
+                    let g = 0.25 - n1 * 0.8 + n2 * 0.3 - (ry - prolog::VIL_Y) as f32 * 0.045;
+                    if trail <= 1 || edge <= 2 || wall <= 2 || n1 > 0.34 {
+                        ROCK
+                    } else if g > 0.35 {
+                        PGRASS
+                    } else {
+                        MOSS
+                    }
+                } else if n2 < -0.12 && trail > 1 {
+                    // Spinnenschlund: nackter Fels, Schlammpfützen, selten ein Moospolster
+                    MUD
+                } else if n1 < -0.45 && trail > 2 && edge > 3 && !nat.arena(vx, vy) {
+                    MOSS
                 } else {
-                    // Gras im geschützten Inneren und in Bachnähe, totes Moos zum Rand und an den
-                    // Pfaden hin
-                    let g = -n1 * 0.9 + 0.022 * edge.min(16) as f32 + if (3..=8).contains(&creek) { 0.12 } else { 0.0 } - if trail <= 3 { 0.15 } else { 0.0 } + n2 * 0.25;
-                    if g > 0.3 { PGRASS } else { MOSS }
+                    ROCK
                 };
                 vtx[((vy - y0) * vw + vx - x0) as usize] = t;
             }
@@ -341,27 +363,19 @@ impl World {
         nat
     }
 
-    /// Abstandsfelder für die Gestaltung: Rand der Platte, Bach, Pfade
+    /// Abstandsfelder für die Gestaltung: Rand der Platte, Bach, Wege
     fn prolog_nature(&self) -> PrologNature {
         let (x0, y0, x1, y1) = PROLOG;
         let (tw, th) = (x1 - x0 + 1, y1 - y0 + 1);
         let d = Zone::Prolog.def();
-        let (cx, cy) = (d.cx, d.cy);
+        let cy = d.cy as f32;
         let plate = |tx: i32, ty: i32| inb(tx, ty) && self.zone[idx(tx, ty)] == Some(Zone::Prolog) && self.level[idx(tx, ty)] == 4;
         let creek = |tx: i32, ty: i32| plate(tx, ty) && self.ground[idx(tx, ty)] == Mat::Water;
         let edge = bfs(x0, y0, tw, th, |tx, ty| !plate(tx, ty) || self.ground[idx(tx, ty)] == Mat::Abyss);
         let creek = bfs(x0, y0, tw, th, creek);
-        // ausgetretene Pfade: vom Erwachen zum Fall, ein Abzweig über die Brücke nach Osten, einer zum
-        // Wrackfriedhof im Westen (leicht geschlängelt)
-        let st = (self.prolog_start.0 / TS as f32, self.prolog_start.1 / TS as f32);
         let cf = (self.prolog_coffin.0 / TS as f32, self.prolog_coffin.1 / TS as f32);
-        let (fx, fy) = (cx as f32, cy as f32);
-        let wr = (fx + PROLOG_WRECKS.0 as f32 + 4.0, fy + PROLOG_WRECKS.1 as f32 - 2.0);
-        let lines: [(&[(f32, f32)], f32); 3] = [
-            (&[st, (fx - 11.0, fy - 24.0), (fx - 7.0, fy - 8.0), (fx - 1.0, fy + 6.0), (fx + 3.0, fy + 15.0), (cf.0 - 1.0, cf.1 - 4.0)], 1.3),
-            (&[(fx - 9.0, fy - 17.0), (fx + 2.0, fy - 15.0), (fx + 9.0, fy - 14.5), (fx + 18.0, fy - 13.0), (fx + 28.0, fy - 6.0)], 1.0),
-            (&[(fx - 7.0, fy - 5.0), (fx - 17.0, fy - 2.0), wr], 1.0),
-        ];
+        // Wege (aus `prolog_roads`): im Dorf gerade Gassen, draußen leicht geschlängelt
+        let lines = self.prolog_roads();
         let mut mask = vec![false; (tw * th) as usize];
         for (k, (pts, rad)) in lines.iter().enumerate() {
             let mut s = 0.0f32;
@@ -372,8 +386,8 @@ impl World {
                 for j in 0..=n {
                     let u = j as f32 / n as f32;
                     let (mut x, mut y) = (ax + (bx - ax) * u, ay + (by - ay) * u);
-                    // seitlich schlängeln
-                    let wob = (s * 0.31 + k as f32 * 1.7).sin() * 1.0 + (s * 0.83 + k as f32).sin() * 0.5;
+                    let calm = if y < cy + prolog::VIL_Y as f32 { 0.3 } else { 1.0 };
+                    let wob = ((s * 0.31 + k as f32 * 1.7).sin() * 1.0 + (s * 0.83 + k as f32).sin() * 0.5) * calm;
                     x += -(by - ay) / len * wob;
                     y += (bx - ax) / len * wob;
                     s += len / n as f32;
@@ -393,26 +407,66 @@ impl World {
         PrologNature { x0, y0, tw, th, edge, creek, trail, coffin: ((cf.0) as i32, (cf.1) as i32) }
     }
 
-    /// Prolog: natürliche Vegetation statt Zufallsdeko – Baumgruppen an geschützten Stellen mit
-    /// Unterholz (Farne, Gras, Pilze, ein umgestürzter Stamm), Schilf am Bach, Grasbüschel auf den
-    /// Wiesen, Felsbrocken an Klippe und Mauerfuß; die Pfade, der Erwachensplatz und das Revier der
-    /// Spinne bleiben frei.
+    /// Prolog: natürlicher Bewuchs je Bereich – im Dorf Gras, Farn und ein paar Laubbäume an den
+    /// Mauern, Schilf am Bach; im Galgenweg Gruppen toter, verdorrter und bleicher Bäume mit
+    /// verwelktem Gras, Dornen und dunklem Farn; im Spinnenschlund Geröll an Mauern und Klippe.
+    /// Wege, Platz, Häuser und das Revier der Spinne bleiben frei.
     pub(super) fn pl_prolog_props(&mut self, nat: &PrologNature) {
         let Some(p) = self.plp.as_ref() else { return };
         let (x0, y0, x1, y1) = (p.x0, p.y0, p.x0 + p.w - 2, p.y0 + p.h - 2);
         let d = Zone::Prolog.def();
         let (cx, cy) = (d.cx, d.cy);
-        let (wx0, wx1, wy0) = (cx - 50, cx + 50, cy - 40);
-        let st = ((self.prolog_start.0 / TS as f32) as i32, (self.prolog_start.1 / TS as f32) as i32);
+        let (wx0, wx1, wy0) = (cx - prolog::WALL_X, cx + prolog::WALL_X, cy + prolog::WALL_Y);
+        let sq = prolog::SQUARE;
         let wr = (cx + PROLOG_WRECKS.0, cy + PROLOG_WRECKS.1);
+        let (vil, cave) = (cy + prolog::VIL_Y, cy + prolog::CAVE_Y);
         let mut rng = Rng::new(9_977_031);
+        // schon Gesetztes (Häuser als Rechteck, alles andere als Kreis), Figuren, Fundstücke, Tür
+        let mut placed: Vec<(f32, f32, f32)> = vec![];
+        let mut rects: Vec<(f32, f32, f32, f32)> = vec![];
+        for pr in &self.props {
+            if pr.hidden || !self.in_prolog(pr.x, pr.y) {
+                continue;
+            }
+            match self.info(&pr.kind) {
+                Some(inf) if inf.big.is_some() => {
+                    let (w, h) = inf.big.unwrap_or((0.0, 0.0));
+                    rects.push((pr.x - w / 2.0 - 10.0, pr.y - h - 4.0, pr.x + w / 2.0 + 10.0, pr.y + 22.0));
+                }
+                Some(inf) => placed.push((pr.x, pr.y, inf.circle.max(inf.boxc.0).max(inf.boxc.1).max(10.0) + 6.0)),
+                None => placed.push((pr.x, pr.y, 16.0)),
+            }
+        }
+        for n in &self.npcs {
+            if self.in_prolog(n.x, n.y) {
+                placed.push((n.x, n.y, 28.0));
+            }
+        }
+        for w in &self.walkers {
+            for &(x, y) in &w.pts {
+                if self.in_prolog(x, y) {
+                    placed.push((x, y, 24.0));
+                }
+            }
+        }
+        for it in &self.items {
+            if self.in_prolog(it.x, it.y) {
+                placed.push((it.x, it.y, 24.0));
+            }
+        }
+        for dr in &self.doors {
+            placed.push((dr.out.0, dr.out.1, 40.0));
+        }
         // Terrain der Kachel (niedrigste Ecke) bzw. None, wenn dort nichts wachsen soll
         let terr = |w: &World, tx: i32, ty: i32| -> Option<u8> {
             let c = w.plp.as_ref()?.corners(tx, ty)?;
             if w.level[idx(tx, ty)] != 4 || matches!(w.ground[idx(tx, ty)], Mat::Water | Mat::Plank | Mat::Abyss) {
                 return None;
             }
-            if ty <= wy0 + 1 || tx <= wx0 + 1 || tx >= wx1 - 1 || ((tx - st.0).abs() <= 6 && (ty - st.1).abs() <= 5) || nat.arena(tx, ty) {
+            if ty <= wy0 + 1 || tx <= wx0 + 1 || tx >= wx1 - 1 || nat.arena(tx, ty) {
+                return None;
+            }
+            if tx >= cx + sq.0 - 1 && tx <= cx + sq.2 + 1 && ty >= cy + sq.1 - 1 && ty <= cy + sq.3 + 1 {
                 return None;
             }
             if ((tx - wr.0) as f32).hypot((ty - wr.1) as f32) < 8.0 {
@@ -420,72 +474,90 @@ impl World {
             }
             c.iter().copied().min()
         };
-        let mut placed: Vec<(f32, f32, f32)> = vec![];
-        let room = |placed: &Vec<(f32, f32, f32)>, x: f32, y: f32, r: f32| placed.iter().all(|&(px, py, pr)| (px - x).hypot((py - y) * 1.4) >= pr + r);
+        let room = |placed: &Vec<(f32, f32, f32)>, rects: &Vec<(f32, f32, f32, f32)>, x: f32, y: f32, r: f32| {
+            placed.iter().all(|&(px, py, pr)| (px - x).hypot((py - y) * 1.4) >= pr + r) && rects.iter().all(|&(a, b, c, d)| x < a - r * 0.5 || x > c + r * 0.5 || y < b || y > d)
+        };
         let put = |w: &mut World, placed: &mut Vec<(f32, f32, f32)>, kind: &str, x: f32, y: f32, r: f32, flip: bool| {
             w.prop_x(kind, x, y, |p| p.flip = flip);
             placed.push((x, y, r));
         };
         let at = |tx: f32, ty: f32| (tx * TS as f32, ty * TS as f32);
-        // ---- Baumgruppen: geschützt an den Mauern und in Bachnähe, nie auf Pfaden
+        // ---- Baumgruppen: im Dorf wenige an den Mauern, im Galgenweg tote Bäume; nie auf Wegen
         let mut cand: Vec<(f32, i32, i32)> = vec![];
         for ty in y0..=y1 {
             for tx in x0..=x1 {
+                if ty >= cave {
+                    continue;
+                }
                 let Some(t) = terr(self, tx, ty) else { continue };
                 if t < MOSS || nat.edge(tx, ty) < 4 || nat.trail(tx, ty) < 5 {
                     continue;
                 }
                 let wall = (ty - wy0).min(tx - wx0).min(wx1 - tx);
                 let mut score = self.nz.fbm(tx as f32 * 0.09 + 3.0, ty as f32 * 0.09 + 8.0, 2) + rng.f() * 0.25;
-                if (4..=12).contains(&wall) {
-                    score += 0.35;
+                if ty < vil && !(2..=7).contains(&wall) {
+                    score -= 0.6;
                 }
                 if (3..=9).contains(&nat.creek(tx, ty)) {
-                    score += 0.25;
-                }
-                if t == PGRASS {
-                    score += 0.15;
+                    score += 0.2;
                 }
                 cand.push((score, tx, ty));
             }
         }
         cand.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
         let mut groves: Vec<(i32, i32)> = vec![];
+        let (mut n_vil, mut n_dark) = (0, 0);
         for &(_, tx, ty) in &cand {
-            if groves.len() >= 10 {
-                break;
+            let v = ty < vil;
+            if (v && n_vil >= 3) || (!v && n_dark >= 6) {
+                continue;
             }
-            if groves.iter().all(|&(gx, gy)| ((gx - tx) as f32).hypot((gy - ty) as f32) >= 13.0) {
+            if groves.iter().all(|&(gx, gy)| ((gx - tx) as f32).hypot((gy - ty) as f32) >= 11.0) {
                 groves.push((tx, ty));
+                if v {
+                    n_vil += 1;
+                } else {
+                    n_dark += 1;
+                }
             }
         }
         for &(gx, gy) in &groves {
-            let n_trees = rng.int(3, 6);
+            let v = gy < vil;
+            let n_trees = if v { rng.int(2, 3) } else { rng.int(2, 4) };
             let mut n = 0;
             for _ in 0..n_trees * 6 {
                 if n >= n_trees {
                     break;
                 }
-                let (a, r) = (rng.f() * std::f32::consts::TAU, rng.f().sqrt() * 3.6);
+                let (a, r) = (rng.f() * std::f32::consts::TAU, rng.f().sqrt() * 3.4);
                 let (fx, fy) = (gx as f32 + 0.5 + a.cos() * r, gy as f32 + 0.5 + a.sin() * r * 0.8);
                 let (tx, ty) = (fx.floor() as i32, fy.floor() as i32);
                 if terr(self, tx, ty).is_none() || nat.trail(tx, ty) < 3 || !self.free_t(tx, ty, 0) {
                     continue;
                 }
                 let (x, y) = at(fx, fy);
-                if !room(&placed, x, y, 34.0) {
+                if !room(&placed, &rects, x, y, 34.0) {
                     continue;
                 }
                 let roll = rng.f();
-                let kind = if roll < 0.42 { "plTree" } else if roll < 0.66 { "plCypress" } else if roll < 0.84 { "plLeafTree" } else { "plDeadTree" };
+                let kind = if v {
+                    if roll < 0.4 { "plOak" } else if roll < 0.7 { "plTree" } else if roll < 0.88 { "plLeafTree" } else { "plCypress" }
+                } else if roll < 0.34 {
+                    "plDeadTree"
+                } else if roll < 0.56 {
+                    "plOakBlight"
+                } else if roll < 0.8 {
+                    "plTreeDark"
+                } else {
+                    "plGhostTree"
+                };
                 let flip = rng.chance(0.5);
                 put(self, &mut placed, kind, x, y, 34.0, flip);
                 n += 1;
             }
-            // Unterholz: innen Farne und Pilze im Schatten, außen Gras und Farn, selten ein Stamm
-            let mut log = false;
-            for _ in 0..rng.int(8, 14) {
-                let (a, r) = (rng.f() * std::f32::consts::TAU, 1.4 + rng.f() * 4.4);
+            // Unterholz: im Dorf Farn und Gras, im Galgenweg verwelktes Gras, Dornen, dunkler Farn
+            for _ in 0..rng.int(6, 11) {
+                let (a, r) = (rng.f() * std::f32::consts::TAU, 1.4 + rng.f() * 4.0);
                 let (fx, fy) = (gx as f32 + 0.5 + a.cos() * r, gy as f32 + 0.5 + a.sin() * r * 0.8);
                 let (tx, ty) = (fx.floor() as i32, fy.floor() as i32);
                 if terr(self, tx, ty).is_none() || nat.trail(tx, ty) < 2 {
@@ -493,73 +565,85 @@ impl World {
                 }
                 let (x, y) = at(fx, fy);
                 let roll = rng.f();
-                let (kind, rad) = if r < 3.0 {
-                    if roll < 0.45 { ("plFern", 14.0) } else if roll < 0.68 { ("plMushrooms", 10.0) } else { ("plGrass", 11.0) }
-                } else if !log && roll < 0.1 && self.free_t(tx, ty, 1) {
-                    log = true;
-                    ("plLog", 36.0)
-                } else if roll < 0.55 {
-                    ("plGrass", 11.0)
+                let (kind, rad) = if v {
+                    if roll < 0.45 { ("plFern", 14.0) } else if roll < 0.6 { ("plMushrooms", 10.0) } else { ("plGrass", 11.0) }
+                } else if roll < 0.4 {
+                    ("plGrassDead", 11.0)
+                } else if roll < 0.62 {
+                    ("plThorns", 14.0)
+                } else if roll < 0.85 {
+                    ("plFernDark", 14.0)
                 } else {
-                    ("plFern", 14.0)
+                    ("plMushrooms", 10.0)
                 };
-                if room(&placed, x, y, rad) {
+                if room(&placed, &rects, x, y, rad) {
                     let flip = rng.chance(0.5);
                     put(self, &mut placed, kind, x, y, rad, flip);
                 }
             }
         }
-        // ---- Schilf an beiden Ufern des Bachs
+        // ---- Schilf an beiden Ufern des Bachs (im Spinnenschlund nur vereinzelt)
         for ty in y0..=y1 {
             for tx in x0..=x1 {
                 if nat.creek(tx, ty) != 1 || terr(self, tx, ty).is_none() || nat.trail(tx, ty) < 2 {
                     continue;
                 }
                 let roll = rng.f();
-                if roll > 0.45 {
+                if roll > if ty >= cave { 0.15 } else { 0.42 } {
                     continue;
                 }
                 let (x, y) = at(tx as f32 + 0.3 + rng.f() * 0.4, ty as f32 + 0.3 + rng.f() * 0.4);
-                let (kind, rad) = if roll < 0.36 { ("plReeds", 12.0) } else { ("plGrass", 10.0) };
-                if room(&placed, x, y, rad) {
+                let (kind, rad) = if roll < 0.32 { ("plReeds", 12.0) } else if ty < vil { ("plGrass", 10.0) } else { ("plGrassDead", 10.0) };
+                if room(&placed, &rects, x, y, rad) {
                     let flip = rng.chance(0.5);
                     put(self, &mut placed, kind, x, y, rad, flip);
                 }
             }
         }
-        // ---- Grasbüschel in Flecken auf den Wiesen
+        // ---- Grasbüschel in Flecken: im Dorf grün, im Galgenweg verwelkt, dazu fahle Blumen
         for ty in y0..=y1 {
             for tx in x0..=x1 {
+                if ty >= cave {
+                    continue;
+                }
                 let Some(t) = terr(self, tx, ty) else { continue };
                 if t < MOSS || nat.trail(tx, ty) < 2 {
                     continue;
                 }
-                let patch = self.nz.fbm(tx as f32 * 0.17 - 2.0, ty as f32 * 0.17 + 5.0, 2) + if t == PGRASS { 0.15 } else { 0.0 };
-                if patch < 0.22 || rng.f() > 0.42 {
+                let patch = self.nz.fbm(tx as f32 * 0.17 - 2.0, ty as f32 * 0.17 + 5.0, 2) + if t == PGRASS { 0.12 } else { 0.0 };
+                if patch < 0.24 || rng.f() > if ty < vil { 0.34 } else { 0.4 } {
                     continue;
                 }
                 let (x, y) = at(tx as f32 + rng.f(), ty as f32 + rng.f());
-                let (kind, rad) = if patch > 0.5 && rng.chance(0.15) { ("plFern", 14.0) } else { ("plGrass", 11.0) };
-                if room(&placed, x, y, rad) {
+                let (kind, rad) = if ty < vil {
+                    if patch > 0.5 && rng.chance(0.15) { ("plFern", 14.0) } else { ("plGrass", 11.0) }
+                } else if patch > 0.48 && rng.chance(0.18) {
+                    ("plFlowersGhost", 11.0)
+                } else {
+                    ("plGrassDead", 11.0)
+                };
+                if room(&placed, &rects, x, y, rad) {
                     let flip = rng.chance(0.5);
                     put(self, &mut placed, kind, x, y, rad, flip);
                 }
             }
         }
-        // ---- Felsbrocken an der Klippe und am Fuß der Mauern, in kleinen Gruppen
+        // ---- Felsbrocken an der Klippe und am Fuß der Mauern (im Spinnenschlund dichter)
         let mut rocks: Vec<(i32, i32)> = vec![];
         for ty in y0..=y1 {
             for tx in x0..=x1 {
                 let Some(t) = terr(self, tx, ty) else { continue };
                 let wall = (ty - wy0).min(tx - wx0).min(wx1 - tx);
-                if t != ROCK || !(nat.edge(tx, ty) <= 4 || wall <= 4) || nat.trail(tx, ty) < 3 || rng.f() > 0.06 {
+                let chance = if ty >= cave { 0.12 } else if ty >= vil { 0.06 } else { 0.03 };
+                if t != ROCK || !(nat.edge(tx, ty) <= 4 || wall <= 4) || nat.trail(tx, ty) < 3 || rng.f() > chance {
                     continue;
                 }
-                if rocks.iter().any(|&(rx, ry)| ((rx - tx) as f32).hypot((ry - ty) as f32) < 9.0) || !self.free_t(tx, ty, 1) {
+                let gap = if ty >= cave { 6.0 } else { 9.0 };
+                if rocks.iter().any(|&(rx, ry)| ((rx - tx) as f32).hypot((ry - ty) as f32) < gap) || !self.free_t(tx, ty, 1) {
                     continue;
                 }
                 let (x, y) = at(tx as f32 + 0.5, ty as f32 + 0.5);
-                if !room(&placed, x, y, 28.0) {
+                if !room(&placed, &rects, x, y, 28.0) {
                     continue;
                 }
                 rocks.push((tx, ty));
@@ -569,9 +653,10 @@ impl World {
                     let (ox, oy) = (rng.range(-1.6, 1.6), rng.range(-1.0, 1.2));
                     let (x2, y2) = (x + ox * TS as f32, y + oy * TS as f32);
                     let (t2x, t2y) = ((x2 / TS as f32) as i32, (y2 / TS as f32) as i32);
-                    if terr(self, t2x, t2y).is_some() && room(&placed, x2, y2, 12.0) {
+                    if terr(self, t2x, t2y).is_some() && room(&placed, &rects, x2, y2, 12.0) {
                         let flip = rng.chance(0.5);
-                        put(self, &mut placed, if rng.chance(0.5) { "plRocks" } else { "plGrass" }, x2, y2, 12.0, flip);
+                        let small = if t2y < vil { "plGrass" } else if t2y < cave { "plGrassDead" } else { "plRocks" };
+                        put(self, &mut placed, if rng.chance(0.5) { "plRocks" } else { small }, x2, y2, 12.0, flip);
                     }
                 }
             }
@@ -583,7 +668,7 @@ impl World {
             let (tx, ty) = (fcx + ox, fcy + oy);
             if inb(tx, ty) && self.level[idx(tx, ty)] == 4 && !matches!(self.ground[idx(tx, ty)], Mat::Water | Mat::Abyss) {
                 let (x, y) = at(tx as f32 + 0.5, ty as f32 + 0.5);
-                if room(&placed, x, y, 20.0) {
+                if room(&placed, &rects, x, y, 20.0) {
                     put(self, &mut placed, kind, x, y, 20.0, ox % 2 == 0);
                 }
             }

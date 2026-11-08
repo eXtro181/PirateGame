@@ -40,6 +40,8 @@ pub struct WorldView {
     /// Bild je Deko-Art (einmal nachgeschlagen statt Name je Bild)
     deco_spr: HashMap<&'static str, Option<sw_art::atlas::Spr>>,
     pub time: f32,
+    /// sichtbare Chunks, die im letzten Bild noch fehlten (Türen halten so lange das Schwarz)
+    pub missing: usize,
 }
 
 pub const BK: f32 = 256.0;
@@ -59,6 +61,7 @@ impl WorldView {
             deco_gen: HashMap::new(),
             deco_spr: HashMap::new(),
             time: 0.0,
+            missing: 0,
         };
         v.rebuild_buckets(world);
         v.build_mask(world, frame);
@@ -261,6 +264,7 @@ impl WorldView {
             out.push((s, (cx * CHUNK) as f32, (cy * CHUNK) as f32));
             baked += 1;
         }
+        self.missing = need.len() - baked;
         // 2. Ring um das Bild: behalten und, wenn Zeit übrig ist, einen fehlenden vorausbacken
         if baked < need.len() {
             return out;

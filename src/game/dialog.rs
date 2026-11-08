@@ -109,6 +109,76 @@ pub fn dialog_for(g: &mut Game, ni: usize) -> Script {
             },
             choices: vec![bye],
         },
+        // Stillwasser: das helle Dorf der Ertrunkenen im Prolog
+        "prologKeeper" => Script {
+            pages: if first {
+                pages(&[
+                    "Na, endlich wach? Drei Nächte hast du an meinem Tresen geschlafen. Keine Sorge – hier wacht jeder einmal am Tresen auf.",
+                    "Willkommen in Stillwasser, Ertrunkener. Hier ist immer Morgen, und das Bier schmeckt nach Salz. Beschwert hat sich noch keiner.",
+                    "Einen Rat gebe ich dir umsonst: Geh nicht nach Süden. Hinter dem Dorf wird es dunkel. Da stehen die Galgen, und dahinter liegt das Gebein.",
+                    "Und ganz unten am großen Fall … da raschelt es. Manche gehen trotzdem hin. Sie sagen, dort stehe ein Sarg, und wer darin einschläft, wacht dort auf, wo das Meer noch Wellen schlägt.",
+                ])
+            } else {
+                pages(&["Noch einen? Geht aufs Haus. Hier geht alles aufs Haus.", "Du willst also doch nach Süden. Dann geh leise. Sie hört jeden Schritt."])
+            },
+            choices: vec![bye],
+        },
+        "prologGuest" => Script {
+            pages: if first {
+                pages(&[
+                    "Prost, Neuer! Weißt du noch, wie du ertrunken bist? Ich nicht. Ist auch besser so.",
+                    "Die See hat uns alle gefressen und hier wieder ausgespuckt. Seitdem trinken wir. Durst haben wir keinen – aber was soll man sonst tun?",
+                ])
+            } else {
+                pages(&["Prost! … Ach, mein Krug ist leer. Er war schon immer leer."])
+            },
+            choices: vec![bye],
+        },
+        "prologGuest2" => Script {
+            pages: if first {
+                pages(&[
+                    "Psst. Hörst du das? Nein? Dann ist sie gerade nicht hungrig.",
+                    "Die Spinne, meine ich. Unten am Fall. Früher war ich Bootsmann. Heute zähle ich, wer nach Süden geht – und wer zurückkommt.",
+                ])
+            } else {
+                pages(&["Zurückgekommen ist noch keiner. Aber ich zähle trotzdem weiter."])
+            },
+            choices: vec![bye],
+        },
+        "prologWife" => Script {
+            pages: if first {
+                pages(&[
+                    "Ist das nicht ein herrlicher Tag? Hier ist immer ein herrlicher Tag. Ich weiß gar nicht mehr, wann es zuletzt geregnet hat.",
+                    "Mein Mann ist hinunter zum Fall gegangen, die Netze holen. Das ist schon eine Weile her. Aber er kommt bestimmt bald wieder.",
+                ])
+            } else {
+                pages(&["Wenn du unten meinen Mann siehst – er trägt eine rote Mütze. Sag ihm, die Suppe wird kalt."])
+            },
+            choices: vec![bye],
+        },
+        "prologFisher" => Script {
+            pages: if first {
+                pages(&[
+                    "Die Netze? Sind immer leer. Aber flicken muss man sie trotzdem, sonst weiß man nicht, wozu man noch da ist.",
+                    "Nachts – wenn es hier je Nacht würde – höre ich es da unten rascheln. Viele Beine. Sehr viele Beine.",
+                ])
+            } else {
+                pages(&["Leer. Wie immer. Geh lieber, bevor ich dir vom Rascheln erzähle."])
+            },
+            choices: vec![bye],
+        },
+        "prologWarn" => Script {
+            pages: if first {
+                pages(&[
+                    "Halt, Ertrunkener. Hier endet Stillwasser. Weiter unten hängen sie an den Galgen, und hinter den Galgen fängt das Gebein an.",
+                    "Dann kommen die Netze. Und wer in die Netze gerät … nun ja. Du hast gesehen, wie leer die Kneipe ist.",
+                    "Wenn du trotzdem gehst: Bleib vom Rand der Klippe weg. Dort unten wartet sie.",
+                ])
+            } else {
+                pages(&["Ich würde nicht gehen. Aber ich bin ja auch schon tot."])
+            },
+            choices: vec![bye],
+        },
         "ghostCaptain" => Script {
             pages: if first {
                 pages(&[

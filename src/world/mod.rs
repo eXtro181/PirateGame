@@ -10,6 +10,7 @@
 
 mod nature;
 mod plisle;
+mod prolog;
 pub mod view;
 mod wild;
 
@@ -289,6 +290,8 @@ pub struct Door {
     pub exit: (f32, f32),
     pub name: &'static str,
     pub room: (f32, f32, f32, f32),
+    /// Kneipe statt Laden (Prolog): anderer Hinweis an der Tür
+    pub tavern: bool,
 }
 #[derive(Clone, Debug)]
 pub struct Dock {
@@ -487,8 +490,14 @@ pub struct World {
     pub low_areas: Vec<(i32, i32, i32, i32)>,
     /// Sarg, aus dem der Ertrunkene beim allerersten Start steigt
     pub wake_coffin: (f32, f32),
-    /// Prolog: wo man erwacht, Fuß der Klippe (px)
+    /// Prolog: wo man erwacht (am Tresen der Kneipe), Fuß der Klippe (px)
     pub prolog_start: (f32, f32),
+    /// Prolog: vor der Kneipentür (px), Anfang der Wege
+    pub prolog_door: (f32, f32),
+    /// Prolog: Dämmerung von hell (Dorf) nach dunkel (Spinnenschlund) zwischen diesen Zeilen (px)
+    pub prolog_dusk: (f32, f32),
+    /// Prolog: Grenzen der Bereiche Dorf | Galgenweg | Spinnenschlund (px)
+    pub prolog_areas: (f32, f32),
     /// begehbare Abbruchkante des Wrackzwingers: je 16 px ein Punkt (x, letzte begehbare Zeile),
     /// nach x sortiert
     pub prolog_edge: Vec<(f32, f32)>,
@@ -578,6 +587,9 @@ impl World {
             low_areas: vec![],
             wake_coffin: (0.0, 0.0),
             prolog_start: (0.0, 0.0),
+            prolog_door: (0.0, 0.0),
+            prolog_dusk: (0.0, 1.0),
+            prolog_areas: (0.0, 0.0),
             prolog_edge: vec![],
             prolog_foot: 0.0,
             prolog_coffin: (0.0, 0.0),
@@ -795,6 +807,7 @@ impl World {
         self.compute_faces();
         self.auto_stairs();
         self.prune_stairs();
+        self.force_access();
         self.extend_stairs();
         self.compute_field();
         self.place_waterfalls();
@@ -1523,7 +1536,7 @@ impl World {
         self.interior(key, k, ix0, iy0, merchant);
         let (ex, ey) = tpos(ix0 + 6, iy0 + 9);
         let d = shop_def(key);
-        self.doors.push(Door { x: door_x, y: door_y, out: (door_x, door_y + 26.0), inn: (ex, ey - 40.0), exit: (ex, ey - 6.0), name: d.town, room: ((ix0 * TS) as f32, (iy0 * TS) as f32, (13 * TS) as f32, (10 * TS) as f32) });
+        self.doors.push(Door { x: door_x, y: door_y, out: (door_x, door_y + 26.0), inn: (ex, ey - 40.0), exit: (ex, ey - 6.0), name: d.town, room: ((ix0 * TS) as f32, (iy0 * TS) as f32, (13 * TS) as f32, (10 * TS) as f32), tavern: false });
     }
     /// Gegner aus einem Ort an den Rand verlegen.
     fn clear_spawns(&mut self, wx: f32, wy: f32, rx: i32, ry: i32) {
@@ -1546,7 +1559,7 @@ impl World {
         self.interior(key, k, ix0, iy0, merchant);
         let (ex, ey) = tpos(ix0 + 6, iy0 + 9);
         let d = shop_def(key);
-        self.doors.push(Door { x: door_x, y: door_y, out: (door_x, door_y + 26.0), inn: (ex, ey - 40.0), exit: (ex, ey - 6.0), name: d.town, room: ((ix0 * TS) as f32, (iy0 * TS) as f32, (13 * TS) as f32, (10 * TS) as f32) });
+        self.doors.push(Door { x: door_x, y: door_y, out: (door_x, door_y + 26.0), inn: (ex, ey - 40.0), exit: (ex, ey - 6.0), name: d.town, room: ((ix0 * TS) as f32, (iy0 * TS) as f32, (13 * TS) as f32, (10 * TS) as f32), tavern: false });
     }
     /// Innenraum eines Ladens: Dielen, Steinwand hinten, Theke mit Händler, Regale, Fässer, Kerzen.
     fn interior(&mut self, key: &'static str, _k: usize, ix0: i32, iy0: i32, merchant: &'static str) {
@@ -1842,7 +1855,9 @@ impl World {
         self.bridge = Some(HubBridge { x0: hx - BRIDGE_HALF, x1: hx + BRIDGE_HALF, y: hy, hw: BRIDGE_HW, h: BRIDGE_H });
         self.prop_x("hubBridge", hx, hy + BRIDGE_HW, |p| p.no_collide = true);
         // ---- Kai (Ebene 0): Liegeplatz und Schiffsmeister im Osten, Werft auf dem Südostplatz
-        self.dock(Zone::Hain, cx + 23, cy + 6, -1, 0);
+        // der Anleger liegt am Nordkai (Mitte oben) und führt auf die große Treppe zum unteren Ring;
+        // Schiffe kommen durchs Seetor herein und fahren unter der Brücke hindurch
+        self.dock(Zone::Hain, cx, cy - 24, 0, 1);
         self.npc("shipmaster", cx + 24, cy - 3, "shipmaster", "Schiffsmeister Brack", "shipmaster", false, None);
         for y in cy + 9..=cy + 24 {
             for x in cx + 8..=cx + 30 {
@@ -2032,139 +2047,6 @@ impl World {
         self.cur_hub_round = true;
     }
 
-    /// Prolog: der Wrackzwinger. Eine hohe Felsplatte (Ebene 4) über dem schwarzen Meer, im
-    /// Norden, Osten und Westen von hohen Mauern umschlossen, im Süden die Abbruchkante über dem
-    /// tiefen Wasserfall. Überall Wracks – die Beute der Riesigen Meeresspinne, eingesponnen in
-    /// Netze und Kokons. Ein Bach entspringt an der Nordmauer und stürzt im Süden über die Klippe.
-    /// Am Abbruch liegt das Revier der Spinne; dahinter bleibt nur der Sprung.
-    fn layout_prolog(&mut self, _rng: &mut Rng) {
-        let d = Zone::Prolog.def();
-        let (cx, cy) = (d.cx, d.cy);
-        let (x0, y0, x1, y1) = PROLOG;
-        // ---- alles Meer, dann die Felsplatte
-        for y in y0..y1 {
-            for x in x0..x1 {
-                let i = idx(x, y);
-                self.ground[i] = Mat::Water;
-                self.level[i] = 0;
-                self.zone[i] = Some(Zone::Prolog);
-                self.biome[i] = Biome::Coast;
-                self.path[i] = false;
-            }
-        }
-        let cliff = |dx: i32| -> i32 { 30 + ((dx as f32 * 0.21).sin() * 1.6 + (dx as f32 * 0.07).cos() * 1.2).round() as i32 };
-        for y in cy - 46..=cy + 34 {
-            for x in cx - 58..=cx + 58 {
-                let (dx, dy) = (x - cx, y - cy);
-                let e = (dx as f32 / 55.0).powi(4) + ((dy as f32 + 6.0) / 41.0).powi(4) + self.nz.n2(x as f32 * 0.2, y as f32 * 0.2) * 0.08;
-                if e < 1.0 && dy < cliff(dx) {
-                    let i = idx(x, y);
-                    let n = self.nz.fbm(x as f32 * 0.09, y as f32 * 0.09, 3);
-                    self.ground[i] = if n > 0.28 { Mat::Rock } else if n < -0.3 { Mat::Sand } else if n < -0.05 { Mat::Mud } else { Mat::Dirt };
-                    self.level[i] = 4;
-                }
-            }
-        }
-        // ---- der Bach: Quelle an der Nordmauer, in Schleifen nach Süden über die Klippe
-        let river: [(i32, i32); 8] = [(12, -36), (14, -28), (8, -18), (13, -8), (20, 2), (17, 11), (15, 18), (15, 34)];
-        for w in river.windows(2) {
-            let ((ax, ay), (bx, by)) = (w[0], w[1]);
-            let n = ((bx - ax).abs().max((by - ay).abs()) * 3).max(1);
-            for k in 0..=n {
-                let t = k as f32 / n as f32;
-                let (fx, fy) = (cx as f32 + ax as f32 + (bx - ax) as f32 * t, cy as f32 + ay as f32 + (by - ay) as f32 * t);
-                for oy in -2..=2 {
-                    for ox in -2..=2 {
-                        let (tx, ty) = ((fx + ox as f32 * 0.6).round() as i32, (fy + oy as f32 * 0.6).round() as i32);
-                        if inb(tx, ty) && self.level[idx(tx, ty)] == 4 {
-                            self.ground[idx(tx, ty)] = Mat::Water;
-                        }
-                    }
-                }
-            }
-        }
-        self.pond(cx + 12, cy - 36, 3, 2, Some(Mat::Rock), 0.2);
-        for y in cy - 39..=cy - 33 {
-            for x in cx + 8..=cx + 16 {
-                if self.ground[idx(x, y)] == Mat::Water {
-                    self.level[idx(x, y)] = 4;
-                }
-            }
-        }
-        // Steg über den Bach zum Ostteil
-        for x in cx + 6..=cx + 12 {
-            for y in cy - 15..=cy - 14 {
-                let i = idx(x, y);
-                if self.ground[i] == Mat::Water {
-                    self.ground[i] = Mat::Plank;
-                    self.path[i] = true;
-                }
-            }
-        }
-        // ---- hohe Mauern: Norden, Westen, Osten; Türme an den Ecken und an der Klippe
-        let (wx0, wx1, wy0) = (cx - 50, cx + 50, cy - 40);
-        // Nordmauer aus dem PixelLab-Mauerstück (90 px breit, nahtlos aneinander), alle acht Stücke
-        // eine Fackel davor
-        let (xa, xb) = ((wx0 * TS) as f32 + 46.0, (wx1 * TS) as f32 - 14.0);
-        let n = ((xb - xa) / 90.0).ceil() as i32;
-        for k in 0..n {
-            let x = xa + 45.0 + k as f32 * 90.0;
-            self.prop_x("plWallH", x, (wy0 * TS) as f32 + 26.0, |_| {});
-            if k % 8 == 4 {
-                self.prop_x("plTorch", x, (wy0 * TS) as f32 + 46.0, |_| {});
-            }
-        }
-        // Felsgrund unter Mauern und Ecktürmen (sonst stünden die Ecken im Wasser)
-        for (ax0, ay0, ax1, ay1) in [(wx0 - 2, wy0 - 2, wx1 + 2, wy0 + 2), (wx0 - 2, wy0, wx0 + 2, cy + 26), (wx1 - 2, wy0, wx1 + 2, cy + 26)] {
-            for y in ay0..=ay1 {
-                for x in ax0..=ax1 {
-                    if inb(x, y) && y < cy + cliff(x - cx) && self.level[idx(x, y)] != 4 {
-                        let i = idx(x, y);
-                        self.ground[i] = Mat::Rock;
-                        self.level[i] = 4;
-                    }
-                }
-            }
-        }
-        // Seitenmauern lückenlos von der Nordmauer bis an die Ecktürme über der Klippe
-        let mut y = wy0 + 4;
-        while y <= cy + 24 {
-            self.prop("highWallV", (wx0 * TS) as f32 + 16.0, (y * TS) as f32);
-            self.prop("highWallV", (wx1 * TS) as f32 + 16.0, (y * TS) as f32);
-            y += 4;
-        }
-        for (tx, ty) in [(wx0, wy0), (wx1, wy0), (wx0, cy + 24), (wx1, cy + 24)] {
-            self.prop("fortTower", (tx * TS) as f32 + 16.0, (ty * TS) as f32 + 16.0);
-        }
-        // ---- Erwachen zwischen Trümmern an der Nordmauer, ein sterbender Matrose daneben
-        let (sx, sy) = (cx - 16, cy - 35);
-        self.prolog_start = tpos(sx, sy);
-        self.flat_areas.push((sx, sy, 3, 3));
-        self.npc("drownedSailor", sx + 4, sy + 1, "stormSailor", "Sterbender Matrose", "prolog", true, None);
-        self.prop_t("plTorch", sx - 2, sy - 2);
-        self.prop_t("plTorch", sx + 6, sy - 2);
-        for (tx, ty, kind) in [(sx - 4, sy + 2, "plCargoWeb"), (sx + 7, sy + 3, "plCargo"), (sx - 6, sy - 1, "plRowboat"), (sx + 2, sy + 4, "plBones")] {
-            self.prop_t(kind, tx, ty);
-        }
-        // ---- der Wrackfriedhof im Westen: drei Schiffe im Morast, ein Mast, Anker, ein Netz, ein Toter
-        // (gezielt gesetzt statt Trümmer überall; der Bewuchs folgt in `pl_prolog_props`)
-        let (gx, gy) = (cx + PROLOG_WRECKS.0, cy + PROLOG_WRECKS.1);
-        for (dx, dy, kind, flip) in [(-5, -2, "plWreckA", false), (6, -4, "plWreckB", true), (1, 5, "plWreckA", true)] {
-            self.prop_tf(kind, gx + dx, gy + dy, flip);
-            self.flat_areas.push((gx + dx, gy + dy, 6, 4));
-        }
-        for (dx, dy, kind) in [(-1, -8, "plMast"), (9, 3, "plAnchor"), (-10, 2, "plWeb"), (4, 1, "plCargoWeb"), (-3, 3, "plSkeleton")] {
-            self.prop_t(kind, gx + dx, gy + dy);
-        }
-        // ---- Fundstücke (Gegner gibt es hier keine außer der Spinne)
-        self.item("pearls", cx + 30, cy - 33);
-        self.item("bombs", cx - 41, cy + 8);
-        self.item("pearls", cx - 19, cy - 35);
-        self.item("bullets", cx + 38, cy + 8);
-        self.prolog_foot = ((cy + 30) * TS) as f32;
-        let _ = (x0, x1, y0, y1);
-    }
-
     /// Der große Fall: der Bach stürzt an der Abbruchkante des Wrackzwingers über die ganze
     /// Klippe und noch weit darunter ins schwarze Wasser.
     fn prolog_fall(&mut self) {
@@ -2317,6 +2199,8 @@ impl World {
     fn highlands(&mut self, r: Region) {
         let z = r.zone;
         let d = r;
+        // höchste Ebene: wilde Inseln zwei Stufen, Königsinseln drei
+        let max_l: u8 = if z == Zone::Wild { 2 } else { 3 };
         let (x0, y0, x1, y1) = r.bbox();
         let (w, h) = (x1 - x0 + 1, y1 - y0 + 1);
         let n = (w * h) as usize;
@@ -2432,21 +2316,23 @@ impl World {
                 let dy = (y - d.cy) as f32 / d.ry as f32;
                 let core = (1.0 - (dx * dx + dy * dy).sqrt()).max(0.0);
                 let nz = self.nz.fbm(x as f32 * 0.03 + d.seed as f32 * 3.1, y as f32 * 0.03 + 9.0, 3);
-                // der Startstrand bleibt sanft, die anderen Inseln steigen kräftiger an
+                // wie in A Link to the Past: wenige, große Plateaus statt vieler Terrassen –
+                // höchstens zwei Stufen (Königsinseln drei), sanfteres Rauschen
                 let zk = d.steep;
-                let mut hgt = (core * 2.4 + nz * 1.9 - 0.2) * zk;
+                let mut hgt = (core * 1.7 + nz * 1.1 - 0.15) * zk;
                 for &(px, py, r) in &peaks {
                     let dd = (x as f32 - px).powi(2) + (y as f32 - py).powi(2);
-                    hgt += 2.3 * (-dd / (2.0 * r * r)).exp();
+                    hgt += 1.3 * (-dd / (2.0 * r * r)).exp();
                 }
                 // Strände bleiben flach, landeinwärts steigt es an
-                hgt = hgt.min((wd[k] as f32 - 4.0) * 0.35);
-                lv[k] = (hgt.floor().max(0.0) as u8).min(4);
+                hgt = hgt.min((wd[k] as f32 - 5.0) * 0.3);
+                lv[k] = (hgt.floor().max(0.0) as u8).min(max_l);
             }
         }
-        // Formen glätten: je Ebene erst Löcher schließen, dann Zacken abtragen (Radius 2)
-        let disk: Vec<(i32, i32)> = (-2..=2).flat_map(|a| (-2..=2).map(move |b| (a, b))).filter(|(a, b)| a * a + b * b <= 5).collect();
-        for lvl in 1..=4u8 {
+        // Formen glätten: je Ebene erst Löcher schließen, dann Zacken und schmale Streifen abtragen
+        // (Radius 3: Plateaus sind mindestens etwa sieben Kacheln breit)
+        let disk: Vec<(i32, i32)> = (-3..=3).flat_map(|a| (-3..=3).map(move |b| (a, b))).filter(|(a, b)| a * a + b * b <= 10).collect();
+        for lvl in 1..=max_l {
             let mut m: Vec<bool> = lv.iter().map(|v| *v >= lvl).collect();
             let morph = |m: &Vec<bool>, dilate: bool| -> Vec<bool> {
                 let mut o = m.clone();
@@ -2730,7 +2616,7 @@ impl World {
                 seen[start] = true;
                 let mut k = 0;
                 let mut has = false;
-                while k < q.len() && q.len() < 400 {
+                while k < q.len() && q.len() < 600 {
                     let i = q[k];
                     k += 1;
                     has |= content[i];
@@ -2746,7 +2632,8 @@ impl World {
                         }
                     }
                 }
-                if q.len() < 36 && !has {
+                // kleine Erhebungen ohne Inhalt verschwinden (unter 110 Kacheln: kein sinnvolles Plateau)
+                if q.len() < 110 && !has {
                     for &i in &q {
                         self.level[i] = l - 1;
                     }
@@ -2916,11 +2803,13 @@ impl World {
         for (pair, list) in by_pair.iter_mut() {
             let small = t_size[pair.0 as usize].min(t_size[pair.1 as usize]);
             let has = t_content[pair.0 as usize] || t_content[pair.1 as usize];
-            // winzige leere Fläche: kein Weg hinauf nötig (außer er wird gebraucht)
-            if small < 30 && !has {
+            // jede Fläche bekommt mindestens einen Aufgang (wie in A Link to the Past: keine
+            // unerreichbaren Plateaus); große Flächen mehrere
+            let _ = has;
+            if small < 8 {
                 continue;
             }
-            let quota = (1 + small / 900).min(3) as usize;
+            let quota = (1 + small / 450).min(3) as usize;
             list.sort_by_key(|&gi| -(groups[gi].2 * 10 + groups[gi].0.len() as i32));
             let mut chosen: Vec<(i32, i32)> = list.iter().filter(|&&gi| keep[gi]).map(|&gi| groups[gi].3).collect();
             for &gi in list.iter() {
@@ -2935,6 +2824,39 @@ impl World {
                     keep[gi] = true;
                     chosen.push(c);
                 }
+            }
+        }
+        // Erreichbarkeit: jede Fläche (ab 8 Kacheln) soll von einem Ufer aus über behaltene Treppen
+        // erreichbar sein; fehlt eine Verbindung, kommt eine passende Treppengruppe dazu
+        loop {
+            let mut reach = vec![false; nt];
+            let mut bq: std::collections::VecDeque<usize> = std::collections::VecDeque::new();
+            for t in 0..nt {
+                if t_entry[t] {
+                    reach[t] = true;
+                    bq.push_back(t);
+                }
+            }
+            while let Some(t) = bq.pop_front() {
+                for &(u, gi) in &adj[t] {
+                    if keep[gi] && !reach[u] {
+                        reach[u] = true;
+                        bq.push_back(u);
+                    }
+                }
+            }
+            let mut added = false;
+            for t in 0..nt {
+                if !reach[t] {
+                    continue;
+                }
+                if let Some(&(_, gi)) = adj[t].iter().find(|&&(u, gi)| !reach[u] && !keep[gi] && t_size[u] >= 8) {
+                    keep[gi] = true;
+                    added = true;
+                }
+            }
+            if !added {
+                break;
             }
         }
         // Antritte oben und unten freihalten (kein Baum, Fels oder Busch davor)
@@ -2978,6 +2900,162 @@ impl World {
             nt
         );
     }
+    /// Letzte Sicherung (A Link to the Past: jedes Plateau hat einen Aufgang): Flächen, die vom
+    /// Ufer aus nicht erreichbar sind, bekommen eine Treppe in ihre Südwand bzw. eine Rampe an der
+    /// Seite – Ebene für Ebene von unten nach oben, bis alles verbunden ist.
+    fn force_access(&mut self) {
+        let n = (MW * MH) as usize;
+        let skip = |w: &World, i: usize| w.tall_faces(i) || w.biome[i] == Biome::Hub || matches!(w.zone[i], Some(Zone::Ende) | Some(Zone::Prolog));
+        let mut carved = 0;
+        let mut left = 0;
+        for _round in 0..8 {
+            // Flutfüllung vom Ufer: gleiche Ebene oder über Treppen
+            let pass = |w: &World, i: usize| !matches!(w.ground[i], Mat::Water | Mat::Abyss) && (!w.cliff[i] || w.stairs[i]);
+            let mut reach = vec![false; n];
+            let mut q: std::collections::VecDeque<usize> = std::collections::VecDeque::new();
+            for i in 0..n {
+                if !pass(self, i) || self.level[i] != 0 {
+                    continue;
+                }
+                let (x, y) = ((i as i32) % MW, (i as i32) / MW);
+                let shore = [(1, 0), (-1, 0), (0, 1), (0, -1)].iter().any(|&(dx, dy)| inb(x + dx, y + dy) && self.ground[idx(x + dx, y + dy)] == Mat::Water);
+                if shore {
+                    reach[i] = true;
+                    q.push_back(i);
+                }
+            }
+            while let Some(i) = q.pop_front() {
+                let (x, y) = ((i as i32) % MW, (i as i32) / MW);
+                for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+                    if !inb(x + dx, y + dy) {
+                        continue;
+                    }
+                    let j = idx(x + dx, y + dy);
+                    if reach[j] || !pass(self, j) {
+                        continue;
+                    }
+                    if self.level[j] == self.level[i] || self.stairs[i] || self.stairs[j] {
+                        reach[j] = true;
+                        q.push_back(j);
+                    }
+                }
+            }
+            // unerreichte Flächen sammeln (gleiche Ebene, zusammenhängend, keine Wand)
+            let mut seen = vec![false; n];
+            let mut fixed_any = false;
+            left = 0;
+            let mut regions: Vec<(u8, Vec<usize>)> = vec![];
+            for start in 0..n {
+                if seen[start] || reach[start] || skip(self, start) || !pass(self, start) || self.cliff[start] {
+                    continue;
+                }
+                let l = self.level[start];
+                let mut tiles = vec![start];
+                seen[start] = true;
+                let mut k = 0;
+                while k < tiles.len() {
+                    let i = tiles[k];
+                    k += 1;
+                    let (x, y) = ((i as i32) % MW, (i as i32) / MW);
+                    for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+                        if !inb(x + dx, y + dy) {
+                            continue;
+                        }
+                        let j = idx(x + dx, y + dy);
+                        if !seen[j] && !reach[j] && self.level[j] == l && pass(self, j) && !self.cliff[j] {
+                            seen[j] = true;
+                            tiles.push(j);
+                        }
+                    }
+                }
+                if tiles.len() >= 8 && l > 0 {
+                    regions.push((l, tiles));
+                }
+            }
+            regions.sort_by_key(|r| r.0);
+            for (l, tiles) in regions {
+                left += 1;
+                // Treppe in die Südwand: von der obersten Wandreihe drei Reihen hinab zu begehbarem
+                // Boden genau eine Ebene tiefer, der schon erreichbar ist; zwei Kacheln breit
+                let mut best: Option<(i32, i32)> = None;
+                for &i in &tiles {
+                    let (x, y) = ((i as i32) % MW, (i as i32) / MW);
+                    let ok_col = |w: &World, cx: i32| -> bool {
+                        if !inb(cx, y + FH + 1) {
+                            return false;
+                        }
+                        for r in 1..=FH {
+                            let j = idx(cx, y + r);
+                            if !w.cliff[j] || w.level[j] != l {
+                                return false;
+                            }
+                        }
+                        let b = idx(cx, y + FH + 1);
+                        w.level[b] + 1 == l && reach[b] && !matches!(w.ground[b], Mat::Water | Mat::Abyss) && !w.cliff[b]
+                    };
+                    if ok_col(self, x) && ok_col(self, x + 1) {
+                        best = Some((x, y));
+                        break;
+                    }
+                }
+                if let Some((x, y)) = best {
+                    for cx in [x, x + 1] {
+                        for r in 1..=FH {
+                            let j = idx(cx, y + r);
+                            self.stairs[j] = true;
+                            self.path[j] = true;
+                        }
+                        for r in [0, FH + 1, FH + 2] {
+                            if inb(cx, y + r) {
+                                self.landing[idx(cx, y + r)] = true;
+                            }
+                        }
+                    }
+                    carved += 1;
+                    fixed_any = true;
+                    left -= 1;
+                    continue;
+                }
+                // sonst eine Rampe an der Seite (Nachbar eine Ebene tiefer und erreichbar)
+                let mut ramp: Option<(usize, usize)> = None;
+                for &i in &tiles {
+                    let (x, y) = ((i as i32) % MW, (i as i32) / MW);
+                    for dx in [-1, 1] {
+                        if !inb(x + dx, y + 1) || !inb(x, y + 1) {
+                            continue;
+                        }
+                        let j = idx(x + dx, y);
+                        if reach[j] && self.level[j] + 1 == l && !self.cliff[j] && !matches!(self.ground[j], Mat::Water | Mat::Abyss) {
+                            ramp = Some((i, j));
+                            break;
+                        }
+                    }
+                    if ramp.is_some() {
+                        break;
+                    }
+                }
+                if let Some((i, j)) = ramp {
+                    for a in [i, j] {
+                        for yy in 0..2 {
+                            let t = a + (yy * MW) as usize;
+                            if t < n && !matches!(self.ground[t], Mat::Water | Mat::Abyss) {
+                                self.stairs[t] = true;
+                                self.path[t] = true;
+                            }
+                        }
+                    }
+                    carved += 1;
+                    fixed_any = true;
+                    left -= 1;
+                }
+            }
+            if !fixed_any {
+                break;
+            }
+        }
+        bevy::log::info!("Welt: {carved} Aufgänge ergänzt, {left} Flächen ohne Aufgang");
+    }
+
     /// Treppenkacheln eine Reihe über und unter die Wand verlängern: die pixelgenauen Kanten
     /// liegen bis zu einer halben Kachel neben dem Kachelraster.
     fn extend_stairs(&mut self) {

@@ -1076,6 +1076,11 @@ pub fn build(frame: &mut Frame) -> Art {
         a.add_trim("x:webNet", &sw_art::structures::web_net(), 26, 26);
         a.add_trim("x:webG0", &sw_art::structures::web_ground(0), 38, 28);
         a.add_trim("x:webG1", &sw_art::structures::web_ground(1), 38, 28);
+        // dieselben Netze als Boden-Requisiten im Spinnenschlund des Prologs (Fußpunkt nahe dem
+        // oberen Rand: wer darauf steht, wird darüber gezeichnet)
+        for i in 0..2 {
+            add_prop(&mut a, &mut props, PropArt::new(&format!("spiderWebG{i}"), sw_art::structures::web_ground(i), 38, 6));
+        }
         a.style = true;
     }
     // ---------------------------------------------------------------- Glutwacht und See (Rig)
@@ -1446,7 +1451,7 @@ pub fn build(frame: &mut Frame) -> Art {
         pages: pages + 1,
         pfx: crate::pfx::Lib::new(pages),
     };
-    let look = chars::player_look(&[0, 1, 1, 5, 0, 0, 0, 0], "cutlass");
+    let look = chars::player_look(&[0, 1, 1, 5, 0, 0, 0, 0, 0], "cutlass");
     build_player(&mut art, frame, &look);
     art
 }

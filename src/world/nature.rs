@@ -494,6 +494,13 @@ impl World {
                     return None;
                 }
             }
+            // Kanten frei halten (wie in A Link to the Past): nichts direkt über einer Felswand,
+            // damit Kante und Aufgänge sichtbar bleiben
+            for (dx, dy) in [(0, 1), (1, 1), (-1, 1), (0, 2)] {
+                if inb(tx + dx, ty + dy) && w.cliff[idx(tx + dx, ty + dy)] && !w.cliff[i] {
+                    return None;
+                }
+            }
             let (x, y) = tpos(tx, ty);
             if w.in_settlement(x, y) {
                 return None;
@@ -870,11 +877,17 @@ impl World {
     /// Gebiets als PNG, 4 px je Kachel – Boden nach Material und Ebene, Bewuchs als Punkte
     /// (Bäume nach Art, Unterholz, Schilf, Blumen, Felsen) –, um die Verteilung zu prüfen.
     pub fn flora_map(&self, key: &str) -> Option<Vec<u8>> {
-        let r = match key.strip_prefix('w') {
-            Some(n) => self.wild.get(n.parse::<usize>().ok()?)?.r,
-            None => ZONES.iter().find(|z| z.def().key == key)?.region(),
+        let (x0, y0, x1, y1) = if key == "prolog" {
+            // die ummauerte Platte samt Kneipe (Innenraum im Meer nordwestlich)
+            let d = Zone::Prolog.def();
+            (PROLOG.0 + 2, d.cy - 72, d.cx + 62, d.cy + 40)
+        } else {
+            let r = match key.strip_prefix('w') {
+                Some(n) => self.wild.get(n.parse::<usize>().ok()?)?.r,
+                None => ZONES.iter().find(|z| z.def().key == key)?.region(),
+            };
+            r.bbox()
         };
-        let (x0, y0, x1, y1) = r.bbox();
         let (w, h) = ((x1 - x0 + 1) * 4, (y1 - y0 + 1) * 4);
         let mut img = vec![0u8; (w * h * 4) as usize];
         let px = |img: &mut Vec<u8>, x: i32, y: i32, c: [u8; 3]| {

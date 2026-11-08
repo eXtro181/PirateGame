@@ -49,6 +49,8 @@ pub struct Menu {
     origin: usize,
     gift: usize,
     name: String,
+    /// zuletzt erzeugter Zufallsname (wechselt mit dem Geschlecht, solange man ihn nicht ändert)
+    auto_name: String,
     err: String,
     page: usize,
     // Anmeldung
@@ -74,7 +76,8 @@ impl Menu {
             look: LookIdx::default_look(),
             origin: 0,
             gift: 0,
-            name: "Finn Rabenfeder".into(),
+            name: String::new(),
+            auto_name: String::new(),
             err: String::new(),
             page: 0,
             profiles: save::list(),
@@ -99,6 +102,18 @@ impl Menu {
             self.del_armed = false;
         }
         textinput::clear_all();
+        textinput::set(1, &self.name);
+    }
+    /// Zufallsgenerator: Aussehen und Name neu würfeln
+    pub fn randomize(&mut self) {
+        let mut r = crate::game::fx::rnd;
+        self.look = LookIdx::random(&mut r);
+        self.roll_name();
+    }
+    fn roll_name(&mut self) {
+        let mut r = crate::game::fx::rnd;
+        self.name = LookIdx::random_name(self.look.female == 1, &mut r);
+        self.auto_name = self.name.clone();
         textinput::set(1, &self.name);
     }
     pub fn look_weapon(&self) -> (LookIdx, &'static str) {
@@ -357,14 +372,20 @@ impl Menu {
         let bx = if w > 520.0 { (w * 0.26 - bw / 2.0).round() } else { (w / 2.0 - bw / 2.0).round() };
         let y0 = (h * 0.5).round();
         f.ui_soft(bx - 40.0, y0 - 24.0, bw + 80.0, items.len() as f32 * 24.0 + 44.0, [0, 0, 0, 120]);
+        let mut out = MenuOut::None;
         for (i, (label, s)) in items.iter().enumerate() {
             if self.button(f, art, inp, bx, y0 + i as f32 * 24.0, bw, 19.0, label, i == 0, true) {
                 sfx.push("click");
                 self.go(*s);
+                // neuer Ertrunkener: beim ersten Öffnen zufällig gewürfelt (Aussehen und Name)
+                if *s == Screen::Creator && self.name.trim().is_empty() {
+                    self.randomize();
+                    out = MenuOut::LookChanged(self.look, ORIGINS[self.origin].weapon);
+                }
             }
         }
         text::tr(f, art, "v0.7 · Rust/Bevy", w - 6.0, h - 12.0, [143, 163, 168, 160]);
-        MenuOut::None
+        out
     }
 
     fn panel_title(f: &mut Frame, art: &Art, x: f32, y: f32, w: f32, h: f32, title: &str) {
@@ -406,13 +427,34 @@ impl Menu {
                 let x = bx + colw / 2.0 - s.w as f32 * sc / 2.0;
                 f.ui_spr(&s, x, top + bh - 8.0 - s.h as f32 * sc, SprOpt { scale: sc, flip, ..Default::default() });
             }
+            // Zufallsgenerator oben rechts in der Vorschau
+            if self.button(f, art, inp, bx + colw - 58.0, top + 4.0, 54.0, 13.0, "Zufall", false, true) {
+                self.randomize();
+                sfx.push("click");
+                out = MenuOut::LookChanged(self.look, ORIGINS[self.origin].weapon);
+            }
             let mut y = top + bh + 8.0;
-            for (i, (label, _, names)) in LOOK_OPTS.iter().enumerate() {
+            // Geschlecht zuerst; Frauen haben keine Bart-Zeile
+            let female = self.look.female == 1;
+            for i in [8usize, 0, 1, 2, 3, 4, 5, 6, 7] {
+                if i == 4 && female {
+                    continue;
+                }
+                let (label, _, names) = LOOK_OPTS[i];
                 let cur = self.look.arr()[i].rem_euclid(names.len() as i32);
                 let d = self.cycler(f, art, inp, lx, y, colw, label, names[cur as usize]);
                 if d != 0 {
                     let v = (cur + d).rem_euclid(names.len() as i32);
                     self.look.set(i, v);
+                    if i == 8 {
+                        if v == 1 {
+                            self.look.beard = 0;
+                        }
+                        // der Zufallsname wechselt mit, solange man ihn nicht selbst geändert hat
+                        if self.name == self.auto_name || self.name.trim().is_empty() {
+                            self.roll_name();
+                        }
+                    }
                     sfx.push("click");
                     out = MenuOut::LookChanged(self.look, ORIGINS[self.origin].weapon);
                 }

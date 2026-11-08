@@ -632,6 +632,8 @@ pub fn sfx(name: &str) -> Vec<f32> {
         "cannon" | "crash" | "tide" | "level" | "pearls" | "chest" | "zap" | "fog" => 1.0,
         "slither" => 1.7,
         "hiss" | "creak" => 0.9,
+        "rustle" => 1.1,
+        "skitter" | "clink" => 0.8,
         _ => 0.6,
     };
     let mut x = Fx::new(len, name.bytes().map(|b| b as u32).sum::<u32>() + 3);
@@ -714,6 +716,32 @@ pub fn sfx(name: &str) -> Vec<f32> {
             for k in 0..6 {
                 x.noise(k as f32 * 0.06, 2600.0, 2200.0, 0.05, 0.35, Band, 1.0, false);
             }
+        }
+        // die Spinne in der Ferne: trockenes Rascheln, als schleife etwas durch Laub und Netze
+        "rustle" => {
+            for k in 0..5 {
+                let t = k as f32 * 0.17 + (k % 2) as f32 * 0.05;
+                x.noise(t, 1800.0 + (k % 3) as f32 * 500.0, 2600.0, 0.22, 0.32, Band, 1.1, false);
+            }
+            x.noise(0.1, 500.0, 300.0, 0.7, 0.12, Band, 0.8, false);
+        }
+        // ihre Schritte nah: hartes Klicken vieler Beine auf Fels, zwei Gruppen, dazu ein dumpfes Tappen
+        "skitter" => {
+            for k in 0..9 {
+                let t = k as f32 * 0.055 + if k >= 5 { 0.16 } else { 0.0 };
+                let f = 2600.0 + ((k * 7) % 5) as f32 * 420.0;
+                x.noise(t, f, f * 0.8, 0.028, 0.55, Band, 3.0, false);
+                x.tone(t, Sine, 210.0 - k as f32 * 6.0, 120.0, 0.05, 0.16);
+            }
+            x.noise(0.0, 260.0, 160.0, 0.5, 0.1, Low, 1.0, false);
+        }
+        // Krüge stoßen an (Kneipe): zwei helle, leicht verstimmte Klänge
+        "clink" => {
+            for (t, f) in [(0.0f32, 2350.0f32), (0.06, 3120.0)] {
+                x.tone(t, Sine, f, f * 0.995, 0.45, 0.16);
+                x.tone(t, Sine, f * 2.7, f * 2.68, 0.2, 0.05);
+            }
+            x.noise(0.0, 4200.0, 4200.0, 0.03, 0.12, Band, 2.0, false);
         }
         "thud" => {
             x.tone(0.0, Sine, 62.0, 40.0, 0.35, 0.5);

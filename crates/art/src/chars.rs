@@ -41,7 +41,7 @@ pub enum Role {
 }
 /// Rolle einer Vorgabe (für `wants_anim`).
 pub fn preset_role(name: &str) -> Role {
-    if name.starts_with("villager") || matches!(name, "lanternMaid" | "smith" | "merchant" | "shipmaster" | "carver" | "smithIlka" | "furWendla" | "mapOrrin" | "witchMabel" | "ghostCaptain") {
+    if name.starts_with("villager") || (name.starts_with("drown") && !name.starts_with("drowned")) || matches!(name, "lanternMaid" | "smith" | "merchant" | "shipmaster" | "carver" | "smithIlka" | "furWendla" | "mapOrrin" | "witchMabel" | "ghostCaptain") {
         Role::Npc
     } else if name.starts_with("crew") {
         Role::Crew
@@ -54,7 +54,7 @@ pub const SKIN: [u32; 4] = [0xE0B896, 0xC49674, 0x9A6A4C, 0x6A4430];
 pub const HAIR: [u32; 6] = [0x26201E, 0x5A3A22, 0xB8925A, 0xA8A8A0, 0x8A3A22, 0xE8E4E0];
 pub const COATS: [(&str, u32); 6] = [("Weinrot", 0x8A2A30), ("Marine", 0x2E4466), ("Moos", 0x4A5A36), ("Leder", 0x6A4A30), ("Teer", 0x2E2E36), ("Verblichen", 0x6A5A7E)];
 
-pub const LOOK_OPTS: [(&str, &str, &[&str]); 8] = [
+pub const LOOK_OPTS: [(&str, &str, &[&str]); 9] = [
     ("Statur", "body", &["Schlank", "Kräftig"]),
     ("Haut", "skin", &["Hell", "Sonnengebräunt", "Bronze", "Dunkel"]),
     ("Haar", "hair", &["Glatze", "Kurz", "Lang", "Zopf", "Wild"]),
@@ -63,10 +63,13 @@ pub const LOOK_OPTS: [(&str, &str, &[&str]); 8] = [
     ("Kopf", "hat", &["Nichts", "Dreispitz", "Kopftuch", "Kapuze", "Kapitänshut"]),
     ("Mantel", "coat", &["Weinrot", "Marine", "Moos", "Leder", "Teer", "Verblichen"]),
     ("Augenklappe", "patch", &["Nein", "Ja"]),
+    ("Geschlecht", "sex", &["Mann", "Frau"]),
 ];
 
 #[derive(Clone, Debug)]
 pub struct Look {
+    /// Frauenfigur: schmalere Schultern, Taille, Mieder mit Schnürung, Wimpern, Lippen, kein Bart
+    pub female: bool,
     pub body: i32,
     pub skin: u32,
     pub hair: i32,
@@ -125,6 +128,7 @@ pub struct Look {
 impl Default for Look {
     fn default() -> Self {
         Look {
+            female: false,
             body: 0,
             skin: SKIN[1],
             hair: 1,
@@ -170,13 +174,15 @@ impl Default for Look {
 }
 
 /// Spieler-Aussehen aus Editor-Indizes.
-pub fn player_look(v: &[i32; 8], weapon: &'static str) -> Look {
+pub fn player_look(v: &[i32; 9], weapon: &'static str) -> Look {
+    let female = v[8] == 1;
     Look {
+        female,
         body: v[0],
         skin: SKIN[v[1].clamp(0, 3) as usize],
         hair: v[2],
         hair_col: HAIR[v[3].clamp(0, 5) as usize],
-        beard: v[4],
+        beard: if female { 0 } else { v[4] },
         hat: v[5],
         coat: COATS[v[6].clamp(0, 5) as usize].1,
         patch: v[7] == 1,
@@ -693,20 +699,42 @@ fn paint_human(cv: &mut Canvas, dir: &str, p: &Pose, l: &Look, s: f32) {
             }
         }
     } else {
-        let tail = if l.robe { 13.0 } else if p.sit { 0.0 } else { 7.0 };
+        let tail = if l.robe { 13.0 } else if p.sit { 0.0 } else if l.female { 10.0 } else { 7.0 };
         let yend = t1 + tail * s;
         let mut y = t0;
         while y <= yend {
             let t = (y - t0) / (t1 - t0);
-            let flare = if y > t1 { (y - t1) / (tail * s).max(1.0) * 2.5 * s } else { 0.0 };
+            let flare = if y > t1 { (y - t1) / (tail * s).max(1.0) * if l.female { 3.4 } else { 2.5 } * s } else { 0.0 };
             // Schulterrundung
             let sh = if t < 0.12 { (0.12 - t) * 14.0 } else { 0.0 };
-            let mut x = x0 - flare + sh;
-            while x <= x1 + flare - sh {
+            // Frauenfigur: schmalere Schultern, Taille, unter dem Gürtel etwas weitere Hüfte
+            let fem = if l.female {
+                let shoulder = if t < 0.3 { 1.0 * s } else { 0.0 };
+                let waist = if t > 0.45 && t < 0.98 { (1.0 - ((t - 0.72) / 0.26).abs()).max(0.0) * (if side { 1.0 } else { 2.2 }) * s } else { 0.0 };
+                let hip = if y > t1 { -0.8 * s } else { 0.0 };
+                shoulder + waist + hip
+            } else {
+                0.0
+            };
+            let mut x = x0 - flare + sh + fem;
+            while x <= x1 + flare - sh - fem {
                 let rel = (x - (x0 - flare)) / ((x1 + flare) - (x0 - flare)).max(1.0);
                 let open = !up && !side && rel > 0.38 && rel < 0.62 && !l.robe && y < t1;
                 let rp = if open { &shirt } else { &coat };
                 let mut v = if rel < 0.18 { 4 } else if rel > 0.82 { 1 } else { 3 };
+                // Mieder: dunkle Schnürleiste mit hellen Kreuzbändern, darüber das Hemd
+                if open && l.female && t > 0.28 {
+                    let mid = (rel - 0.5).abs() < 0.07;
+                    let lace = ((y - t0) as i32 + (x as i32)) % 3 == 0 || ((y - t0) as i32 - (x as i32)).rem_euclid(3) == 0;
+                    let c = if mid && lace { shirt[4] } else { coat[if rel < 0.5 { 2 } else { 1 }] };
+                    cx.c.put(x as i32, y as i32, c, 3.5);
+                    x += 1.0;
+                    continue;
+                }
+                // sanfte Rundung der Brust (Licht oben, Schatten darunter)
+                if l.female && !up && !side && t > 0.12 && t < 0.3 && ((rel - 0.32).abs() < 0.12 || (rel - 0.68).abs() < 0.12) {
+                    v += if t < 0.22 { 1 } else { -1 };
+                }
                 if !open && y > t1 {
                     v -= 1;
                 }
@@ -1042,15 +1070,24 @@ fn paint_human(cv: &mut Canvas, dir: &str, p: &Pose, l: &Look, s: f32) {
                         // Braue
                         cx.c.put(*e as i32, ey as i32 - 2, shade(hex(l.hair_col), 0.8), 8.5);
                         cx.c.put(*e as i32 + 1, ey as i32 - 2, shade(hex(l.hair_col), 0.8), 8.5);
+                        // Wimpern am äußeren Augenwinkel
+                        if l.female {
+                            let ox = if side || *e > hx { 2 } else { -1 };
+                            cx.c.put(*e as i32 + ox, ey as i32 - 1, hex(0x140C10), 8.6);
+                        }
                     }
                 }
                 if l.patch {
                     cx.c.line(hx - hr, hy - 3.0 * s, hx + 3.0 * s, ey - 1.0, hex(0x0B0B0E));
                 }
-                // Mund
+                // Mund (bei Frauen dunkelrote Lippen)
                 let mx = if side { hx + 4.0 * s } else { hx - 0.5 * s };
-                cx.c.put(mx as i32, (hy + 5.0 * s) as i32, skin[1], 8.5);
-                cx.c.put(mx as i32 + 1, (hy + 5.0 * s) as i32, skin[1], 8.5);
+                let lip = if l.female { hex(0x8A3A3E) } else { skin[1] };
+                cx.c.put(mx as i32, (hy + 5.0 * s) as i32, lip, 8.5);
+                cx.c.put(mx as i32 + 1, (hy + 5.0 * s) as i32, lip, 8.5);
+                if l.female && !side {
+                    cx.c.put(mx as i32, (hy + 5.0 * s) as i32 + 1, shade(hex(0x8A3A3E), 1.2), 8.4);
+                }
                 if l.tusks {
                     let tusk = r(0xE8E0C8);
                     let txs: Vec<f32> = if side { vec![mx + 1.0 * s] } else { vec![mx - 3.0 * s, mx + 3.5 * s] };
@@ -1103,7 +1140,7 @@ fn paint_human(cv: &mut Canvas, dir: &str, p: &Pose, l: &Look, s: f32) {
             } else if l.hair > 0 {
                 let hp = &hair;
                 let mut y = hy - hr - 1.0;
-                let back_cover = if up { hr * 1.6 } else if l.hair >= 2 { hr * 0.55 } else { hr * 0.25 };
+                let back_cover = if up { hr * 1.6 } else if l.hair >= 2 || l.female { hr * 0.55 } else { hr * 0.25 };
                 while y <= hy + back_cover {
                     let dy = (y - hy) / (hr + 1.5);
                     let half = (1.0 - dy * dy).max(0.0).sqrt() * (hr + 1.5);
@@ -1128,11 +1165,23 @@ fn paint_human(cv: &mut Canvas, dir: &str, p: &Pose, l: &Look, s: f32) {
                 for k in 0..(5.0 * s) as i32 {
                     cx.c.put((hx - 3.0 * s + k as f32) as i32, (hy - hr * 0.7) as i32, hp[5], 10.0);
                 }
-                // lang: Strähnen an der Seite bis zur Schulter
+                // Frauen mit kurzem Haar: kinnlanger Bob (Strähnen an der Seite bis zum Kinn)
+                if l.female && l.hair == 1 && !side {
+                    for sx in [-1.0f32, 1.0] {
+                        let mut y = hy;
+                        while y < hy + hr * 0.9 {
+                            for k in 0..(2.0 * s) as i32 {
+                                cx.c.put((hx + sx * (hr + 0.5) - k as f32 * sx) as i32, y as i32, pick(hp, 0.5 - k as f32 * 0.08), 8.0);
+                            }
+                            y += 1.0;
+                        }
+                    }
+                }
+                // lang: Strähnen an der Seite bis zur Schulter (bei Frauen bis über die Schulter)
                 if l.hair == 2 && !side {
                     for sx in [-1.0f32, 1.0] {
                         let mut y = hy;
-                        while y < hy + hr * 1.6 {
+                        while y < hy + hr * if l.female { 2.2 } else { 1.6 } {
                             for k in 0..(3.0 * s) as i32 {
                                 cx.c.put((hx + sx * (hr + 0.5) - k as f32 * sx) as i32, y as i32, pick(hp, 0.45 - k as f32 * 0.08), 8.0);
                             }
@@ -1693,6 +1742,14 @@ pub fn preset(name: &str) -> (Look, f32) {
         "villagerF" => Look { skin: 0x9C7058, hair_col: 0x2A2018, hair: 1, beard: 3, coat: 0x524a34, hat: 2, band_col: 0x22303E, apron: true, weapon: None, ..d() },
         "villagerG" => Look { skin: 0xD0AA90, hair_col: 0x7A4422, hair: 3, coat: 0x46261E, robe: true, hat: 0, sash: Some(0x6A5A3A), weapon: None, ..d() },
         "villagerH" => Look { skin: 0x8A5A40, hair_col: 0xA8A8A0, hair: 0, beard: 2, coat: 0x2E3E4E, hat: 1, hat_col: 0x2A2A30, weapon: None, patch: true, ..d() },
+        // Stillwasser (Prolog): freundliche Ertrunkene – fahle, meergrüne Haut, nasses Haar,
+        // verblichene, triefende Kleidung mit Tangsträhnen, schwach leuchtende Augen
+        "drownA" => Look { female: true, drowned: true, skin: 0x9DB6AC, hair: 3, hair_col: 0x2C4A48, coat: 0x46606A, robe: true, apron: true, hat: 2, band_col: 0x8A8A78, eye_col: 0xCFF6EC, weapon: None, ..d() },
+        "drownB" => Look { drowned: true, skin: 0x8FA69C, hair: 1, hair_col: 0xB8C4C0, beard: 2, coat: 0x56604A, pants: 0x2E3A38, hat: 1, hat_col: 0x3A4A44, eye_col: 0xCFF6EC, weapon: None, ..d() },
+        "drownC" => Look { drowned: true, skin: 0xA4BCB2, hair: 4, hair_col: 0x3A2E26, coat: 0x2E4656, shirt: 0xB8C8C4, hat: 2, band_col: 0x7A3A34, sash: Some(0x6A4A3A), eye_col: 0xCFF6EC, weapon: None, ..d() },
+        "drownD" => Look { female: true, drowned: true, skin: 0x98B2A8, hair: 2, hair_col: 0x6A4A2A, coat: 0x5E5068, robe: true, hat: 0, sash: Some(0x8A7A5A), eye_col: 0xCFF6EC, weapon: None, ..d() },
+        // der Wirt der Kneipe „Zur Letzten Flut“: stämmig, kahl, mächtiger Bart, Schürze über der Weste
+        "drownKeeper" => Look { drowned: true, body: 1, skin: 0x92AA9E, hair: 0, hair_col: 0x9AA8A4, beard: 3, coat: 0x3E3428, shirt: 0xC0CCC4, apron: true, eye_col: 0xCFF6EC, weapon: None, ..d() },
         // aufgebrachter Mob einer feindlich gewordenen Siedlung (wie die Dorfbewohner gekleidet,
         // aber bewaffnet: Knüppel, Mistgabel, Messer)
         "mobA" => Look { skin: 0xC8A88C, hair_col: 0x3E2A1A, hair: 4, beard: 1, coat: 0x2A3C34, hat: 1, hat_col: 0x2E2620, apron: true, weapon: Some("club"), ..d() },
@@ -1729,7 +1786,7 @@ pub fn preset(name: &str) -> (Look, f32) {
     (l, s)
 }
 
-pub const PRESET_NAMES: [&str; 44] = [
+pub const PRESET_NAMES: [&str; 49] = [
     "abyssPirate", "voodoo", "orcCaptain", "stormHarpy", "bellConstruct", "gorgonQueen", "clockStorm",
-    "skeleton", "skelBrute", "skelGunner", "drowned", "drownedIce", "ashSkeleton", "stormSailor", "lanternMaid", "smith", "merchant", "shipmaster", "carver", "crewFire", "crewIce", "crewWind", "crewEarth", "villagerA", "villagerB", "villagerC", "villagerD", "villagerE", "villagerF", "villagerG", "villagerH", "smithIlka", "furWendla", "mapOrrin", "witchMabel", "kingFire", "kingIce", "kingWind", "kingEarth", "malakor", "ghostCaptain", "mobA", "mobB", "mobC",
+    "skeleton", "skelBrute", "skelGunner", "drowned", "drownedIce", "ashSkeleton", "stormSailor", "lanternMaid", "smith", "merchant", "shipmaster", "carver", "crewFire", "crewIce", "crewWind", "crewEarth", "villagerA", "villagerB", "villagerC", "villagerD", "villagerE", "villagerF", "villagerG", "villagerH", "smithIlka", "furWendla", "mapOrrin", "witchMabel", "kingFire", "kingIce", "kingWind", "kingEarth", "malakor", "ghostCaptain", "mobA", "mobB", "mobC", "drownA", "drownB", "drownC", "drownD", "drownKeeper",
 ];

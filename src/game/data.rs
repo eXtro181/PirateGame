@@ -272,10 +272,13 @@ pub struct LookIdx {
     pub coat: i32,
     #[serde(default)]
     pub patch: i32,
+    /// 0 Mann, 1 Frau
+    #[serde(default)]
+    pub female: i32,
 }
 impl LookIdx {
-    pub fn arr(&self) -> [i32; 8] {
-        [self.body, self.skin, self.hair, self.hair_col, self.beard, self.hat, self.coat, self.patch]
+    pub fn arr(&self) -> [i32; 9] {
+        [self.body, self.skin, self.hair, self.hair_col, self.beard, self.hat, self.coat, self.patch, self.female]
     }
     pub fn set(&mut self, i: usize, v: i32) {
         match i {
@@ -286,11 +289,44 @@ impl LookIdx {
             4 => self.beard = v,
             5 => self.hat = v,
             6 => self.coat = v,
-            _ => self.patch = v,
+            7 => self.patch = v,
+            _ => self.female = v,
         }
     }
     pub fn default_look() -> Self {
-        LookIdx { body: 0, skin: 1, hair: 1, hair_col: 5, beard: 1, hat: 1, coat: 0, patch: 0 }
+        LookIdx { body: 0, skin: 1, hair: 1, hair_col: 5, beard: 1, hat: 1, coat: 0, patch: 0, female: 0 }
+    }
+    /// Name eines Ertrunkenen aus Vor- und zusammengesetztem Beinamen (Zufallsgenerator)
+    pub fn random_name(female: bool, r: &mut dyn FnMut() -> f32) -> String {
+        const MEN: [&str; 20] = ["Jorek", "Hagen", "Tarvin", "Bram", "Corvin", "Edric", "Ulf", "Morten", "Kaspar", "Lorenz", "Anselm", "Ivar", "Gorm", "Severin", "Ruben", "Konrad", "Silas", "Matthis", "Arvid", "Bastian"];
+        const WOMEN: [&str; 20] = ["Isolde", "Mara", "Elva", "Runa", "Sigrun", "Liska", "Wanda", "Thea", "Ylva", "Greta", "Alwine", "Ronja", "Freya", "Hedda", "Marla", "Senta", "Kalla", "Imke", "Brida", "Nele"];
+        const A: [&str; 20] = ["Sturm", "Salz", "Teer", "Nebel", "Anker", "Grau", "Kraken", "Möwen", "Krähen", "Knochen", "Rost", "Tang", "Fels", "Schwarz", "Eisen", "Blut", "Asche", "Tiefen", "Wellen", "Gischt"];
+        const B: [&str; 15] = ["wind", "auge", "hand", "zahn", "herz", "wasser", "fuß", "bart", "klinge", "dorn", "segel", "haken", "schlund", "mut", "grab"];
+        let mut k = |n: usize| ((r() * n as f32) as usize).min(n - 1);
+        let first = if female { WOMEN[k(20)] } else { MEN[k(20)] };
+        // „Bart“ passt nicht zu jeder: Frauen bekommen einen anderen zweiten Teil
+        let mut b = B[k(15)];
+        if female && b == "bart" {
+            b = "dorn";
+        }
+        format!("{first} {}{b}", A[k(20)])
+    }
+    /// zufälliges Aussehen (Zufallsgenerator im Editor); `r` liefert Zufallszahlen 0..1
+    pub fn random(r: &mut dyn FnMut() -> f32) -> Self {
+        let mut k = |n: i32| ((r() * n as f32) as i32).min(n - 1);
+        let female = k(2);
+        LookIdx {
+            body: k(2),
+            skin: k(4),
+            // Frauen tragen öfter langes Haar oder einen Zopf
+            hair: if female == 1 { [1, 2, 2, 3, 3, 4][k(6) as usize] } else { k(5) },
+            hair_col: k(6),
+            beard: if female == 1 { 0 } else { k(4) },
+            hat: k(5),
+            coat: k(6),
+            patch: if k(5) == 0 { 1 } else { 0 },
+            female,
+        }
     }
 }
 

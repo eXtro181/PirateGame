@@ -197,7 +197,8 @@ fn setup(world: &mut bevy::ecs::world::World) {
                 s.lit_fires = vec![fire];
             }
             // Testläufe ohne das Erwachen im Sarg (mit &intro zum Ansehen) und ohne Prolog
-            // (mit &prolog im Wrackzwinger; &prolog&spider: die Spinne ist schon erschlagen)
+            // (mit &prolog in Stillwasser, &prolog&intro mit dem Erwachen am Tresen; &prolog&spider:
+            // die Spinne ist schon erschlagen)
             s.woke = !app.params.contains_key("intro");
             s.prolog = app.params.contains_key("prolog");
             s.spider = app.params.contains_key("spider");
@@ -265,6 +266,9 @@ fn setup(world: &mut bevy::ecs::world::World) {
                     } else if pos == "sin" {
                         // Testlauf: vor der Sündenstatue der Glutwacht
                         g.world.sin_statue.map(|si| (g.world.props[si].x, g.world.props[si].y + 46.0))
+                    } else if let Some(p) = g.world.prolog_spot(&pos) {
+                        // Testlauf: Prolog – Dorf, Galgenweg, Spinnenschlund (pos=dorf|galgen|schlund)
+                        Some(p)
                     } else if pos == "ghost" {
                         // Testlauf: neben dem Geisterkapitän auf dem Steg des Galgenstrands
                         g.npcs.iter().find(|n| n.def.id == "ghostCaptain").map(|n| (n.a.x - 34.0, n.a.y + 26.0))
@@ -286,6 +290,12 @@ fn setup(world: &mut bevy::ecs::world::World) {
                         g.player.a.x = x;
                         g.player.a.y = y;
                         g.cam_f = (x, y);
+                        // im Prolog anderswo beginnen: kein Erwachen am Tresen
+                        if matches!(g.cutscene, Some(game::Cut::Washed { .. })) {
+                            g.cutscene = None;
+                            g.ui.fade = 0.0;
+                            g.player.a.anim = "idle";
+                        }
                     }
                 }
             }
@@ -504,6 +514,7 @@ fn tick(
     };
 
     let mut sfx: Vec<&'static str> = vec![];
+    let mut sfx_vol: Vec<(&'static str, f32)> = vec![];
     let mut go_title = false;
     let mut restart: Option<Save> = None;
     let mut start: Option<(Option<save::Profile>, Save)> = None;
@@ -548,6 +559,7 @@ fn tick(
             for s in g.sfx_q.drain(..) {
                 sfx.push(s);
             }
+            sfx_vol.append(&mut g.sfx_vol);
             audio.set_mood(g.mood);
             if let Some((s, secs)) = g.song_req.take() {
                 audio.play_song(s, secs);
@@ -628,6 +640,9 @@ fn tick(
     audio.volume = app.opt.volume;
     for s in sfx {
         audio.sfx(s, 1.0);
+    }
+    for (s, v) in sfx_vol {
+        audio.sfx(s, v);
     }
     prof::time(prof::AUDIO, || audio.update(dt, fire_dist));
     app.input.end_frame();

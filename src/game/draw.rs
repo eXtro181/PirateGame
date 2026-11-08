@@ -442,7 +442,12 @@ impl Game {
             "frost" => ([190, 215, 235], 22, 8.0),
             "raben" => ([120, 130, 140], 70, 18.0),
             "kueste" => ([170, 190, 200], 40, 5.0),
-            "prolog" => ([120, 140, 152], 64, 6.0),
+            // Prolog: im Dorf ein heller Morgendunst, zum Spinnenschlund hin dichter, dunkler Nebel
+            "prolog" => {
+                let k = self.prolog_dark();
+                let m = |a: f32, b: f32| (a + (b - a) * k) as u8;
+                ([m(196.0, 112.0), m(212.0, 130.0), m(222.0, 142.0)], (14.0 + 56.0 * k) as i32, 6.0)
+            }
             _ => ([150, 190, 200], 26, 4.0),
         };
         if self.opt.fx_high {

@@ -17,6 +17,7 @@ pub mod seamon;
 pub mod ship;
 pub mod summon;
 pub mod hostile;
+pub mod prolog;
 
 pub use crate::art::{anim_index, Art, CharSheet};
 pub use crate::gfx::{flags, modes, Frame, LightDef, SprOpt};
@@ -158,6 +159,13 @@ pub struct Game {
     pub slow_t: f32,
     /// feindliche Siedlungen haben sich geändert: Mob anlegen bzw. entfernen
     pub hostile_dirty: bool,
+    /// Prolog: Bereich (0 Stillwasser, 1 Galgenweg, 2 Spinnenschlund), schon gezeigte
+    /// Vorahnungen, Zeit bis zum nächsten Schritt der lauernden Spinne
+    pub prolog_area: u8,
+    pub prolog_hint: u8,
+    pub skitter_t: f32,
+    /// Klänge mit eigener Lautstärke (Schritte der Spinne)
+    pub sfx_vol: Vec<(&'static str, f32)>,
     /// Netze der Meeresspinne am Boden (verlangsamen, zerreißen beim Hindurchrollen)
     pub webs: Vec<boss::WebPatch>,
     /// Spieler eingesponnen (Volltreffer eines Netzes): so lange festgehalten (s)
@@ -292,6 +300,10 @@ impl Game {
             talk_to: None,
             slow_t: 0.0,
             hostile_dirty: false,
+            prolog_area: 0,
+            prolog_hint: 0,
+            skitter_t: 0.0,
+            sfx_vol: vec![],
             webs: vec![],
             web_t: 0.0,
             web_slow: 0.0,
@@ -444,7 +456,7 @@ impl Game {
         g.refresh_player(true, art, frame);
         g.hp_ghost = g.player.hp;
         if g.save.prolog {
-            // Neues Spiel: im Wrackzwinger zwischen den Wracks zu sich kommen
+            // Neues Spiel: am Tresen der Kneipe „Zur Letzten Flut“ in Stillwasser zu sich kommen
             let (x, y) = g.world.prolog_start;
             g.player.a.x = x;
             g.player.a.y = y;
@@ -487,6 +499,7 @@ impl Game {
     pub fn place_name(&self) -> &'static str {
         match (self.zone_key, self.wild_cur) {
             (Zone::Wild, Some(i)) => self.world.wild[i].name,
+            (Zone::Prolog, _) => prolog::AREAS[self.prolog_area.min(2) as usize],
             (z, _) => z.def().name,
         }
     }
@@ -507,6 +520,7 @@ impl Game {
     /// Musik eines Ortes
     fn place_music(&self) -> &'static str {
         match (self.zone_key, self.wild_cur) {
+            (Zone::Prolog, _) => self.prolog_music(),
             (Zone::Wild, Some(i)) => match self.world.wild[i].r.biome {
                 sw_art::terrain::Biome::Fire => "glut",
                 sw_art::terrain::Biome::Frost => "frost",
@@ -888,6 +902,7 @@ impl Game {
         self.update_zone(dt);
         self.update_hub_wrecks(dt);
         self.update_boss_arena();
+        self.update_prolog(dt);
         self.update_camera(dt, frame);
         if self.whirlpool_open && self.sailing && self.cutscene.is_none() && (self.ship.hull.x - self.world.whirlpool.0).hypot(self.ship.hull.y - self.world.whirlpool.1) < 250.0 {
             self.enter_whirlpool();
@@ -999,6 +1014,10 @@ impl Game {
                     self.lock = None;
                     self.sfx("board");
                     self.cutscene = Some(Cut::Door { t, door, enter, moved: true });
+                } else if self.view.missing > 0 && t < 1.3 {
+                    // erst aufblenden, wenn der Boden am neuen Ort gebacken ist (keine Löcher)
+                    self.ui.fade = 1.0;
+                    self.cutscene = Some(Cut::Door { t, door, enter, moved });
                 } else {
                     self.ui.fade = (self.ui.fade - dt * 3.0).max(0.0);
                     self.cutscene = if self.ui.fade <= 0.0 { None } else { Some(Cut::Door { t, door, enter, moved }) };
@@ -1008,22 +1027,27 @@ impl Game {
                 let t0 = t;
                 let t = t + dt;
                 let crossed = |m: f32| t0 < m && t >= m;
-                // im Dunkeln das Rauschen des Falls, dann langsam aufblenden; man liegt, rappelt sich auf
-                self.ui.fade = if t < 1.2 { 1.0 } else { (1.0 - (t - 1.2) / 1.8).max(0.0) };
+                // am Tresen zu sich kommen: Gläserklirren im Dunkeln, dann blendet die Kneipe auf;
+                // man sitzt zusammengesunken vor der Theke und rappelt sich auf
+                self.ui.fade = if t < 1.0 { 1.0 } else { (1.0 - (t - 1.0) / 1.6).max(0.0) };
                 self.player.hidden = false;
-                self.player.a.anim = if t < 3.4 { "dead" } else { "hurt" };
+                self.player.a.face(0.0, -1.0);
+                self.player.a.anim = if t < 3.0 { "sit" } else { "idle" };
                 self.player.a.frame = 0.0;
-                if crossed(0.4) {
-                    self.sfx("tide");
+                if crossed(0.3) || crossed(1.5) {
+                    self.sfx("clink");
                 }
-                if crossed(3.4) {
+                if crossed(3.0) {
                     let (x, y) = (self.player.a.x, self.player.a.y);
-                    self.fx.burst("dust", x, y + 4.0, 10, BurstOpt { speed: Some(40.0), up: Some(24.0), ..Default::default() });
+                    self.fx.burst("dust", x, y + 4.0, 6, BurstOpt { speed: Some(30.0), up: Some(16.0), ..Default::default() });
                 }
-                if t >= 4.2 {
+                if crossed(3.3) {
+                    self.ui.toast("Wirt Klaas: „Na, endlich wach, Ertrunkener?“");
+                }
+                if t >= 4.0 {
                     self.cutscene = None;
                     self.player.a.anim = "idle";
-                    self.ui.banner(Zone::Prolog.def().name, "Die See hat dich ausgespien", "big", 3.8);
+                    self.ui.banner("Stillwasser", "Kneipe »Zur Letzten Flut«", "big", 3.8);
                     self.persist(true);
                 } else {
                     self.cutscene = Some(Cut::Washed { t });
@@ -1141,6 +1165,15 @@ impl Game {
                 self.zone_t = 4.0;
             }
         }
+        // Prolog: Dorf, Galgenweg und Spinnenschlund haben eigene Namen
+        if z == Zone::Prolog && !self.sailing {
+            let a = self.prolog_area_now();
+            if a != self.prolog_area {
+                self.prolog_area = a;
+                self.zone_name = self.place_name();
+                self.zone_t = 4.0;
+            }
+        }
         // erkundet ist eine Insel erst, wenn man an ihr ist (nicht schon beim Vorbeisegeln weit draußen)
         if on_island {
             let k = match wild {
@@ -1157,7 +1190,17 @@ impl Game {
         }
         self.zone_t = (self.zone_t - dt).max(0.0);
         let inside = !self.sailing && self.world.interior_at(x, y).is_some();
-        let mut target = if inside { env::env("innen", false) } else if z == Zone::Ende { env::env(self.end.env_key(), false) } else { env::env(self.env_key(), self.sailing && !on_island) };
+        let mut target = if inside {
+            // die Kneipe des Prologs ist hell und warm, die Läden kerzenbeleuchtet
+            env::env(if z == Zone::Prolog { "kneipe" } else { "innen" }, false)
+        } else if z == Zone::Ende {
+            env::env(self.end.env_key(), false)
+        } else if z == Zone::Prolog {
+            // vom hellen Dorf durch die Dämmerung des Galgenwegs ins Dunkel des Spinnenschlunds
+            env::mix(&env::env("prolog_dorf", false), &env::env("prolog", false), self.prolog_dark())
+        } else {
+            env::env(self.env_key(), self.sailing && !on_island)
+        };
         // elementare Seegebiete: Stimmung zum Rand hin weich einblenden
         let mut sea = (0.0f32, "");
         if self.sailing && !on_island {
@@ -1271,7 +1314,8 @@ impl Game {
             }
         }
         for (i, d) in self.world.doors.iter().enumerate() {
-            out.extend(f(d.x, d.y, 40.0, &format!("Laden in {} betreten", d.name), Use::Enter(i), None));
+            let label = if d.tavern { format!("Kneipe »{}« betreten", d.name) } else { format!("Laden in {} betreten", d.name) };
+            out.extend(f(d.x, d.y, 40.0, &label, Use::Enter(i), None));
             out.extend(f(d.exit.0, d.exit.1, 40.0, "Hinausgehen", Use::Leave(i), None));
         }
         let ship_busy = self.ship.sinking.is_some() || matches!(self.cutscene, Some(Cut::Summon { .. }));

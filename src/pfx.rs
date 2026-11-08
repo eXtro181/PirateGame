@@ -235,7 +235,7 @@ impl Lib {
         if !self.started {
             self.started = true;
             // Darsteller für Seele, Heilung und Wiedergeburt (Spielerfigur) und fürs Zersplittern (Skelett)
-            let hero = chars::frame(&chars::player_look(&[0, 1, 1, 5, 0, 0, 0, 0], "cutlass"), "down", "idle", 0, 1.0);
+            let hero = chars::frame(&chars::player_look(&[0, 1, 1, 5, 0, 0, 0, 0, 0], "cutlass"), "down", "idle", 0, 1.0);
             send_actor("hero", &hero, 4);
             let (l, s) = chars::preset("skeleton");
             let sk = chars::frame(&l, "down", "idle", 0, s);

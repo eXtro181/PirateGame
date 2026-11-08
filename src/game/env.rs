@@ -221,10 +221,49 @@ pub fn env(zone: &str, sailing_open_sea: bool) -> Env {
             light_k: 1.15,
             ..base
         },
-        // Wrackzwinger (Prolog): kaltes Mondlicht, dichter Seenebel, schwarzes Wasser
+        // Stillwasser (Prolog, Norden): ein heller, klarer Morgen – warmes Sonnenlicht, Lichtstrahlen,
+        // kaum Nebel, blaugrünes Wasser im Bach; das Dorf der Ertrunkenen ahnt nichts
+        "prolog_dorf" => Env {
+            rays: 1.0,
+            ambient: l(0xC8D2DC, 1.8),
+            sky: 0.85,
+            sun: l(0xFFE6BC, 1.9),
+            sun_dir: n3([-0.5, -0.35, 0.8]),
+            shadow: 0.5,
+            fog: l(0xA8BCC8, 1.0),
+            fog_k: 0.02,
+            lift: [0.05, 0.05, 0.055],
+            gain: [1.18, 1.15, 1.08],
+            sat: 1.08,
+            bloom: 0.7,
+            vignette: 0.6,
+            water_a: l(0x5AAAB0, 1.0),
+            water_b: l(0x22667E, 1.0),
+            water_c: l(0xE8F6F2, 1.0),
+            // Laternen brennen am Tag nur schwach
+            light_k: 0.4,
+            ..base
+        },
+        // die Kneipe „Zur Letzten Flut“: Tageslicht durch die Fenster, warmes Kerzenlicht
+        "kneipe" => Env {
+            rays: 0.0,
+            ambient: l(0xC8B49A, 0.82),
+            sky: 0.35,
+            sun: l(0xFFD8A8, 0.35),
+            shadow: 0.3,
+            fog: l(0x2A1E18, 1.0),
+            fog_k: 0.0,
+            lift: [0.025, 0.018, 0.01],
+            gain: [1.04, 1.0, 0.94],
+            bloom: 0.7,
+            vignette: 1.0,
+            light_k: 1.1,
+            ..base
+        },
+        // Spinnenschlund (Prolog, Süden): kaltes, fahles Mondlicht, dichter Nebel, schwarzes Wasser
         "prolog" => Env {
             rays: 0.45,
-            // hell genug, dass man Bewuchs und Pfade im Mondlicht erkennt
+            // dunkel, aber hell genug, dass man Felsen, Netze, Pfade und die Spinne erkennt
             ambient: l(0x72809A, 0.72),
             sky: 0.45,
             sun: l(0xB0C0DC, 0.78),
