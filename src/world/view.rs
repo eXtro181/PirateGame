@@ -12,8 +12,8 @@ pub struct ChunkCache {
     tick: u64,
     mats: Materials,
     en: EdgeNoise,
-    /// gebackener Chunk der offenen See (Farbe, Normalen), für alle reinen Wasser-Chunks gleich
-    water: Option<(Vec<u8>, Vec<u8>)>,
+    /// Platz 0 ist fest für die offene See reserviert (einmal gebacken und hochgeladen)
+    water_uploaded: bool,
     /// Chunk, der gerade über mehrere Bilder vorausgebacken wird
     job: Option<Job>,
 }
@@ -55,7 +55,7 @@ fn bkey(x: f32, y: f32) -> i32 {
 impl WorldView {
     pub fn new(world: &World, frame: &mut Frame) -> Self {
         let mut v = WorldView {
-            cache: ChunkCache { slots: vec![None; CHUNK_SLOTS as usize], map: HashMap::new(), tick: 0, mats: Materials::new(), en: EdgeNoise::new(), water: None, job: None },
+            cache: ChunkCache { slots: vec![None; CHUNK_SLOTS as usize], map: HashMap::new(), tick: 0, mats: Materials::new(), en: EdgeNoise::new(), water_uploaded: false, job: None },
             buckets: HashMap::new(),
             deco_b: HashMap::new(),
             deco_gen: HashMap::new(),
@@ -86,6 +86,7 @@ impl WorldView {
             *s = None;
         }
         self.cache.map.clear();
+        self.cache.water_uploaded = false;
         self.cache.job = None;
         self.deco_gen.clear();
         self.rebuild_buckets(w);
@@ -245,7 +246,9 @@ impl WorldView {
                     continue;
                 }
                 if let Some(&s) = self.cache.map.get(&(cx, cy)) {
-                    self.cache.slots[s as usize] = Some((cx, cy, tick));
+                    if s > 0 {
+                        self.cache.slots[s as usize] = Some((cx, cy, tick));
+                    }
                     out.push((s, (cx * CHUNK) as f32, (cy * CHUNK) as f32));
                 } else {
                     need.push((cx, cy));
@@ -276,7 +279,9 @@ impl WorldView {
                     continue;
                 }
                 if let Some(&s) = self.cache.map.get(&(cx, cy)) {
-                    self.cache.slots[s as usize] = Some((cx, cy, tick));
+                    if s > 0 {
+                        self.cache.slots[s as usize] = Some((cx, cy, tick));
+                    }
                 } else {
                     ring.push((cx, cy));
                 }
@@ -308,11 +313,11 @@ impl WorldView {
         out
     }
 
-    /// Freier oder am längsten ungenutzter Platz (nicht in diesem Bild gebraucht).
+    /// Freier oder am längsten ungenutzter Platz ab Index 1 (Platz 0 bleibt fest für offene See).
     fn free_slot(&self, tick: u64) -> Option<usize> {
         let mut best = None;
         let mut bt = u64::MAX;
-        for (i, s) in self.cache.slots.iter().enumerate() {
+        for (i, s) in self.cache.slots.iter().enumerate().skip(1) {
             match s {
                 None => return Some(i),
                 Some((_, _, t)) if *t < bt && *t != tick => {
@@ -337,23 +342,27 @@ impl WorldView {
 
     /// Einen Chunk sofort backen (sichtbar und fehlend) und hochladen.
     fn bake_into(&mut self, w: &World, frame: &mut Frame, cx: i32, cy: i32, tick: u64) -> Option<u32> {
-        let slot = self.free_slot(tick)?;
         let (x0, y0) = (cx * CHUNK, cy * CHUNK);
-        let data = if sw_art::terrain::open_water_chunk(w, x0, y0, CHUNK) {
-            // offene See: immer derselbe leere Chunk, einmal gebacken
-            let cache = &mut self.cache;
-            let (mats, en) = (&mut cache.mats, &cache.en);
-            cache.water.get_or_insert_with(|| sw_art::atlas::encode_canvas(&bake_chunk(w, mats, en, x0, y0, CHUNK), 0.55)).clone()
-        } else {
-            // war er schon angefangen, dort weitermachen
-            if self.cache.job.as_ref().is_some_and(|j| (j.cx, j.cy) != (cx, cy)) {
-                self.cache.job = None;
+        if sw_art::terrain::open_water_chunk(w, x0, y0, CHUNK) {
+            // offene See teilt sich immer Platz 0 (kein Klonen, kein Verdrängen von Insel-Chunks)
+            if !self.cache.water_uploaded {
+                let (col, nrm) = sw_art::atlas::encode_canvas(&bake_chunk(w, &mut self.cache.mats, &self.cache.en, x0, y0, CHUNK), 0.68);
+                frame.uploads.push(Upload { tex: Tex::ChunkCol, layer: 0, x: 0, y: 0, w: CHUNK as u32, h: CHUNK as u32, data: col });
+                frame.uploads.push(Upload { tex: Tex::ChunkNrm, layer: 0, x: 0, y: 0, w: CHUNK as u32, h: CHUNK as u32, data: nrm });
+                self.cache.water_uploaded = true;
             }
-            if self.cache.job.is_none() {
-                self.cache.job = Some(Job { cx, cy, phase: Phase::Start });
-            }
-            self.step_job(w, f64::INFINITY).map(|(_, _, d)| d)?
-        };
+            self.cache.map.insert((cx, cy), 0);
+            return Some(0);
+        }
+        let slot = self.free_slot(tick)?;
+        // war er schon angefangen, dort weitermachen
+        if self.cache.job.as_ref().is_some_and(|j| (j.cx, j.cy) != (cx, cy)) {
+            self.cache.job = None;
+        }
+        if self.cache.job.is_none() {
+            self.cache.job = Some(Job { cx, cy, phase: Phase::Start });
+        }
+        let data = self.step_job(w, f64::INFINITY).map(|(_, _, d)| d)?;
         self.upload(frame, slot, cx, cy, tick, data);
         Some(slot as u32)
     }
@@ -378,7 +387,7 @@ impl WorldView {
                     }
                 }
                 Phase::Encode(c, mut col, mut nrm, r) => {
-                    sw_art::atlas::encode_rows(&c, 0.55, r, r + 32, &mut col, &mut nrm);
+                    sw_art::atlas::encode_rows(&c, 0.68, r, r + 32, &mut col, &mut nrm);
                     Phase::Encode(c, col, nrm, r + 32)
                 }
             });
@@ -457,10 +466,15 @@ impl WorldView {
                         self.draw_prop(w, art, frame, pi, focus, hover == Some(pi), t);
                     }
                 }
+            }
+        }
+        // Boden-Deko nur in den tatsächlich sichtbaren Eimern (ohne Zwischen-Allokationen)
+        for by in d0y..=d1y {
+            for bx in d0x..=d1x {
                 let key = by * 1000 + bx;
-                let fixed = self.deco_b.get(&key).map(|l| l.iter().map(|&di| &w.deco[di]).collect::<Vec<_>>()).unwrap_or_default();
-                let gen = self.deco_gen.get(&key).map(|e| e.0.iter().collect::<Vec<_>>()).unwrap_or_default();
-                for d in fixed.into_iter().chain(gen) {
+                let fixed = self.deco_b.get(&key).map(|l| l.as_slice()).unwrap_or(&[]);
+                let gen = self.deco_gen.get(&key).map(|e| e.0.as_slice()).unwrap_or(&[]);
+                for d in fixed.iter().map(|&di| &w.deco[di]).chain(gen.iter()) {
                     if d.x < vx - 40.0 || d.x > vx + vw + 40.0 || d.y < vy - 20.0 || d.y > vy + vh + 60.0 {
                         continue;
                     }

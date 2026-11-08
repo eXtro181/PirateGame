@@ -459,7 +459,7 @@ fn tex_cobble(bp: &BiomePal, seed: u32, p: &[Rgba], cells: i32, moss: bool) -> C
     let nz = Noise::new(seed);
     for y in 0..TEX {
         for x in 0..TEX {
-            let (d1, d2, id) = worley(x as f32 * sc, y as f32 * sc * 1.15, cells, seed as i32);
+            let (d1, d2, gx, gy, id) = worley_grad(x as f32 * sc, y as f32 * sc * 1.15, cells, seed as i32);
             let edge = d2 - d1;
             let k = (id % 3) as f32 * 0.12;
             if edge < 0.08 {
@@ -468,12 +468,8 @@ fn tex_cobble(bp: &BiomePal, seed: u32, p: &[Rgba], cells: i32, moss: bool) -> C
             } else {
                 // Wölbung: zur Zellmitte hoch
                 let h = (edge / 0.5).min(1.0);
-                // Licht von oben links über Gradient-Näherung
-                let (d1x, _, _) = worley((x as f32 + 1.0) * sc, y as f32 * sc * 1.15, cells, seed as i32);
-                let (d1y, _, _) = worley(x as f32 * sc, (y as f32 + 1.0) * sc * 1.15, cells, seed as i32);
-                let gx = d1x - d1;
-                let gy = d1y - d1;
-                let l = (gx * 0.6 + gy * 0.8) * 9.0; // weg von der Mitte nach unten rechts = dunkel
+                // Licht von oben links über analytischen Worley-Gradienten
+                let l = (gx * sc * 0.6 + gy * (sc * 1.15) * 0.8) * 9.0; // weg von der Mitte nach unten rechts = dunkel
                 let v = 0.55 + k - l * 0.35 + (bayer(x, y) - 0.5) * 0.12 + nz.n2(x as f32 * 0.3, y as f32 * 0.3) * 0.08;
                 let col = pickf(&p[1..], v);
                 c.put(x, y, col, h * 2.0);
@@ -953,7 +949,7 @@ pub struct ChunkBake {
     grid: Vec<Mat>,
     wd: Vec<u8>,
     lg: Vec<u8>,
-    down: Vec<(i32, u8)>,
+    down: Vec<(i16, u8)>,
     lo_l: Vec<u8>,
     lo_r: Vec<u8>,
     lo_u: Vec<u8>,
@@ -994,7 +990,7 @@ impl ChunkBake {
             grid: vec![Mat::Water; (gw * gw) as usize],
             wd: vec![255u8; (gw * gw) as usize],
             lg: vec![0u8; (lw * lh) as usize],
-            down: vec![(i32::MAX, 0u8); n],
+            down: vec![(i16::MAX, 0u8); n],
             lo_l: vec![u8::MAX; n],
             lo_r: vec![u8::MAX; n],
             lo_u: vec![u8::MAX; n],
@@ -1084,6 +1080,12 @@ impl ChunkBake {
                 }
                 self.prow = end;
                 if end >= lh {
+                    let l0 = self.lg[0];
+                    if self.lg.iter().all(|&v| v == l0) {
+                        // komplett ebener Chunk: keine Klippen oder Böschungen, Stufen 2 & 3 überspringen
+                        self.stage = 4;
+                        return true;
+                    }
                     self.stage = 2;
                 }
                 false
@@ -1099,10 +1101,10 @@ impl ChunkBake {
                         let y = yy - mn;
                         let l = lv(x, y);
                         if (0..sz).contains(&y) {
-                            let mut best = (i32::MAX, 0u8);
+                            let mut best = (i16::MAX, 0u8);
                             for k in 0..(l as usize).min(8) {
-                                if pos[k] != i32::MAX && pos[k] - y < best.0 {
-                                    best = (pos[k] - y, k as u8);
+                                if pos[k] != i32::MAX && (pos[k] - y) < best.0 as i32 {
+                                    best = ((pos[k] - y).min(i16::MAX as i32) as i16, k as u8);
                                 }
                             }
                             down[(y * sz + x) as usize] = best;
@@ -1243,7 +1245,8 @@ impl ChunkBake {
                 let ty = py.div_euclid(T);
                 let l = lv(x, y);
                 let pi = (y * sz + x) as usize;
-                let (dd, lb) = down[pi];
+                let (dd_i16, lb) = down[pi];
+                let dd = dd_i16 as i32;
                 let deep = m.deep_cliff(tx, ty);
                 let fpx = if deep { FACE_PX * (l as i32 - lb as i32).max(1) } else { face_span(m.biome(tx, ty), l, lb) };
                 if l > 0 && dd <= fpx {
@@ -1262,6 +1265,7 @@ impl ChunkBake {
                     c.emi[i] = [shore_lookup(sh, sz, x, y), if mt == Mat::Water { 255 } else { 64 }, 0, 0];
                     continue;
                 }
+                let wd_raw = wd[((y + pad) * gw + x + pad) as usize];
                 if let Some(a) = m.art_px(px, py) {
                     // Fertigkacheln (PixelLab): Farbe übernehmen, Relief aus der Helligkeit; am Wasser
                     // wie überall eine dunkle, nasse Uferkante
@@ -1269,9 +1273,11 @@ impl ChunkBake {
                     let lu = (a[0] as f32 * 0.3 + a[1] as f32 * 0.59 + a[2] as f32 * 0.11) / 255.0;
                     let mut rel = (lu - 0.4) * 4.0;
                     let mut wet = 0.0f32;
-                    for (dx, dy, k) in [(1, 0, 1.0), (-1, 0, 1.0), (0, 1, 1.0), (0, -1, 1.0), (2, 0, 0.6), (-2, 0, 0.6), (0, 2, 0.6), (0, -2, 0.6), (0, 3, 0.4), (3, 0, 0.3), (-3, 0, 0.3)] {
-                        if g(x + dx, y + dy) == Mat::Water {
-                            wet = f32::max(wet, k);
+                    if wd_raw <= 8 {
+                        for (dx, dy, k) in [(1, 0, 1.0), (-1, 0, 1.0), (0, 1, 1.0), (0, -1, 1.0), (2, 0, 0.6), (-2, 0, 0.6), (0, 2, 0.6), (0, -2, 0.6), (0, 3, 0.4), (3, 0, 0.3), (-3, 0, 0.3)] {
+                            if g(x + dx, y + dy) == Mat::Water {
+                                wet = f32::max(wet, k);
+                            }
                         }
                     }
                     if [(1, 0), (0, 1), (-1, 0), (0, -1)].iter().any(|&(dx, dy)| g(x + dx, y + dy).transparent()) {
@@ -1333,11 +1339,13 @@ impl ChunkBake {
                         edge_dark = true;
                     }
                 }
-                // Ufer: nasse Kante
+                // Ufer: nasse Kante (nur nahe am Wasser prüfen)
                 let mut wet = 0.0f32;
-                for (dx, dy, k) in [(1, 0, 1.0), (-1, 0, 1.0), (0, 1, 1.0), (0, -1, 1.0), (2, 0, 0.6), (-2, 0, 0.6), (0, 2, 0.6), (0, -2, 0.6), (0, 3, 0.4), (3, 0, 0.3), (-3, 0, 0.3)] {
-                    if g(x + dx, y + dy) == Mat::Water {
-                        wet = f32::max(wet, k);
+                if wd_raw <= 8 {
+                    for (dx, dy, k) in [(1, 0, 1.0), (-1, 0, 1.0), (0, 1, 1.0), (0, -1, 1.0), (2, 0, 0.6), (-2, 0, 0.6), (0, 2, 0.6), (0, -2, 0.6), (0, 3, 0.4), (3, 0, 0.3), (-3, 0, 0.3)] {
+                        if g(x + dx, y + dy) == Mat::Water {
+                            wet = f32::max(wet, k);
+                        }
                     }
                 }
                 if edge_dark {
@@ -1367,11 +1375,9 @@ impl ChunkBake {
                     let bpal = biome_pal(b);
                     let st = &bpal.stone;
                     let sc = 1.0 / 6.0;
-                    let (d1, d2, id) = worley(px as f32 * sc, py as f32 * sc * 1.2, 0, 77);
+                    let (d1, d2, gx, gy, id) = worley_grad(px as f32 * sc, py as f32 * sc * 1.2, 0, 77);
                     let e = d2 - d1;
-                    let (dx1, _, _) = worley((px + 1) as f32 * sc, py as f32 * sc * 1.2, 0, 77);
-                    let (dy1, _, _) = worley(px as f32 * sc, (py + 1) as f32 * sc * 1.2, 0, 77);
-                    let l = ((dx1 - d1) * 0.6 + (dy1 - d1) * 0.8) * 14.0;
+                    let l = (gx * sc * 0.6 + gy * (sc * 1.2) * 0.8) * 14.0;
                     let (col2, rel2) = if e < 0.07 {
                         (shade(st[0], 0.8), -1.0)
                     } else {
@@ -1848,10 +1854,8 @@ fn hill_pixel(mats: &mut Materials, en: &EdgeNoise, c: &mut Canvas, x: i32, y: i
         let k = ((fyf - top_r) / (hgt as f32 - top_r).max(1.0)).clamp(0.0, 1.0);
         let sc = 1.0 / 17.0;
         let (wx, wy) = (px as f32 * sc, (py as f32 + n3 * 6.0) * sc * 2.0);
-        let (d1, d2, id) = worley(wx, wy, 0, 41);
-        let (dx1, _, _) = worley(wx + sc, wy, 0, 41);
-        let (dy1, _, _) = worley(wx, wy + sc * 2.0, 0, 41);
-        let lgt = ((dx1 - d1) * 0.7 + (dy1 - d1) * 0.9) * 12.0;
+        let (d1, d2, gx, gy, id) = worley_grad(wx, wy, 0, 41);
+        let lgt = (gx * sc * 0.7 + gy * (sc * 2.0) * 0.9) * 12.0;
         let e = d2 - d1;
         let tint = (id % 7) as f32 * 0.025 - 0.07;
         // senkrechte Regen- und Sickerspuren

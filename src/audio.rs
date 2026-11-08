@@ -6,26 +6,30 @@ use std::collections::HashMap;
 
 #[cfg(target_arch = "wasm32")]
 mod web {
-    use std::cell::RefCell;
+    use std::cell::{Cell, RefCell};
     use wasm_bindgen::prelude::*;
     use wasm_bindgen::JsCast;
     use web_sys::*;
 
     thread_local! {
         pub static CTX: RefCell<Option<AudioContext>> = const { RefCell::new(None) };
+        static UNLOCKED: Cell<bool> = const { Cell::new(false) };
     }
 
     /// AudioContext im Benutzer-Ereignis anlegen/fortsetzen (iOS verlangt das).
     pub fn install_unlock() {
         let Some(w) = window() else { return };
         let cb = Closure::<dyn FnMut()>::new(|| {
+            if UNLOCKED.with(|u| u.get()) {
+                return;
+            }
             CTX.with(|c| {
                 if c.borrow().is_none() {
                     *c.borrow_mut() = AudioContext::new().ok();
                 }
                 if let Some(ctx) = c.borrow().as_ref() {
                     let _ = ctx.resume();
-                    // stiller Puffer: entsperrt Safari
+                    // stiller Puffer: entsperrt Safari einmalig beim ersten Eingabe-Ereignis
                     if let Ok(b) = ctx.create_buffer(1, 1, 22050.0) {
                         if let Ok(s) = ctx.create_buffer_source() {
                             s.set_buffer(Some(&b));
@@ -33,6 +37,7 @@ mod web {
                             let _ = s.start();
                         }
                     }
+                    UNLOCKED.with(|u| u.set(true));
                 }
             })
         });
@@ -86,7 +91,13 @@ mod web {
             let ir = ctx.create_buffer(2, len, rate).ok()?;
             let mut r = crate::synth::Rng::new(99);
             for ch in 0..2 {
-                let d: Vec<f32> = (0..len).map(|i| r.f() * (1.0 - i as f32 / len as f32).powf(2.6)).collect();
+                let inv_len = 1.0 / len as f32;
+                let d: Vec<f32> = (0..len)
+                    .map(|i| {
+                        let x = 1.0 - i as f32 * inv_len;
+                        r.f() * x * x * x.sqrt()
+                    })
+                    .collect();
                 ir.copy_to_channel(&d, ch).ok()?;
             }
             let rev = ctx.create_convolver().ok()?;

@@ -267,7 +267,8 @@ impl Gpu {
         let bgl_gb = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor { label: Some("bgl_gb"), entries: &[tex_entry(0, Dm::D2, true), tex_entry(1, Dm::D2, true)] });
         let pl_over = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("pl_over"), bind_group_layouts: &[&bgl0, &bgl_scene, &bgl_gb], push_constant_ranges: &[] });
         let all = wgpu::ColorWrites::ALL;
-                let p_gbuf = pipe(d, "gbuf", &pl_scene, &scene_mod, "vs_world", "fs_gbuf", true, &[ct(ALB, None, all), ct(NRM, None, all), ct(hdr, None, all)]);
+        let none = wgpu::ColorWrites::empty();
+        let p_gbuf = pipe(d, "gbuf", &pl_scene, &scene_mod, "vs_world", "fs_gbuf", true, &[ct(ALB, None, all), ct(NRM, None, all), ct(hdr, None, all)]);
         let p_decal = pipe(
             d,
             "decal",
@@ -276,7 +277,7 @@ impl Gpu {
             "vs_world",
             "fs_decal",
             true,
-            &[ct(ALB, Some(wgpu::BlendState::ALPHA_BLENDING), wgpu::ColorWrites::COLOR)],
+            &[ct(ALB, Some(wgpu::BlendState::ALPHA_BLENDING), wgpu::ColorWrites::COLOR), ct(NRM, None, none), ct(hdr, None, none)],
         );
         // Überlagerung schreibt nur Farbe: Alpha der Szene trägt die Bodenzeile für die Tiefenschärfe
         let col = wgpu::ColorWrites::COLOR;
@@ -541,12 +542,15 @@ impl Node for SwNode {
                 pass.draw_indexed(range.0 * 6..(range.0 + range.1) * 6, 0, 0..1);
             }
         };
-        // 1) G-Puffer: Boden, dann Schatten (nur Farbe), dann Welt
-        let gpass = |enc: &mut wgpu::CommandEncoder, clear: bool, range: (u32, u32)| {
-            let c = |col: wgpu::Color| if clear { Some(col) } else { None };
+        // 1) G-Puffer in einem einzigen Render-Pass: Boden, dann Schatten (nur Farbe), dann Welt
+        {
             let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("gbuf"),
-                color_attachments: &[att(&t.alb, c(black)), att(&t.nrm, c(wgpu::Color { r: 0.5, g: 0.5, b: 0.0, a: 0.0 })), att(&t.emi, c(black))],
+                color_attachments: &[
+                    att(&t.alb, Some(black)),
+                    att(&t.nrm, Some(wgpu::Color { r: 0.5, g: 0.5, b: 0.0, a: 0.0 })),
+                    att(&t.emi, Some(black)),
+                ],
                 depth_stencil_attachment: None,
                 timestamp_writes: None,
                 occlusion_query_set: None,
@@ -556,27 +560,14 @@ impl Node for SwNode {
             pass.set_vertex_buffer(0, gpu.vbuf.slice(..));
             pass.set_index_buffer(gpu.ibuf.slice(..), wgpu::IndexFormat::Uint32);
             pass.set_pipeline(&gpu.p_gbuf);
-            if range.1 > 0 {
-                pass.draw_indexed(range.0 * 6..(range.0 + range.1) * 6, 0, 0..1);
+            draw(&mut pass, r[0]);
+            if r[1].1 > 0 {
+                pass.set_pipeline(&gpu.p_decal);
+                draw(&mut pass, r[1]);
+                pass.set_pipeline(&gpu.p_gbuf);
             }
-        };
-        gpass(enc, true, r[0]);
-        if r[1].1 > 0 {
-            let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("decal"),
-                color_attachments: &[att(&t.alb, None)],
-                depth_stencil_attachment: None,
-                timestamp_writes: None,
-                occlusion_query_set: None,
-            });
-            pass.set_bind_group(0, &gpu.bg0, &[]);
-            pass.set_bind_group(1, gpu.bg_scene.as_ref().unwrap(), &[]);
-            pass.set_vertex_buffer(0, gpu.vbuf.slice(..));
-            pass.set_index_buffer(gpu.ibuf.slice(..), wgpu::IndexFormat::Uint32);
-            pass.set_pipeline(&gpu.p_decal);
-            draw(&mut pass, r[1]);
+            draw(&mut pass, r[2]);
         }
-        gpass(enc, false, r[2]);
         // 2) Licht + Überlagerung
         {
             let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor {

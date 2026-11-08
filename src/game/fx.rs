@@ -143,7 +143,7 @@ impl Fx {
     }
     pub fn p(&mut self, p: P) {
         if self.parts.len() > 1400 {
-            self.parts.remove(0);
+            self.parts.swap_remove(0);
         }
         let mut p = p;
         p.max = p.life;
@@ -301,58 +301,140 @@ impl Fx {
 
     /// Telegraphen auf den Boden (unter den Figuren).
     pub fn draw_under(&self, f: &mut Frame) {
+        let (vx, vy, vw, vh) = f.view();
         for &(x, y, rest, c) in &self.prints {
+            if x < vx - 16.0 || x > vx + vw + 16.0 || y < vy - 16.0 || y > vy + vh + 16.0 {
+                continue;
+            }
             let a = (rest / 3.0).min(1.0) * c[3] as f32;
             f.decals.push(Frame::quad_rect(x - 2.0, y - 1.0, 4.0, 2.5, [c[0], c[1], c[2], a as u8], modes::SOFT, 0));
         }
+        let seg_q = |x0: f32, y0: f32, x1: f32, y1: f32, hw: f32, c: [u8; 4], mode: u8| -> Option<crate::gfx::Q> {
+            let (dx, dy) = (x1 - x0, y1 - y0);
+            let len = dx.hypot(dy);
+            if len < 0.01 {
+                return None;
+            }
+            let (nx, ny) = (-dy / len * hw, dx / len * hw);
+            Some(crate::gfx::Q {
+                p: [[x0 - nx, y0 - ny], [x1 - nx, y1 - ny], [x1 + nx, y1 + ny], [x0 + nx, y0 + ny]],
+                uv: [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]],
+                col: c,
+                ext: [0, mode, 0, 0],
+                prm: [0.0, 0.0],
+                sway: 0,
+            })
+        };
         for m in &self.marks {
             let k = (m.t / m.dur.max(0.01)).min(1.0);
             let pulse = 0.75 + 0.25 * (m.t * 18.0).sin();
             let col = Self::c8(m.col, pulse);
-            let full = Self::c8([m.col[0], m.col[1], m.col[2], 0.7], 1.0);
+            let full = Self::c8([m.col[0], m.col[1], m.col[2], 0.75], 1.0);
+            let rim = Self::c8([(m.col[0] * 1.35).min(1.0), (m.col[1] * 1.35).min(1.0), (m.col[2] * 1.35).min(1.0), 0.9], pulse);
             match m.kind {
                 MarkKind::Circle => {
                     let rx = m.r;
                     let ry = m.r * 0.6;
-                    // Fläche als Streifen, Fortschrittsring
-                    let mut y = -ry;
-                    while y <= ry {
-                        let w = (1.0 - (y / ry).powi(2)).max(0.0).sqrt() * rx;
-                        let q = Frame::quad_rect(m.x - w, m.y + y, w * 2.0, 2.0, col, modes::SOLID, 0);
-                        f.decals.push(q);
-                        y += 4.0;
-                    }
+                    // Weiche Grundfläche + wachsender Fortschrittskern + glatte Polygonringe
+                    f.decals.push(Frame::quad_rect(m.x - rx * 1.08, m.y - ry * 1.08, rx * 2.16, ry * 2.16, col, modes::SOFT, 0));
                     let rk = rx * k;
-                    let mut a = 0.0f32;
-                    while a < std::f32::consts::TAU {
-                        f.decals.push(Frame::quad_rect(m.x + a.cos() * rk - 1.0, m.y + a.sin() * rk * 0.6 - 1.0, 2.0, 2.0, full, modes::SOLID, 0));
-                        a += 0.06;
+                    let ryk = ry * k;
+                    if rk > 1.5 {
+                        f.decals.push(Frame::quad_rect(m.x - rk * 1.05, m.y - ryk * 1.05, rk * 2.1, ryk * 2.1, full, modes::SOFT, 0));
+                    }
+                    const N: usize = 28;
+                    for i in 0..N {
+                        let a0 = (i as f32 / N as f32) * std::f32::consts::TAU;
+                        let a1 = ((i + 1) as f32 / N as f32) * std::f32::consts::TAU;
+                        let (c0, s0) = (a0.cos(), a0.sin());
+                        let (c1, s1) = (a1.cos(), a1.sin());
+                        if let Some(q) = seg_q(m.x + c0 * rx, m.y + s0 * ry, m.x + c1 * rx, m.y + s1 * ry, 1.1, col, modes::SOLID) {
+                            f.decals.push(q);
+                        }
+                        if rk > 1.0 {
+                            if let Some(q) = seg_q(m.x + c0 * rk, m.y + s0 * ryk, m.x + c1 * rk, m.y + s1 * ryk, 1.4, rim, modes::SOLID) {
+                                f.decals.push(q);
+                            }
+                        }
                     }
                 }
                 MarkKind::Cone => {
-                    let mut d = 12.0;
-                    while d < m.r {
-                        let mut s = -m.w;
-                        while s <= m.w {
-                            let a = m.ang + s;
-                            let cc = if d < m.r * k { full } else { col };
-                            f.decals.push(Frame::quad_rect(m.x + a.cos() * d - 1.0, m.y + a.sin() * d * 0.7 - 1.0, 3.0, 2.0, cc, modes::SOLID, 0));
-                            s += 6.0 / d;
+                    const SEGS: usize = 12;
+                    let r0 = 10.0f32.min(m.r * 0.5);
+                    let rk = (r0 + (m.r - r0) * k).clamp(r0, m.r);
+                    let pt = |a: f32, d: f32| -> [f32; 2] { [m.x + a.cos() * d, m.y + a.sin() * d * 0.7] };
+                    for i in 0..SEGS {
+                        let a0 = m.ang - m.w + (2.0 * m.w) * (i as f32 / SEGS as f32);
+                        let a1 = m.ang - m.w + (2.0 * m.w) * ((i + 1) as f32 / SEGS as f32);
+                        if rk < m.r {
+                            f.decals.push(crate::gfx::Q {
+                                p: [pt(a0, rk), pt(a1, rk), pt(a1, m.r), pt(a0, m.r)],
+                                uv: [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]],
+                                col,
+                                ext: [0, modes::SOLID, 0, 0],
+                                prm: [0.0, 0.0],
+                                sway: 0,
+                            });
                         }
-                        d += 5.0;
+                        if rk > r0 {
+                            f.decals.push(crate::gfx::Q {
+                                p: [pt(a0, r0), pt(a1, r0), pt(a1, rk), pt(a0, rk)],
+                                uv: [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]],
+                                col: full,
+                                ext: [0, modes::SOLID, 0, 0],
+                                prm: [0.0, 0.0],
+                                sway: 0,
+                            });
+                        }
+                        let [x0, y0] = pt(a0, m.r);
+                        let [x1, y1] = pt(a1, m.r);
+                        if let Some(q) = seg_q(x0, y0, x1, y1, 1.2, rim, modes::SOLID) {
+                            f.decals.push(q);
+                        }
+                    }
+                    for s in [-m.w, m.w] {
+                        let [x0, y0] = pt(m.ang + s, r0);
+                        let [x1, y1] = pt(m.ang + s, m.r);
+                        if let Some(q) = seg_q(x0, y0, x1, y1, 1.1, rim, modes::SOLID) {
+                            f.decals.push(q);
+                        }
                     }
                 }
                 MarkKind::Line => {
                     let (ca, sa) = (m.ang.cos(), m.ang.sin());
-                    let mut d = 0.0;
-                    while d < m.r {
-                        let mut s = -m.w;
-                        while s <= m.w {
-                            let cc = if d < m.r * k { full } else { col };
-                            f.decals.push(Frame::quad_rect(m.x + ca * d - sa * s - 1.0, m.y + sa * d * 0.85 + ca * s - 1.0, 3.0, 3.0, cc, modes::SOLID, 0));
-                            s += 4.0;
+                    let pt = |d: f32, s: f32| -> [f32; 2] { [m.x + ca * d - sa * s, m.y + sa * d * 0.85 + ca * s] };
+                    let rk = m.r * k;
+                    if rk < m.r {
+                        f.decals.push(crate::gfx::Q {
+                            p: [pt(rk, -m.w), pt(m.r, -m.w), pt(m.r, m.w), pt(rk, m.w)],
+                            uv: [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]],
+                            col,
+                            ext: [0, modes::SOLID, 0, 0],
+                            prm: [0.0, 0.0],
+                            sway: 0,
+                        });
+                    }
+                    if rk > 0.5 {
+                        f.decals.push(crate::gfx::Q {
+                            p: [pt(0.0, -m.w), pt(rk, -m.w), pt(rk, m.w), pt(0.0, m.w)],
+                            uv: [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]],
+                            col: full,
+                            ext: [0, modes::SOLID, 0, 0],
+                            prm: [0.0, 0.0],
+                            sway: 0,
+                        });
+                    }
+                    for s in [-m.w, m.w] {
+                        let [x0, y0] = pt(0.0, s);
+                        let [x1, y1] = pt(m.r, s);
+                        if let Some(q) = seg_q(x0, y0, x1, y1, 1.15, rim, modes::SOLID) {
+                            f.decals.push(q);
                         }
-                        d += 4.0;
+                    }
+                    let [fx0, fy0] = pt(rk, -m.w);
+                    let [fx1, fy1] = pt(rk, m.w);
+                    if let Some(q) = seg_q(fx0, fy0, fx1, fy1, 1.3, rim, modes::SOLID) {
+                        f.decals.push(q);
                     }
                 }
             }
@@ -361,9 +443,13 @@ impl Fx {
 
     pub fn draw(&self, f: &mut Frame, lib: &crate::pfx::Lib) {
         self.px.draw(f, lib);
+        let (vx, vy, vw, vh) = f.view();
         for p in &self.parts {
-            let a = (p.life / p.max * 2.0).min(1.0);
             let y = p.y - p.z;
+            if p.x < vx - 48.0 || p.x > vx + vw + 48.0 || y < vy - 48.0 || y > vy + vh + 48.0 {
+                continue;
+            }
+            let a = (p.life / p.max * 2.0).min(1.0);
             if p.glow > 0.0 {
                 let k = p.glow * a;
                 f.glow(p.x, y, p.size * 1.6, Self::c8([p.col[0] * k, p.col[1] * k, p.col[2] * k, 1.0], 1.0));
@@ -381,13 +467,29 @@ impl Fx {
             }
         }
         for b in &self.bolts {
-            let fade = 1.0 - b.t / b.dur;
-            let col = Self::c8([b.col[0] * 2.0, b.col[1] * 2.0, b.col[2] * 2.0, 1.0], fade);
+            let fade = (1.0 - b.t / b.dur).clamp(0.0, 1.0);
+            let glow_col = Self::c8([b.col[0] * 1.5, b.col[1] * 1.5, b.col[2] * 1.5, 0.55], fade);
+            let col = Self::c8([b.col[0] * 2.2, b.col[1] * 2.2, b.col[2] * 2.2, 1.0], fade);
             for s in &b.segs {
-                let n = ((s[2] - s[0]).hypot(s[3] - s[1])).round().max(1.0) as i32;
-                for i in 0..=n {
-                    let t = i as f32 / n as f32;
-                    f.over(Frame::quad_rect(s[0] + (s[2] - s[0]) * t - 1.0, s[1] + (s[3] - s[1]) * t - 1.0, 2.0, 2.0, col, modes::SOLID, 0), true);
+                let (dx, dy) = (s[2] - s[0], s[3] - s[1]);
+                let len = dx.hypot(dy);
+                if len < 0.01 {
+                    continue;
+                }
+                let (nx, ny) = (-dy / len, dx / len);
+                for (hw, c, mode) in [(3.4f32, glow_col, modes::SOFT), (1.15f32, col, modes::SOLID)] {
+                    let (ox, oy) = (nx * hw, ny * hw);
+                    f.over(
+                        crate::gfx::Q {
+                            p: [[s[0] - ox, s[1] - oy], [s[2] - ox, s[3] - oy], [s[2] + ox, s[3] + oy], [s[0] + ox, s[1] + oy]],
+                            uv: [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]],
+                            col: c,
+                            ext: [0, mode, 0, 0],
+                            prm: [0.0, 0.0],
+                            sway: 0,
+                        },
+                        true,
+                    );
                 }
             }
         }

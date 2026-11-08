@@ -156,7 +156,7 @@ impl Noise {
 pub fn worley(x: f32, y: f32, cells: i32, seed: i32) -> (f32, f32, u32) {
     let xi = x.floor() as i32;
     let yi = y.floor() as i32;
-    let (mut d1, mut d2, mut id) = (9.0f32, 9.0f32, 0u32);
+    let (mut d1_sq, mut d2_sq, mut id) = (81.0f32, 81.0f32, 0u32);
     for j in -1..=1 {
         for i in -1..=1 {
             let cx = if cells > 0 { (xi + i).rem_euclid(cells) } else { xi + i };
@@ -164,15 +164,51 @@ pub fn worley(x: f32, y: f32, cells: i32, seed: i32) -> (f32, f32, u32) {
             let h = hash(cx, cy, seed);
             let px = (xi + i) as f32 + (h & 1023) as f32 / 1023.0 * 0.8 + 0.1;
             let py = (yi + j) as f32 + ((h >> 10) & 1023) as f32 / 1023.0 * 0.8 + 0.1;
-            let d = ((px - x).powi(2) + (py - y).powi(2)).sqrt();
-            if d < d1 {
-                d2 = d1;
-                d1 = d;
+            let dx = px - x;
+            let dy = py - y;
+            let d2 = dx * dx + dy * dy;
+            if d2 < d1_sq {
+                d2_sq = d1_sq;
+                d1_sq = d2;
                 id = h;
-            } else if d < d2 {
-                d2 = d;
+            } else if d2 < d2_sq {
+                d2_sq = d2;
             }
         }
     }
-    (d1, d2, id)
+    (d1_sq.sqrt(), d2_sq.sqrt(), id)
+}
+
+/// Worley-Zellen samt analytischem Gradienten von `d1`: `(d1, d2, gx, gy, id)` mit `gx = ∂d1/∂x`, `gy = ∂d1/∂y`.
+/// Spart zwei zusätzliche `worley`-Aufrufe bei Pflaster-, Uferstein- und Felswand-Schattierung.
+pub fn worley_grad(x: f32, y: f32, cells: i32, seed: i32) -> (f32, f32, f32, f32, u32) {
+    let xi = x.floor() as i32;
+    let yi = y.floor() as i32;
+    let (mut d1_sq, mut d2_sq, mut id) = (81.0f32, 81.0f32, 0u32);
+    let (mut vx, mut vy) = (0.0f32, 0.0f32);
+    for j in -1..=1 {
+        for i in -1..=1 {
+            let cx = if cells > 0 { (xi + i).rem_euclid(cells) } else { xi + i };
+            let cy = if cells > 0 { (yi + j).rem_euclid(cells) } else { yi + j };
+            let h = hash(cx, cy, seed);
+            let px = (xi + i) as f32 + (h & 1023) as f32 / 1023.0 * 0.8 + 0.1;
+            let py = (yi + j) as f32 + ((h >> 10) & 1023) as f32 / 1023.0 * 0.8 + 0.1;
+            let dx = x - px;
+            let dy = y - py;
+            let d2 = dx * dx + dy * dy;
+            if d2 < d1_sq {
+                d2_sq = d1_sq;
+                d1_sq = d2;
+                vx = dx;
+                vy = dy;
+                id = h;
+            } else if d2 < d2_sq {
+                d2_sq = d2;
+            }
+        }
+    }
+    let d1 = d1_sq.sqrt();
+    let d2 = d2_sq.sqrt();
+    let inv = if d1 > 1.0e-5 { 1.0 / d1 } else { 0.0 };
+    (d1, d2, vx * inv, vy * inv, id)
 }

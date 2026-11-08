@@ -72,8 +72,12 @@ fn dkey(ch: char) -> char {
         c => c.to_uppercase().next().unwrap_or(c),
     }
 }
-fn dtext(s: &str) -> String {
-    s.replace('ß', "SS")
+fn dtext(s: &str) -> std::borrow::Cow<'_, str> {
+    if s.contains('ß') {
+        std::borrow::Cow::Owned(s.replace('ß', "SS"))
+    } else {
+        std::borrow::Cow::Borrowed(s)
+    }
 }
 /// Breite in UI-Pixeln bei Versalhöhe `size`
 pub fn display_width(art: &Art, s: &str, size: f32) -> f32 {
@@ -156,13 +160,21 @@ pub fn tr(f: &mut Frame, art: &Art, s: &str, x: f32, y: f32, col: [u8; 4]) {
 pub fn wrap(art: &Art, s: &str, maxw: f32) -> Vec<String> {
     let mut out = vec![];
     let mut line = String::new();
+    let mut line_w = 0.0f32;
+    let space_w = adv(art, ' ');
     for word in s.split(' ') {
-        let cand = if line.is_empty() { word.to_string() } else { format!("{line} {word}") };
-        if width(art, &cand) > maxw && !line.is_empty() {
+        let word_w = width(art, word);
+        let cand_w = if line.is_empty() { word_w } else { line_w + space_w + word_w };
+        if cand_w > maxw && !line.is_empty() {
             out.push(std::mem::take(&mut line));
-            line = word.to_string();
+            line.push_str(word);
+            line_w = word_w;
         } else {
-            line = cand;
+            if !line.is_empty() {
+                line.push(' ');
+            }
+            line.push_str(word);
+            line_w = cand_w;
         }
     }
     if !line.is_empty() {

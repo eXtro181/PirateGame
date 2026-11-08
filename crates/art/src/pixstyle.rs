@@ -8,9 +8,9 @@ use crate::canvas::Canvas;
 use crate::color::*;
 
 /// Stufen der Helligkeit (HSL), der Sättigung und des Farbtons (Grad)
-const L_STEPS: f32 = 8.0;
-const S_STEPS: f32 = 5.0;
-const H_STEP: f32 = 12.0;
+const L_STEPS: f32 = 14.0;
+const S_STEPS: f32 = 8.0;
+const H_STEP: f32 = 8.0;
 
 /// Ab dieser Deckkraft zählt ein Pixel als fest (bekommt Umriss und Stufen)
 const SOLID: u8 = 200;
@@ -85,19 +85,24 @@ pub fn pixel_style(c: &Canvas) -> Canvas {
                 continue;
             }
             let mut best = (0usize, 0u32);
-            for oy in -1..=1i32 {
-                for ox in -1..=1i32 {
-                    if ox == 0 && oy == 0 {
-                        continue;
-                    }
-                    let q = ((y + oy) * w + x + ox) as usize;
-                    if keys[q] == u32::MAX {
-                        continue;
-                    }
-                    let cnt = (-1..=1i32).flat_map(|a| (-1..=1i32).map(move |b| (a, b))).filter(|&(a, b)| (a, b) != (0, 0) && keys[((y + b) * w + x + a) as usize] == keys[q]).count();
-                    if cnt > best.0 {
-                        best = (cnt, q as u32);
-                    }
+            let nbs = [
+                j - w as usize - 1,
+                j - w as usize,
+                j - w as usize + 1,
+                j - 1,
+                j + 1,
+                j + w as usize - 1,
+                j + w as usize,
+                j + w as usize + 1,
+            ];
+            for &q in &nbs {
+                let kq = keys[q];
+                if kq == u32::MAX {
+                    continue;
+                }
+                let cnt = nbs.iter().filter(|&&r| keys[r] == kq).count();
+                if cnt > best.0 {
+                    best = (cnt, q as u32);
                 }
             }
             if best.0 >= 3 {
@@ -190,28 +195,30 @@ pub fn pixel_tex(c: &mut Canvas) {
     let n = (w * h) as usize;
     let at = |x: i32, y: i32| (y.rem_euclid(h) * w + x.rem_euclid(w)) as usize;
     let lum = |p: Rgba| (p[0] as f32 * 0.3 + p[1] as f32 * 0.59 + p[2] as f32 * 0.11) / 255.0;
-    // weiche Helligkeit (Kastenfilter 25×25, getrennt, mit Umlauf)
+    // weiche Helligkeit (gleitender Kastenfilter 25×25 in O(W*H), getrennt, mit Umlauf)
     let r = 12;
     let l0: Vec<f32> = c.col.iter().map(|&p| lum(p)).collect();
     let mut tmp = vec![0.0f32; n];
     for y in 0..h {
+        let mut a = 0.0;
+        for dx in -r..=r {
+            a += l0[at(dx, y)];
+        }
         for x in 0..w {
-            let mut a = 0.0;
-            for dx in -r..=r {
-                a += l0[at(x + dx, y)];
-            }
-            tmp[at(x, y)] = a;
+            tmp[(y * w + x) as usize] = a;
+            a += l0[at(x + r + 1, y)] - l0[at(x - r, y)];
         }
     }
     let k = ((2 * r + 1) * (2 * r + 1)) as f32;
     let mut soft = vec![0.0f32; n];
-    for y in 0..h {
-        for x in 0..w {
-            let mut a = 0.0;
-            for dy in -r..=r {
-                a += tmp[at(x, y + dy)];
-            }
-            soft[at(x, y)] = a / k;
+    for x in 0..w {
+        let mut a = 0.0;
+        for dy in -r..=r {
+            a += tmp[at(x, dy)];
+        }
+        for y in 0..h {
+            soft[(y * w + x) as usize] = a / k;
+            a += tmp[at(x, y + r + 1)] - tmp[at(x, y - r)];
         }
     }
     let mean_l = l0.iter().sum::<f32>() / n as f32;
@@ -223,16 +230,17 @@ pub fn pixel_tex(c: &mut Canvas) {
         ab += p[2] as f32;
     }
     let [mh, ms, _] = to_hsl([(ar / n as f32) as u8, (ag / n as f32) as u8, (ab / n as f32) as u8, 255]);
-    const STEP: f32 = 0.042;
+    const STEP: f32 = 0.028;
+    let hsl: Vec<[f32; 3]> = c.col.iter().map(|&p| to_hsl(p)).collect();
     let mut tone = vec![0i8; n];
     let mut own = vec![false; n];
     for i in 0..n {
-        // 70 % der großen Flecken einebnen
-        let l = l0[i] - (soft[i] - mean_l) * 0.7;
-        tone[i] = ((l - mean_l) / STEP).round().clamp(-7.0, 5.0) as i8;
-        let [hh, ss, _] = to_hsl(c.col[i]);
+        // 48 % der großen Flecken einebnen, feinere Materialkontraste erhalten
+        let l = l0[i] - (soft[i] - mean_l) * 0.48;
+        tone[i] = ((l - mean_l) / STEP).round().clamp(-9.0, 8.0) as i8;
+        let [hh, ss, _] = hsl[i];
         let dh = ((hh - mh + 540.0).rem_euclid(360.0) - 180.0).abs();
-        own[i] = ss > 0.12 && (dh > 28.0 || ss > ms + 0.3);
+        own[i] = ss > 0.12 && (dh > 26.0 || ss > ms + 0.28);
     }
     let mut t2 = tone.clone();
     for y in 0..h {
@@ -241,17 +249,17 @@ pub fn pixel_tex(c: &mut Canvas) {
             if own[i] || [(1, 0), (-1, 0), (0, 1), (0, -1)].iter().any(|&(dx, dy)| tone[at(x + dx, y + dy)] == tone[i]) {
                 continue;
             }
-            let mut cnt = [0u8; 13];
+            let mut cnt = [0u8; 18];
             for dy in -1..=1 {
                 for dx in -1..=1 {
                     if dx != 0 || dy != 0 {
-                        cnt[(tone[at(x + dx, y + dy)] + 7) as usize] += 1;
+                        cnt[(tone[at(x + dx, y + dy)] + 9) as usize] += 1;
                     }
                 }
             }
             let (bi, bc) = cnt.iter().enumerate().max_by_key(|e| *e.1).unwrap();
             if *bc >= 3 {
-                t2[i] = bi as i8 - 7;
+                t2[i] = bi as i8 - 9;
             }
         }
     }
@@ -259,13 +267,13 @@ pub fn pixel_tex(c: &mut Canvas) {
         let t = t2[i] as f32;
         let l = (mean_l + t * STEP).clamp(0.02, 0.97);
         let q = if own[i] {
-            // eigene Farbe (Blume, Glut, Moos): Farbton bleibt, Helligkeit gestuft
-            let [hh, ss, _] = to_hsl(c.col[i]);
-            let lq = (to_hsl(c.col[i])[2] / STEP).round() * STEP;
-            from_hsl([(hh / 10.0).round() * 10.0, (ss * 5.0).round() / 5.0, lq.clamp(0.02, 0.97)])
+            // eigene Farbe (Blume, Glut, Moos): Farbton bleibt, Helligkeit fein gestuft
+            let [hh, ss, ll] = hsl[i];
+            let lq = (ll / STEP).round() * STEP;
+            from_hsl([(hh / 8.0).round() * 8.0, (ss * 7.0).round() / 7.0, lq.clamp(0.02, 0.97)])
         } else {
-            let hh = (mh - t * 3.0).rem_euclid(360.0);
-            let ss = (ms * (1.0 - t * 0.06)).clamp(0.0, 1.0);
+            let hh = (mh - t * 2.2).rem_euclid(360.0);
+            let ss = (ms * (1.0 - t * 0.045)).clamp(0.0, 1.0);
             // HSL-Helligkeit so wählen, dass die Leuchtdichte der Stufe entspricht
             let mut q = from_hsl([hh, ss, l]);
             let f = l / lum(q).max(0.01);
