@@ -495,7 +495,7 @@ impl Game {
         // Porträt des Gesprächspartners über dem Dialog (Kopf und Schultern, vergrößert)
         if self.ui.dialog.is_some() {
             if let Some(n) = self.talk_to.and_then(|i| self.npcs.get(i)) {
-                if let Some(sh) = art.chars.get(n.def.preset) {
+                if let Some(sh) = art.chars.get(n.def.preset).filter(|sh| sh.f.first().is_some_and(|d| d.first().is_some_and(|a| !a.is_empty()))) {
                     let s = sh.get(0, 0, ((self.t * 2.5) as usize) % sh.f[0][0].len().max(1));
                     let bw = (w - 16.0).min(440.0);
                     let (bx, by) = ((w / 2.0 - bw / 2.0).round(), h - 66.0 - 10.0);

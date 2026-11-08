@@ -216,7 +216,7 @@ impl Game {
             }
             let (Body::Sheet(sname) | Body::Beast(sname)) = d.body;
             if let Some(sh) = art.chars.get(sname) {
-                if e.state == ES::Dead && e.dead_t < 0.32 {
+                if e.state == ES::Dead && e.dead_t < 0.32 && !sh.f.is_empty() {
                     // Sterben über mehrere Bilder: taumelt zurück, sackt zusammen, dann liegt er
                     let k = e.dead_t / 0.32;
                     let mut a = e.a;

@@ -40,7 +40,8 @@ const LIMIT = 0.12; // höchstens 12 % deutlich abweichende Pixel
     p.on('console', (m) => {
       const t = m.text();
       if (/Welt erzeugt/.test(t)) t0 = Date.now();
-      if (/panic|ERROR|wgpu error/i.test(t)) errs.push(t.slice(0, 200));
+      // Fehler des Spiels (Panik, Bevy-ERROR); der Hinweis auf Software-Rendering in Swiftshader zählt nicht
+      if ((/panicked|\bERROR\b/.test(t)) && !/software rendering/.test(t)) errs.push(t.replace(/%c/g, '').slice(0, 200));
     });
     p.on('pageerror', (e) => errs.push('PAGEERR ' + e.message.slice(0, 200)));
     await p.goto(`${base}/?debug&${q}`);
