@@ -127,7 +127,7 @@ fn main() {
             let list: Vec<(PropArt, i32, i32)> = vec![
                 (townhouse(0), 110, 250), (townhouse(1), 330, 250), (townhouse(2), 580, 250), (tavern(), 900, 260),
                 (well(), 120, 420), (stall(0), 260, 440), (stall(1), 400, 440), (laundry(2), 520, 420),
-                (flower_pot(1), 600, 420), (ward_post(0), 660, 430), (gibbet(), 760, 460), (lamppost(), 860, 430),
+                (flower_pot(1), 600, 420), (ward_post(0), 660, 430), (sw_art::grave::gibbet(0), 760, 460), (lamppost(), 860, 430),
             ];
             for (pa, x, y) in &list {
                 let c = sw_art::pixstyle::pixel_style(&pa.c);

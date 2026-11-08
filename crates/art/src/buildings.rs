@@ -133,7 +133,7 @@ pub fn boarded(c: &mut Canvas, x: i32, y: i32, w: i32, h: i32, seed: i32) {
             }
         }
         c.set(x, yy - 1, ir[4]);
-        c.set(x + w - 1, yy - 1 + tilt.signum() * 0, ir[4]);
+        c.set(x + w - 1, yy - 1, ir[4]);
     }
 }
 

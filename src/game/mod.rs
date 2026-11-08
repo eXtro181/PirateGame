@@ -1246,7 +1246,8 @@ impl Game {
         }
         if let Some(si) = self.world.sin_statue {
             let p = &self.world.props[si];
-            out.extend(f(p.x, p.y, 96.0, "Sündenstatue", Use::Sin, Some(si)));
+            // an der Vorderkante des breiten Sockels (sonst reicht der Fokus von vorn nicht hin)
+            out.extend(f(p.x, p.y + 26.0, 120.0, "Sündenstatue", Use::Sin, Some(si)));
         }
         for (i, it) in self.items.iter().enumerate() {
             out.extend(f(it.x, it.y, 40.0, "Aufheben", Use::Item(i), None));

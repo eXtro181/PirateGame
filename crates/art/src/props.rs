@@ -963,53 +963,6 @@ pub fn ward_post(seed: i32) -> PropArt {
     PropArt::new("wardPost", c, 17, 76).shadow(8.0, 3.0).circle(5.0).light(0.0, -2.0, 66.0, 90.0, [1.4, 0.8, 0.35], 0.3)
 }
 
-/// Galgen mit eisernem Käfig, darin ein Skelett (Dark-Fantasy-Dorf).
-pub fn gibbet() -> PropArt {
-    let (w, h) = (70, 124);
-    let mut c = Canvas::new(w, h);
-    let dk = darkwood();
-    let ir = iron();
-    let b = bone();
-    // Pfosten, Arm und Strebe
-    c.rect_r(10, 6, 7, 116, dk[2], 2.0);
-    c.vline(10, 6, 121, dk[4]);
-    c.vline(16, 6, 121, dk[1]);
-    c.rect_r(10, 6, 52, 6, dk[2], 3.0);
-    c.hline(10, 61, 6, dk[4]);
-    c.tube(&[(17.0, 34.0), (38.0, 12.0)], 2.2, 2.0, &dk, 2.0, 3.0);
-    // Kette
-    for k in 0..5 {
-        let y = 12 + k * 4;
-        c.ellipse(52.0, y as f32 + 1.5, 1.5, 2.0, ir[3 - (k % 2) as usize]);
-    }
-    // Käfig: Ring oben und unten, Stäbe, Kuppel
-    let (cx, top, bot) = (52.0f32, 34.0f32, 86.0f32);
-    for k in 0..7 {
-        let x = cx - 12.0 + k as f32 * 4.0;
-        let bend = ((k as f32 - 3.0) / 3.0).powi(2) * 3.0;
-        c.tube(&[(cx + (x - cx) * 0.4, top - 4.0), (x, top + bend), (x, bot - bend), (cx + (x - cx) * 0.5, bot + 4.0)], 0.9, 0.9, &ir, 2.0, 4.0);
-    }
-    c.hline((cx - 12.0) as i32, (cx + 12.0) as i32, top as i32 + 2, ir[4]);
-    c.hline((cx - 12.0) as i32, (cx + 12.0) as i32, bot as i32 - 2, ir[2]);
-    // Skelett im Käfig, zusammengesunken
-    skull(&mut c, cx - 2.0, top + 10.0, 1.3);
-    c.tube(&[(cx - 1.0, top + 16.0), (cx + 1.0, top + 34.0)], 1.4, 1.2, &b, 2.0, 3.0);
-    for k in 0..4 {
-        let y = top + 19.0 + k as f32 * 4.0;
-        c.tube(&[(cx - 5.0, y), (cx + 6.0, y + 1.0)], 0.8, 0.7, &b, 1.5, 3.0);
-    }
-    c.tube(&[(cx - 1.0, top + 18.0), (cx - 8.0, top + 30.0), (cx - 6.0, top + 42.0)], 1.0, 0.8, &b, 1.5, 3.0);
-    c.tube(&[(cx + 2.0, top + 34.0), (cx + 7.0, bot - 2.0)], 1.1, 0.9, &b, 1.5, 3.0);
-    c.tube(&[(cx - 1.0, top + 34.0), (cx - 6.0, bot + 2.0)], 1.1, 0.9, &b, 1.5, 3.0);
-    // Krähe auf dem Arm
-    let crow = p6(&[0x060608, 0x0E0E12, 0x16161C, 0x202028, 0x2A2A34, 0x363642]);
-    c.dome(30.0, 3.0, 4.0, 3.0, &crow, 2.0, 5.0, 0.3, 0.1);
-    c.dome(33.0, 0.5, 2.0, 2.0, &crow, 2.0, 6.0, 0.3, 0.1);
-    c.put(35, 1, hex(0x5A4A2A), 6.0);
-    c.outline(true, 0.8);
-    PropArt::new("gibbet", c, 13, 121).shadow(14.0, 4.0).circle(6.0).sway(10)
-}
-
 pub fn stone_column(seed: i32) -> PropArt {
     let (w, h) = (36, 86);
     let mut c = Canvas::new(w, h);

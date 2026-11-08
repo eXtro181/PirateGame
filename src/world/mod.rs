@@ -1505,7 +1505,7 @@ impl World {
         // Dark Fantasy: Bannpfähle mit Schädeln statt Blumentöpfen, ein Galgen mit Käfig
         self.prop_t("wardPost", cx - 6, cy - 3);
         self.prop_t("wardPost", cx + 10, cy - 3);
-        self.prop_t("gibbet", cx - 15, cy - 1);
+        self.prop_t(if k % 2 == 0 { "gibbet0" } else { "gibbet1" }, cx - 15, cy - 1);
         for (i, d) in decor.iter().enumerate() {
             let (x, y) = [(-13, 4), (13, 5), (-2, 6), (2, -3)][i % 4];
             self.prop_t(d, cx + x, cy + y);
@@ -3332,8 +3332,8 @@ impl World {
         for (x, y) in [(-24, 4), (0, 14), (-8, -7), (12, 14)] {
             self.prop_t("wardPost", cx + x, cy + y);
         }
-        self.prop_t("gibbet", cx - 28, cy + 6);
-        self.prop_t("gibbet", cx + 24, cy + 10);
+        self.prop_t("gibbet0", cx - 28, cy + 6);
+        self.prop_tf("gibbet1", cx + 24, cy + 10, true);
         self.arena("raben", cx - 2, cy - 28, 9, Mat::Cobble, (0, 1));
         self.fire("raben2", cx + 2, cy - 19);
         self.plateau(cx + 20, cy - 26, 14, 10, 1);

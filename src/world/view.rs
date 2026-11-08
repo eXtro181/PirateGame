@@ -684,7 +684,7 @@ impl WorldView {
                 }
             }
             // Gehängte am Galgen und Käfige am Gibbet schwingen im Wind
-            if kind.starts_with("gallows") || kind.starts_with("gibbet") {
+            if (kind.starts_with("gallows") || kind.starts_with("gibbet")) && !def.frames.is_empty() {
                 let n = def.frames.len();
                 let sx = if p.flip { -1.0 } else { 1.0 };
                 let spots: &[(f32, f32)] = if kind.starts_with("gallows") { &[(-38.0, -117.0), (0.0, -118.0), (38.0, -117.0)] } else { &[(42.0, -137.0)] };

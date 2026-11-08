@@ -389,6 +389,24 @@ impl Game {
         }
     }
 
+    /// Testlauf (`&sink=<s>`): am nächsten Steg versinkt das Schiff gerade (ab Sekunde s).
+    pub fn debug_sink(&mut self, t: f32) {
+        let (px, py) = (self.player.a.x, self.player.a.y);
+        let di = (0..self.world.docks.len()).min_by(|a, b| {
+            let da = (self.world.docks[*a].px - px).hypot(self.world.docks[*a].py - py);
+            let db = (self.world.docks[*b].px - px).hypot(self.world.docks[*b].py - py);
+            da.partial_cmp(&db).unwrap()
+        });
+        let Some(di) = di else { return };
+        let d = self.world.docks[di].clone();
+        self.player.a.x = d.px;
+        self.player.a.y = d.py;
+        self.cam_f = (d.px, d.py);
+        self.save.ship_raised = true;
+        self.place_ship(di);
+        self.ship.sinking = Some(t.max(0.0));
+    }
+
     /// Der Geisterkapitän übergibt das Flaschenschiff und löst sich in Nebel auf.
     pub(super) fn take_bottle(&mut self) {
         // Gespräch richtig beenden (sonst bleibt die Figur im Gesprächszustand stehen)

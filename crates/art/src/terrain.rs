@@ -1606,7 +1606,12 @@ fn face_pixel<M: TerrainMap>(m: &M, mats: &mut Materials, en: &EdgeNoise, c: &mu
     }
     let top_mat = if top_mat.transparent() { Mat::Rock } else { top_mat };
     if b != Biome::Hub && !deep {
-        hill_pixel(mats, en, c, x, y, px, py, fy, hgt, &bp, b, top_mat, ev_at(fy), below == Mat::Water);
+        if m.town(tx, ty) {
+            // in Siedlungen: gemauerte Stützmauer statt wilder Felswand
+            masonry_pixel(c, x, y, px, fy, hgt, &bp, ev_at(fy), below == Mat::Water, false);
+        } else {
+            hill_pixel(mats, en, c, x, y, px, py, fy, hgt, &bp, b, top_mat, ev_at(fy), below == Mat::Water);
+        }
         return;
     }
     let has_lip = matches!(top_mat, Mat::Grass | Mat::Meadow | Mat::Moss | Mat::Snow);
@@ -1653,7 +1658,7 @@ fn face_pixel<M: TerrainMap>(m: &M, mats: &mut Materials, en: &EdgeNoise, c: &mu
         }
     }
     if b == Biome::Hub && !deep {
-        masonry_pixel(c, x, y, px, fy, hgt, &bp, ev_at(fy), below == Mat::Water);
+        masonry_pixel(c, x, y, px, fy, hgt, &bp, ev_at(fy), below == Mat::Water, true);
         return;
     }
     if fy < cap_here {
@@ -1931,7 +1936,7 @@ fn path_pixel(c: &mut Canvas, x: i32, y: i32, px: i32, py: i32, en: &EdgeNoise, 
 /// Festungsmauer der Glutwacht: Quader in versetzten Lagen, helle Deckplatten, dunkle Fugen
 /// (manchmal glühend), Schießscharten und Wasserlinie am Seeufer.
 #[allow(clippy::too_many_arguments)]
-fn masonry_pixel(c: &mut Canvas, x: i32, y: i32, px: i32, fy: i32, hgt: i32, bp: &BiomePal, ev: f32, water: bool) {
+fn masonry_pixel(c: &mut Canvas, x: i32, y: i32, px: i32, fy: i32, hgt: i32, bp: &BiomePal, ev: f32, water: bool, fort: bool) {
     static ST: std::sync::OnceLock<Vec<Rgba>> = std::sync::OnceLock::new();
     let st = ST.get_or_init(|| pal(&[0x342E36, 0x48404C, 0x5E5562, 0x786C7C, 0x948898, 0xB4A8B2]));
     let mut v: f32;
@@ -1967,7 +1972,7 @@ fn masonry_pixel(c: &mut Canvas, x: i32, y: i32, px: i32, fy: i32, hgt: i32, bp:
             }
         }
         // Schießscharten in manchen Feldern
-        let slit = hash(px.div_euclid(64), 5, 13) % 3 == 0 && (px.rem_euclid(64) - 32).abs() <= 1 && fy > 14 && fy < hgt - 14 && (fy - 6).rem_euclid(FACE_PX) > 18;
+        let slit = fort && hash(px.div_euclid(64), 5, 13) % 3 == 0 && (px.rem_euclid(64) - 32).abs() <= 1 && fy > 14 && fy < hgt - 14 && (fy - 6).rem_euclid(FACE_PX) > 18;
         if slit {
             v = 0.04;
             rel = -2.0;

@@ -25,6 +25,15 @@ pub fn town_name(key: &str) -> &'static str {
     }
 }
 
+/// Name nach „mit“ (Dativ): „der Glutwacht“, sonst wie der Ortsname
+fn town_dat(key: &str) -> &'static str {
+    if key == "hain" {
+        "der Glutwacht"
+    } else {
+        town_name(key)
+    }
+}
+
 impl Game {
     /// Schlüssel als statische Zeichenkette (aus der Welt bzw. „hain“)
     fn static_town(&self, k: &str) -> Option<&'static str> {
@@ -182,9 +191,9 @@ impl Game {
         for k in self.save.hostile.clone() {
             let Some(sk) = self.static_town(&k) else { continue };
             items.push(entry(
-                &format!("Frieden mit {}", town_name(sk)),
+                &format!("Frieden mit {}", town_dat(sk)),
                 &format!("{cost} Perlen"),
-                "Lege Perlen in die glühende Schale. Die Statue nimmt deine Schuld, und die Siedlung vergisst, was du getan hast.",
+                "Lege Perlen in die glühende Schale: Die Statue nimmt deine Schuld, der Ort vergibt dir.",
                 self.save.pearls < cost,
                 Cmd::Atone(sk),
             ));

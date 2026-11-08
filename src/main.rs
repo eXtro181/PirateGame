@@ -264,7 +264,7 @@ fn setup(world: &mut bevy::ecs::world::World) {
                         g.world.settlement_keys.iter().position(|s| *s == k).map(|i| (g.world.settlements[i].0, g.world.settlements[i].1 + 40.0))
                     } else if pos == "sin" {
                         // Testlauf: vor der Sündenstatue der Glutwacht
-                        g.world.sin_statue.map(|si| (g.world.props[si].x, g.world.props[si].y + 60.0))
+                        g.world.sin_statue.map(|si| (g.world.props[si].x, g.world.props[si].y + 46.0))
                     } else if pos == "ghost" {
                         // Testlauf: neben dem Geisterkapitän auf dem Steg des Galgenstrands
                         g.npcs.iter().find(|n| n.def.id == "ghostCaptain").map(|n| (n.a.x - 34.0, n.a.y + 26.0))
@@ -318,6 +318,12 @@ fn setup(world: &mut bevy::ecs::world::World) {
                 // Testlauf: mit so vielen Lebenspunkten beginnen (z. B. &hp=1: der erste Treffer tötet)
                 if let Scene::Play(g) = &mut app.scene {
                     g.player.hp = hp.clamp(1.0, g.player.d.max_hp);
+                }
+            }
+            if let Some(t) = app.params.get("sink").and_then(|v| v.parse::<f32>().ok()) {
+                // Testlauf: das Schiff versinkt am nächsten Steg (ab Sekunde t)
+                if let Scene::Play(g) = &mut app.scene {
+                    g.debug_sink(t);
                 }
             }
             if let Some(v) = app.params.get("hostile").cloned() {

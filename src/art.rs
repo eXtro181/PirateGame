@@ -1007,7 +1007,6 @@ pub fn build(frame: &mut Frame) -> Art {
         bd::townhouse(1),
         bd::townhouse(2),
         pr::ward_post(0),
-        pr::gibbet(),
         bd::tavern(),
         bd::forge(),
         bd::wreck(),
