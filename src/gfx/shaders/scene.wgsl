@@ -410,19 +410,21 @@ fn fs_decal(v: VOut) -> GOut {
 fn fs_overlay(v: VOut) -> @location(0) vec4<f32> {
     let mode = v.ext.y;
     if (mode == 5u) {
-        // Nebelbank: vor der Texturabfrage zwischen Pixel- und FullHD-Modus verzweigen (keine doppelten Abfragen)
+        // Nebelbank: vor der Texturabfrage zwischen Pixel- und FullHD-Modus verzweigen (keine doppelten Abfragen).
+        // prm.x = Parallaxe: höhere Lagen ziehen mit der Kamera mit (Tiefe zwischen den Lagen)
         let t = G.screen.z;
+        let wpos = v.world + (G.view.xy + G.view.zw * 0.5) * v.prm.x;
         let e = min(min(v.uv.x, 1.0 - v.uv.x), min(v.uv.y, 1.0 - v.uv.y));
         let edge = smoothstep(0.0, 0.28, e);
         var a = 0.0;
         if (G.hd3.x < 0.5) {
-            let p = floor(v.world);
+            let p = floor(wpos);
             let n = noise_at(p * 0.25 + vec2<f32>(t * v.prm.y, t * v.prm.y * 0.3)).r;
             let n2 = noise_at(p * 0.12 - vec2<f32>(t * v.prm.y * 0.6, 0.0)).b;
             a = smoothstep(0.35, 0.85, n * 0.6 + n2 * 0.5) * v.col.a * edge;
             a = floor(a * 6.0 + hash21(p) * 0.8) / 6.0;
         } else {
-            let pf = v.world * 0.5;
+            let pf = wpos * 0.5;
             let n = noise_at(pf * 0.25 + vec2<f32>(t * v.prm.y, t * v.prm.y * 0.3)).r;
             let n2 = noise_at(pf * 0.12 - vec2<f32>(t * v.prm.y * 0.6, 0.0)).b;
             // dritte Lage aus dem weichen Rauschkanal (der Worley-Kanal g zeichnete ein Liniennetz)

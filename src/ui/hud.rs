@@ -492,6 +492,33 @@ impl Game {
                 Ui::rect(f, (w / 2.0 - lw / 2.0).round(), 14.0 + size + 6.0, lw, 1.0, [196, 168, 118, (a_out * 170.0) as u8]);
             }
         }
+        // Porträt des Gesprächspartners über dem Dialog (Kopf und Schultern, vergrößert)
+        if self.ui.dialog.is_some() {
+            if let Some(n) = self.talk_to.and_then(|i| self.npcs.get(i)) {
+                if let Some(sh) = art.chars.get(n.def.preset) {
+                    let s = sh.get(0, 0, ((self.t * 2.5) as usize) % sh.f[0][0].len().max(1));
+                    let bw = (w - 16.0).min(440.0);
+                    let (bx, by) = ((w / 2.0 - bw / 2.0).round(), h - 66.0 - 10.0);
+                    let (pw, ph) = (56.0, 56.0);
+                    let (px, py) = (bx, by - ph - 18.0);
+                    Ui::panel(f, art, px, py, pw, ph);
+                    // Ausschnitt: Mitte des Bildes, oberer Teil der Figur (aus dem Ankerpunkt)
+                    let page = sw_art::atlas::PAGE as f32;
+                    let cw = 26.0f32.min(s.w as f32);
+                    let top = (s.ay as f32 - 64.0).max(0.0);
+                    let (u0, v0) = ((s.x as f32 + s.ax as f32 - cw / 2.0) / page, (s.y as f32 + top) / page);
+                    let (u1, v1) = (u0 + cw / page, v0 + 26.0 / page);
+                    f.ui.push(crate::gfx::Q {
+                        p: [[px + 3.0, py + 3.0], [px + pw - 3.0, py + 3.0], [px + pw - 3.0, py + ph - 3.0], [px + 3.0, py + ph - 3.0]],
+                        uv: [[u0, v0], [u1, v0], [u1, v1], [u0, v1]],
+                        col: [255; 4],
+                        ext: [s.page as u8, crate::gfx::modes::ATLAS, 0, 0],
+                        prm: [0.0, 0.0],
+                        sway: 0,
+                    });
+                }
+            }
+        }
         self.ui.draw_overlays(f, art);
         if self.ui.map_open {
             self.draw_map(f, art);

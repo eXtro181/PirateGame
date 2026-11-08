@@ -194,10 +194,14 @@ pub struct SprOpt {
     pub rot: f32,
     /// Ausschnitt von oben abschneiden (0..1, z. B. Wasser bis zur Hüfte)
     pub cut_bottom: f32,
+    /// Stauchen/Strecken (senkrechter Faktor; waagrecht gegenläufig, der Fuß bleibt stehen)
+    pub squash: f32,
+    /// Scherung: Oberkante um so viele Pixel seitlich versetzt (Lehnen, Ausholen)
+    pub skew: f32,
 }
 impl Default for SprOpt {
     fn default() -> Self {
-        SprOpt { flip: false, tint: [255; 4], flags: 0, sway: 0, ev: 0.0, scale: 1.0, rot: 0.0, cut_bottom: 0.0 }
+        SprOpt { flip: false, tint: [255; 4], flags: 0, sway: 0, ev: 0.0, scale: 1.0, rot: 0.0, cut_bottom: 0.0, squash: 1.0, skew: 0.0 }
     }
 }
 
@@ -258,7 +262,9 @@ impl Frame {
     }
     pub fn set_camera(&mut self, cx: f32, cy: f32) {
         let (w, h) = (self.low.0 as f32, self.low.1 as f32);
-        self.g.view = [(cx - w * 0.5).round(), (cy - h * 0.5).round(), w, h];
+        // auf Zielpixel runden: in FullHD halbe Weltpixel (ruhigere Kamerafahrt, Pixel bleiben scharf)
+        let k = self.rs.max(1) as f32;
+        self.g.view = [((cx - w * 0.5) * k).round() / k, ((cy - h * 0.5) * k).round() / k, w, h];
     }
     /// Zoom des Endbilds (1 = keiner, siehe `fs_final`)
     fn zoom(&self) -> f32 {
@@ -296,10 +302,11 @@ impl Frame {
     pub fn quad_spr(s: &Spr, x: f32, y: f32, o: &SprOpt) -> Q {
         // x,y = Fußpunkt in Welt; Sprite-Anker (ax, ay)
         let sc = o.scale;
-        let w = s.w as f32 * sc;
-        let mut h = s.h as f32 * sc;
-        let ax = if o.flip { (s.w as f32 - s.ax as f32) * sc } else { s.ax as f32 * sc };
-        let ay = s.ay as f32 * sc;
+        let (sxk, syk) = if o.squash != 1.0 { (1.0 / o.squash.max(0.2).sqrt(), o.squash) } else { (1.0, 1.0) };
+        let w = s.w as f32 * sc * sxk;
+        let mut h = s.h as f32 * sc * syk;
+        let ax = if o.flip { (s.w as f32 - s.ax as f32) * sc } else { s.ax as f32 * sc } * sxk;
+        let ay = s.ay as f32 * sc * syk;
         let x0 = x - ax;
         let y0 = y - ay;
         let u0 = s.x as f32 / ATLAS_PX;
@@ -309,13 +316,13 @@ impl Frame {
         let mut ev = o.ev;
         if o.cut_bottom > 0.0 {
             let cut = (s.h as f32 * o.cut_bottom).round();
-            h -= cut * sc;
+            h -= cut * sc * syk;
             v1 -= cut / ATLAS_PX;
             // Höhe auf die sichtbare Unterkante (Wasserlinie) beziehen, nicht auf den verdeckten Fuß
             ev -= (cut - (s.h as f32 - s.ay as f32)).max(0.0) * sc;
         }
         let (ua, ub) = if o.flip { (u1, u0) } else { (u0, u1) };
-        let mut p = [[x0, y0], [x0 + w, y0], [x0 + w, y0 + h], [x0, y0 + h]];
+        let mut p = [[x0 + o.skew, y0], [x0 + w + o.skew, y0], [x0 + w, y0 + h], [x0, y0 + h]];
         if o.rot != 0.0 {
             let (sn, cs) = o.rot.sin_cos();
             for q in p.iter_mut() {
@@ -421,8 +428,12 @@ impl Frame {
         self.over_add.push(q);
     }
     pub fn fog(&mut self, x: f32, y: f32, w: f32, h: f32, col: [u8; 4], speed: f32) {
+        self.fog_layer(x, y, w, h, col, speed, 0.0);
+    }
+    /// Nebellage mit Parallaxe (`par` 0 = am Boden, 0,3 = hoch, zieht mit der Kamera mit)
+    pub fn fog_layer(&mut self, x: f32, y: f32, w: f32, h: f32, col: [u8; 4], speed: f32, par: f32) {
         let mut q = Self::quad_rect(x, y, w, h, col, modes::FOG, 0);
-        q.prm = [0.0, speed];
+        q.prm = [par, speed];
         self.over_alpha.push(q);
     }
     pub fn light(&mut self, l: LightDef) {

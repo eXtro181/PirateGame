@@ -20,6 +20,7 @@ pub mod hostile;
 pub mod prolog;
 pub mod look;
 pub mod feel;
+pub mod sealife;
 
 pub use crate::art::{anim_index, Art, CharSheet};
 pub use crate::gfx::{flags, modes, Frame, LightDef, SprOpt};
@@ -170,6 +171,8 @@ pub struct Game {
     pub skitter_t: f32,
     /// Klänge mit eigener Lautstärke (Schritte der Spinne)
     pub sfx_vol: Vec<(&'static str, f32)>,
+    /// Klänge an einem Ort (Lautstärke, Stereo-Panorama)
+    pub sfx_pan: Vec<(&'static str, f32, f32)>,
     /// Netze der Meeresspinne am Boden (verlangsamen, zerreißen beim Hindurchrollen)
     pub webs: Vec<boss::WebPatch>,
     /// Spieler eingesponnen (Volltreffer eines Netzes): so lange festgehalten (s)
@@ -328,6 +331,7 @@ impl Game {
             prolog_hint: 0,
             skitter_t: 0.0,
             sfx_vol: vec![],
+            sfx_pan: vec![],
             webs: vec![],
             web_t: 0.0,
             web_slow: 0.0,
@@ -572,6 +576,25 @@ impl Game {
             self.sfx_q.push(n);
         }
     }
+    /// Klang an einem Weltort: leiser mit der Entfernung, links/rechts nach der Lage zur Kamera
+    pub fn sfx_at(&mut self, n: &'static str, x: f32, y: f32) {
+        let (cx, cy) = self.cam;
+        let d = (x - cx).hypot((y - cy) * 1.3);
+        let vol = (1.0 - (d - 120.0).max(0.0) / 900.0).clamp(0.15, 1.0);
+        let pan = ((x - cx) / 340.0).clamp(-0.85, 0.85);
+        if self.sfx_pan.len() < 24 {
+            self.sfx_pan.push((n, vol, pan));
+        }
+    }
+    /// Kampfspannung (0..1) für die dunkle Klanglage: Bosse, verfolgende Gegner in der Nähe
+    pub fn tension(&self) -> f32 {
+        if self.boss.is_some() || self.sea_boss.is_some() {
+            return 1.0;
+        }
+        let (px, py) = (self.player.a.x, self.player.a.y);
+        let n = self.enemies.iter().filter(|e| e.valid && matches!(e.state, ES::Chase | ES::Windup | ES::Strike | ES::Recover) && (e.a.x - px).hypot(e.a.y - py) < 500.0).count();
+        (n as f32 * 0.35).min(1.0)
+    }
     pub fn shake(&mut self, k: f32) {
         if self.opt.shake {
             self.shake_k = self.shake_k.max(k);
@@ -716,8 +739,10 @@ impl Game {
         self.pearl_gain_t = 2.0;
         if let Some((x, y)) = src {
             let (px, py) = (self.player.a.x, self.player.a.y);
-            for _ in 0..10 {
-                self.fx.p(P { x: x + rr(-10.0, 10.0), y: y - 8.0, z: 12.0, vz: 60.0 + rnd() * 40.0, vx: (px - x) * 0.8, vy: (py - y) * 0.8, life: 1.0, col: c::SOUL, glow: 1.5, drag: 0.3, ..Default::default() });
+            // Seelenperlen steigen auf und werden zur Figur gezogen
+            let _ = (px, py);
+            for _ in 0..12 {
+                self.fx.p(P { x: x + rr(-10.0, 10.0), y: y - 8.0, z: 12.0, vz: 70.0 + rnd() * 50.0, vx: rr(-40.0, 40.0), vy: rr(-20.0, 20.0), life: 2.2, max: 2.2, col: c::SOUL, glow: 1.5, seek: true, ..Default::default() });
             }
         }
         self.sfx("pearls");
@@ -906,6 +931,8 @@ impl Game {
             } else {
                 self.update_player(dt);
                 self.update_feel(dt);
+                self.fx.seek_to = (self.player.a.x, self.player.a.y);
+                self.update_fires_alive(dt);
                 if self.input.pressed(Act::Interact) {
                     self.interact(art);
                 }
@@ -1260,6 +1287,14 @@ impl Game {
             self.zone_name = self.place_name();
             if !self.sailing || on_island {
                 self.zone_t = 4.0;
+                // zum ersten Mal hier: leise Glocken der Entdeckung
+                let k = match wild {
+                    Some(i) => self.world.wild[i].key.clone(),
+                    None => z.def().key.to_string(),
+                };
+                if !self.save.explored.contains(&k) {
+                    self.sfx("discover");
+                }
             }
         }
         // Prolog: Dorf, Galgenweg und Spinnenschlund haben eigene Namen
@@ -1359,7 +1394,8 @@ impl Game {
         }
         if let Some(bi) = self.boss {
             if !self.bosses[bi].dead() && self.bosses[bi].state != BS::Dormant {
-                mood = "boss";
+                // bewusste Stille: beim Auftritt schweigt die Musik einen Atemzug lang
+                mood = if self.boss_intro_t > 1.3 && self.bosses[bi].state == BS::Intro { "silence" } else { "boss" };
             }
         }
         if self.player.state == PS::Sit {

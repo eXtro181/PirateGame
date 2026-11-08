@@ -180,6 +180,67 @@ impl Game {
     }
 }
 
+impl Game {
+    /// Fässer und Kisten im Hiebbogen zerschlagen: Splitter, Staub, Kollision weg (bis zum
+    /// nächsten Neuaufbau der Welt)
+    pub fn smash_props(&mut self, x: f32, y: f32, fx: f32, fy: f32, reach: f32) {
+        let mut hit = vec![];
+        for by in ((y - reach) / 128.0).floor() as i32..=((y + reach) / 128.0).floor() as i32 {
+            for bx in ((x - reach) / 128.0).floor() as i32..=((x + reach) / 128.0).floor() as i32 {
+                let Some(arr) = self.world.grid.get(&(by * 1000 + bx)) else { continue };
+                for c in arr {
+                    let pi = match *c {
+                        crate::world::Collider::Circle { prop, .. } | crate::world::Collider::Box { prop, .. } => prop,
+                    };
+                    let p = &self.world.props[pi];
+                    if p.hidden || p.sea || !matches!(p.kind.as_str(), "barrels" | "crates") || p.interact.is_some() || p.loot.is_some() {
+                        continue;
+                    }
+                    let (dx, dy) = (p.x - x, p.y - y);
+                    let d = dx.hypot(dy);
+                    if d < reach + 10.0 && (dx * fx + dy * fy) / d.max(1.0) > 0.2 && !hit.contains(&pi) {
+                        hit.push(pi);
+                    }
+                }
+            }
+        }
+        for pi in hit {
+            let (px, py) = (self.world.props[pi].x, self.world.props[pi].y);
+            self.world.props[pi].hidden = true;
+            self.fx.burst("dust", px, py - 8.0, 8, BurstOpt { speed: Some(70.0), up: Some(40.0), col: Some([0.45, 0.36, 0.26, 0.8]), ..Default::default() });
+            for _ in 0..10 {
+                self.fx.p(fx::P { x: px + rr(-6.0, 6.0), y: py + rr(-3.0, 3.0), z: 10.0 + rnd() * 10.0, vx: fx * rr(30.0, 90.0) + rr(-40.0, 40.0), vy: fy * rr(20.0, 60.0) + rr(-20.0, 20.0), vz: rr(60.0, 140.0), g: 420.0, life: 1.6, col: [0.36, 0.25, 0.16, 1.0], size: 2.0, ..Default::default() });
+            }
+            self.fx.splat(px, py, 0.0);
+            self.sfx("crush");
+            self.hit_stop(0.04);
+            self.shake(3.0);
+        }
+    }
+}
+
+impl Game {
+    /// Säbelfeuer leben: Glut steigt auf, ab und zu knackt ein Funkenregen, die Flamme atmet
+    pub fn update_fires_alive(&mut self, dt: f32) {
+        let (cx, cy) = self.cam_f;
+        for i in 0..self.world.fires.len() {
+            let (x, y, pi) = (self.world.fires[i].x, self.world.fires[i].y, self.world.fires[i].prop);
+            if (x - cx).abs() > 520.0 || (y - cy).abs() > 360.0 || !self.world.props[pi].lit || self.world.props[pi].hidden {
+                continue;
+            }
+            if rnd() < dt * 7.0 {
+                self.fx.p(fx::P { x: x + rr(-6.0, 6.0), y: y + rr(-2.0, 2.0), z: 18.0 + rnd() * 8.0, vx: rr(-10.0, 10.0) + self.look.wind_dir.0 * self.look.wind * 20.0, vz: 30.0 + rnd() * 30.0, life: 1.4 + rnd(), col: c::EMBER, glow: 1.1, size: 1.0, wobble: 10.0, drag: 0.4, ..Default::default() });
+            }
+            if rnd() < dt * 0.35 {
+                // Knacken: ein Funkenregen
+                for _ in 0..7 {
+                    self.fx.p(fx::P { x, y, z: 22.0, vx: rr(-60.0, 60.0), vy: rr(-30.0, 30.0), vz: rr(60.0, 130.0), g: 220.0, life: 0.7, col: c::SPARK, glow: 1.4, size: 1.0, ..Default::default() });
+                }
+            }
+        }
+    }
+}
+
 /// vierstrahliger Glanz (Ausholen)
 fn glint(f: &mut Frame, x: f32, y: f32, r: f32, k: f32) {
     let c = [255, 236, 200, (230.0 * k) as u8];

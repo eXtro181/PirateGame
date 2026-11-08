@@ -17,7 +17,30 @@ pub fn draw_char_lift(f: &mut Frame, sh: &CharSheet, a: &Actor, fl: u8, tint: [u
     let n = sh.f[dir.min(2)][ai].len().max(1);
     let fi = (a.frame.max(0.0) as usize) % n;
     let s = sh.get(dir, ai, fi);
-    f.sprite_z(&s, a.x, a.y - lift, sort, SprOpt { flip: a.flip(), flags: fl, tint, ..Default::default() });
+    let (squash, skew) = pose_layer(a, s.h as f32 * 0.5);
+    f.sprite_z(&s, a.x, a.y - lift, sort, SprOpt { flip: a.flip(), flags: fl, tint, squash, skew, ..Default::default() });
+}
+
+/// Prozedurale Schicht über den Bildern: Atmen im Stand, Ausholen (Stauchen, zurücklehnen) und
+/// Nachschwingen (Strecken, vorlehnen) beim Hieb, Lehnen weg vom Treffer; liefert (Stauchung, Scherung)
+pub fn pose_layer(a: &Actor, h: f32) -> (f32, f32) {
+    let side = if a.fx.abs() > 0.2 { a.fx.signum() } else { 0.0 };
+    match a.anim {
+        "idle" => (1.0 + (a.at * 2.1 + a.x * 0.013).sin() * 0.012, 0.0),
+        "atk" => {
+            let fr = a.frame;
+            if fr < 1.0 {
+                (0.955, -side * h * 0.035)
+            } else if fr < 3.0 {
+                (1.045, side * h * 0.05)
+            } else {
+                (1.0 + (4.0 - fr).max(0.0) * 0.01, side * h * 0.02)
+            }
+        }
+        "hurt" => (0.96, -side * h * 0.06),
+        "cast" => (1.0 + (a.frame * 0.8).sin() * 0.02, 0.0),
+        _ => (1.0, 0.0),
+    }
 }
 
 pub fn draw_char(f: &mut Frame, sh: &CharSheet, a: &Actor, fl: u8, tint: [u8; 4], shadow: f32) {
@@ -32,7 +55,8 @@ pub fn draw_char(f: &mut Frame, sh: &CharSheet, a: &Actor, fl: u8, tint: [u8; 4]
     if shadow > 0.0 && sh.shadow > 0.0 {
         f.shadow(a.x, a.y, sh.shadow, sh.shadow * 0.33, shadow);
     }
-    f.sprite(&s, a.x, a.y, SprOpt { flip: a.flip(), flags: fl, tint, ..Default::default() });
+    let (squash, skew) = pose_layer(a, s.h as f32 * 0.5);
+    f.sprite(&s, a.x, a.y, SprOpt { flip: a.flip(), flags: fl, tint, squash, skew, ..Default::default() });
 }
 
 /// Silhouette einer Figur hinter Verdeckern (Überlagerung, Modus `SIL`): nur wo etwas Aufrechtes
@@ -107,6 +131,8 @@ impl Game {
         let vis = |x: f32, y: f32, m: f32| x > vx - m && x < vx + vw + m && y > vy - m && y < vy + vh + m * 2.0;
 
         self.fx.draw_under(f);
+        // Fischschwärme in Ufernähe, Treibgut auf hoher See
+        self.draw_sealife(art, f);
         self.draw_wake(art, f);
         self.draw_prolog_coffin(art, f);
         // Laternen und Feuerschalen der hohen Brücke über dem Hafenbecken
@@ -190,7 +216,21 @@ impl Game {
             }
             let (Body::Sheet(sname) | Body::Beast(sname)) = d.body;
             if let Some(sh) = art.chars.get(sname) {
-                draw_char(f, sh, &e.a, fl, tint, 0.4);
+                if e.state == ES::Dead && e.dead_t < 0.32 {
+                    // Sterben über mehrere Bilder: taumelt zurück, sackt zusammen, dann liegt er
+                    let k = e.dead_t / 0.32;
+                    let mut a = e.a;
+                    a.anim = "hurt";
+                    a.frame = 0.0;
+                    let ai = anim_index("hurt");
+                    let n = sh.f[a.dir().min(2)][ai].len().max(1);
+                    let s = sh.get(a.dir(), ai, 0 % n);
+                    let side = if a.fx.abs() > 0.2 { a.fx.signum() } else { 1.0 };
+                    f.shadow(a.x, a.y, sh.shadow, sh.shadow * 0.33, 0.4);
+                    f.sprite(&s, a.x, a.y, SprOpt { flip: a.flip(), flags: fl, tint, squash: 1.0 - k * 0.35, skew: -side * s.h as f32 * 0.2 * k, ..Default::default() });
+                } else {
+                    draw_char(f, sh, &e.a, fl, tint, 0.4);
+                }
             }
             if e.state == ES::Lurk {
                 // Mimic schläft: schwaches Glimmen im Spalt
@@ -309,7 +349,15 @@ impl Game {
             if let Some(sh) = art.chars.get(n.def.preset) {
                 let fl = if self.hover == Hover::Npc(i) { flags::OUTLINE } else { 0 } | if ghost { flags::GHOST } else { 0 } | if n.a.flash > 0.0 { flags::FLASH } else { 0 };
                 let tint = if ghost { [220, 255, 250, (210.0 * fade) as u8] } else { [255; 4] };
-                draw_char(f, sh, &n.a, fl, tint, if ghost { 0.15 * fade } else { 0.4 });
+                // Umschauen: wer steht und nicht gerade spricht, blickt ab und zu zur Seite
+                let mut a = n.a;
+                if a.anim == "idle" && self.talk_to != Some(i) && ((self.t * 0.13 + i as f32 * 0.37).fract()) < 0.16 {
+                    a.fx = -a.fx;
+                    if a.fx.abs() < 0.2 {
+                        a.fx = if i % 2 == 0 { 0.8 } else { -0.8 };
+                    }
+                }
+                draw_char(f, sh, &a, fl, tint, if ghost { 0.15 * fade } else { 0.4 });
             }
             if ghost {
                 // kaltes Licht der Geisterlaterne
@@ -540,6 +588,15 @@ impl Game {
         if self.opt.fx_high {
             let a = if self.sailing { fa / 2 } else { fa };
             f.fog(vx - 20.0, vy - 20.0, vw + 40.0, vh + 40.0, [fc[0], fc[1], fc[2], a as u8], sp);
+            // zweite, höhere Lage: dünner, schneller im Wind, zieht mit der Kamera mit (Tiefe);
+            // nachts und bei aufziehender Front dichter
+            let night = self.look.night() * self.env_cur.nightk;
+            let extra = (night * 10.0 + self.look.rain * 22.0) as i32;
+            let a2 = ((a as i32 * 2 / 3) + extra).clamp(0, 120) as u8;
+            // heller als die untere Lage, nachts dunkler (kein milchiger Schleier)
+            let lift = 40.0 * (1.0 - night * 0.8);
+            let c2 = [(fc[0] as f32 + lift).min(255.0) as u8, (fc[1] as f32 + lift).min(255.0) as u8, (fc[2] as f32 + lift * 1.1).min(255.0) as u8];
+            f.fog_layer(vx - 20.0, vy - 20.0, vw + 40.0, vh + 40.0, [c2[0], c2[1], c2[2], a2], sp * (1.6 + self.look.wind), 0.35);
         }
         let lk = self.env_cur.light_k * 1.5;
         for l in f.lights.iter_mut() {

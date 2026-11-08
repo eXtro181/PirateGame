@@ -791,6 +791,10 @@ impl Game {
         }
         p.atk_t = if heavy { 0.85 } else { 0.48 } / weapon(&self.save.weapon).speed;
         self.sfx(if heavy { "heavy" } else { "swing" });
+        // Kampflaut beim schweren Hieb und beim dritten Schlag der Folge
+        if heavy || p.combo == 2 {
+            self.sfx_vol.push(("grunt", 0.55));
+        }
     }
 
     fn player_strike(&mut self, p: &Player) {
@@ -862,11 +866,17 @@ impl Game {
                 self.shake(9.0);
             }
         }
+        // Fässer und Kisten zerschlagen
+        self.smash_props(p.a.x, p.a.y, p.a.fx, p.a.fy, reach);
         if hit {
             self.shake(if p.heavy { 6.0 } else { 3.0 });
             // Trefferstopp und gerichteter Kamerastoß: der Hieb hat Gewicht
             self.hit_stop(if p.heavy { 0.085 } else { 0.045 });
             self.kick(p.a.fx, p.a.fy, if p.heavy { 4.5 } else { 2.5 });
+            // schwere Hiebe: zweite, dumpfe Klanglage
+            if p.heavy {
+                self.sfx("thud");
+            }
         }
     }
 
@@ -942,6 +952,7 @@ impl Game {
     pub fn explode(&mut self, x: f32, y: f32, r: f32, dmg: f32) {
         self.fx.px.play(Px::Boom, x, y).scale((r / 80.0).clamp(0.45, 1.6)).gain(1.2);
         self.shake(6.0);
+        self.sfx_at("thud", x, y);
         // Druckwelle und Brandspur
         self.shockwave(x, y - 10.0, (r / 90.0).clamp(0.5, 1.4));
         self.fx.scorch(x, y, (r * 0.35).clamp(10.0, 34.0));
@@ -1345,7 +1356,7 @@ impl Game {
             }
         }
         self.fx.burst(if skel { "bone" } else { "blood" }, x, y - 20.0, 7, BurstOpt { speed: Some(110.0), ..Default::default() });
-        self.sfx(if crit { "crit" } else { "hit" });
+        self.sfx_at(if crit { "crit" } else { "hit" }, x, y);
         if self.enemies[i].hp <= 0.0 {
             self.enemy_die(i);
             return;
@@ -1380,7 +1391,7 @@ impl Game {
             let d = &self.edefs[e.def];
             (e.a.x, e.a.y, d.pearls * (1.0 + 0.4 * e.lvl as f32), matches!(d.body, Body::Sheet(s) if s.contains("kel")))
         };
-        self.sfx(if skel { "bones" } else { "crush" });
+        self.sfx_at(if skel { "bones" } else { "crush" }, x, y);
         self.hit_stop(0.07);
         // PixelFX: Skelette zersplittern in ihrer Gestalt, Figuren geben ihre Seele frei, Bestien verpuffen
         let beast = matches!(self.edefs[self.enemies[i].def].body, Body::Beast(_));

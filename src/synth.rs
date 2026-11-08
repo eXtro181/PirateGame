@@ -623,7 +623,8 @@ pub fn sfx(name: &str) -> Vec<f32> {
     use Ft::*;
     use Wave::*;
     let len = match name {
-        "death" | "rise" | "bell" => 3.2,
+        "death" | "rise" | "bell" | "stinger" => 3.2,
+        "discover" => 2.6,
         "bubbles" => 1.6,
         "surge" => 2.4,
         "plunge" => 1.6,
@@ -704,6 +705,32 @@ pub fn sfx(name: &str) -> Vec<f32> {
             x.tone(0.0, Saw, 210.0, 150.0, 0.55, 0.12);
             x.tone(0.05, Saw, 330.0, 250.0, 0.45, 0.06);
             x.noise(0.0, 700.0, 500.0, 0.6, 0.25, Band, 2.0, false);
+        }
+        // musikalischer Stinger (Boss besiegt, große Momente): aufsteigender Moll-Akkord mit
+        // Paukenschlag, schwillt an und verklingt
+        "stinger" => {
+            x.tone(0.0, Sine, 55.0, 41.0, 0.9, 0.7);
+            x.noise(0.0, 160.0, 90.0, 0.6, 0.6, Low, 1.0, false);
+            for (k, f) in [146.8f32, 174.6, 220.0, 293.7].iter().enumerate() {
+                let t0 = 0.08 + k as f32 * 0.09;
+                x.tone(t0, Saw, *f, *f, 2.6 - t0, 0.06);
+                x.tone(t0, Tri, f * 2.0, f * 2.0, 2.4 - t0, 0.05);
+            }
+            x.tone(0.5, Sine, 587.3, 587.3, 2.4, 0.06);
+        }
+        // Entdeckung (neuer Ort): leise Glockenfolge, zwei Töne nach oben
+        "discover" => {
+            for (k, (f, v)) in [(392.0f32, 0.12f32), (523.3, 0.1), (659.3, 0.08)].iter().enumerate() {
+                let t0 = k as f32 * 0.22;
+                x.tone(t0, Sine, *f, *f, 2.2 - t0, *v);
+                x.tone(t0, Sine, f * 2.76, f * 2.76, 0.9, v * 0.25);
+            }
+        }
+        // Kampflaut der Spielfigur (kein Wort: gefilterter Atemstoß mit Vokalfärbung)
+        "grunt" => {
+            x.noise(0.0, 720.0, 640.0, 0.22, 0.38, Band, 6.0, false);
+            x.noise(0.0, 1150.0, 1050.0, 0.2, 0.22, Band, 7.0, false);
+            x.tone(0.0, Saw, 128.0, 104.0, 0.2, 0.08);
         }
         "bell" => {
             // tiefe Glocke unter Wasser: unharmonische Teiltöne, langer Nachhall
@@ -899,6 +926,27 @@ pub fn ambience(kind: &str) -> Vec<f32> {
                 *o = lp.run(rng.f()) * m * 1.4;
             }
             crossfade(&mut out, 2000);
+            out
+        }
+        // Regen: dichtes, helles Rauschen mit einzelnen Tropfen
+        "rain" => {
+            let len = (5.0 * SR) as usize;
+            let mut hp = Bq::new(Ft::Band, 2600.0, 0.5);
+            let mut lp = Bq::new(Ft::Low, 900.0, 0.6);
+            let mut out = vec![0.0; len];
+            let mut drop = 0.0f32;
+            let mut dph = 0.0f32;
+            for o in out.iter_mut() {
+                let n = rng.f();
+                if rng.u() < 0.0009 {
+                    drop = 0.5 + rng.u() * 0.5;
+                    dph = 0.0;
+                }
+                dph += (1800.0 + drop * 1400.0) / SR;
+                drop *= 0.9985;
+                *o = hp.run(n) * 0.9 + lp.run(n) * 0.5 + (dph * std::f32::consts::TAU).sin() * drop * 0.12;
+            }
+            crossfade(&mut out, 3000);
             out
         }
         "wind" => {

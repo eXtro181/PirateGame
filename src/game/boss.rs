@@ -1132,6 +1132,7 @@ impl Game {
         // der letzte Hieb: Aufprallbild, lange Zeitlupe, die Kamera rückt heran, Kinobalken
         self.impact_frame(0.08);
         self.slow_mo(1.5, 0.22);
+        self.sfx("stinger");
         self.look.zoom_in(1.16, 1.6);
         self.shockwave(x, y - 30.0, 1.5);
         self.boss_intro_t = self.boss_intro_t.max(2.4);

@@ -215,6 +215,8 @@ Fünf Werte: **Vitalität** (Leben), **Ausdauer**, **Kraft** (Hammer, Säbel, Kn
 
 Der Schmied härtet Waffen mit **Gezeitensplittern** (aus Seelenblumen).
 
+**Kampfgefühl** (Runde 13): Jeder Treffer hat Gewicht – ein kurzer **Trefferstopp** (leicht 45 ms, schwer 85 ms), ein **gerichteter Kamerastoß** in Hiebrichtung, **Rückstoß** (die Gegner gleiten aus), Blutspritzer bzw. Knochenstaub am Boden und **Stofflichkeit** (Knochen splittern, Panzer und Stein sprühen Funken, Geister zerfließen). **Paraden** werfen Funken, frieren das Bild für einen Augenblick ein (Aufprallbild) und gehen in eine kurze **Zeitlupe** über; ein Treffer im ersten Augenblick der Rolle ist ein **perfektes Ausweichen** (Zeitlupe, Nachbilder, Ausdauer zurück). Bosse haben eine **Haltung**, die sich mit Treffern füllt – voll, taumeln sie und der **Gegenstoß** wird zur **Hinrichtung** (Kamera nah heran, Zeitlupe). Eingaben werden kurz **gepuffert**, der Nachschwung eines Hiebs lässt sich mit einer Rolle abbrechen, die Figur läuft mit kurzem **Schwung** an. Gegner kündigen Hiebe mit einem **Ausholglanz** an und werden mit sinkendem Leben sichtbar verwundet. Fässer und Kisten zerbrechen unter Hieben. Bossauftritte und -tode haben Kinobalken, Kamerazoom und einen musikalischen Stinger; in der zweiten Phase verwandelt sich die Arena mit dem Element des Bosses (Hitze und Asche, Schneesturm, Gewitter, Regen). Wenig Leben färbt die Welt grau und lässt den Bildrand im Herzschlag rot pochen; die Laterne der Figur wird mit sinkendem Leben kleiner und rötlicher.
+
 ### 6.4 Säbelfeuer, Tod und Perlen
 - **Säbelfeuer** sind die Leuchtfeuer der Welt (11 Stück, zwei je Königsinsel). Entzünden, rasten (heilt, füllt Rum und Phiolen auf, belebt Gegner wieder), zwischen entzündeten Feuern reisen. Automatisches Speichern beim Rasten.
 - **Tod** („DU BIST ERTRUNKEN“): Alle Perlen bleiben als **Perlenfleck** an der letzten sicheren Stelle zurück. Zurückholen geht nur, wenn man dort ankommt, ohne vorher noch einmal zu sterben.
@@ -302,7 +304,15 @@ Jedes Bild ist eine **Leinwand mit vier Kanälen**: Farbe, Normale, Höhe über 
 - **Boden-Deko** (Gras, Blumen, Klee, Farnsprossen, Steinchen, Zweige, Laub, Tang, Muscheln, Treibholz, Wurzeln, Pilze, Glut, Seerosen, Schilf) entsteht je 256-px-Eimer erst beim Zeichnen, ohne Speicher und Ladezeit – nach denselben Standortregeln: Laub, Zweige und Pilze nur im Schatten der Bäume, Tang und Muscheln am Flutsaum, Seerosen nur in Teichen und im Sumpf, Rumflaschen, Taue und Münzen nur auf Planken und in Siedlungen; keine verstreuten Schädel und Knochen mehr.
 
 ### 7.4 Zonenstimmung
-Jede Zone hat eine eigene Licht- und Farbstimmung (`env.rs`), die weich eingeblendet wird: Grundlicht, Sonne, Nebelfarbe, Wasserfarben, Belichtung, Lichtstrahlen. Stimmungen gibt es für Galgenstrand, Glutwacht, Aschebucht, Frostgrotte, Rabenwacht, Fluchmangroven, Ende der Welt, Innenräume, die Stille vor dem Endkampf, das Gewitter beim Holländer, den Meeresgrund und jedes Seegebiet.
+Jede Zone hat eine eigene Licht- und Farbstimmung (`env.rs`), die weich eingeblendet wird: Grundlicht, Sonne, Nebelfarbe, Wasserfarben, Belichtung, Lichtstrahlen und ein **Farbskript** (Farbtrennung in Schatten und Lichter, z. B. violette Schatten und Glut-Lichter in der Glutwacht, grüne Schatten und fahles Gelb in den Fluchmangroven). Stimmungen gibt es für Galgenstrand, Glutwacht, Aschebucht, Frostgrotte, Rabenwacht, Fluchmangroven, Ende der Welt, Innenräume, die Stille vor dem Endkampf, das Gewitter beim Holländer, den Meeresgrund und jedes Seegebiet.
+
+### 7.4b Wetter, Tageszeit und Leben (Runde 13)
+- **Tageszeit**: ein Tag dauert eine halbe Stunde; in der zweiten Hälfte sinkt die **tiefe Nacht** über die Zonenstimmung – Mondlicht, dunklerer Nebel, hellere Laternen, Sterne spiegeln sich in der See. Prolog, Innenräume und der Endkampf behalten ihre feste Stimmung.
+- **Wetterfronten** je Gebiet: Regen (Galgenstrand, Rabenwacht fast immer, Fluchmangroven, wilde Inseln, offene See), Schnee (Frostgrotte, Eismeer), Asche (Aschebucht, Glutwacht, Ende der Welt), dazu Wind. Fronten ziehen in 40–110 s auf und ab; mit ihnen zieht die Wolkendecke zu, Lichtstrahlen fallen nur durch Wolkenlücken. Regen fällt schräg im Wind und spritzt auf, die Welt wird **nass** (dunkler, glänzend, Pfützen mit Regenringen, Ringe auf dem Wasser) und trocknet langsam; Schnee und Asche legen sich auf Dächer, Felsen und Kronen; in der Kälte steht der Atem als Wolke vor dem Mund.
+- **Wind** bewegt Laub, Halme, Nebel und Teilchen in seiner Richtung; Gras, Farne und Schilf biegen sich vor der Figur weg.
+- **Wasser**: Wolken spiegeln sich, Laternen werfen zitternde Lichtpfade, das Schiff rollt im Seegang und krängt in Kurven, hinter dem Heck läuft ein Kielwasser auseinander, bei voller Fahrt sprüht Gischt am Bug. Fischschwärme kreisen in Ufernähe und stieben vor dem Schiff auseinander, auf hoher See treibt Wrackgut. Am Fuß der Wasserfälle steht bei Sonne ein Regenbogen im Sprühnebel, der Strudel zieht drei Schaumarme in seinen Schlund.
+- **Feuer**: Säbelfeuer knistern mit aufsteigender Glut und Funkenregen, über Feuer und Lava flimmert die Luft, leuchtende Flächen (Lava, Glut, Leuchtpilze) erhellen ihre Umgebung.
+- **Lesbarkeit**: Die Spielfigur hat im Dunkeln einen kühlen Rand und bleibt hinter Bäumen, Mauern und Dächern als Silhouette sichtbar. Außerhalb von Kämpfen blendet sich die Anzeige nach einigen Sekunden aus; Ortsnamen erscheinen Buchstabe für Buchstabe.
 
 ### 7.5 Titelbild
 **„Der Thron der Ertrunkenen“**: In der nächtlichen See ragt ein riesiger Thron aus schwarzem Basalt auf – Spitzbogen-Lehne mit Bronzeband und Rosette, in der ein grüner Seelenstein glüht, Schädelfries, Armlehnen mit Schädeln, drei Nischen mit Seelenlichtern, Korallen, Seepocken, Tang und Wasserspuren. Über dem leeren Sitz schwebt die Korallenkrone, Ketten hängen von den Armlehnen ins Wasser, gebrochene Säulen der versunkenen Halle stehen ringsum, grüne Seelenlichter steigen auf, und hinter dem Thron winden sich Krakenarme aus der Tiefe. Oben der Schriftzug „THRONE of the DROWNED“ in Gold mit Zierlinie und Krone, links das Menü.
@@ -328,7 +338,9 @@ Jede Zone hat eine eigene Licht- und Farbstimmung (`env.rs`), die weich eingeble
 | „Weltschlund“ | Ende der Welt |
 | Boss | Bosskämpfe |
 
-- **Ambiente**: Wellen, Wind, Dröhnen (Tod), Feuerknistern nahe Feuern.
+- **Ambiente**: Wellen, Wind (stärker mit dem Wetter), Regen (eigene Lage, unter Dach gedämpft), Dröhnen (Tod) und eine **dunkle Spannungslage**, die mit Gegnern in der Nähe und im Bosskampf anschwillt, Feuerknistern nahe Feuern.
+- **Bewusste Stille**: beim Bossauftritt schweigt die Musik einen Atemzug lang; im Prolog verstummt sie, sobald man die Spinne hört. **Stinger** beim Sieg über einen Boss, leise Glocken beim ersten Betreten eines Ortes.
+- **Raumklang**: Treffer, Tode und Explosionen erklingen links/rechts nach ihrer Lage zur Kamera und leiser mit der Entfernung. Schwere Hiebe haben eine zweite, dumpfe Klanglage, die Figur stößt beim schweren Hieb einen Kampflaut aus (kein Wort).
 - **Klangeffekte** (über 30): Hiebe, Treffer, Parieren, Rolle, Trinken, Kanonen, Pistole, Gebrüll, Glocke, Ketten, Feuer entzünden, Truhe, Stufenaufstieg und mehr.
 - Wiedergabe über WebAudio mit Hall und Kompressor. Der Ton wird beim ersten Tippen oder Klick freigeschaltet.
 

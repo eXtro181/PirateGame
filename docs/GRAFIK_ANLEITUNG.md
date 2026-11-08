@@ -26,6 +26,7 @@ Bezugsdateien im Repo: `crates/art/src/*` (Kunst aus Code), `src/gfx/mod.rs` + `
 17. Stimmungen je Zone (alle Werte)
 18. Nebel, Partikel, Spiegelungen, Schatten am Boden
 19. Pixel-Modus gegen FullHD-Modus
+19a. Ausbau 2026 (Runde 13): Licht, Wetter, Tageszeit, Bildwirkungen, Stilrichtlinie und Farbskript
 20. Schritt-für-Schritt-Plan für das neue Projekt
 21. Fallstricke
 22. Anhang: Shader im Wortlaut
@@ -577,6 +578,70 @@ Die Option **„Sparsam“** schaltet Tiefenschärfe, Verdeckung, Strahlen, Boke
 
 ---
 
+## 19a. Ausbau 2026 (Runde 13)
+
+Zusätzliche Shader-Konstanten (in `Globals` und `common.wgsl` vor `lights`, beide Seiten gleich):
+
+| Feld | Inhalt |
+|---|---|
+| `fx0` | Aufprallbild (0/1), wenig Leben (0..1), Tinten-Übergang (0..1), Kinobalken (0..1) |
+| `fx1` | Druckwelle: Weltort x, y, Radius (px), Stärke |
+| `fx2` | Wetter: Nässe, Schnee, Asche (0..1), Windstärke |
+| `fx3` | Hitzeflimmern, Nacht (0..1), Zoom (1 = keiner), Sterne über dem Wasser |
+| `fx4` | Rückstrahlung 0,22, leuchtende Flächen 0,55, Randlicht der Lichter 0,85, Lesbarkeit der Spielfigur 1 |
+| `fx5` | Spieler (Weltort; Pflanzen biegen sich weg), Windrichtung |
+| `fx6` | Wolkenbedeckung (0,2 + Front·0,55 + Regen·0,25) |
+| `tone_lo`, `tone_hi` | Farbtrennung: Faktoren für Schatten und Lichter (1 = neutral) |
+| `counts.y` | Blitz (harte Schatten, nur bei hohen Effekten) |
+
+`env::apply` setzt alle Bildwirkungen auf Grundwerte (Titelbild!), das Spiel überschreibt sie danach in `Look::apply` (`src/game/look.rs`).
+
+**Art des Pixels im Leuchtpuffer-Alpha**: 1 Sprite, **0,98 Laub** (Sprites mit Windstärke > 0), **0,96 Spielfigur** (Flag `HERO` = 128), 0,875 Boden/Abgrund, 0,5 Wasser. Die Windstärke steht seit Runde 13 auf allen vier Ecken; der Vertex-Shader schwenkt nur die oberen (Eckennummer `vertex_index & 3` – die flache Interpolation von `ext` ist unter WebGL und WebGPU verschieden: WebGL nimmt die letzte, WebGPU die erste Ecke).
+
+**Licht-Pass** (zusätzlich zu Kapitel 14):
+1. **Wetter auf Flächen** vor allem anderen: Nässe dunkelt die Albedo (×(1 − 0,26·Nässe)) und hebt den Glanz (mindestens 0,5); auf ebenem Boden (Art 0,875, `n.z > 0,94`) **Pfützen** aus zwei Rauschlagen (`smoothstep(0,6, 0,655)`), die den Himmel spiegeln und Regenringe tragen (`rain_ring`: je Zelle ein Tropfen, Ring wächst und verblasst). Schnee/Asche legen sich auf nach oben weisende Flächen (`smoothstep(0,8, 0,97, n.z)`, auf Requisiten voll, auf Boden 35 %), fleckig über ein Rauschfeld.
+2. **Rückstrahlung und leuchtende Flächen** (FullHD): 8 Proben auf einer Spirale mit dem goldenen Winkel (`GI_KERNEL`, Radien 4–72 px, Gewicht `1/(1 + r²/900)`), je Pixel nach einem 4×4-Muster gedreht (geordnet, flimmert nicht). Mittlere Albedo der Umgebung × (Umgebung·0,55 + Sonne·0,3) × 0,22 färbt das Umgebungslicht (Farbbluten); mittleres Leuchten (ohne Wasser) × 0,55 macht Lava, Glut, Pilze und Runen zu Lichtquellen.
+3. **Wolkenschatten nach Bedeckung**: Schwelle `0,62 − 0,3·Bedeckung`, Stärke `0,28 + 0,3·Bedeckung`.
+4. **Lichtflecken unter Kronen**: Ist der stärkste Verdecker des Sonnenstrahls Laub (Art 0,98) und höher als 22 px, wird der Schatten in Flecken aufgehoben (`smoothstep(0,6, 0,68)` des b-Kanals bei 1/96, mit dem Wind wandernd, bis 82 %).
+5. **Punktlichter**: flackernde Flammen bewegen ihr Licht (±2,4 px·Flackern), damit tanzen die Schatten; bis zu **12 Schattenlichter** je Pixel (ab dem 7. nur 7 Schritte); **weicher Halbschatten** über die Tiefe des Verdeckers (`smoothstep(2, 11)`) statt harter Kante; **farbiges Randlicht** an Kanten, die zum Licht weisen (`(1 − n.z)^1,6 · max(n̂·l̂, 0)`, von hinten stärker), Faktor `fx4.z`; **Lichtkegel im Dunst** (Hof × Strahlen aus dem Winkelrauschen um das Licht, nachts ×1,7); auf Wasser **Lichtpfade** (zitternder Streifen unter jedem Licht über 12 px Höhe).
+6. **Spielfigur** (Art 0,96): kühler Rand `(1 − n.z)^1,4 · (Umgebung·0,9 + 0,05)` und Mindesthelligkeit (0,1/0,11/0,14).
+7. **Wasser nachts**: Sterne spiegeln sich (Raster 3 px, von den Wellen verschoben, funkelnd, Dichte 0,32 %), Regenringe auf der Oberfläche.
+8. **Blitz**: zweiter Strahl durch das Höhenfeld aus (0,42, −0,55, 0,72), 10 Schritte à 6,5 px → harte, lange Schatten.
+
+**Endbild** (zusätzlich zu Kapitel 16): Zoom um die Bildmitte (Umrechnungen in `Frame::src_to_screen/screen_to_src/world_to_screen` berücksichtigen ihn); **Druckwelle** (Ring `exp(−((d − r)/16)²)`, 5 px nach außen); **Hitzeflimmern** (zwei wandernde Rauschlagen, Stärke = Zonenhitze + `smoothstep(0,05, 0,4, Bloom-Helligkeit)·0,9` → über Feuer und Lava von selbst); Lichtstrahlen nur durch **Wolkenlücken**; Unschärfe entsättigt um 22 % (Blickführung); **weicher Fuß** nach dem Kontrast (`max(kontrast, c·0,42)`: Schatten behalten Zeichnung); **Farbtrennung** `c *= mix(tone_hi, tone_lo, (1 − luma)^1,6)`; **wenig Leben** (Entsättigung 50 %, roter Rand im Herzschlag: zwei Schläge je 0,87 s); **Aufprallbild** (Schwelle 0,26 → fast Weiß/fast Schwarz); Dither ±1/255 gegen Farbstufen; **Tinten-Übergang** (Rauschen + Randabstand gegen die Schwelle `1,32 − 1,62·Blende`, dunkle Kante), die schwarze UI-Blende kommt erst ab 72 %; **Kinobalken** je 10,5 % oben und unten.
+
+**Szene**: Nebel in **zwei Lagen** – die obere (heller, nachts kaum, schneller im Wind) mit Parallaxe `prm.x = 0,35` (die Rauschkoordinate wandert mit der Kamera mit); die dritte Nebel-Rauschlage nimmt den weichen b-Kanal (der Worley-Kanal g zeichnete ein Liniennetz). Wasser spiegelt die ziehenden Wolken (dasselbe Feld wie die Wolkenschatten, von den Wellen verzerrt). **Silhouette** (Überlagerung Modus 11): die Spielfigur wird ein zweites Mal gezeichnet, aber nur wo der G-Puffer ein Aufrechtes zeigt, dessen Bodenzeile vor ihrem Fuß liegt – kühl, halb durchsichtig, Rand heller, sanft pulsierend.
+
+**Figuren**: `SprOpt.squash` (senkrechter Faktor, waagrecht gegenläufig, der Fuß bleibt) und `SprOpt.skew` (Oberkante seitlich versetzt) – `draw::pose_layer`: Atmen im Stand (±1,2 %), Ausholen (0,955, zurücklehnen) und Nachschwingen (1,045, vorlehnen) beim Hieb, Lehnen weg vom Treffer; Gegner sterben über mehrere Bilder (taumeln, sacken zusammen, dann liegen).
+
+### Stilrichtlinie (Kurzfassung)
+
+1. **Licht erzählt**: Jede Szene hat eine Hauptlichtquelle (Mond, Glut, Laterne) und Lichtinseln. Das Umgebungslicht bleibt gedämpft, Schatten behalten Zeichnung (weicher Fuß), reines Schwarz gibt es nur in der Tiefe (Abgrund, Prolog-Meer).
+2. **Lesbarkeit vor Stimmung**: Spielfigur (Randlicht, Silhouette), Gegner (Ausholglanz, Wunden), Beute (Strahl) und Gefahren (Telegraphen) müssen in jeder Stimmung erkennbar sein.
+3. **Pixel bleiben Pixel**: keine Drehung von Pixelkunst über wenige Grad (Schiff ≤ 2°), Bewegung lieber als Stauchen/Scheren; Kamera auf Zielpixel runden.
+4. **Ein Effekt-Stil**: PixelFX für Kampf und Magie, eigene Teilchen nur für Wetter, Staub, Glut und Blut – alle beleuchtet oder leuchtend, nie flach eingefärbt.
+5. **Bewegung in der Welt**: Wind (Laub, Halme, Nebel, Teilchen), Wasser (Wellen, Kielwasser, Treibgut, Fische) und Feuer (Glut, Flimmern) bewegen sich immer leicht – Stillstand nur als bewusster Moment (Zwischensequenz, Stille vor dem Boss).
+
+### Farbskript (Farbtrennung je Zone, Schatten → Lichter)
+
+| Zone | Schatten (`tone_lo`) | Lichter (`tone_hi`) | Wetter | Nacht |
+|---|---|---|---|---|
+| Galgenstrand | kühles Blaugrün 0,93/1/1,08 | Silber 1/1/1,02 | Regen 0,35, Wind 0,35 | 0,6 |
+| Glutwacht | Violett 0,95/0,95/1,09 | Glut 1,06/0,99/0,9 | Asche 0,25 | 0,5 |
+| Aschebucht | Rotbraun 1,02/0,97/0,99 | Glut 1,04/0,99/0,92 | Asche 0,8, Hitze 0,35 | 0,3 |
+| Frostgrotte | Blau 0,95/0,99/1,07 | 1/1/1,02 | Schnee 0,85, Wind 0,5 | 0,6 |
+| Rabenwacht | 0,95/1/1,06 | neutral | Regen 0,9, Wind 0,8 | 0,5 |
+| Fluchmangroven | Grün 0,93/1,05/0,96 | fahles Gelb 1,03/1,03/0,91 | Regen 0,45 | 0,5 |
+| Ende der Welt | Purpur 1,03/0,92/1 | Blutrot 1,06/0,96/0,94 | Asche 0,4 | – |
+| Wilde Inseln | 0,95/1/1,05 | Bernstein 1,03/1/0,95 | Regen 0,35 | 0,7 |
+| Offene See | 0,94/0,99/1,07 | 1,02/1/0,97 | Regen 0,3, Wind 0,6 | 0,8 |
+| Stillwasser / Kneipe | warm 0,98/1/1,03 bzw. 1/0,97/0,93 | Morgen 1,04/1,01/0,95 bzw. Kerze 1,05/1/0,9 | – | – |
+| Spinnenschlund | kalt 0,93/0,98/1,1 | 0,98/1/1,04 | – | – |
+
+**Tageszeit**: ein Tag dauert 30 min; in der zweiten Hälfte sinkt die tiefe Nacht (`env::night`: Mond statt Sonne, Umgebung ×0,55/0,6/0,78, Nebel dunkler und +0,025, Laternen ×1,4, Strahlen ×0,45, Sterne) mit der Zonenstärke `nightk` über die Stimmung. **Bosskampf** (`env::arena`): Umgebung ×0,84–0,95, Kontrast +0,06, Vignette +0,25, Laternen ×1,15; in Phase 2 wandelt sich das Wetter mit dem Element (Feuer: Hitze und Asche, Eis: Schnee, Sturm: Regen, Wind und Blitze, Erde: Regen).
+
+---
+
 ## 20. Schritt-für-Schritt-Plan für das neue Projekt
 
 **Technik-Gerüst**
@@ -623,7 +688,9 @@ Die Option **„Sparsam“** schaltet Tiefenschärfe, Verdeckung, Strahlen, Boke
 - Schatten-Abziehbilder schreiben **nur Farbe** in die Albedo, sonst zerstören sie Normalen und Höhen.
 - Höhe im Normalen-Texel ist Höhe/2 (bis 510 px); größere Wesen brauchen Grundhöhe über `prm.x`.
 - Höhe und Bodenort gehören zusammen: Verdecker zählen nur „am selben Bodenort“, sonst werfen Figuren im Vordergrund Schatten auf den Hintergrund.
-- Kamera-Ursprung auf ganze Pixel runden, sonst flimmert die Pixelkunst.
+- Kamera-Ursprung auf Zielpixel runden (Pixel-Modus ganze, FullHD halbe Weltpixel), sonst flimmert die Pixelkunst.
+- **Flache Interpolation (`@interpolate(flat)`) nimmt unter WebGL die letzte, unter WebGPU die erste Ecke** eines Dreiecks. Werte, die nur an einzelnen Ecken stehen (früher die Windstärke an den oberen Ecken), kommen im Fragment-Shader je nach Plattform an oder nicht – solche Werte auf alle Ecken schreiben und im Vertex-Shader über `vertex_index` unterscheiden.
+- Neue Felder in `Globals` immer **vor** `lights` und in Rust und WGSL in derselben Reihenfolge; `env::apply` muss sie auf Grundwerte setzen, sonst erbt das Titelbild die Werte des letzten Spielbilds (z. B. eine volle Tinten-Blende).
 - Boden-Chunks schrittweise backen (Zeitbudget je Bild), sonst ruckelt das Laufen.
 - Atlas beim Start in den Upload **verschieben**, nicht kopieren (Wasm-Speicher wächst nur).
 - **Sonnenglanz auf Wasser nie mit der überall gleichen Blickrichtung**: Steht die Sonne „hinter“ dem Bild (Norden, Gegenlicht) oder läuft eine Stimmungs-Überblendung durch diese Lage, liegt der Halbvektor nahe der Senkrechten, fast jede Wellenflanke fällt in den Glanzkegel und die See wird flächig weiß-fleckig. Für Wasser deshalb eine Kamera über der Bildmitte (Lichtpfad) und Glitzerpunkte mit begrenzter Dichte statt eines breiten Kegels. Beim Testen ruhig 40–60 s warten: das Schiff fährt vom Ufer weg, und erst dann blendet die Hochsee-Stimmung ein.
@@ -661,6 +728,15 @@ struct Globals {
     hd: vec4<f32>,        // HD-2D: Kippung, Tiefenschärfe, Fokuszeile, Lichtstrahlen
     hd2: vec4<f32>,       // HD-2D: Verdeckung, Bokeh-Staub, Randlicht, Farbsaum
     hd3: vec4<f32>,       // FullHD: weiche Normalen, Auflösungsstufe, frei, frei
+    fx0: vec4<f32>,       // Aufprallbild, wenig Leben, Tinten-Übergang, Kinobalken
+    fx1: vec4<f32>,       // Druckwelle: Weltort xy, Radius, Stärke
+    fx2: vec4<f32>,       // Wetter: Nässe, Schnee, Asche, Windstärke
+    fx3: vec4<f32>,       // Hitzeflimmern, Nacht, Zoom, Sterne
+    fx4: vec4<f32>,       // Rückstrahlung, leuchtende Flächen, Randlicht der Lichter, Lesbarkeit
+    fx5: vec4<f32>,       // Spieler xy (Pflanzen biegen sich weg), Windrichtung xy
+    fx6: vec4<f32>,       // Wolkenbedeckung, frei, frei, frei
+    tone_lo: vec4<f32>,   // Farbtrennung: Faktor Schatten
+    tone_hi: vec4<f32>,   // Farbtrennung: Faktor Lichter
     lights: array<Light, 48>,
 };
 @group(0) @binding(0) var<uniform> G: Globals;
@@ -717,14 +793,27 @@ struct VOut {
 };
 
 @vertex
-fn vs_world(v: VIn) -> VOut {
+fn vs_world(v: VIn, @builtin(vertex_index) vid: u32) -> VOut {
     var o: VOut;
     var p = v.pos;
-    // Wind: obere Eckpunkte schwingen
-    if (v.ext.z > 0u) {
+    // Wind: die oberen Eckpunkte schwingen (Eckennummer aus dem Vertex-Index; die Windstärke steht
+    // auf allen vier Ecken, damit der Fragment-Shader Laub erkennt). Böen und Windrichtung kommen
+    // aus dem Wetter.
+    if (v.ext.z > 0u && (vid & 3u) < 2u) {
         let t = G.screen.z;
         let a = f32(v.ext.z) / 64.0;
-        p.x += (sin(t * 1.6 + v.pos.x * 0.031 + v.pos.y * 0.017) * 0.7 + sin(t * 2.9 + v.pos.x * 0.07) * 0.3) * a;
+        let wind = G.fx2.w;
+        let gust = 1.0 + wind * (0.7 + 0.7 * sin(t * 0.63 + v.pos.x * 0.0041 + v.pos.y * 0.0023));
+        p.x += (sin(t * 1.6 + v.pos.x * 0.031 + v.pos.y * 0.017) * 0.7 + sin(t * 2.9 + v.pos.x * 0.07) * 0.3) * a * gust;
+        p += G.fx5.zw * wind * a * (1.6 + 0.8 * sin(t * 0.9 + v.pos.x * 0.01));
+        // Halme, Farne und Schilf biegen sich vor der Spielfigur weg (hohe Kronen liegen zu weit oben)
+        let dp = vec2<f32>(p.x - G.fx5.x, (p.y - (G.fx5.y - 12.0)) * 1.25);
+        let dl = length(dp);
+        if (dl < 34.0) {
+            let bend = (1.0 - smoothstep(8.0, 34.0, dl)) * min(a * 2.6, 1.0) * 8.0;
+            p.x += sign(dp.x + 0.001) * bend;
+            p.y += bend * 0.35;
+        }
     }
     let rel = (p - G.view.xy) / G.view.zw;
     o.clip = vec4<f32>(rel.x * 2.0 - 1.0, 1.0 - rel.y * 2.0, 0.0, 1.0);
@@ -763,7 +852,9 @@ fn wave_h(p: vec2<f32>, t: f32) -> f32 {
     let a = noise_at(p * 0.32 + vec2<f32>(t * 2.2, t * 1.1)).r;
     let b = noise_at(p * 0.75 - vec2<f32>(t * 3.6, -t * 1.9)).r;
     let c = noise_at(p * 1.9 + vec2<f32>(-t * 6.0, t * 4.5)).r;
-    return a * 0.55 + b * 0.3 + c * 0.15;
+    let h = a * 0.54 + b * 0.31 + c * 0.15;
+    // Trochoidale Schärfung: breite Wellentäler, markante Kämme
+    return mix(h, h * h * (1.35 - 0.35 * h), 0.55);
 }
 
 fn water(p_in: vec2<f32>) -> GOut {
@@ -784,49 +875,67 @@ fn water_s(p_in: vec2<f32>, shore_in: f32) -> GOut {
     let depth = m.b;          // 0 flach → 1 tief
     // Grundfarbe mit Tiefe: im Flachen schimmert der Grund durch, in der Tiefe wird es dunkel
     let dd = smoothstep(0.0, 1.0, max(depth, shore * 0.85));
-    var c = mix(G.water_a.rgb, G.water_b.rgb, dd);
+    var c = mix(G.water_a.rgb, G.water_b.rgb, dd * (0.85 + 0.15 * dd));
     // weite See: großflächig tiefere und hellere Stellen, langsam ziehende Strömungsbänder
     let big = noise_at(p * 0.011 + vec2<f32>(t * 0.21, t * 0.08)).r;
     let band = noise_at(vec2<f32>(p.x * 0.004 + p.y * 0.002, p.y * 0.017) + vec2<f32>(t * 0.05, 0.0)).b;
-    c *= 0.9 + big * 0.18 * dd + (band - 0.5) * 0.08 * dd;
+    c *= 0.88 + big * 0.20 * dd + (band - 0.5) * 0.09 * dd;
     let h0 = wave_h(p, t);
-    // Wellentäler dunkler, Kämme heller und grüner (Licht dringt durch die dünne Wasserhaut)
-    c *= 0.86 + h0 * 0.3;
-    c += G.water_a.rgb * smoothstep(0.62, 0.8, h0) * 0.18 * (1.0 - dd * 0.5);
-    // Kaustik im Flachen (Voronoi-Netz aus der Rauschtextur)
-    let ca = noise_at(p * 0.7 + vec2<f32>(t * 5.0, t * 2.0)).g;
-    let cb = noise_at(p * 0.55 - vec2<f32>(t * 3.5, t * 4.0)).g;
-    let caust = smoothstep(0.86, 0.97, max(ca, cb)) * (1.0 - dd) * G.water_b.w;
-    c += vec3<f32>(caust * 0.35);
-    // Schaumringe zum Ufer, Gischt auf hohen Kämmen nahe der Küste
-    let fw = G.water_c.w;
-    let ring = fract(shore * 6.0 - t * 0.35);
-    let foam_edge = 1.0 - smoothstep(0.0, fw * 0.5, shore);
-    let foam_ring = step(0.82, ring) * (1.0 - smoothstep(0.0, fw * 1.5, shore)) * step(0.45, noise_at(p * 1.7 + vec2<f32>(t * 2.0, 0.0)).b);
-    var foam = max(step(0.4, foam_edge + (noise_at(p * 2.0 + t * 7.0).b - 0.5) * 0.6), foam_ring * 0.85);
-    if (hd) {
-        let crest = smoothstep(0.7, 0.78, h0) * (1.0 - smoothstep(0.0, fw * 3.0, shore)) * step(0.5, noise_at(p * 2.6 - t * 5.0).b);
-        foam = max(foam, crest * 0.6);
+    // Wellentäler dunkler, Kämme heller und smaragdgrün durchschimmernd (Subsurface Scattering)
+    c *= 0.84 + h0 * 0.32;
+    let sss_col = mix(G.water_a.rgb * vec3<f32>(0.78, 1.26, 1.12), G.sun_col.rgb, 0.22);
+    c += sss_col * smoothstep(0.52, 0.82, h0) * (0.22 + (1.0 - dd) * 0.15);
+    // Kaustik nur im Flachen berechnen (Voronoi-Netz aus der Rauschtextur)
+    var caust = 0.0;
+    if (dd < 0.995) {
+        let ca = noise_at(p * 0.7 + vec2<f32>(t * 5.0, t * 2.0)).g;
+        let cb = noise_at(p * 0.55 - vec2<f32>(t * 3.5, t * 4.0)).g;
+        let c_net = smoothstep(0.84, 0.965, max(ca, cb)) + smoothstep(0.88, 0.98, min(ca, cb)) * 0.55;
+        caust = c_net * (1.0 - dd) * (1.0 - dd * 0.35) * G.water_b.w;
+        c += mix(vec3<f32>(0.75, 0.98, 1.0), G.sun_col.rgb + vec3<f32>(0.3), 0.35) * (caust * 0.38);
     }
-    c = mix(c, G.water_c.rgb, foam * 0.9);
+    // Schaumringe zum Ufer, Gischt auf hohen Kämmen nahe der Küste (nur in Ufernähe berechnen)
+    let fw = G.water_c.w;
+    var foam = 0.0;
+    if (shore < fw * 3.2) {
+        let ring = fract(shore * 6.0 - t * 0.35);
+        let foam_edge = 1.0 - smoothstep(0.0, fw * 0.55, shore);
+        let fn1 = noise_at(p * 1.7 + vec2<f32>(t * 2.0, 0.0)).b;
+        let fn2 = noise_at(p * 2.0 + t * 7.0).b;
+        if (hd) {
+            let foam_ring = smoothstep(0.76, 0.92, ring) * (1.0 - smoothstep(0.0, fw * 1.6, shore)) * smoothstep(0.38, 0.62, fn1);
+            let edge_lace = smoothstep(0.32, 0.52, foam_edge + (fn2 - 0.5) * 0.55);
+            let crest = smoothstep(0.66, 0.78, h0) * (1.0 - smoothstep(0.0, fw * 3.0, shore)) * smoothstep(0.42, 0.62, noise_at(p * 2.6 - t * 5.0).b);
+            foam = max(max(edge_lace, foam_ring * 0.88), crest * 0.68);
+        } else {
+            let foam_ring = step(0.82, ring) * (1.0 - smoothstep(0.0, fw * 1.5, shore)) * step(0.45, fn1);
+            foam = max(step(0.4, foam_edge + (fn2 - 0.5) * 0.6), foam_ring * 0.85);
+        }
+        c = mix(c, G.water_c.rgb, foam * 0.92);
+    }
     // Normale aus dem Wellenfeld
-    let e = 1.0;
+    let e = select(1.0, 0.65, hd);
     let hx = wave_h(p + vec2<f32>(e, 0.0), t) - h0;
     let hy = wave_h(p + vec2<f32>(0.0, e), t) - h0;
-    let nxy = clamp(vec2<f32>(-hx, -hy) * 9.0 * G.water_a.w, vec2<f32>(-0.6), vec2<f32>(0.6));
-    var em = vec3<f32>(caust * 0.06);
-    var spec = select(0.75, 0.2, foam > 0.5);
+    let nxy = clamp(vec2<f32>(-hx, -hy) * (9.5 / e) * G.water_a.w, vec2<f32>(-0.68), vec2<f32>(0.68));
+    var em = vec3<f32>(caust * 0.07);
+    var spec = select(0.78, 0.18, foam > 0.5);
     if (hd) {
         // Spiegelung des Himmels nach Fresnel: flach blickend und an Wellenflanken stärker
         let n = vec3<f32>(nxy, sqrt(max(0.0, 1.0 - dot(nxy, nxy))));
         let v = normalize(vec3<f32>(0.0, 0.55, 0.85));
         let r = reflect(-v, n);
-        let horizon = G.fog.rgb * 1.1 + G.ambient.rgb * 0.4;
-        let zenith = G.ambient.rgb * 1.3 + G.sun_col.rgb * 0.08;
-        let sky = mix(horizon, zenith, clamp(r.z, 0.0, 1.0));
-        let fres = 0.06 + 0.94 * pow(1.0 - clamp(dot(n, v), 0.0, 1.0), 5.0);
-        em += sky * clamp(fres * 2.2 + 0.08, 0.0, 0.6) * (1.0 - foam);
-        spec = select(0.97, 0.25, foam > 0.5);
+        let horizon = G.fog.rgb * 1.15 + G.ambient.rgb * 0.42 + G.sun_col.rgb * 0.12;
+        let zenith = G.ambient.rgb * 1.35 + G.sun_col.rgb * 0.08;
+        var sky = mix(horizon, zenith, clamp(r.z, 0.0, 1.0));
+        // ziehende Wolken spiegeln sich (dasselbe Feld wie die Wolkenschatten, von den Wellen verzerrt)
+        let wq = (p + nxy * 26.0) * 0.00042 + vec2<f32>(t * 0.0062 + 0.21, t * 0.0024 + 0.43);
+        let cl = textureSampleLevel(t_noise, s_lin, fract(wq), 0.0).r * 0.72 + textureSampleLevel(t_noise, s_lin, fract(wq * 2.7), 0.0).b * 0.34;
+        let cov = G.fx6.x;
+        sky = mix(sky, G.fog.rgb * 1.4 + G.ambient.rgb * 0.7 + G.sun_col.rgb * 0.1, smoothstep(0.58 - cov * 0.25, 0.85 - cov * 0.25, cl) * 0.55);
+        let fres = 0.05 + 0.95 * pow(1.0 - clamp(dot(n, v), 0.0, 1.0), 5.0);
+        em += sky * clamp(fres * 2.35 + 0.07, 0.0, 0.65) * (1.0 - foam * 0.85);
+        spec = mix(0.98, 0.22, foam);
     } else {
         // Glitzern (Pixelstil)
         let gl = noise_at(p * 1.3 + vec2<f32>(t * 9.0, t * 6.0)).a;
@@ -883,30 +992,33 @@ fn nrm_texel(uv: vec2<f32>, layer: u32, chunk: bool) -> vec4<f32> {
     return textureSampleLevel(t_anrm, s_near, uv, i32(layer), 0.0);
 }
 fn sample_nrm(uv: vec2<f32>, layer: u32, chunk: bool) -> vec4<f32> {
-    let c = nrm_texel(uv, layer, chunk);
-    // FullHD: Neigung weich zwischen den Kunstpixeln (eigene bilineare Mischung, WebGL erlaubt
-    // nur einen Sampler je Textur); Höhe und Glanz bleiben pixelgenau, die Farbe ohnehin
-    if (G.hd3.x > 0.5) {
-        var dim = vec2<f32>(textureDimensions(t_anrm).xy);
-        if (chunk) {
-            dim = vec2<f32>(textureDimensions(t_cnrm).xy);
-        }
-        let px = uv * dim - 0.5;
-        let fr = fract(px);
-        // Bodenstücke liegen je in einer eigenen Ebene: am Rand nicht auf die Gegenseite greifen
-        let lo = 0.5 / dim;
-        let hi = 1.0 - lo;
-        let b = clamp((floor(px) + 0.5) / dim, lo, hi);
-        let d = 1.0 / dim;
-        let b1 = clamp(b + d, lo, hi);
-        let n00 = nrm_texel(b, layer, chunk).rg;
-        let n10 = nrm_texel(vec2<f32>(b1.x, b.y), layer, chunk).rg;
-        let n01 = nrm_texel(vec2<f32>(b.x, b1.y), layer, chunk).rg;
-        let n11 = nrm_texel(b1, layer, chunk).rg;
-        let n = mix(mix(n00, n10, fr.x), mix(n01, n11, fr.x), fr.y);
-        return vec4<f32>(n, c.b, c.a);
+    if (G.hd3.x < 0.5) {
+        return nrm_texel(uv, layer, chunk);
     }
-    return c;
+    // FullHD: Neigung weich zwischen den Kunstpixeln (eigene Hermite-Mischung, WebGL erlaubt
+    // nur einen Sampler je Textur); Höhe und Glanz bleiben pixelgenau aus dem nächsten Ecktexel
+    var dim = vec2<f32>(textureDimensions(t_anrm).xy);
+    if (chunk) {
+        dim = vec2<f32>(textureDimensions(t_cnrm).xy);
+    }
+    let px = uv * dim - 0.5;
+    let fr = fract(px);
+    // Bodenstücke liegen je in einer eigenen Ebene: am Rand nicht auf die Gegenseite greifen
+    let lo = 0.5 / dim;
+    let hi = 1.0 - lo;
+    let b = clamp((floor(px) + 0.5) / dim, lo, hi);
+    let d = 1.0 / dim;
+    let b1 = clamp(b + d, lo, hi);
+    let t00 = nrm_texel(b, layer, chunk);
+    let t10 = nrm_texel(vec2<f32>(b1.x, b.y), layer, chunk);
+    let t01 = nrm_texel(vec2<f32>(b.x, b1.y), layer, chunk);
+    let t11 = nrm_texel(b1, layer, chunk);
+    let s = fr * fr * (3.0 - 2.0 * fr);
+    let n = mix(mix(t00.rg, t10.rg, s.x), mix(t01.rg, t11.rg, s.x), s.y);
+    let cx = select(t00, t10, fr.x >= 0.5);
+    let cy = select(t01, t11, fr.x >= 0.5);
+    let c = select(cx, cy, fr.y >= 0.5);
+    return vec4<f32>(n, c.b, c.a);
 }
 
 @fragment
@@ -938,10 +1050,19 @@ fn fs_gbuf(v: VOut) -> GOut {
         let q = vec2<i32>(floor(v.clip.xy));
         if (((q.x + q.y) & 1) == 0 || (q.y & 1) == 0) { discard; }
     }
-    var c = sample_sprite(v.uv, v.ext.x, chunk);
+    var uv = v.uv;
+    if ((flags & 64u) != 0u) {
+        // Wasserspiegelung: pixelgenaue Wellenverzerrung direkt im Shader (statt 24 CPU-Streifen)
+        let t = G.screen.z;
+        let wob = sin(v.world.y * 0.11 + t * 2.1 + v.world.x * 0.025) * 1.65
+            + (noise_at(v.world * 0.62 + vec2<f32>(t * 3.1, -t * 1.8)).r - 0.5) * 2.4;
+        uv.x -= wob / 2048.0;
+        if (uv.x < v.prm.x || uv.x > v.prm.y) { discard; }
+    }
+    var c = sample_sprite(uv, v.ext.x, chunk);
     if (chunk && c.a < 0.45) {
         // Wasser und Abgrund im Boden-Chunk: Art und Uferabstand stehen in der Normalen-Textur
-        let wn = nrm_texel(v.uv, v.ext.x, true);
+        let wn = nrm_texel(uv, v.ext.x, true);
         if (wn.a > 0.75) {
             return water_s(v.world, wn.b);
         }
@@ -954,10 +1075,10 @@ fn fs_gbuf(v: VOut) -> GOut {
         // Umriss beim Fokus: Nachbarpixel prüfen
         if ((flags & 2u) != 0u) {
             let ts = 1.0 / vec2<f32>(textureDimensions(t_acol).xy);
-            let a = sample_sprite(v.uv + vec2<f32>(ts.x, 0.0), v.ext.x, false).a
-                + sample_sprite(v.uv - vec2<f32>(ts.x, 0.0), v.ext.x, false).a
-                + sample_sprite(v.uv + vec2<f32>(0.0, ts.y), v.ext.x, false).a
-                + sample_sprite(v.uv - vec2<f32>(0.0, ts.y), v.ext.x, false).a;
+            let a = sample_sprite(uv + vec2<f32>(ts.x, 0.0), v.ext.x, false).a
+                + sample_sprite(uv - vec2<f32>(ts.x, 0.0), v.ext.x, false).a
+                + sample_sprite(uv + vec2<f32>(0.0, ts.y), v.ext.x, false).a
+                + sample_sprite(uv - vec2<f32>(0.0, ts.y), v.ext.x, false).a;
             if (a > 0.4) {
                 o.alb = vec4<f32>(1.0, 0.95, 0.8, 1.0);
                 o.nrm = vec4<f32>(0.5, 0.5, clamp(v.prm.x / 510.0, 0.0, 1.0), 0.0);
@@ -967,11 +1088,17 @@ fn fs_gbuf(v: VOut) -> GOut {
         }
         discard;
     }
-    var n = sample_nrm(v.uv, v.ext.x, chunk);
-    if (chunk && G.hd3.x > 0.5) {
-        // FullHD: feine Bodenstruktur (Körnung, kleine Unebenheiten) in der Normale, ortsfest in der Welt
-        let fq = noise_at(v.world * 0.73 + vec2<f32>(13.0, 7.0));
-        n = vec4<f32>(n.rg + (fq.rb - vec2<f32>(0.5)) * 0.09, n.b, n.a);
+    var n = sample_nrm(uv, v.ext.x, chunk);
+    if (G.hd3.x > 0.5) {
+        if (chunk) {
+            // FullHD: feine Bodenstruktur (Körnung, kleine Unebenheiten) in der Normale, ortsfest in der Welt
+            let fq = noise_at(v.world * 0.73 + vec2<f32>(13.0, 7.0));
+            n = vec4<f32>(clamp(n.rg + (fq.rb - vec2<f32>(0.5)) * 0.11, vec2<f32>(0.02), vec2<f32>(0.98)), n.b, n.a);
+        } else if (n.b > 0.02) {
+            // FullHD: dezente Material-Mikrostruktur auf Felsen, Mauern, Stämmen und Schiffsrümpfen
+            let fq = noise_at(uv * 512.0 + vec2<f32>(5.0, 11.0));
+            n = vec4<f32>(clamp(n.rg + (fq.rg - vec2<f32>(0.5)) * 0.055, vec2<f32>(0.02), vec2<f32>(0.98)), n.b, n.a);
+        }
     }
     var rgb = c.rgb * v.col.rgb;
     var glow = vec3<f32>(0.0);
@@ -1000,24 +1127,30 @@ fn fs_gbuf(v: VOut) -> GOut {
         rgb *= mix(vec3<f32>(1.05, 1.0, 0.93), vec3<f32>(0.95, 1.0, 1.06), smoothstep(0.3, 0.7, m2));
     }
     if ((flags & 64u) != 0u) {
-        // Spiegelung: die Wasseroberfläche bleibt, das Bild schimmert hindurch
+        // Spiegelung: die Wasseroberfläche bleibt, das Bild schimmert wellig gebrochen hindurch
         var w = water(v.world);
-        let k = v.col.a * 0.85;
-        w.alb = vec4<f32>(mix(w.alb.rgb, rgb, k), 1.0);
-        w.emi = vec4<f32>(w.emi.rgb * (1.0 - k * 0.6) + glow * 0.7, 0.5);
+        let wn = w.nrm.rg * 2.0 - 1.0;
+        let ripple = 1.0 - clamp(length(wn) * 0.45, 0.0, 0.35);
+        let k = v.col.a * 0.86 * ripple;
+        w.alb = vec4<f32>(mix(w.alb.rgb, rgb * vec3<f32>(0.88, 0.95, 1.02), k), 1.0);
+        w.emi = vec4<f32>(w.emi.rgb * (1.0 - k * 0.55) + glow * 0.75, 0.5);
         return w;
     }
     let elev = n.b * 510.0 + v.prm.x;
     o.alb = vec4<f32>(rgb, 1.0);
     o.nrm = vec4<f32>(n.rg, clamp(elev / 510.0, 0.0, 1.0), n.a);
-    // Alpha im Leuchtpuffer: 1 = Sprite (kann Effekte verdecken), 0,875 = Boden-Chunk, 0,5 = Wasser
-    o.emi = vec4<f32>(glow * v.col.a, select(1.0, 0.875, chunk));
+    // Alpha im Leuchtpuffer: 1 = Sprite (kann Effekte verdecken), 0,98 = Laub (schwingt im Wind:
+    // Lichtflecken unter Kronen), 0,96 = Spielfigur (Randlicht), 0,875 = Boden-Chunk, 0,5 = Wasser
+    var kind = select(1.0, 0.875, chunk);
+    if (!chunk && v.ext.z > 0u) { kind = 0.98; }
+    if ((flags & 128u) != 0u) { kind = 0.96; }
+    o.emi = vec4<f32>(glow * v.col.a, kind);
     return o;
 }
 
 // Schatten/Abziehbilder: nur Farbe abdunkeln (Mischung), Normale und Höhe bleiben.
 @fragment
-fn fs_decal(v: VOut) -> @location(0) vec4<f32> {
+fn fs_decal(v: VOut) -> GOut {
     var a = v.col.a;
     if (v.ext.y == 6u) {
         let d = length(v.uv * 2.0 - 1.0);
@@ -1029,7 +1162,12 @@ fn fs_decal(v: VOut) -> @location(0) vec4<f32> {
         let c = textureSampleLevel(t_acol, s_near, v.uv, i32(v.ext.x), 0.0);
         a *= step(0.45, c.a);
     }
-    return vec4<f32>(v.col.rgb, a);
+    // nur die Farbe: Normale und Leuchten mit Alpha 0 (gleiche Mischung für alle Ziele, siehe render.rs)
+    var o: GOut;
+    o.alb = vec4<f32>(v.col.rgb, a);
+    o.nrm = vec4<f32>(0.0);
+    o.emi = vec4<f32>(0.0);
+    return o;
 }
 
 // ---------------------------------------------------------------- Überlagerung (nach dem Licht)
@@ -1037,21 +1175,26 @@ fn fs_decal(v: VOut) -> @location(0) vec4<f32> {
 fn fs_overlay(v: VOut) -> @location(0) vec4<f32> {
     let mode = v.ext.y;
     if (mode == 5u) {
-        // Nebelbank
+        // Nebelbank: vor der Texturabfrage zwischen Pixel- und FullHD-Modus verzweigen (keine doppelten Abfragen).
+        // prm.x = Parallaxe: höhere Lagen ziehen mit der Kamera mit (Tiefe zwischen den Lagen)
         let t = G.screen.z;
-        let p = floor(v.world);
-        let n = noise_at(p * 0.25 + vec2<f32>(t * v.prm.y, t * v.prm.y * 0.3)).r;
-        let n2 = noise_at(p * 0.12 - vec2<f32>(t * v.prm.y * 0.6, 0.0)).b;
-        var a = smoothstep(0.35, 0.85, n * 0.6 + n2 * 0.5) * v.col.a;
-        // weicher Rand am Quad
+        let wpos = v.world + (G.view.xy + G.view.zw * 0.5) * v.prm.x;
         let e = min(min(v.uv.x, 1.0 - v.uv.x), min(v.uv.y, 1.0 - v.uv.y));
-        a *= smoothstep(0.0, 0.25, e);
-        // Pixelmodus: gerasterte Stufen; FullHD: weicher, fotografischer Nebel
+        let edge = smoothstep(0.0, 0.28, e);
+        var a = 0.0;
         if (G.hd3.x < 0.5) {
+            let p = floor(wpos);
+            let n = noise_at(p * 0.25 + vec2<f32>(t * v.prm.y, t * v.prm.y * 0.3)).r;
+            let n2 = noise_at(p * 0.12 - vec2<f32>(t * v.prm.y * 0.6, 0.0)).b;
+            a = smoothstep(0.35, 0.85, n * 0.6 + n2 * 0.5) * v.col.a * edge;
             a = floor(a * 6.0 + hash21(p) * 0.8) / 6.0;
         } else {
-            let pf = v.world * 0.5;
-            a = smoothstep(0.35, 0.85, noise_at(pf * 0.25 + vec2<f32>(t * v.prm.y, t * v.prm.y * 0.3)).r * 0.6 + noise_at(pf * 0.12 - vec2<f32>(t * v.prm.y * 0.6, 0.0)).b * 0.5) * v.col.a * smoothstep(0.0, 0.25, e) * 0.8;
+            let pf = wpos * 0.5;
+            let n = noise_at(pf * 0.25 + vec2<f32>(t * v.prm.y, t * v.prm.y * 0.3)).r;
+            let n2 = noise_at(pf * 0.12 - vec2<f32>(t * v.prm.y * 0.6, 0.0)).b;
+            // dritte Lage aus dem weichen Rauschkanal (der Worley-Kanal g zeichnete ein Liniennetz)
+            let n3 = noise_at(pf * 0.52 + vec2<f32>(-t * v.prm.y * 0.35 + 17.0, t * v.prm.y * 0.45 + 5.0)).b;
+            a = smoothstep(0.33, 0.86, n * 0.52 + n2 * 0.42 + n3 * 0.22) * v.col.a * edge * 0.84;
         }
         return vec4<f32>(v.col.rgb * a, a);
     }
@@ -1078,6 +1221,28 @@ fn fs_overlay(v: VOut) -> @location(0) vec4<f32> {
             if (a < 0.004) { discard; }
         }
         return vec4<f32>(c.rgb * v.col.rgb * v.prm.y * a, a);
+    }
+    if (mode == 11u) {
+        // Silhouette der Spielfigur hinter Verdeckern (Bäume, Mauern, Dächer): nur wo etwas
+        // Aufrechtes vor ihrem Fuß (prm.x) steht, als kühler, halb durchsichtiger Umriss
+        let c = textureSampleLevel(t_acol, s_near, v.uv, i32(v.ext.x), 0.0);
+        if (c.a < 0.45) { discard; }
+        let ip = vec2<i32>(floor(v.clip.xy));
+        let ek = textureLoad(t_ge, ip, 0).a;
+        if (ek < 0.95 || abs(ek - 0.96) < 0.01) { discard; }
+        let e = textureLoad(t_gn, ip, 0).b * 510.0;
+        let occ = smoothstep(v.prm.x + 3.0, v.prm.x + 10.0, v.world.y + e) * smoothstep(4.0, 9.0, e);
+        if (occ < 0.05) { discard; }
+        // Rand heller als die Fläche (Lesbarkeit), sanft pulsierend
+        let ts = 1.0 / vec2<f32>(textureDimensions(t_acol).xy);
+        let l = i32(v.ext.x);
+        let nb = textureSampleLevel(t_acol, s_near, v.uv + vec2<f32>(ts.x, 0.0), l, 0.0).a
+            * textureSampleLevel(t_acol, s_near, v.uv - vec2<f32>(ts.x, 0.0), l, 0.0).a
+            * textureSampleLevel(t_acol, s_near, v.uv + vec2<f32>(0.0, ts.y), l, 0.0).a
+            * textureSampleLevel(t_acol, s_near, v.uv - vec2<f32>(0.0, ts.y), l, 0.0).a;
+        let rim = 1.0 - step(0.45, nb);
+        let a = (0.22 + rim * 0.5) * occ * v.col.a * (0.85 + 0.15 * sin(G.screen.z * 3.0));
+        return vec4<f32>(v.col.rgb * a, a);
     }
     let c = textureSampleLevel(t_acol, s_near, v.uv, i32(v.ext.x), 0.0);
     if (c.a < 0.45) { discard; }
@@ -1184,51 +1349,158 @@ fn t_now() -> f32 {
 }
 
 // ---------------------------------------------------------------- Beleuchtung
-// t_a = Farbe, t_b = Normale (xy, Höhe/510, Glanz), t_c = Leuchten
+// Vorberechnete Spirale für die Umgebungsverdeckung (spart 12 sin/cos-Aufrufe pro Pixel):
+// xy = Richtung * Radius, z = Radius
+const AO_KERNEL: array<vec3<f32>, 12> = array<vec3<f32>, 12>(
+    vec3<f32>(2.0000, 0.0000, 2.0),
+    vec3<f32>(-2.2858, 2.0940, 3.1),
+    vec3<f32>(0.3672, -4.1839, 4.2),
+    vec3<f32>(3.2247, 4.2061, 5.3),
+    vec3<f32>(-6.3022, -1.1148, 6.4),
+    vec3<f32>(6.3296, -4.0231, 7.5),
+    vec3<f32>(-2.2326, 8.3051, 8.6),
+    vec3<f32>(-4.4705, -8.6084, 9.7),
+    vec3<f32>(10.1423, 3.7114, 10.8),
+    vec3<f32>(-11.0142, 4.5053, 11.9),
+    vec3<f32>(5.5105, -11.7743, 13.0),
+    vec3<f32>(4.1678, 13.4699, 14.1),
+);
+
+// Physikalisch motivierter Glanz (GGX-Mikrofacetten + Schlick-Fresnel)
+fn ggx_spec(n: vec3<f32>, v: vec3<f32>, l: vec3<f32>, gloss: f32) -> f32 {
+    let h = normalize(l + v);
+    let ndh = max(dot(n, h), 0.0);
+    let ndl = max(dot(n, l), 0.0);
+    let vdh = max(dot(v, h), 0.0);
+    let rough = clamp(1.0 - gloss * 0.86, 0.09, 0.92);
+    let a = rough * rough;
+    let a2 = a * a;
+    let d_denom = ndh * ndh * (a2 - 1.0) + 1.0;
+    let d = a2 / max(3.14159 * d_denom * d_denom, 0.0001);
+    let f0 = mix(0.04, 0.38, gloss * gloss);
+    let fres = f0 + (1.0 - f0) * pow(1.0 - vdh, 5.0);
+    return d * fres * ndl * gloss * 1.35;
+}
+
+// Rückstrahlung und leuchtende Flächen (Bildschirm-GI): Spirale mit dem goldenen Winkel,
+// xy = Richtung * Radius (Low-Res-Pixel), z = Gewicht
+const GI_KERNEL: array<vec3<f32>, 8> = array<vec3<f32>, 8>(
+    vec3<f32>(4.00, 0.00, 0.98),
+    vec3<f32>(-5.86, 5.37, 0.93),
+    vec3<f32>(1.21, -13.75, 0.83),
+    vec3<f32>(13.11, 17.10, 0.66),
+    vec3<f32>(-30.72, -5.43, 0.48),
+    vec3<f32>(36.07, -22.95, 0.33),
+    vec3<f32>(-14.59, 54.27, 0.22),
+    vec3<f32>(-32.98, -63.50, 0.15),
+);
+
+// Regenringe: je Zelle ein Tropfen, der sich ausbreitet und verblasst (0..1)
+fn rain_ring(p: vec2<f32>, cs: f32, t: f32) -> f32 {
+    let cell = floor(p / cs);
+    let h = hash21(cell);
+    let ph = fract(t * 1.3 + h * 7.0);
+    let ctr = (cell + 0.5 + (vec2<f32>(hash21(cell + 1.7), hash21(cell + 4.3)) - 0.5) * 0.5) * cs;
+    let rd = length(p - ctr);
+    return (1.0 - smoothstep(0.0, 0.85, abs(rd - ph * cs * 0.42))) * (1.0 - ph) * step(0.35, h);
+}
+
+// t_a = Farbe, t_b = Normale (xy, Höhe/510, Glanz), t_c = Leuchten (Alpha: Art des Pixels)
 @fragment
 fn fs_light(f: FOut) -> @location(0) vec4<f32> {
     let dim = vec2<f32>(textureDimensions(t_a));
     let ip = vec2<i32>(f.uv * dim);
-    let alb = textureLoad(t_a, ip, 0).rgb;
+    var alb = textureLoad(t_a, ip, 0).rgb;
     let nr = textureLoad(t_b, ip, 0);
     let emt = textureLoad(t_c, ip, 0);
     let em = emt.rgb;
-    // Wasseroberfläche (Alpha 0,5 im Leuchtpuffer, siehe water_s)
-    let wet = abs(emt.a - 0.5) < 0.2;
+    // Art des Pixels: 0,5 Wasser, 0,875 Boden, 0,96 Spielfigur, 0,98 Laub, 1 übrige Sprites
+    let kind = emt.a;
+    let wet = abs(kind - 0.5) < 0.2;
+    let hero = abs(kind - 0.96) < 0.009;
     let nxy = nr.rg * 2.0 - 1.0;
     let n = vec3<f32>(nxy, sqrt(max(0.0, 1.0 - dot(nxy, nxy))));
     let elev = nr.b * 510.0;
-    let spec_k = nr.a;
+    var spec_k = nr.a;
     let sp = gpos((vec2<f32>(ip) + 0.5) / dim);
     let p3 = vec3<f32>(sp.x, sp.y + elev, elev);
     // interne Auflösungsstufe: Höhen (Welt-px) in Zielpixel umrechnen
     let rs = max(G.hd3.y, 1.0);
+    let t = G.screen.z;
+    let hd = G.hd3.x > 0.5;
 
     // Bodenzeile (0..1, fern = oben): wo dieser Pixel auf dem Boden steht
     let ground = (f32(ip.y) + 0.5 + elev * rs) / dim.y;
 
+    // Wetter auf den Flächen: Nässe dunkelt und lässt glänzen, Pfützen auf ebenem Boden;
+    // Schnee und Asche legen sich auf nach oben weisende Flächen (vor allem auf Requisiten)
+    var puddle = 0.0;
+    if (!wet) {
+        if (G.fx2.x > 0.01) {
+            let wk = G.fx2.x;
+            alb *= 1.0 - 0.26 * wk;
+            spec_k = mix(spec_k, max(spec_k, 0.5), wk * 0.75);
+            if (kind > 0.86 && kind < 0.89 && n.z > 0.94) {
+                let pn = textureSampleLevel(t_d, s_lin, fract(sp * 0.0021 + vec2<f32>(0.31, 0.77)), 0.0).r * 0.65
+                    + textureSampleLevel(t_d, s_lin, fract(sp * 0.0087 + vec2<f32>(0.13, 0.41)), 0.0).b * 0.35;
+                puddle = smoothstep(0.6, 0.655, pn) * wk;
+            }
+        }
+        if (G.fx2.y > 0.01 || G.fx2.z > 0.01) {
+            let up = smoothstep(0.8, 0.97, n.z) * select(0.35, 1.0, kind > 0.95);
+            let sn = textureSampleLevel(t_d, s_lin, fract(sp * 0.0131 + vec2<f32>(0.21, 0.64)), 0.0).b;
+            let ks = G.fx2.y * up * smoothstep(0.42, 0.6, sn + G.fx2.y * 0.25);
+            alb = mix(alb, vec3<f32>(0.78, 0.83, 0.9), ks * 0.72);
+            spec_k = max(spec_k, ks * 0.32);
+            let ka = G.fx2.z * up * smoothstep(0.45, 0.62, sn + G.fx2.z * 0.2);
+            alb = mix(alb, vec3<f32>(0.15, 0.14, 0.14), ka * 0.5);
+        }
+    }
+
     // Umgebungsverdeckung aus dem Höhenpuffer: Boden am Fuß von Wänden, Klippen und Stämmen
-    // wird dunkler. Nur Verdecker zählen, die am selben Bodenort stehen (nicht Figuren davor).
+    // sowie Nischen in Klippen und Mauern werden plastisch abgedunkelt.
     var ao = 1.0;
-    // nur ebene Flächen empfangen Verdeckung: auf Wänden, Kronen und Figuren steigt die Höhe nach oben hin an
     let e_up = textureLoad(t_b, vec2<i32>(ip.x, max(ip.y - i32(2.0 * rs), 0)), 0).b * 510.0;
-    let flat = 1.0 - smoothstep(0.8, 1.6, abs(e_up - elev));
-    if (G.hd2.x > 0.0 && flat > 0.0) {
+    let flat = mix(0.38, 1.0, 1.0 - smoothstep(0.8, 2.2, abs(e_up - elev)));
+    if (G.hd2.x > 0.0) {
         var occ = 0.0;
         let g1 = f32(ip.y) / rs + elev;
         for (var k = 0; k < 12; k = k + 1) {
-            let ang = f32(k) * 2.39996;
-            let rad = 2.0 + f32(k) * 1.1;
-            let o = vec2<f32>(cos(ang), sin(ang)) * rad * rs;
-            let q = vec2<i32>(clamp(vec2<f32>(ip) + o, vec2<f32>(0.0), dim - 1.0));
+            let ks = AO_KERNEL[k];
+            let rad = ks.z;
+            let q = vec2<i32>(clamp(vec2<f32>(ip) + ks.xy * rs, vec2<f32>(0.0), dim - 1.0));
             let e2 = textureLoad(t_b, q, 0).b * 510.0;
             let dh = e2 - elev;
             let g2 = f32(q.y) / rs + e2;
-            if (dh > 2.0 && abs(g2 - g1) < 6.0 + rad) {
-                occ += clamp(dh / (rad * 2.0 + 6.0), 0.0, 1.0);
+            if (dh > 1.5 && abs(g2 - g1) < 7.0 + rad) {
+                occ += clamp(dh / (rad * 1.9 + 5.0), 0.0, 1.0);
             }
         }
-        ao = 1.0 - clamp(occ / 12.0 * 1.6, 0.0, 0.6) * G.hd2.x * flat;
+        let n_crevice = (1.0 - n.z) * 0.14;
+        ao = 1.0 - clamp((occ / 12.0 * 1.65 * flat) + n_crevice, 0.0, 0.65) * G.hd2.x;
+    }
+
+    // Rückstrahlung (farbiges Streulicht der Umgebung) und leuchtende Flächen (Lava, Glut, Pilze,
+    // Runen) als Lichtquellen: Spirale je Pixel gedreht (geordnetes Muster, flimmert nicht)
+    var bounce = vec3<f32>(0.0);
+    var emis = vec3<f32>(0.0);
+    if (hd && G.hd2.x > 0.0) {
+        let bay = f32((ip.x & 3) * 4 + ((ip.y + (ip.x >> 2u)) & 3)) * 0.3927;
+        let cs = cos(bay);
+        let sn = sin(bay);
+        var wsum = 0.0;
+        for (var k = 0; k < 8; k = k + 1) {
+            let kk = GI_KERNEL[k];
+            let o = vec2<f32>(kk.x * cs - kk.y * sn, kk.x * sn + kk.y * cs) * rs;
+            let q = vec2<i32>(clamp(vec2<f32>(ip) + o, vec2<f32>(0.0), dim - 1.0));
+            let qe = textureLoad(t_c, q, 0);
+            bounce += textureLoad(t_a, q, 0).rgb * kk.z;
+            // Wasser spiegelt nur den Himmel: keine Lichtquelle
+            emis += qe.rgb * kk.z * step(0.7, qe.a);
+            wsum += kk.z;
+        }
+        bounce /= wsum;
+        emis /= wsum;
     }
 
     // Wolkenschatten: große, weiche Flecken ziehen langsam über Land und See (am Bodenort des
@@ -1239,84 +1511,127 @@ fn fs_light(f: FOut) -> @location(0) vec4<f32> {
         // zurückgefaltet: große Weltkoordinaten (siehe noise_at)
         let c1 = textureSampleLevel(t_d, s_lin, fract(wq), 0.0).r;
         let c2 = textureSampleLevel(t_d, s_lin, fract(wq * 2.7 + vec2<f32>(0.37, 0.11)), 0.0).b;
-        cloud = 1.0 - smoothstep(0.5, 0.74, c1 * 0.72 + c2 * 0.34) * 0.4;
+        // Bedeckung: bei aufziehender Front mehr und dunklere Wolken
+        let cov = G.fx6.x;
+        cloud = 1.0 - smoothstep(0.62 - cov * 0.3, 0.86 - cov * 0.3, c1 * 0.72 + c2 * 0.34) * (0.28 + cov * 0.3);
     }
-    // Umgebung: Himmel von oben, Boden reflektiert etwas
-    let hemi = mix(0.75, 1.0, n.z * G.ambient.w + (1.0 - G.ambient.w));
+    // Umgebung: Himmel von oben, warmer Bodenrückwurf von unten
+    let hemi = mix(0.72, 1.04, n.z * G.ambient.w + (1.0 - G.ambient.w));
     var li = G.ambient.rgb * hemi * ao * mix(1.0, cloud, 0.35);
+    li += bounce * (G.ambient.rgb * 0.55 + G.sun_col.rgb * 0.3 * cloud) * G.fx4.x * ao;
+    li += emis * G.fx4.y;
     // Randlicht: erhöhte Kanten (Figuren, Kronen, Klippenkanten) fangen kühles Himmelslicht von hinten
     if (elev > 3.0) {
-        let edge = pow(clamp(1.0 - n.z, 0.0, 1.0), 2.0);
-        let back = clamp(-n.y * 0.8 + abs(n.x) * 0.35, 0.0, 1.0);
-        li += (G.ambient.rgb * 1.6 + G.sun_col.rgb * 0.5) * edge * back * G.hd2.z;
+        let edge = pow(clamp(1.0 - n.z, 0.0, 1.0), 1.85);
+        let back = clamp(-n.y * 0.82 + abs(n.x) * 0.38, 0.0, 1.0);
+        li += (G.ambient.rgb * 1.65 + G.sun_col.rgb * 0.55) * edge * back * G.hd2.z;
     }
     var spec = vec3<f32>(0.0);
     let view_dir = normalize(vec3<f32>(0.0, 0.55, 0.85));
 
-    // Sonne/Mond mit Bildschirm-Schatten (Höhenfeld abtasten)
+    // Sonne/Mond mit kontakthärtenden Bildschirm-Schatten (Höhenfeld abtasten)
     let sd = normalize(G.sun_dir.xyz);
-    var nd = max(dot(n, sd), 0.0);
+    let raw_nd = dot(n, sd);
+    let nd = select(max(raw_nd, 0.0), max((raw_nd + 0.15) / 1.15, 0.0), hd);
     var sh = 1.0;
     if (G.sun_dir.w > 0.0 && nd > 0.0) {
         var occl = 0.0;
-        // versetzter Start je Pixel (kein Streifenmuster), Schatten werden zum Ende hin weicher
+        var canopy = false;
+        // versetzter Start je Pixel (kein Streifenmuster), Schatten nahe am Werfer scharf, fern weicher
         let jit = hash21(vec2<f32>(ip) * 0.73 + vec2<f32>(3.1, 7.7));
-        for (var k = 1; k <= 12; k = k + 1) {
-            let tq = (f32(k) - jit) * 5.0;
+        for (var k = 1; k <= 15; k = k + 1) {
+            let tq = (f32(k) - jit) * 4.4;
             let q = p3 + sd * tq;
             let sp2 = vec2<f32>(q.x, q.y - q.z);
             let suv = (sp2 - G.view.xy) / G.view.zw;
             if (suv.x < 0.0 || suv.y < 0.0 || suv.x > 1.0 || suv.y > 1.0) { break; }
-            let e2 = textureLoad(t_b, vec2<i32>(suv * dim), 0).b * 510.0;
+            let qi = vec2<i32>(suv * dim);
+            let e2 = textureLoad(t_b, qi, 0).b * 510.0;
             // Verdecker: höher als der Strahl und am selben Bodenort
             let ground2 = sp2.y + e2;
-            if (e2 > q.z + 3.0 && abs(ground2 - q.y) < 22.0) {
-                occl = 1.0 - f32(k) / 15.0;
-                break;
+            let over = e2 - (q.z + 2.5);
+            if (over > 0.0 && abs(ground2 - q.y) < 23.0) {
+                let contact = clamp(over * 0.25, 0.35, 1.0);
+                let dist_fade = 1.0 - f32(k) / 18.5;
+                if (dist_fade * contact > occl) {
+                    occl = dist_fade * contact;
+                    // Laubkronen lassen Licht in Flecken durch
+                    canopy = e2 > 22.0 && abs(textureLoad(t_c, qi, 0).a - 0.98) < 0.009;
+                }
+                if (occl > 0.78) { break; }
             }
+        }
+        if (canopy) {
+            let dq = sp * (1.0 / 96.0) + vec2<f32>(sin(t * 0.37) * 0.012 + t * 0.0016, cos(t * 0.29) * 0.01);
+            let dap = smoothstep(0.6, 0.68, textureSampleLevel(t_d, s_lin, fract(dq), 0.0).b);
+            occl *= 1.0 - dap * 0.82;
         }
         sh = 1.0 - occl * G.sun_dir.w;
     }
-    li += G.sun_col.rgb * nd * sh * (0.5 + 0.5 * ao) * cloud;
+    // Warme Streuung an der Licht-Schatten-Grenze (Subsurface-Terminator für Laub, Segel, Haut)
+    let term = select(0.0, smoothstep(0.0, 0.32, nd) * (1.0 - smoothstep(0.15, 0.65, max(raw_nd, 0.0))) * 0.14, hd && !wet);
+    li += (G.sun_col.rgb * nd + G.sun_col.rgb * vec3<f32>(1.15, 0.85, 0.65) * term) * sh * (0.48 + 0.52 * ao) * cloud;
     let hv = normalize(sd + view_dir);
-    let hd = G.hd3.x > 0.5;
-    // Glanz: glatte Flächen (Wasser, Metall) mit scharfen, hellen Spitzlichtern
-    var sexp = 40.0;
-    var spnorm = 1.0;
-    if (hd) {
-        sexp = mix(12.0, 220.0, spec_k * spec_k);
-        spnorm = (sexp + 8.0) / 48.0;
-    }
+    // Glanz: glatte Flächen (Wasser, Metall, nasser Fels) mit physikalisch motivierten Spitzlichtern
+    let sexp = 40.0;
     if (wet) {
-        // Wasser: Sonne/Mond nicht als großer Spiegelkegel. Mit dem überall gleichen Blick der
-        // Schrägsicht stünde bei Gegenlicht fast jede Wellenflanke darin und die See würde flächig
-        // weiß. Stattdessen blickt hier eine Kamera schräg über der Bildmitte: der Glanz bildet
-        // einen örtlichen Lichtpfad (wandert mit Sonne und Kamera), darin ein weicher Schimmer und
-        // funkelnde Glitzerpunkte (Zufall je Weltpixel aus dem Alphakanal der Rauschtextur,
-        // springt mehrmals je Sekunde; Dichte höchstens 3,5 %).
+        // Wasser: örtlicher Sonnen-/Mondpfad mit GGX-Schimmer und funkelnden Glitzerpunkten
         let cen = G.view.xy + G.view.zw * 0.5;
         let cd = G.view.w * 2.5;
         let vw = normalize(vec3<f32>(cen.x, cen.y + cd * 0.543, cd * 0.84) - p3);
         let ndh = max(dot(n, normalize(sd + vw)), 0.0);
-        let lobe = pow(ndh, 70.0);
+        let lobe = pow(ndh, 64.0) * 0.34 + pow(ndh, 16.0) * 0.06;
         let gq = vec2<i32>(select(floor(sp), floor(sp * 2.0), hd));
         let tk = i32(t_now() * 7.0);
         let r = textureLoad(t_d, vec2<i32>((gq.x + tk * 37) & 255, (gq.y + tk * 59) & 255), 0).a;
-        let spark = step(1.0 - pow(ndh, 300.0) * 0.035, r) * select(2.2, 3.2, hd);
-        spec += G.sun_col.rgb * (lobe * 0.3 + spark) * (spec_k * 1.03) * sh * G.sun_col.w * cloud * cloud;
+        let spark = step(1.0 - pow(ndh, 280.0) * 0.038, r) * select(2.2, 3.4, hd);
+        spec += G.sun_col.rgb * (lobe + spark) * (spec_k * 1.05) * sh * G.sun_col.w * cloud * cloud;
+        // Sterne spiegeln sich in der nächtlichen See (von den Wellen verschoben, funkelnd)
+        if (G.fx3.w > 0.01) {
+            let sq = floor((sp + n.xy * 7.0) / 3.0);
+            let hs = hash21(sq + vec2<f32>(0.37, 0.91));
+            let tw = 0.55 + 0.45 * sin(t * (1.5 + hs * 3.0) + hs * 40.0);
+            spec += vec3<f32>(0.72, 0.8, 1.0) * step(0.9968, hs) * tw * G.fx3.w * cloud * 1.7 * spec_k;
+        }
+        // Regen: Ringe auf der Oberfläche
+        if (G.fx2.x > 0.01) {
+            spec += (G.ambient.rgb * 1.6 + vec3<f32>(0.1)) * rain_ring(sp, 11.0, t) * G.fx2.x * 0.9;
+        }
+    } else if (hd) {
+        spec += G.sun_col.rgb * ggx_spec(n, view_dir, sd, spec_k) * sh * G.sun_col.w * cloud * cloud;
     } else {
-        spec += G.sun_col.rgb * pow(max(dot(n, hv), 0.0), sexp) * spec_k * sh * G.sun_col.w * spnorm * cloud * cloud;
+        spec += G.sun_col.rgb * pow(max(dot(n, hv), 0.0), sexp) * spec_k * sh * G.sun_col.w * cloud * cloud;
     }
 
-    // Punktlichter in 3D
+    // Punktlichter in 3D + Streulicht-Hof im Dunst in einer gemeinsamen Schleife
     let nl = i32(G.counts.x);
-    let t = G.screen.z;
     var shadows = 0;
+    var halo = vec3<f32>(0.0);
+    var rim_l = vec3<f32>(0.0);
     for (var i = 0; i < nl; i = i + 1) {
         let L = G.lights[i];
-        let d3 = L.pos.xyz - p3;
-        let dist = length(d3);
-        if (dist > L.pos.w) { continue; }
+        let fi = f32(i);
+        // flackernde Flammen bewegen ihr Licht: die Schatten tanzen mit
+        let jl = vec2<f32>(sin(t * 13.0 + fi * 3.1), cos(t * 10.7 + fi * 1.7)) * L.col.w * 2.4;
+        let lpos = vec3<f32>(L.pos.x + jl.x, L.pos.y + jl.y * 0.5, L.pos.z);
+        if (hd) {
+            let lp = vec2<f32>(lpos.x, lpos.y - lpos.z);
+            let dp2 = sp - lp;
+            let r_inv = 1.0 / max(L.pos.w, 1.0);
+            let dd2 = dot(dp2, dp2) * (r_inv * r_inv);
+            if (dd2 < 1.0) {
+                let fl2 = 1.0 + sin(t * 9.0 + fi * 2.1) * 0.5 * L.col.w;
+                // Lichtkegel im Dunst: Strahlen, die vom Licht ausgehen
+                let ang = atan2(dp2.y, dp2.x) * 0.15915;
+                let ray = textureSampleLevel(t_d, s_lin, fract(vec2<f32>(ang + fi * 0.37, fi * 0.13 + t * 0.004)), 0.0).r;
+                halo += L.col.rgb * exp(-sqrt(dd2) * 5.0) * fl2 * (0.7 + 0.7 * smoothstep(0.48, 0.74, ray));
+            }
+        }
+        let d3 = lpos - p3;
+        let d2 = dot(d3, d3);
+        let r2 = L.pos.w * L.pos.w;
+        if (d2 > r2) { continue; }
+        let dist = sqrt(d2);
         let ld = d3 / max(dist, 0.001);
         let ndl = max(dot(n, ld), 0.0) * 0.85 + 0.15;
         var att = 1.0 - dist / L.pos.w;
@@ -1324,32 +1639,60 @@ fn fs_light(f: FOut) -> @location(0) vec4<f32> {
         var lsh = 1.0;
         if (hd) {
             // natürlicher Abfall: hell am Licht, langer weicher Ausläufer
-            let x = dist / L.pos.w;
-            let wnd = 1.0 - x * x;
-            att = wnd * wnd / (1.0 + 7.0 * x * x);
-            // Schlagschatten der nahen Lichter: Strahl zum Licht durch das Höhenfeld
-            if (shadows < 8 && att > 0.04 && dist > 10.0) {
+            let x2 = d2 / max(r2, 0.001);
+            let wnd = 1.0 - x2;
+            att = wnd * wnd / (1.0 + 6.5 * x2);
+            // Schlagschatten der nahen Lichter: Strahl zum Licht durch das Höhenfeld, mit weichem
+            // Halbschatten (Tiefe des Verdeckers) statt harter Kante
+            if (shadows < 12 && att > 0.04 && dist > 10.0) {
                 shadows = shadows + 1;
-                let jit2 = hash21(vec2<f32>(ip) * 1.31 + vec2<f32>(f32(i), 2.3));
-                for (var k = 1; k <= 10; k = k + 1) {
-                    let s2 = (f32(k) - jit2) / 10.5;
+                let steps = select(10, 7, shadows > 6);
+                let jit2 = hash21(vec2<f32>(ip) * 1.31 + vec2<f32>(fi, 2.3));
+                for (var k = 1; k <= steps; k = k + 1) {
+                    let s2 = (f32(k) - jit2) / (f32(steps) + 0.5);
                     let q = p3 + d3 * s2;
-                    if (q.z > L.pos.z - 4.0) { break; }
+                    if (q.z > lpos.z - 4.0) { break; }
                     let sp2 = vec2<f32>(q.x, q.y - q.z);
                     let suv = (sp2 - G.view.xy) / G.view.zw;
                     if (suv.x < 0.0 || suv.y < 0.0 || suv.x > 1.0 || suv.y > 1.0) { break; }
                     let e2 = textureLoad(t_b, vec2<i32>(suv * dim), 0).b * 510.0;
-                    if (e2 > q.z + 4.0 && abs(sp2.y + e2 - q.y) < 16.0) {
-                        lsh = 0.25 + 0.75 * s2 * s2;
-                        break;
+                    if (e2 > q.z + 2.0 && abs(sp2.y + e2 - q.y) < 16.0) {
+                        let depth = smoothstep(2.0, 11.0, e2 - q.z);
+                        lsh = min(lsh, mix(1.0, 0.2 + 0.8 * s2 * s2, depth));
+                        if (lsh < 0.3) { break; }
                     }
                 }
             }
+            // farbiges Randlicht: Kanten, die zum Licht weisen, leuchten auf (Laternen hinter Figuren)
+            if (elev > 3.0) {
+                let edge = pow(clamp(1.0 - n.z, 0.0, 1.0), 1.6);
+                let facing = max(dot(normalize(n.xy + vec2<f32>(0.0001, 0.0)), normalize(d3.xy + vec2<f32>(0.0001, 0.0))), 0.0);
+                rim_l += L.col.rgb * edge * facing * att * lsh * (0.6 + 0.4 * smoothstep(0.0, 0.6, -ld.y));
+            }
         }
-        let fl = 1.0 + (sin(t * 11.0 + f32(i) * 1.7) * 0.5 + sin(t * 17.0 + f32(i)) * 0.5) * L.col.w;
-        li += L.col.rgb * ndl * att * fl * (0.6 + 0.4 * ao) * lsh;
-        let h2 = normalize(ld + view_dir);
-        spec += L.col.rgb * pow(max(dot(n, h2), 0.0), select(24.0, sexp, hd)) * spec_k * att * lsh * select(1.0, 0.4, hd);
+        let fl = 1.0 + (sin(t * 11.0 + fi * 1.7) * 0.5 + sin(t * 17.0 + fi) * 0.5) * L.col.w;
+        if (wet && hd && lpos.z > 12.0) {
+            // Lichtpfad: die Laterne spiegelt sich als zitternder Streifen unter sich im Wasser
+            let ry = lpos.y + lpos.z * 0.35;
+            let dx = sp.x - lpos.x + n.x * 9.0;
+            let dy = (sp.y - ry) / (lpos.z * 0.9 + 8.0);
+            let streak = exp(-dx * dx / 40.0) * exp(-dy * dy * 2.2) * (0.6 + 0.4 * sin(sp.y * 0.9 + t * 4.0 + n.y * 6.0));
+            spec += L.col.rgb * streak * 0.55 * fl;
+        }
+        li += L.col.rgb * ndl * att * fl * (0.58 + 0.42 * ao) * lsh;
+        if (hd) {
+            spec += L.col.rgb * ggx_spec(n, view_dir, ld, spec_k) * att * fl * lsh * 0.65;
+        } else {
+            let h2 = normalize(ld + view_dir);
+            spec += L.col.rgb * pow(max(dot(n, h2), 0.0), 24.0) * spec_k * att * lsh;
+        }
+    }
+    li += rim_l * G.fx4.z;
+    // Lesbarkeit: die Spielfigur behält im Dunkeln eine Mindesthelligkeit und einen kühlen Rand
+    if (hero) {
+        let edge = pow(clamp(1.0 - n.z, 0.0, 1.0), 1.4);
+        li += (G.ambient.rgb * 0.9 + vec3<f32>(0.05, 0.06, 0.08)) * edge * G.fx4.w;
+        li = max(li, vec3<f32>(0.1, 0.11, 0.14) * G.fx4.w);
     }
     if (!hd) {
         // weiche Stufen wie in Pixelkunst (leicht gedithert)
@@ -1357,21 +1700,29 @@ fn fs_light(f: FOut) -> @location(0) vec4<f32> {
         li = floor(li * 12.0 + dith * 12.0 + 0.5) / 12.0;
     }
     var c = alb * li + spec + em;
-    // Streulicht im Dunst: jede Lichtquelle leuchtet als weicher Hof in der Luft um sich
     if (hd) {
-        var halo = vec3<f32>(0.0);
-        for (var i = 0; i < nl; i = i + 1) {
-            let L = G.lights[i];
-            let lp = vec2<f32>(L.pos.x, L.pos.y - L.pos.z);
-            let dd = length(sp - lp) / max(L.pos.w, 1.0);
-            if (dd > 1.0) { continue; }
-            let fl2 = 1.0 + sin(t * 9.0 + f32(i) * 2.1) * 0.5 * L.col.w;
-            halo += L.col.rgb * exp(-dd * 5.0) * fl2;
-        }
-        c += halo * (0.04 + G.fog.w * 0.3);
+        c += halo * (0.045 + G.fog.w * 0.32) * (1.0 + G.fx3.y * 0.7);
     }
-    // Blitz (Gewitter)
-    c += alb * G.counts.y * vec3<f32>(0.8, 0.85, 1.0);
+    // Pfützen: spiegeln den Himmel, Regenringe darauf
+    if (puddle > 0.0) {
+        let sky = G.fog.rgb * 0.8 + G.ambient.rgb * 0.55;
+        c = mix(c, sky * (0.62 + rain_ring(sp, 8.0, t) * 1.2) + spec * 1.4, puddle * 0.55);
+    }
+    // Blitz (Gewitter): hartes Licht von schräg oben mit langen, scharfen Schatten
+    if (G.counts.y > 0.01) {
+        let ldl = normalize(vec3<f32>(0.42, -0.55, 0.72));
+        var occ2 = 0.0;
+        for (var k = 1; k <= 10; k = k + 1) {
+            let q = p3 + ldl * f32(k) * 6.5;
+            let sp2 = vec2<f32>(q.x, q.y - q.z);
+            let suv = (sp2 - G.view.xy) / G.view.zw;
+            if (suv.x < 0.0 || suv.y < 0.0 || suv.x > 1.0 || suv.y > 1.0) { break; }
+            let e2 = textureLoad(t_b, vec2<i32>(suv * dim), 0).b * 510.0;
+            if (e2 > q.z + 2.5 && abs(sp2.y + e2 - q.y) < 23.0) { occ2 = 1.0; break; }
+        }
+        let ndl2 = max(dot(n, ldl), 0.0) * 0.8 + 0.2;
+        c += alb * G.counts.y * vec3<f32>(0.8, 0.85, 1.0) * ndl2 * (1.0 - occ2 * 0.88) * 1.6;
+    }
     // Tiefennebel nach Bodenzeile (fern = oben), Ferne zusätzlich in Nebelfarbe getaucht
     let fogk = G.fog.w * (1.0 - ground * 0.6) + G.hd.y * 0.03 * (1.0 - smoothstep(0.0, 0.4, ground));
     c = mix(c, G.fog.rgb, clamp(fogk, 0.0, 0.85));
@@ -1379,34 +1730,37 @@ fn fs_light(f: FOut) -> @location(0) vec4<f32> {
     return vec4<f32>(c * G.misc.w, clamp(ground * 0.5, 0.0, 1.0));
 }
 
-// ---------------------------------------------------------------- Bloom
+// ---------------------------------------------------------------- Bloom (breiter 9-Tap-Gaußkern)
 @fragment
 fn fs_bright(f: FOut) -> @location(0) vec4<f32> {
     let c = textureSampleLevel(t_a, s_lin, f.uv, 0.0).rgb;
     let l = max(c.r, max(c.g, c.b));
-    let k = smoothstep(0.75, 1.6, l);
+    let k = smoothstep(0.64, 1.5, l);
     return vec4<f32>(c * k, 1.0);
+}
+
+fn bloom_blur(uv: vec2<f32>, step: vec2<f32>) -> vec4<f32> {
+    var c = textureSampleLevel(t_a, s_lin, uv, 0.0).rgb * 0.196;
+    let o1 = step * 1.485;
+    let o2 = step * 3.465;
+    let o3 = step * 5.445;
+    let o4 = step * 7.425;
+    c += (textureSampleLevel(t_a, s_lin, uv + o1, 0.0).rgb + textureSampleLevel(t_a, s_lin, uv - o1, 0.0).rgb) * 0.244;
+    c += (textureSampleLevel(t_a, s_lin, uv + o2, 0.0).rgb + textureSampleLevel(t_a, s_lin, uv - o2, 0.0).rgb) * 0.108;
+    c += (textureSampleLevel(t_a, s_lin, uv + o3, 0.0).rgb + textureSampleLevel(t_a, s_lin, uv - o3, 0.0).rgb) * 0.038;
+    c += (textureSampleLevel(t_a, s_lin, uv + o4, 0.0).rgb + textureSampleLevel(t_a, s_lin, uv - o4, 0.0).rgb) * 0.012;
+    return vec4<f32>(c, 1.0);
 }
 
 @fragment
 fn fs_blur_h(f: FOut) -> @location(0) vec4<f32> {
     let ts = 1.0 / vec2<f32>(textureDimensions(t_a));
-    var c = textureSampleLevel(t_a, s_lin, f.uv, 0.0).rgb * 0.227;
-    c += textureSampleLevel(t_a, s_lin, f.uv + vec2<f32>(ts.x * 1.385, 0.0), 0.0).rgb * 0.316;
-    c += textureSampleLevel(t_a, s_lin, f.uv - vec2<f32>(ts.x * 1.385, 0.0), 0.0).rgb * 0.316;
-    c += textureSampleLevel(t_a, s_lin, f.uv + vec2<f32>(ts.x * 3.231, 0.0), 0.0).rgb * 0.07;
-    c += textureSampleLevel(t_a, s_lin, f.uv - vec2<f32>(ts.x * 3.231, 0.0), 0.0).rgb * 0.07;
-    return vec4<f32>(c, 1.0);
+    return bloom_blur(f.uv, vec2<f32>(ts.x, 0.0));
 }
 @fragment
 fn fs_blur_v(f: FOut) -> @location(0) vec4<f32> {
     let ts = 1.0 / vec2<f32>(textureDimensions(t_a));
-    var c = textureSampleLevel(t_a, s_lin, f.uv, 0.0).rgb * 0.227;
-    c += textureSampleLevel(t_a, s_lin, f.uv + vec2<f32>(0.0, ts.y * 1.385), 0.0).rgb * 0.316;
-    c += textureSampleLevel(t_a, s_lin, f.uv - vec2<f32>(0.0, ts.y * 1.385), 0.0).rgb * 0.316;
-    c += textureSampleLevel(t_a, s_lin, f.uv + vec2<f32>(0.0, ts.y * 3.231), 0.0).rgb * 0.07;
-    c += textureSampleLevel(t_a, s_lin, f.uv - vec2<f32>(0.0, ts.y * 3.231), 0.0).rgb * 0.07;
-    return vec4<f32>(c, 1.0);
+    return bloom_blur(f.uv, vec2<f32>(0.0, ts.y));
 }
 
 // ---------------------------------------------------------------- Tiefenschärfe (halbe Größe, breiter Kern)
@@ -1441,9 +1795,12 @@ fn fs_dof_v(f: FOut) -> @location(0) vec4<f32> {
 // ---------------------------------------------------------------- Endbild
 // t_a = beleuchtete Szene (Low-Res, Alpha = Bodenzeile), t_b = Bloom, t_c = Unschärfe, t_d = Rauschen
 fn tonemap(c: vec3<f32>) -> vec3<f32> {
-    // weiches Abrollen der Lichter (ACES-Näherung)
-    let a = c * (2.51 * c + 0.03);
-    let b = c * (2.43 * c + 0.59) + 0.14;
+    // ACES-Kurve mit sanfter Entsättigung in den Spitzenlichtern (AgX-inspiriert)
+    let lum = luma(c);
+    let desat = smoothstep(0.85, 3.2, lum) * 0.42;
+    let x = mix(c, vec3<f32>(lum), desat);
+    let a = x * (2.51 * x + 0.03);
+    let b = x * (2.43 * x + 0.59) + 0.14;
     return clamp(a / b, vec3<f32>(0.0), vec3<f32>(1.0));
 }
 
@@ -1461,7 +1818,13 @@ fn light_rays(suv: vec2<f32>, sy: f32) -> f32 {
     let n2 = textureSampleLevel(t_d, s_lin, fract(vec2<f32>(across * 0.009 - t * 0.006, along * 0.0015 + 0.71)), 0.0).r;
     let beam = smoothstep(0.56, 0.85, n1) * (0.4 + 0.6 * n2);
     let top = clamp(0.35 + (1.0 - sy) * 0.65, 0.0, 1.0);
-    return beam * top * G.hd.w;
+    // Strahlen fallen durch Wolkenlücken (dasselbe Rauschen wie die Wolkenschatten im Licht-Pass)
+    let wq = wp * 0.00042 + vec2<f32>(t * 0.0062, t * 0.0024);
+    let c1 = textureSampleLevel(t_d, s_lin, fract(wq), 0.0).r;
+    let c2 = textureSampleLevel(t_d, s_lin, fract(wq * 2.7 + vec2<f32>(0.37, 0.11)), 0.0).b;
+    let cov = G.fx6.x;
+    let gap = 1.0 - smoothstep(0.62 - cov * 0.3, 0.86 - cov * 0.3, c1 * 0.72 + c2 * 0.34);
+    return beam * top * G.hd.w * (0.4 + 0.95 * gap) * (1.15 - cov * 0.6);
 }
 
 // schwebender Staub im Vordergrund als unscharfe Bokeh-Scheiben (außerhalb der Fokuszone)
@@ -1491,11 +1854,31 @@ fn bokeh_dust(uv: vec2<f32>) -> f32 {
 
 @fragment
 fn fs_final(f: FOut) -> @location(0) vec4<f32> {
+    // Zoom (Kamera rückt nah heran): um die Bildmitte vergrößern
+    let zoom = max(G.fx3.z, 0.5);
+    let fuv = (f.uv - 0.5) / zoom + 0.5;
     // Schrägsicht: Bildschirm → Low-Res-Bild
-    let suv = tilt_src(f.uv);
+    var suv = tilt_src(fuv);
     let k = G.hd.x;
-    let dk = 1.0 + k * f.uv.y;
-    let mag = vec2<f32>(dk, dk * dk / (1.0 + k));
+    let dk = 1.0 + k * fuv.y;
+    let mag = vec2<f32>(dk, dk * dk / (1.0 + k)) * zoom;
+    // Druckwelle: ein Ring verschiebt das Bild nach außen
+    let wp = G.view.xy + suv * G.view.zw;
+    if (G.fx1.w > 0.001) {
+        let d = wp - G.fx1.xy;
+        let dl = length(d) + 0.001;
+        let x = (dl - G.fx1.z) / 16.0;
+        suv -= d / dl * exp(-x * x) * G.fx1.w * 5.0 / G.view.zw;
+    }
+    // Hitzeflimmern: in heißen Gebieten überall leicht, über Feuer, Glut und Lava stark
+    let blm0 = textureSampleLevel(t_b, s_lin, suv, 0.0).rgb;
+    let heat = G.fx3.x + smoothstep(0.05, 0.4, luma(blm0)) * 0.9 * G.hd.y;
+    if (heat > 0.002) {
+        let tt = G.screen.z;
+        let hn = textureSampleLevel(t_d, s_lin, fract(wp * vec2<f32>(0.011, 0.027) + vec2<f32>(0.0, tt * 0.31)), 0.0).r;
+        let hn2 = textureSampleLevel(t_d, s_lin, fract(wp * vec2<f32>(0.019, 0.046) - vec2<f32>(tt * 0.04, tt * 0.47)), 0.0).b;
+        suv += vec2<f32>((hn - 0.5 + (hn2 - 0.5) * 0.6) * 1.6 / G.view.z, (hn2 - 0.5) * 0.8 / G.view.w) * heat;
+    }
     // scharf-bilineare Vergrößerung: Pixel bleiben scharf, Kanten ohne Flimmern
     let src = vec2<f32>(textureDimensions(t_a));
     let px = suv * src;
@@ -1517,10 +1900,13 @@ fn fs_final(f: FOut) -> @location(0) vec4<f32> {
     if (G.hd.y > 0.0) {
         let fd = s0.a * 2.0 - G.hd.z;
         let coc = select(smoothstep(0.22, 0.5, fd), smoothstep(0.2, 0.55, -fd), fd < 0.0) * G.hd.y;
-        let bl = textureSampleLevel(t_c, s_lin, suv, 0.0).rgb;
-        c = mix(c, bl, coc * 0.8);
-        // Diorama: unscharfe Ränder etwas dunkler, der Blick bleibt in der Fokuszone
-        c *= 1.0 - coc * 0.16;
+        if (coc > 0.001) {
+            let bl = textureSampleLevel(t_c, s_lin, suv, 0.0).rgb;
+            c = mix(c, bl, coc * 0.8);
+            // Diorama: unscharfe Ränder etwas dunkler und blasser, der Blick bleibt in der Fokuszone
+            c *= 1.0 - coc * 0.16;
+            c = mix(vec3<f32>(luma(c)), c, 1.0 - coc * 0.22);
+        }
     }
     if (G.hd.w > 0.0) {
         // Strahlen hellen auf, was schon da ist (kein Grauschleier auf dunklem Wasser)
@@ -1530,25 +1916,62 @@ fn fs_final(f: FOut) -> @location(0) vec4<f32> {
     if (G.hd2.y > 0.0) {
         let fv = G.hd.z / (1.0 + k - k * G.hd.z);
         let band = smoothstep(0.16, 0.42, abs(f.uv.y - fv));
-        c += (G.sun_col.rgb * 0.7 + G.fog.rgb * 0.4 + vec3<f32>(0.02)) * bokeh_dust(f.uv) * band * G.hd2.y * 0.07;
+        if (band > 0.001) {
+            c += (G.sun_col.rgb * 0.7 + G.fog.rgb * 0.4 + vec3<f32>(0.02)) * bokeh_dust(f.uv) * band * G.hd2.y * 0.07;
+        }
     }
-    let bl = textureSampleLevel(t_b, s_lin, suv, 0.0).rgb;
-    c += bl * G.misc.z;
+    c += blm0 * G.misc.z;
     c = tonemap(c);
-    // Farbkorrektur: Lift/Gain, Kontrast, Sättigung
+    // Farbkorrektur: Lift/Gain, Kontrast mit weichem Fuß (Schatten behalten Zeichnung statt ins
+    // Schwarze zu laufen), Farbtrennung je Zone, Sättigung
     c = G.lift.rgb + c * (G.gain.rgb - G.lift.rgb);
-    c = (c - 0.5) * G.lift.w + 0.5;
+    let cc = (c - 0.5) * G.lift.w + 0.5;
+    c = max(cc, c * 0.42);
+    let l0 = clamp(luma(c), 0.0, 1.0);
+    c *= mix(G.tone_hi.rgb, G.tone_lo.rgb, pow(1.0 - l0, 1.6));
     let l = luma(c);
     c = mix(vec3<f32>(l), c, G.gain.w);
+    // wenig Leben: die Welt verliert Farbe, am Rand pocht es rot im Herzschlag
+    if (G.fx0.y > 0.001) {
+        let lh = G.fx0.y;
+        let ph = fract(G.screen.z * 1.15) * 8.0;
+        let beat = exp(-(ph - 1.0) * (ph - 1.0) * 3.0) + 0.6 * exp(-(ph - 2.4) * (ph - 2.4) * 3.0);
+        let dv = f.uv - 0.5;
+        let edge = smoothstep(0.1, 0.42, dot(dv, dv) * 2.2);
+        c = mix(c, vec3<f32>(luma(c)), lh * 0.5);
+        c = mix(c, vec3<f32>(0.42, 0.02, 0.03), edge * lh * (0.3 + 0.38 * beat));
+    }
     // Blenden (Tod, Treffer)
     c = mix(c, vec3<f32>(1.0), G.counts.z);
     c = mix(c, vec3<f32>(0.5, 0.02, 0.04), G.counts.w);
+    // Aufprallbild: für einen Augenblick nur Licht und Schatten (harte Treffer, Paraden)
+    if (G.fx0.x > 0.001) {
+        let ink = select(vec3<f32>(0.02, 0.015, 0.03), vec3<f32>(1.0, 0.95, 0.86), luma(c) > 0.26);
+        c = mix(c, ink, G.fx0.x);
+    }
     // Vignette
     let d = f.uv - 0.5;
     c *= 1.0 - dot(d, d) * G.misc.x;
-    // Körnung
-    let gr = hash21(floor(f.uv * G.screen.xy) + fract(G.screen.z) * 91.0) - 0.5;
+    // Körnung und feines Dither (keine Farbstufen in dunklen Verläufen)
+    let fp = floor(f.uv * G.screen.xy);
+    let gr = hash21(fp + fract(G.screen.z) * 91.0) - 0.5;
     c += gr * G.misc.y;
+    c += (hash21(fp * 1.37 + vec2<f32>(17.0, 3.0)) + hash21(fp * 0.71 + vec2<f32>(5.0, 29.0)) - 1.0) / 255.0;
+    // Übergang wie Tinte im Wasser: vom Rand her läuft Schwärze ins Bild
+    if (G.fx0.z > 0.001) {
+        let n1 = textureSampleLevel(t_d, s_lin, fract(f.uv * vec2<f32>(1.3, 0.8) + vec2<f32>(0.13, G.screen.z * 0.01)), 0.0).r;
+        let n2 = textureSampleLevel(t_d, s_lin, fract(f.uv * vec2<f32>(3.7, 2.1) + vec2<f32>(0.57, 0.21)), 0.0).b;
+        let m = n1 * 0.55 + n2 * 0.25 + dot(d, d) * 0.9;
+        let th = 1.32 - G.fx0.z * 1.62;
+        let ink = smoothstep(th - 0.05, th + 0.03, m);
+        let edge = 1.0 - smoothstep(0.0, 0.04, abs(m - th));
+        c = mix(c * (1.0 - edge * 0.35), vec3<f32>(0.008, 0.01, 0.018), ink);
+    }
+    // Kinobalken (Zwischensequenzen, Bossauftritte)
+    let lb = G.fx0.w * 0.105;
+    if (f.uv.y < lb || f.uv.y > 1.0 - lb) {
+        c = vec3<f32>(0.0);
+    }
     return vec4<f32>(clamp(c, vec3<f32>(0.0), vec3<f32>(1.0)), 1.0);
 }
 ```

@@ -41,6 +41,8 @@ pub struct Look {
     pub bars: f32,
     /// Grundzoom (Option „Kamera nah“; auf See und in Zwischensequenzen 1)
     pub base_zoom: f32,
+    /// unter Dach: kein Wetter auf den Flächen, keine Sterne
+    indoor: bool,
 }
 
 impl Default for Look {
@@ -65,6 +67,7 @@ impl Default for Look {
             zoom_t: 0.0,
             bars: 0.0,
             base_zoom: 1.0,
+            indoor: false,
         }
     }
 }
@@ -84,6 +87,7 @@ impl Look {
     /// Wetter, Tageszeit, Belichtung und Bildwirkungen fortschreiben. `e` = aktuelle Stimmung
     /// (gibt die Wetterneigung vor), `indoor` = unter Dach (kein Wetter, Nässe trocknet nicht)
     pub fn update(&mut self, dt: f32, e: &Env, indoor: bool, cut: bool, boss: bool) {
+        self.indoor = indoor;
         self.day = (self.day + dt / DAY_LEN).fract();
         // Fronten: alle 40–110 s ein neues Ziel; Regen-Gebiete haben selten ganz klaren Himmel
         self.front_t -= dt;
@@ -174,10 +178,10 @@ impl Look {
             None => [0.0; 4],
         };
         let wet = if fx_high { self.wet } else { self.wet * 0.6 };
-        g.fx2 = [wet, self.snow, self.ash, self.wind];
+        g.fx2 = if self.indoor { [0.0, 0.0, 0.0, 0.0] } else { [wet, self.snow, self.ash, self.wind] };
         let night = self.night() * e.nightk.clamp(0.0, 1.0);
         let stars = (e.stars.max(night) * (1.0 - self.rain * 0.9) * (1.0 - smoothstep(0.4, 0.9, self.front) * 0.6)).clamp(0.0, 1.0);
-        g.fx3 = [e.heat, night, self.zoom, stars];
+        g.fx3 = [e.heat, night, self.zoom, if self.indoor { 0.0 } else { stars }];
         g.fx5 = [player.0, player.1, self.wind_dir.0, self.wind_dir.1];
         // Wolkendecke: zieht mit der Front zu (Regen) und reißt danach auf
         g.fx6 = [(0.2 + self.front * 0.55 + self.rain * 0.25).min(1.0), 0.0, 0.0, 0.0];

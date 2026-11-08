@@ -50,6 +50,10 @@ struct App {
     fx: Fx,
     env: game::env::Env,
     params: HashMap<String, String>,
+    /// dynamische Auflösung: gleitende Bildzeit, auf einfache Auflösung zurückgeschaltet, Zeit im Zustand
+    ft_avg: f32,
+    dyn_low: bool,
+    dyn_t: f32,
 }
 
 fn main() {
@@ -189,6 +193,9 @@ fn setup(world: &mut bevy::ecs::world::World) {
         // Titelbild: nächtliches offenes Meer, das brennende Schiff ist die Hauptlichtquelle
         env: { let mut e = game::env::env("kueste", true); e.sun = [e.sun[0] * 0.45, e.sun[1] * 0.4, e.sun[2] * 0.45]; e.ambient = [e.ambient[0] * 0.6, e.ambient[1] * 0.6, e.ambient[2] * 0.7]; e.fog_k = 0.16; e },
         params,
+        ft_avg: 0.016,
+        dyn_low: false,
+        dyn_t: 0.0,
     };
     let mut art = art;
     if app.params.contains_key("debug") {
@@ -316,6 +323,10 @@ fn setup(world: &mut bevy::ecs::world::World) {
                 }
                 if let Some(w) = app.params.get("weather").and_then(|v| v.parse::<f32>().ok()) {
                     g.look.force_front(w.clamp(0.0, 1.0));
+                }
+                // Testlauf: Kamera nah (Zoomstufe)
+                if app.params.contains_key("near") {
+                    g.opt.near = true;
                 }
             }
             if let Some(v) = app.params.get("summon").cloned() {
@@ -464,12 +475,31 @@ fn tick(
     mut keys: EventReader<KeyboardInput>,
     win: Query<&Window, With<PrimaryWindow>>,
 ) {
-    let dt = time.delta_secs().min(0.05);
+    let raw_dt = time.delta_secs();
+    let dt = raw_dt.min(0.05);
     let app = &mut *app;
     let f = &mut *f;
+    // dynamische Auflösung: dauerhaft langsame Bilder (über 30 ms) schalten FullHD auf die
+    // einfache Auflösung zurück, nach einer Weile flüssiger Bilder (unter 15 ms) wieder hoch.
+    // In Testläufen (`?debug`) nur mit `&dyn`, damit Bildschirmfotos vergleichbar bleiben.
+    app.ft_avg += (raw_dt.min(0.25) - app.ft_avg) * 0.05;
+    let dyn_ok = !app.params.contains_key("debug") || app.params.contains_key("dyn");
+    if dyn_ok {
+        let want_low = if app.dyn_low { app.ft_avg > 0.015 } else { app.ft_avg > 0.030 };
+        if want_low != app.dyn_low {
+            app.dyn_t += dt;
+            if app.dyn_t > if app.dyn_low { 15.0 } else { 4.0 } {
+                app.dyn_low = want_low;
+                app.dyn_t = 0.0;
+                info!("Dynamische Auflösung: {}", if want_low { "einfach" } else { "FullHD" });
+            }
+        } else {
+            app.dyn_t = 0.0;
+        }
+    }
     // FullHD: interne Auflösung verdoppeln, sobald der Bildschirm groß genug ist
     let short = f.screen.0.min(f.screen.1);
-    f.rs = if app.opt.hd && short >= 900 { 2 } else { 1 };
+    f.rs = if app.opt.hd && short >= 900 && !app.dyn_low { 2 } else { 1 };
     f.g.hd3 = [if app.opt.hd { 1.0 } else { 0.0 }, f.rs as f32, 0.0, 0.0];
     let art = &mut *art;
     app.t += dt;
@@ -527,6 +557,7 @@ fn tick(
 
     let mut sfx: Vec<&'static str> = vec![];
     let mut sfx_vol: Vec<(&'static str, f32)> = vec![];
+    let mut sfx_pan: Vec<(&'static str, f32, f32)> = vec![];
     let mut go_title = false;
     let mut restart: Option<Save> = None;
     let mut start: Option<(Option<save::Profile>, Save)> = None;
@@ -572,6 +603,11 @@ fn tick(
                 sfx.push(s);
             }
             sfx_vol.append(&mut g.sfx_vol);
+            sfx_pan.append(&mut g.sfx_pan);
+            // Klanglagen: Regen und Wind nach dem Wetter, dunkle Spannung im Kampf
+            audio.rain = if g.world.interior_at(g.player.a.x, g.player.a.y).is_some() { g.look.rain * 0.25 } else { g.look.rain };
+            audio.wind = g.look.wind;
+            audio.tension = g.tension();
             audio.set_mood(g.mood);
             if let Some((s, secs)) = g.song_req.take() {
                 audio.play_song(s, secs);
@@ -621,6 +657,8 @@ fn tick(
                 f.fog(vx - 20.0, vy - 20.0, vw + 40.0, vh + 40.0, [70, 90, 110, 60], 5.0);
             }
             audio.set_mood("title");
+            audio.rain = 0.0;
+            audio.tension = 0.0;
             match app.menu.update_draw(dt, &app.input, f, art, &mut app.opt, &mut sfx) {
                 MenuOut::Start(p, s) => start = Some((p, *s)),
                 MenuOut::LookChanged(l, wpn) => art::build_player(art, f, &sw_art::chars::player_look(&l.arr(), wpn)),
@@ -655,6 +693,9 @@ fn tick(
     }
     for (s, v) in sfx_vol {
         audio.sfx(s, v);
+    }
+    for (s, v, p) in sfx_pan {
+        audio.sfx_pan(s, v, p);
     }
     prof::time(prof::AUDIO, || audio.update(dt, fire_dist));
     app.input.end_frame();

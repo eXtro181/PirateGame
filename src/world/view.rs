@@ -564,6 +564,23 @@ impl WorldView {
                     frame.glow(sx + (k as f32 * 2.1).sin() * 6.0, sy, 4.0 + f * 10.0, [210, 245, 255, (80.0 * (1.0 - f)) as u8]);
                 }
             }
+            // Regenbogen im Sprühnebel am Fuß, wenn genug Sonne durch die Wolken fällt
+            let sun = (frame.g.sun_col[0] * 0.3 + frame.g.sun_col[1] * 0.59 + frame.g.sun_col[2] * 0.11) * (1.0 - frame.g.fx6[0] * 0.8) * (1.0 - frame.g.fx3[1]);
+            if sun > 0.12 {
+                let k = ((sun - 0.12) * 2.2).min(1.0);
+                let (cx, cy) = (x0 + wwid / 2.0, wf.bot + 14.0);
+                let r0 = wwid * 0.7 + 18.0;
+                let bands: [[u8; 3]; 6] = [[255, 70, 60], [255, 160, 60], [250, 240, 90], [90, 230, 110], [80, 140, 255], [170, 90, 230]];
+                for (bi, c) in bands.iter().enumerate() {
+                    let r = r0 - bi as f32 * 2.0;
+                    for j in 0..16 {
+                        let a = std::f32::consts::PI * (1.08 + 0.84 * j as f32 / 15.0);
+                        let fade = (1.0 - ((j as f32 / 15.0) - 0.5).abs() * 1.6).max(0.0);
+                        let al = (34.0 * k * fade * (0.8 + 0.2 * (t * 0.7 + j as f32).sin())) as u8;
+                        frame.glow(cx + a.cos() * r, cy + a.sin() * r * 0.62, 2.6, [c[0], c[1], c[2], al]);
+                    }
+                }
+            }
             frame.light(LightDef { x: x0 + wwid / 2.0, y: wf.bot + 20.0, z: 20.0, r: 120.0, col: [0.3, 0.6, 0.7], flicker: 0.0 });
         }
         self.draw_prolog_dark(w, frame);

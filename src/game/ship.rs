@@ -714,6 +714,17 @@ impl Game {
                     let a = k as f32 / 10.0 * TAU - t * 1.1;
                     f.glow(wx + a.cos() * 24.0, wy + a.sin() * 24.0, 5.0, [95, 242, 200, 120]);
                 }
+                // drei Schaumarme ziehen spiralförmig in den Trichter, innen dunkler Schlund
+                f.shadow(wx, wy + 2.0, 46.0, 30.0, 0.55);
+                for arm in 0..3 {
+                    for j in 0..18 {
+                        let u = j as f32 / 17.0;
+                        let r = 130.0 * (1.0 - u) + 16.0;
+                        let a = arm as f32 * TAU / 3.0 + u * 5.2 - t * 1.6;
+                        let al = (u * (1.0 - u) * 4.0 * 110.0) as u8;
+                        f.glow(wx + a.cos() * r, wy + a.sin() * r * 0.72, 3.0 + (1.0 - u) * 3.0, [210, 245, 240, al]);
+                    }
+                }
                 f.glow(wx, wy, 26.0, [95, 242, 200, 160]);
                 f.light(LightDef { x: wx, y: wy, z: 20.0, r: 280.0, col: [0.35, 1.0, 0.82], flicker: 0.3 });
                 self.draw_whirl_arms(art, f);

@@ -81,10 +81,12 @@ pub struct P {
     pub ground: bool,
     pub wobble: f32,
     pub ph: f32,
+    /// zieht zur Spielfigur (Perlen, Seelen) und vergeht dort
+    pub seek: bool,
 }
 impl Default for P {
     fn default() -> Self {
-        P { x: 0.0, y: 0.0, z: 0.0, vx: 0.0, vy: 0.0, vz: 0.0, g: 0.0, life: 0.6, max: 0.6, col: c::SPARK, glow: 0.0, size: 2.0, drag: 0.0, rain: false, ground: false, wobble: 0.0, ph: 0.0 }
+        P { x: 0.0, y: 0.0, z: 0.0, vx: 0.0, vy: 0.0, vz: 0.0, g: 0.0, life: 0.6, max: 0.6, col: c::SPARK, glow: 0.0, size: 2.0, drag: 0.0, rain: false, ground: false, wobble: 0.0, ph: 0.0, seek: false }
     }
 }
 
@@ -132,6 +134,8 @@ pub struct Fx {
     pub splats: Vec<(f32, f32, f32, f32, [u8; 4], u32)>,
     /// Regentropfen schlagen auf: x, y, Alter (s)
     pub drops: Vec<(f32, f32, f32)>,
+    /// Ziel der ziehenden Teilchen (Spielfigur, Brusthöhe)
+    pub seek_to: (f32, f32),
     pub t: f32,
     /// laufende PixelFX-Effekte
     pub px: crate::pfx::Pfx,
@@ -317,7 +321,27 @@ impl Fx {
         }
         self.splats.retain(|p| p.2 > 0.0);
         let t = self.t;
+        let (sx, sy) = self.seek_to;
         for p in self.parts.iter_mut() {
+            if p.seek {
+                // erst kurz aufsteigen, dann immer schneller zur Figur
+                let age = p.max - p.life;
+                if age > 0.25 {
+                    let (dx, dy, dz) = (sx - p.x, sy - p.y, 22.0 - p.z);
+                    let d = (dx * dx + dy * dy + dz * dz).sqrt().max(1.0);
+                    let acc = 900.0 + age * 1400.0;
+                    p.vx += dx / d * acc * dt;
+                    p.vy += dy / d * acc * dt;
+                    p.vz += dz / d * acc * dt;
+                    let k = (1.0 - dt * 3.0).max(0.0);
+                    p.vx *= k;
+                    p.vy *= k;
+                    p.vz *= k;
+                    if d < 9.0 {
+                        p.life = 0.0;
+                    }
+                }
+            }
             p.life -= dt;
             let k = (1.0 - p.drag * dt).max(0.0);
             p.vx *= k;
