@@ -102,10 +102,9 @@ pub struct DynSlot {
     pub h: i32,
 }
 impl DynSlot {
-    /// Leerer Arbeitsatlas in Bereichsbreite.
+    /// Leerer Arbeitsatlas in genau passender Bereichsgröße `(w, h)`.
     fn atlas(&self) -> Atlas {
-        let mut a = Atlas::new();
-        a.lim = self.w;
+        let mut a = Atlas::with_size(self.w, self.h);
         // Schiffe, Seebosse, Malakor und die Meeresspinne im Pixelstil wie die übrige Welt
         a.style = true;
         a
@@ -115,26 +114,18 @@ impl DynSlot {
         s.x = (s.x as i32 + self.x) as u16;
         s.y = (s.y as i32 + self.y) as u16;
     }
-    /// Arbeitsatlas (Seite 0, oben links w×h) in den Bereich hochladen.
-    fn upload(&self, frame: &mut Frame, a: &Atlas) -> bool {
-        let used = a.used() * PAGE as f32;
-        if a.pages.len() > 1 || used > self.h as f32 {
-            warn!("Bereich zu klein: {:.0} px belegt, {} px frei", used, self.h);
+    /// Arbeitsatlas (Seite 0, w×h) ohne Kopie direkt in den Bereich hochladen.
+    fn upload(&self, frame: &mut Frame, a: &mut Atlas) -> bool {
+        let used = a.used_px();
+        if a.pages.len() > 1 || used > self.h {
+            warn!("Bereich zu klein: {} px belegt, {} px frei", used, self.h);
             return false;
         }
-        info!("Bereich: {:.0} von {} px", used, self.h);
-        let pg = &a.pages[0];
+        info!("Bereich: {} von {} px", used, self.h);
+        let pg = a.pages.remove(0);
         let (sw, sh) = (self.w, self.h);
-        let cut = |src: &Vec<u8>| -> Vec<u8> {
-            let mut out = vec![0u8; (sw * sh * 4) as usize];
-            for y in 0..sh {
-                let o = (y * PAGE * 4) as usize;
-                out[(y * sw * 4) as usize..((y + 1) * sw * 4) as usize].copy_from_slice(&src[o..o + (sw * 4) as usize]);
-            }
-            out
-        };
-        frame.uploads.push(Upload { tex: Tex::AtlasCol, layer: self.page, x: self.x as u32, y: self.y as u32, w: sw as u32, h: sh as u32, data: cut(&pg.col) });
-        frame.uploads.push(Upload { tex: Tex::AtlasNrm, layer: self.page, x: self.x as u32, y: self.y as u32, w: sw as u32, h: sh as u32, data: cut(&pg.nrm) });
+        frame.uploads.push(Upload { tex: Tex::AtlasCol, layer: self.page, x: self.x as u32, y: self.y as u32, w: sw as u32, h: sh as u32, data: pg.col });
+        frame.uploads.push(Upload { tex: Tex::AtlasNrm, layer: self.page, x: self.x as u32, y: self.y as u32, w: sw as u32, h: sh as u32, data: pg.nrm });
         true
     }
 }
@@ -166,7 +157,7 @@ pub fn build_malakor(art: &mut Art, frame: &mut Frame) {
     let mut v = v;
     v.push(("mk:rseg".into(), a.add("mk:rseg", &mk::tentacle_seg(0x8A1E16, 0x3A0A0A, 0xE8A08A), 20, 20)));
     v.push(("mk:vert".into(), a.add("mk:vert", &mk::vertebra(), 22, 20)));
-    if !slot.upload(frame, &a) {
+    if !slot.upload(frame, &mut a) {
         return;
     }
     if let Some(old) = art.boss_loaded.take() {
@@ -212,7 +203,7 @@ pub fn build_title(art: &mut Art, frame: &mut Frame) {
         ("t:seg".into(), a.add("t:seg", &seg, n / 2, n / 2)),
         ("t:logo".into(), a.add("t:logo", &logo, 0, 0)),
     ];
-    if !slot.upload(frame, &a) {
+    if !slot.upload(frame, &mut a) {
         return;
     }
     for (k, s) in v.iter_mut() {
@@ -539,7 +530,7 @@ pub fn build_ship(art: &mut Art, frame: &mut Frame, u: sw_art::ships::Upg) {
             a.add_trim(&format!("s:player{k}"), &c, c.w / 2, h - foot)
         })
         .collect();
-    if slot.upload(frame, &a) {
+    if slot.upload(frame, &mut a) {
         for s in v.iter_mut() {
             slot.fix(s);
         }
@@ -615,7 +606,7 @@ pub fn build_sea_boss(art: &mut Art, frame: &mut Frame, el: &str, beast: Option<
             v.push(v[k - 1]);
         }
     }
-    if !slot.upload(frame, &a) {
+    if !slot.upload(frame, &mut a) {
         return;
     }
     for d in sh.f.iter_mut() {
@@ -651,7 +642,7 @@ pub fn build_prolog_boss(art: &mut Art, frame: &mut Frame) {
     let slot = art.boss_slot;
     let mut a = slot.atlas();
     let mut sh = beast_sheet(&mut a, "seaSpider");
-    if !slot.upload(frame, &a) {
+    if !slot.upload(frame, &mut a) {
         return;
     }
     for d in sh.f.iter_mut() {
@@ -871,13 +862,13 @@ const BOSS_STRIP: i32 = 1520;
 /// Spieler-Bilderbogen in einem reservierten Streifen der ersten Atlasseite
 /// (wird bei Änderungen des Aussehens neu gebaut und nur dieser Ausschnitt hochgeladen).
 pub fn build_player(art: &mut Art, frame: &mut Frame, l: &chars::Look) {
-    let mut a = Atlas::new();
-    a.style = true;
-    let mut sh = sheet(&mut a, "player", l, 1.0, chars::Role::Player);
     let (page, rx, ry) = art.player_slot;
     let (sw, shh) = (PAGE - 8, PLAYER_STRIP);
-    if a.pages.len() > 1 || a.used() * PAGE as f32 > shh as f32 {
-        warn!("Spieler-Bogen passt nicht in den Streifen ({:.0} px)", a.used() * PAGE as f32);
+    let mut a = Atlas::with_size(sw, shh);
+    a.style = true;
+    let mut sh = sheet(&mut a, "player", l, 1.0, chars::Role::Player);
+    if a.pages.len() > 1 || a.used_px() > shh {
+        warn!("Spieler-Bogen passt nicht in den Streifen ({} px)", a.used_px());
     }
     for d in sh.f.iter_mut() {
         for an in d.iter_mut() {
@@ -889,17 +880,9 @@ pub fn build_player(art: &mut Art, frame: &mut Frame, l: &chars::Look) {
         }
     }
     art.player = sh;
-    let pg = &a.pages[0];
-    let cut = |src: &Vec<u8>| -> Vec<u8> {
-        let mut out = vec![0u8; (sw * shh * 4) as usize];
-        for y in 0..shh {
-            let o = (y * PAGE * 4) as usize;
-            out[(y * sw * 4) as usize..((y + 1) * sw * 4) as usize].copy_from_slice(&src[o..o + (sw * 4) as usize]);
-        }
-        out
-    };
-    frame.uploads.push(Upload { tex: Tex::AtlasCol, layer: page, x: rx as u32, y: ry as u32, w: sw as u32, h: shh as u32, data: cut(&pg.col) });
-    frame.uploads.push(Upload { tex: Tex::AtlasNrm, layer: page, x: rx as u32, y: ry as u32, w: sw as u32, h: shh as u32, data: cut(&pg.nrm) });
+    let pg = a.pages.remove(0);
+    frame.uploads.push(Upload { tex: Tex::AtlasCol, layer: page, x: rx as u32, y: ry as u32, w: sw as u32, h: shh as u32, data: pg.col });
+    frame.uploads.push(Upload { tex: Tex::AtlasNrm, layer: page, x: rx as u32, y: ry as u32, w: sw as u32, h: shh as u32, data: pg.nrm });
 }
 
 pub fn build(frame: &mut Frame) -> Art {

@@ -74,7 +74,9 @@ fn wave_h(p: vec2<f32>, t: f32) -> f32 {
     let a = noise_at(p * 0.32 + vec2<f32>(t * 2.2, t * 1.1)).r;
     let b = noise_at(p * 0.75 - vec2<f32>(t * 3.6, -t * 1.9)).r;
     let c = noise_at(p * 1.9 + vec2<f32>(-t * 6.0, t * 4.5)).r;
-    return a * 0.55 + b * 0.3 + c * 0.15;
+    let h = a * 0.54 + b * 0.31 + c * 0.15;
+    // Trochoidale Schärfung: breite Wellentäler, markante Kämme
+    return mix(h, h * h * (1.35 - 0.35 * h), 0.55);
 }
 
 fn water(p_in: vec2<f32>) -> GOut {
@@ -95,49 +97,62 @@ fn water_s(p_in: vec2<f32>, shore_in: f32) -> GOut {
     let depth = m.b;          // 0 flach → 1 tief
     // Grundfarbe mit Tiefe: im Flachen schimmert der Grund durch, in der Tiefe wird es dunkel
     let dd = smoothstep(0.0, 1.0, max(depth, shore * 0.85));
-    var c = mix(G.water_a.rgb, G.water_b.rgb, dd);
+    var c = mix(G.water_a.rgb, G.water_b.rgb, dd * (0.85 + 0.15 * dd));
     // weite See: großflächig tiefere und hellere Stellen, langsam ziehende Strömungsbänder
     let big = noise_at(p * 0.011 + vec2<f32>(t * 0.21, t * 0.08)).r;
     let band = noise_at(vec2<f32>(p.x * 0.004 + p.y * 0.002, p.y * 0.017) + vec2<f32>(t * 0.05, 0.0)).b;
-    c *= 0.9 + big * 0.18 * dd + (band - 0.5) * 0.08 * dd;
+    c *= 0.88 + big * 0.20 * dd + (band - 0.5) * 0.09 * dd;
     let h0 = wave_h(p, t);
-    // Wellentäler dunkler, Kämme heller und grüner (Licht dringt durch die dünne Wasserhaut)
-    c *= 0.86 + h0 * 0.3;
-    c += G.water_a.rgb * smoothstep(0.62, 0.8, h0) * 0.18 * (1.0 - dd * 0.5);
-    // Kaustik im Flachen (Voronoi-Netz aus der Rauschtextur)
-    let ca = noise_at(p * 0.7 + vec2<f32>(t * 5.0, t * 2.0)).g;
-    let cb = noise_at(p * 0.55 - vec2<f32>(t * 3.5, t * 4.0)).g;
-    let caust = smoothstep(0.86, 0.97, max(ca, cb)) * (1.0 - dd) * G.water_b.w;
-    c += vec3<f32>(caust * 0.35);
-    // Schaumringe zum Ufer, Gischt auf hohen Kämmen nahe der Küste
-    let fw = G.water_c.w;
-    let ring = fract(shore * 6.0 - t * 0.35);
-    let foam_edge = 1.0 - smoothstep(0.0, fw * 0.5, shore);
-    let foam_ring = step(0.82, ring) * (1.0 - smoothstep(0.0, fw * 1.5, shore)) * step(0.45, noise_at(p * 1.7 + vec2<f32>(t * 2.0, 0.0)).b);
-    var foam = max(step(0.4, foam_edge + (noise_at(p * 2.0 + t * 7.0).b - 0.5) * 0.6), foam_ring * 0.85);
-    if (hd) {
-        let crest = smoothstep(0.7, 0.78, h0) * (1.0 - smoothstep(0.0, fw * 3.0, shore)) * step(0.5, noise_at(p * 2.6 - t * 5.0).b);
-        foam = max(foam, crest * 0.6);
+    // Wellentäler dunkler, Kämme heller und smaragdgrün durchschimmernd (Subsurface Scattering)
+    c *= 0.84 + h0 * 0.32;
+    let sss_col = mix(G.water_a.rgb * vec3<f32>(0.78, 1.26, 1.12), G.sun_col.rgb, 0.22);
+    c += sss_col * smoothstep(0.52, 0.82, h0) * (0.22 + (1.0 - dd) * 0.15);
+    // Kaustik nur im Flachen berechnen (Voronoi-Netz aus der Rauschtextur)
+    var caust = 0.0;
+    if (dd < 0.995) {
+        let ca = noise_at(p * 0.7 + vec2<f32>(t * 5.0, t * 2.0)).g;
+        let cb = noise_at(p * 0.55 - vec2<f32>(t * 3.5, t * 4.0)).g;
+        let c_net = smoothstep(0.84, 0.965, max(ca, cb)) + smoothstep(0.88, 0.98, min(ca, cb)) * 0.55;
+        caust = c_net * (1.0 - dd) * (1.0 - dd * 0.35) * G.water_b.w;
+        c += mix(vec3<f32>(0.75, 0.98, 1.0), G.sun_col.rgb + vec3<f32>(0.3), 0.35) * (caust * 0.38);
     }
-    c = mix(c, G.water_c.rgb, foam * 0.9);
+    // Schaumringe zum Ufer, Gischt auf hohen Kämmen nahe der Küste (nur in Ufernähe berechnen)
+    let fw = G.water_c.w;
+    var foam = 0.0;
+    if (shore < fw * 3.2) {
+        let ring = fract(shore * 6.0 - t * 0.35);
+        let foam_edge = 1.0 - smoothstep(0.0, fw * 0.55, shore);
+        let fn1 = noise_at(p * 1.7 + vec2<f32>(t * 2.0, 0.0)).b;
+        let fn2 = noise_at(p * 2.0 + t * 7.0).b;
+        if (hd) {
+            let foam_ring = smoothstep(0.76, 0.92, ring) * (1.0 - smoothstep(0.0, fw * 1.6, shore)) * smoothstep(0.38, 0.62, fn1);
+            let edge_lace = smoothstep(0.32, 0.52, foam_edge + (fn2 - 0.5) * 0.55);
+            let crest = smoothstep(0.66, 0.78, h0) * (1.0 - smoothstep(0.0, fw * 3.0, shore)) * smoothstep(0.42, 0.62, noise_at(p * 2.6 - t * 5.0).b);
+            foam = max(max(edge_lace, foam_ring * 0.88), crest * 0.68);
+        } else {
+            let foam_ring = step(0.82, ring) * (1.0 - smoothstep(0.0, fw * 1.5, shore)) * step(0.45, fn1);
+            foam = max(step(0.4, foam_edge + (fn2 - 0.5) * 0.6), foam_ring * 0.85);
+        }
+        c = mix(c, G.water_c.rgb, foam * 0.92);
+    }
     // Normale aus dem Wellenfeld
-    let e = 1.0;
+    let e = select(1.0, 0.65, hd);
     let hx = wave_h(p + vec2<f32>(e, 0.0), t) - h0;
     let hy = wave_h(p + vec2<f32>(0.0, e), t) - h0;
-    let nxy = clamp(vec2<f32>(-hx, -hy) * 9.0 * G.water_a.w, vec2<f32>(-0.6), vec2<f32>(0.6));
-    var em = vec3<f32>(caust * 0.06);
-    var spec = select(0.75, 0.2, foam > 0.5);
+    let nxy = clamp(vec2<f32>(-hx, -hy) * (9.5 / e) * G.water_a.w, vec2<f32>(-0.68), vec2<f32>(0.68));
+    var em = vec3<f32>(caust * 0.07);
+    var spec = select(0.78, 0.18, foam > 0.5);
     if (hd) {
         // Spiegelung des Himmels nach Fresnel: flach blickend und an Wellenflanken stärker
         let n = vec3<f32>(nxy, sqrt(max(0.0, 1.0 - dot(nxy, nxy))));
         let v = normalize(vec3<f32>(0.0, 0.55, 0.85));
         let r = reflect(-v, n);
-        let horizon = G.fog.rgb * 1.1 + G.ambient.rgb * 0.4;
-        let zenith = G.ambient.rgb * 1.3 + G.sun_col.rgb * 0.08;
+        let horizon = G.fog.rgb * 1.15 + G.ambient.rgb * 0.42 + G.sun_col.rgb * 0.12;
+        let zenith = G.ambient.rgb * 1.35 + G.sun_col.rgb * 0.08;
         let sky = mix(horizon, zenith, clamp(r.z, 0.0, 1.0));
-        let fres = 0.06 + 0.94 * pow(1.0 - clamp(dot(n, v), 0.0, 1.0), 5.0);
-        em += sky * clamp(fres * 2.2 + 0.08, 0.0, 0.6) * (1.0 - foam);
-        spec = select(0.97, 0.25, foam > 0.5);
+        let fres = 0.05 + 0.95 * pow(1.0 - clamp(dot(n, v), 0.0, 1.0), 5.0);
+        em += sky * clamp(fres * 2.35 + 0.07, 0.0, 0.65) * (1.0 - foam * 0.85);
+        spec = mix(0.98, 0.22, foam);
     } else {
         // Glitzern (Pixelstil)
         let gl = noise_at(p * 1.3 + vec2<f32>(t * 9.0, t * 6.0)).a;
@@ -194,30 +209,33 @@ fn nrm_texel(uv: vec2<f32>, layer: u32, chunk: bool) -> vec4<f32> {
     return textureSampleLevel(t_anrm, s_near, uv, i32(layer), 0.0);
 }
 fn sample_nrm(uv: vec2<f32>, layer: u32, chunk: bool) -> vec4<f32> {
-    let c = nrm_texel(uv, layer, chunk);
-    // FullHD: Neigung weich zwischen den Kunstpixeln (eigene bilineare Mischung, WebGL erlaubt
-    // nur einen Sampler je Textur); Höhe und Glanz bleiben pixelgenau, die Farbe ohnehin
-    if (G.hd3.x > 0.5) {
-        var dim = vec2<f32>(textureDimensions(t_anrm).xy);
-        if (chunk) {
-            dim = vec2<f32>(textureDimensions(t_cnrm).xy);
-        }
-        let px = uv * dim - 0.5;
-        let fr = fract(px);
-        // Bodenstücke liegen je in einer eigenen Ebene: am Rand nicht auf die Gegenseite greifen
-        let lo = 0.5 / dim;
-        let hi = 1.0 - lo;
-        let b = clamp((floor(px) + 0.5) / dim, lo, hi);
-        let d = 1.0 / dim;
-        let b1 = clamp(b + d, lo, hi);
-        let n00 = nrm_texel(b, layer, chunk).rg;
-        let n10 = nrm_texel(vec2<f32>(b1.x, b.y), layer, chunk).rg;
-        let n01 = nrm_texel(vec2<f32>(b.x, b1.y), layer, chunk).rg;
-        let n11 = nrm_texel(b1, layer, chunk).rg;
-        let n = mix(mix(n00, n10, fr.x), mix(n01, n11, fr.x), fr.y);
-        return vec4<f32>(n, c.b, c.a);
+    if (G.hd3.x < 0.5) {
+        return nrm_texel(uv, layer, chunk);
     }
-    return c;
+    // FullHD: Neigung weich zwischen den Kunstpixeln (eigene Hermite-Mischung, WebGL erlaubt
+    // nur einen Sampler je Textur); Höhe und Glanz bleiben pixelgenau aus dem nächsten Ecktexel
+    var dim = vec2<f32>(textureDimensions(t_anrm).xy);
+    if (chunk) {
+        dim = vec2<f32>(textureDimensions(t_cnrm).xy);
+    }
+    let px = uv * dim - 0.5;
+    let fr = fract(px);
+    // Bodenstücke liegen je in einer eigenen Ebene: am Rand nicht auf die Gegenseite greifen
+    let lo = 0.5 / dim;
+    let hi = 1.0 - lo;
+    let b = clamp((floor(px) + 0.5) / dim, lo, hi);
+    let d = 1.0 / dim;
+    let b1 = clamp(b + d, lo, hi);
+    let t00 = nrm_texel(b, layer, chunk);
+    let t10 = nrm_texel(vec2<f32>(b1.x, b.y), layer, chunk);
+    let t01 = nrm_texel(vec2<f32>(b.x, b1.y), layer, chunk);
+    let t11 = nrm_texel(b1, layer, chunk);
+    let s = fr * fr * (3.0 - 2.0 * fr);
+    let n = mix(mix(t00.rg, t10.rg, s.x), mix(t01.rg, t11.rg, s.x), s.y);
+    let cx = select(t00, t10, fr.x >= 0.5);
+    let cy = select(t01, t11, fr.x >= 0.5);
+    let c = select(cx, cy, fr.y >= 0.5);
+    return vec4<f32>(n, c.b, c.a);
 }
 
 @fragment
@@ -249,10 +267,19 @@ fn fs_gbuf(v: VOut) -> GOut {
         let q = vec2<i32>(floor(v.clip.xy));
         if (((q.x + q.y) & 1) == 0 || (q.y & 1) == 0) { discard; }
     }
-    var c = sample_sprite(v.uv, v.ext.x, chunk);
+    var uv = v.uv;
+    if ((flags & 64u) != 0u) {
+        // Wasserspiegelung: pixelgenaue Wellenverzerrung direkt im Shader (statt 24 CPU-Streifen)
+        let t = G.screen.z;
+        let wob = sin(v.world.y * 0.11 + t * 2.1 + v.world.x * 0.025) * 1.65
+            + (noise_at(v.world * 0.62 + vec2<f32>(t * 3.1, -t * 1.8)).r - 0.5) * 2.4;
+        uv.x -= wob / 2048.0;
+        if (uv.x < v.prm.x || uv.x > v.prm.y) { discard; }
+    }
+    var c = sample_sprite(uv, v.ext.x, chunk);
     if (chunk && c.a < 0.45) {
         // Wasser und Abgrund im Boden-Chunk: Art und Uferabstand stehen in der Normalen-Textur
-        let wn = nrm_texel(v.uv, v.ext.x, true);
+        let wn = nrm_texel(uv, v.ext.x, true);
         if (wn.a > 0.75) {
             return water_s(v.world, wn.b);
         }
@@ -265,10 +292,10 @@ fn fs_gbuf(v: VOut) -> GOut {
         // Umriss beim Fokus: Nachbarpixel prüfen
         if ((flags & 2u) != 0u) {
             let ts = 1.0 / vec2<f32>(textureDimensions(t_acol).xy);
-            let a = sample_sprite(v.uv + vec2<f32>(ts.x, 0.0), v.ext.x, false).a
-                + sample_sprite(v.uv - vec2<f32>(ts.x, 0.0), v.ext.x, false).a
-                + sample_sprite(v.uv + vec2<f32>(0.0, ts.y), v.ext.x, false).a
-                + sample_sprite(v.uv - vec2<f32>(0.0, ts.y), v.ext.x, false).a;
+            let a = sample_sprite(uv + vec2<f32>(ts.x, 0.0), v.ext.x, false).a
+                + sample_sprite(uv - vec2<f32>(ts.x, 0.0), v.ext.x, false).a
+                + sample_sprite(uv + vec2<f32>(0.0, ts.y), v.ext.x, false).a
+                + sample_sprite(uv - vec2<f32>(0.0, ts.y), v.ext.x, false).a;
             if (a > 0.4) {
                 o.alb = vec4<f32>(1.0, 0.95, 0.8, 1.0);
                 o.nrm = vec4<f32>(0.5, 0.5, clamp(v.prm.x / 510.0, 0.0, 1.0), 0.0);
@@ -278,11 +305,17 @@ fn fs_gbuf(v: VOut) -> GOut {
         }
         discard;
     }
-    var n = sample_nrm(v.uv, v.ext.x, chunk);
-    if (chunk && G.hd3.x > 0.5) {
-        // FullHD: feine Bodenstruktur (Körnung, kleine Unebenheiten) in der Normale, ortsfest in der Welt
-        let fq = noise_at(v.world * 0.73 + vec2<f32>(13.0, 7.0));
-        n = vec4<f32>(n.rg + (fq.rb - vec2<f32>(0.5)) * 0.09, n.b, n.a);
+    var n = sample_nrm(uv, v.ext.x, chunk);
+    if (G.hd3.x > 0.5) {
+        if (chunk) {
+            // FullHD: feine Bodenstruktur (Körnung, kleine Unebenheiten) in der Normale, ortsfest in der Welt
+            let fq = noise_at(v.world * 0.73 + vec2<f32>(13.0, 7.0));
+            n = vec4<f32>(clamp(n.rg + (fq.rb - vec2<f32>(0.5)) * 0.11, vec2<f32>(0.02), vec2<f32>(0.98)), n.b, n.a);
+        } else if (n.b > 0.02) {
+            // FullHD: dezente Material-Mikrostruktur auf Felsen, Mauern, Stämmen und Schiffsrümpfen
+            let fq = noise_at(uv * 512.0 + vec2<f32>(5.0, 11.0));
+            n = vec4<f32>(clamp(n.rg + (fq.rg - vec2<f32>(0.5)) * 0.055, vec2<f32>(0.02), vec2<f32>(0.98)), n.b, n.a);
+        }
     }
     var rgb = c.rgb * v.col.rgb;
     var glow = vec3<f32>(0.0);
@@ -311,11 +344,13 @@ fn fs_gbuf(v: VOut) -> GOut {
         rgb *= mix(vec3<f32>(1.05, 1.0, 0.93), vec3<f32>(0.95, 1.0, 1.06), smoothstep(0.3, 0.7, m2));
     }
     if ((flags & 64u) != 0u) {
-        // Spiegelung: die Wasseroberfläche bleibt, das Bild schimmert hindurch
+        // Spiegelung: die Wasseroberfläche bleibt, das Bild schimmert wellig gebrochen hindurch
         var w = water(v.world);
-        let k = v.col.a * 0.85;
-        w.alb = vec4<f32>(mix(w.alb.rgb, rgb, k), 1.0);
-        w.emi = vec4<f32>(w.emi.rgb * (1.0 - k * 0.6) + glow * 0.7, 0.5);
+        let wn = w.nrm.rg * 2.0 - 1.0;
+        let ripple = 1.0 - clamp(length(wn) * 0.45, 0.0, 0.35);
+        let k = v.col.a * 0.86 * ripple;
+        w.alb = vec4<f32>(mix(w.alb.rgb, rgb * vec3<f32>(0.88, 0.95, 1.02), k), 1.0);
+        w.emi = vec4<f32>(w.emi.rgb * (1.0 - k * 0.55) + glow * 0.75, 0.5);
         return w;
     }
     let elev = n.b * 510.0 + v.prm.x;
@@ -348,21 +383,23 @@ fn fs_decal(v: VOut) -> @location(0) vec4<f32> {
 fn fs_overlay(v: VOut) -> @location(0) vec4<f32> {
     let mode = v.ext.y;
     if (mode == 5u) {
-        // Nebelbank
+        // Nebelbank: vor der Texturabfrage zwischen Pixel- und FullHD-Modus verzweigen (keine doppelten Abfragen)
         let t = G.screen.z;
-        let p = floor(v.world);
-        let n = noise_at(p * 0.25 + vec2<f32>(t * v.prm.y, t * v.prm.y * 0.3)).r;
-        let n2 = noise_at(p * 0.12 - vec2<f32>(t * v.prm.y * 0.6, 0.0)).b;
-        var a = smoothstep(0.35, 0.85, n * 0.6 + n2 * 0.5) * v.col.a;
-        // weicher Rand am Quad
         let e = min(min(v.uv.x, 1.0 - v.uv.x), min(v.uv.y, 1.0 - v.uv.y));
-        a *= smoothstep(0.0, 0.25, e);
-        // Pixelmodus: gerasterte Stufen; FullHD: weicher, fotografischer Nebel
+        let edge = smoothstep(0.0, 0.28, e);
+        var a = 0.0;
         if (G.hd3.x < 0.5) {
+            let p = floor(v.world);
+            let n = noise_at(p * 0.25 + vec2<f32>(t * v.prm.y, t * v.prm.y * 0.3)).r;
+            let n2 = noise_at(p * 0.12 - vec2<f32>(t * v.prm.y * 0.6, 0.0)).b;
+            a = smoothstep(0.35, 0.85, n * 0.6 + n2 * 0.5) * v.col.a * edge;
             a = floor(a * 6.0 + hash21(p) * 0.8) / 6.0;
         } else {
             let pf = v.world * 0.5;
-            a = smoothstep(0.35, 0.85, noise_at(pf * 0.25 + vec2<f32>(t * v.prm.y, t * v.prm.y * 0.3)).r * 0.6 + noise_at(pf * 0.12 - vec2<f32>(t * v.prm.y * 0.6, 0.0)).b * 0.5) * v.col.a * smoothstep(0.0, 0.25, e) * 0.8;
+            let n = noise_at(pf * 0.25 + vec2<f32>(t * v.prm.y, t * v.prm.y * 0.3)).r;
+            let n2 = noise_at(pf * 0.12 - vec2<f32>(t * v.prm.y * 0.6, 0.0)).b;
+            let n3 = noise_at(pf * 0.52 + vec2<f32>(-t * v.prm.y * 0.35, t * v.prm.y * 0.45)).g;
+            a = smoothstep(0.33, 0.86, n * 0.52 + n2 * 0.42 + n3 * 0.22) * v.col.a * edge * 0.84;
         }
         return vec4<f32>(v.col.rgb * a, a);
     }

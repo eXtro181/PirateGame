@@ -349,40 +349,74 @@ impl Game {
                     }
                 }
                 "shard" => {
-                    f.glow(s.x, y, 8.0, [170, 230, 255, 220]);
-                    f.world_q(s.y, Frame::quad_rect(s.x - 2.0, y - 4.0, 4.0, 8.0, [220, 245, 255, 255], modes::SOLID, 0));
+                    f.glow(s.x, y, 10.0, [150, 225, 255, 230]);
+                    f.world_q(s.y, Frame::quad_rect(s.x - 3.0, y - 5.0, 6.0, 10.0, [160, 220, 250, 180], modes::SOFT, 0));
+                    f.world_q(s.y + 0.05, Frame::quad_rect(s.x - 2.0, y - 4.0, 4.0, 8.0, [225, 248, 255, 255], modes::SOLID, 0));
+                    f.world_q(s.y + 0.1, Frame::quad_rect(s.x - 1.0, y - 3.0, 2.0, 5.0, [255, 255, 255, 255], modes::SOLID, 0));
                 }
-                "feather" => f.world_q(s.y, Frame::quad_rect(s.x - 4.0, y - 1.0, 8.0, 3.0, [230, 235, 245, 255], modes::SOLID, 0)),
+                "feather" => {
+                    f.world_q(s.y, Frame::quad_rect(s.x - 4.5, y - 1.5, 9.0, 3.5, [215, 222, 236, 255], modes::SOLID, 0));
+                    f.world_q(s.y + 0.05, Frame::quad_rect(s.x - 3.0, y - 1.0, 5.0, 1.5, [248, 250, 255, 255], modes::SOLID, 0));
+                }
                 "bomb" => {
-                    f.shadow(s.x, s.y, 6.0, 2.5, 0.4);
-                    f.world_q(s.y, Frame::quad_rect(s.x - 4.0, y - 4.0, 8.0, 8.0, [24, 22, 26, 255], modes::SOLID, 0));
-                    f.glow(s.x + 3.0, y - 5.0, 3.0, [255, 200, 90, 255]);
+                    f.shadow(s.x, s.y, 6.5, 2.8, 0.42);
+                    f.world_q(s.y, Frame::quad_rect(s.x - 5.0, y - 5.0, 10.0, 10.0, [18, 18, 22, 240], modes::SOFT, 0));
+                    f.world_q(s.y + 0.05, Frame::quad_rect(s.x - 3.5, y - 3.5, 7.0, 7.0, [30, 28, 34, 255], modes::SOLID, 0));
+                    f.world_q(s.y + 0.1, Frame::quad_rect(s.x - 2.5, y - 3.0, 2.5, 2.0, [105, 112, 124, 230], modes::SOLID, 0));
+                    f.glow(s.x + 3.0, y - 5.0, 4.5, [255, 205, 95, 255]);
+                    f.light(LightDef { x: s.x, y: s.y, z: s.z.max(8.0), r: 52.0, col: [1.1, 0.65, 0.22], flicker: 0.25 });
                 }
                 "mortar" => {
                     // Mörserkugel im hohen Bogen: Schatten am Boden, Kugel in der Höhe
-                    f.shadow(s.x, s.y, 7.0, 2.5, 0.4);
-                    f.world_q(s.y, Frame::quad_rect(s.x - 5.0, y - 5.0, 10.0, 10.0, [26, 24, 28, 255], modes::SOLID, 0));
-                    f.glow(s.x + 3.0, y - 4.0, 3.0, [255, 190, 90, 220]);
+                    f.shadow(s.x, s.y, 7.5, 3.0, 0.42);
+                    f.world_q(s.y, Frame::quad_rect(s.x - 6.0, y - 6.0, 12.0, 12.0, [20, 19, 24, 240], modes::SOFT, 0));
+                    f.world_q(s.y + 0.05, Frame::quad_rect(s.x - 4.5, y - 4.5, 9.0, 9.0, [32, 30, 36, 255], modes::SOLID, 0));
+                    f.world_q(s.y + 0.1, Frame::quad_rect(s.x - 3.0, y - 3.5, 3.0, 2.5, [110, 116, 128, 235], modes::SOLID, 0));
+                    f.glow(s.x + 3.0, y - 4.0, 5.0, [255, 195, 90, 235]);
+                    f.light(LightDef { x: s.x, y: s.y, z: s.z.max(12.0), r: 64.0, col: [1.2, 0.7, 0.25], flicker: 0.2 });
                 }
                 "bigball" => {
                     // XXL-Kanonenkugel des Holländers
-                    f.shadow(s.x, s.y, 12.0, 4.0, 0.4);
-                    f.world_q(s.y, Frame::quad_rect(s.x - 9.0, y - 9.0, 18.0, 18.0, [20, 22, 24, 255], modes::SOLID, 0));
-                    f.world_q(s.y + 0.1, Frame::quad_rect(s.x - 6.0, y - 7.0, 5.0, 4.0, [90, 96, 100, 255], modes::SOLID, 0));
-                    f.glow(s.x - s.vx * 0.03, y - s.vy * 0.03, 10.0, [120, 120, 120, 90]);
+                    f.shadow(s.x, s.y, 12.0, 4.5, 0.45);
+                    f.world_q(s.y, Frame::quad_rect(s.x - 10.5, y - 10.5, 21.0, 21.0, [16, 18, 22, 245], modes::SOFT, 0));
+                    f.world_q(s.y + 0.05, Frame::quad_rect(s.x - 8.0, y - 8.0, 16.0, 16.0, [26, 28, 32, 255], modes::SOLID, 0));
+                    f.world_q(s.y + 0.1, Frame::quad_rect(s.x - 6.0, y - 7.0, 5.0, 4.0, [104, 112, 122, 255], modes::SOLID, 0));
+                    f.world_q(s.y + 0.15, Frame::quad_rect(s.x - 4.5, y - 5.5, 2.5, 2.0, [165, 175, 186, 240], modes::SOLID, 0));
+                    f.glow(s.x - s.vx * 0.03, y - s.vy * 0.03, 12.0, [130, 135, 140, 110]);
                 }
                 "boneshard" => {
-                    f.world_q(s.y, Frame::quad_rect(s.x - 5.0, y - 2.0, 10.0, 4.0, [226, 216, 186, 255], modes::SOLID, 0));
-                    f.glow(s.x, y, 6.0, [150, 255, 200, 120]);
+                    f.world_q(s.y, Frame::quad_rect(s.x - 5.0, y - 2.0, 10.0, 4.0, [216, 206, 176, 255], modes::SOLID, 0));
+                    f.world_q(s.y + 0.05, Frame::quad_rect(s.x - 3.5, y - 1.5, 7.0, 1.5, [246, 240, 220, 255], modes::SOLID, 0));
+                    f.glow(s.x, y, 7.0, [140, 255, 205, 140]);
                 }
                 "chain" => {
                     // Kettenkugel: zwei Kugeln mit Kette, drehend
                     let a = s.t * 18.0;
                     let (dx, dy) = (a.cos() * 7.0, a.sin() * 4.0);
+                    let len = dx.hypot(dy).max(0.1);
+                    let (nx, ny) = (-dy / len * 1.1, dx / len * 1.1);
+                    f.world_q(
+                        s.y,
+                        crate::gfx::Q {
+                            p: [
+                                [s.x - dx - nx, y - dy - ny],
+                                [s.x + dx - nx, y + dy - ny],
+                                [s.x + dx + nx, y + dy + ny],
+                                [s.x - dx + nx, y - dy + ny],
+                            ],
+                            uv: [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]],
+                            col: [130, 134, 144, 255],
+                            ext: [0, modes::SOLID, 0, 0],
+                            prm: [0.0, 0.0],
+                            sway: 0,
+                        },
+                    );
                     for k in [-1.0f32, 1.0] {
-                        f.world_q(s.y, Frame::quad_rect(s.x + dx * k - 3.0, y + dy * k - 3.0, 6.0, 6.0, [34, 34, 40, 255], modes::SOLID, 0));
+                        let (bx, by) = (s.x + dx * k, y + dy * k);
+                        f.world_q(s.y + 0.05, Frame::quad_rect(bx - 3.8, by - 3.8, 7.6, 7.6, [24, 24, 30, 240], modes::SOFT, 0));
+                        f.world_q(s.y + 0.1, Frame::quad_rect(bx - 2.8, by - 2.8, 5.6, 5.6, [38, 38, 46, 255], modes::SOLID, 0));
+                        f.world_q(s.y + 0.15, Frame::quad_rect(bx - 1.8, by - 2.0, 2.0, 1.5, [115, 120, 132, 230], modes::SOLID, 0));
                     }
-                    f.world_q(s.y, Frame::quad_rect(s.x - 1.0, y - 1.0, 2.0, 2.0, [120, 120, 130, 255], modes::SOLID, 0));
                 }
                 "flame" => {
                     let k = (s.life / 0.75).clamp(0.0, 1.0);
@@ -390,13 +424,19 @@ impl Game {
                     f.glow(s.x, y, 4.0, [255, 240, 180, (230.0 * k) as u8]);
                 }
                 "cannon" | "rock" => {
-                    f.shadow(s.x, s.y, 5.0, 2.0, 0.35);
-                    let c = if s.kind == "rock" { [90, 74, 56, 255] } else { [30, 30, 34, 255] };
-                    f.world_q(s.y, Frame::quad_rect(s.x - 4.0, y - 4.0, 8.0, 8.0, c, modes::SOLID, 0));
+                    f.shadow(s.x, s.y, 5.5, 2.2, 0.38);
+                    let (base, hi) = if s.kind == "rock" {
+                        ([90, 74, 56, 255], [138, 118, 92, 235])
+                    } else {
+                        ([28, 28, 34, 255], [104, 110, 122, 235])
+                    };
+                    f.world_q(s.y, Frame::quad_rect(s.x - 4.8, y - 4.8, 9.6, 9.6, [base[0] / 2, base[1] / 2, base[2] / 2, 235], modes::SOFT, 0));
+                    f.world_q(s.y + 0.05, Frame::quad_rect(s.x - 3.5, y - 3.5, 7.0, 7.0, base, modes::SOLID, 0));
+                    f.world_q(s.y + 0.1, Frame::quad_rect(s.x - 2.2, y - 2.5, 2.4, 2.0, hi, modes::SOLID, 0));
                 }
                 _ => {
-                    f.world_q(s.y, Frame::quad_rect(s.x - 2.0, y - 1.0, 4.0, 2.0, [255, 230, 160, 255], modes::SOLID, 0));
-                    f.glow(s.x, y, 3.0, [255, 200, 120, 160]);
+                    f.world_q(s.y, Frame::quad_rect(s.x - 2.5, y - 1.2, 5.0, 2.4, [255, 235, 175, 255], modes::SOLID, 0));
+                    f.glow(s.x, y, 4.0, [255, 205, 125, 180]);
                 }
             }
         }

@@ -267,24 +267,29 @@ impl Canvas {
     pub fn disc(&mut self, cx: f32, cy: f32, r: f32, c: Rgba) {
         self.ellipse(cx, cy, r, r, c)
     }
-    /// Schattierte Kuppel: Rampenfarbe nach Lichtrichtung, Relief = Kuppelhöhe.
-    /// `hgt` = Reliefhöhe in px, `base` = Reliefsockel.
+    /// Schattierte Kuppel: weiche PBR-inspirierte Rampenfarbe nach Lichtrichtung, Kernschatten +
+    /// Rückwurflicht + Glanzpunkt, Relief = Kuppelhöhe.
     pub fn dome(&mut self, cx: f32, cy: f32, rx: f32, ry: f32, p: &[Rgba], hgt: f32, base: f32, dith: f32, bias: f32) {
-        let n = p.len() as f32 - 1.0;
+        if p.is_empty() {
+            return;
+        }
         for y in (cy - ry).floor() as i32..=(cy + ry).ceil() as i32 {
             for x in (cx - rx).floor() as i32..=(cx + rx).ceil() as i32 {
-                let dx = (x as f32 + 0.5 - cx) / rx;
-                let dy = (y as f32 + 0.5 - cy) / ry;
+                let dx = (x as f32 + 0.5 - cx) / rx.max(0.5);
+                let dy = (y as f32 + 0.5 - cy) / ry.max(0.5);
                 let d2 = dx * dx + dy * dy;
                 if d2 > 1.0 {
                     continue;
                 }
                 let nz = (1.0 - d2).max(0.0).sqrt();
                 let l = dx * LIGHT[0] + dy * LIGHT[1] + nz * LIGHT[2];
-                let mut v = (l * 0.75 + 0.35 + bias) * n;
-                v += (bayer(x, y) - 0.5) * dith;
-                let i = v.round().clamp(0.0, n) as usize;
-                self.put(x, y, p[i], base + hgt * nz);
+                // Sanfter Wrap-Diffuse + dezentes Boden-Rückwurflicht am unteren Rand + Glanzlobe
+                let bounce = (dy * 0.5 + 0.5).max(0.0) * (1.0 - nz) * 0.08;
+                let spec_lobe = l.max(0.0).powi(5) * 0.14;
+                let mut v = l * 0.62 + 0.42 + bias + bounce + spec_lobe;
+                v += (bayer(x, y) - 0.5) * (dith * 0.08);
+                let c = pick(p, v.clamp(0.0, 1.0));
+                self.put(x, y, c, base + hgt * nz);
             }
         }
     }
@@ -342,7 +347,6 @@ impl Canvas {
         for i in 1..path.len() {
             len += ((path[i].0 - path[i - 1].0).powi(2) + (path[i].1 - path[i - 1].1).powi(2)).sqrt();
         }
-        let n = p.len() as f32 - 1.0;
         let mut acc = 0.0;
         for i in 1..path.len() {
             let (ax, ay) = path[i - 1];
@@ -365,11 +369,13 @@ impl Canvas {
                             continue;
                         }
                         let side = ((dx * nx + dy * ny) / r.max(0.5)).clamp(-1.0, 1.0);
-                        // Licht von oben links: Seite mit Normalen Richtung Licht ist hell
-                        let lit = -(nx * side * LIGHT[0] + ny * side * LIGHT[1]) * -1.0;
+                        // Licht von oben links: zylindrische Ausleuchtung mit Kernschatten und feinem Kanten-Rückwurf
+                        let lit = nx * side * LIGHT[0] + ny * side * LIGHT[1];
                         let nzz = (1.0 - side * side).max(0.0).sqrt();
-                        let v = ((lit * 0.8 + nzz * 0.55) * 0.75 + 0.3) * n + (bayer(x, y) - 0.5) * 0.6;
-                        let c = p[v.round().clamp(0.0, n) as usize];
+                        let rim_bounce = (1.0 - nzz) * 0.07;
+                        let spec_lobe = (lit * 0.7 + nzz * 0.6).max(0.0).powi(4) * 0.12;
+                        let v = ((lit * 0.76 + nzz * 0.54) * 0.62 + 0.34 + rim_bounce + spec_lobe) + (bayer(x, y) - 0.5) * 0.05;
+                        let c = pick(p, v.clamp(0.0, 1.0));
                         self.put(x, y, c, base + hgt * nzz * r);
                     }
                 }
@@ -524,10 +530,13 @@ impl Canvas {
                 _ => 0.0,
             }
         };
-        let gx = grad((x + 1, y), (x - 1, y));
-        let gy = grad((x, y + 1), (x, y - 1));
-        let gx = gx.clamp(-2.5, 2.5) * k;
-        let gy = gy.clamp(-2.5, 2.5) * k;
+        let gx1 = grad((x + 1, y), (x - 1, y));
+        let gy1 = grad((x, y + 1), (x, y - 1));
+        // Zweite Skala (Radius 2 px) für weiche 3D-Makrowölbung ohne flache Innenflächen
+        let gx2 = grad((x + 2, y), (x - 2, y)) * 0.5;
+        let gy2 = grad((x, y + 2), (x, y - 2)) * 0.5;
+        let gx = (gx1 * 0.65 + gx2 * 0.35).clamp(-2.8, 2.8) * k;
+        let gy = (gy1 * 0.65 + gy2 * 0.35).clamp(-2.8, 2.8) * k;
         let u = self.up[i] as f32 / 255.0;
         // Grundnormale: flach (0,0,1) bis aufrecht (0, 0.72, 0.69)
         let bx = 0.0;

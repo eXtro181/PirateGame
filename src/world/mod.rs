@@ -3951,10 +3951,14 @@ impl TerrainMap for World {
         let fx = px as f32 / TS as f32 - 0.5;
         let fy = py as f32 / TS as f32 - 0.5;
         let (i0, j0) = (fx.floor() as i32, fy.floor() as i32);
-        let (u, v) = (fx - i0 as f32, fy - j0 as f32);
         let h = |x: i32, y: i32| self.hb[idx(x.clamp(0, MW - 1), y.clamp(0, MH - 1))];
-        let a = h(i0, j0) + (h(i0 + 1, j0) - h(i0, j0)) * u;
-        let b = h(i0, j0 + 1) + (h(i0 + 1, j0 + 1) - h(i0, j0 + 1)) * u;
+        let (h00, h10, h01, h11) = (h(i0, j0), h(i0 + 1, j0), h(i0, j0 + 1), h(i0 + 1, j0 + 1));
+        if (h00 - h10).abs() < 1.0e-4 && (h00 - h01).abs() < 1.0e-4 && (h00 - h11).abs() < 1.0e-4 {
+            return (h00.floor().max(0.0) as u8).min(self.level[i] + 1);
+        }
+        let (u, v) = (fx - i0 as f32, fy - j0 as f32);
+        let a = h00 + (h10 - h00) * u;
+        let b = h01 + (h11 - h01) * u;
         let wob = self.en.at(px / 3, py / 3) * 0.32 + self.en.at(px + 77, py * 2 + 13) * 0.08;
         let v = a + (b - a) * v + wob;
         (v.floor().max(0.0) as u8).min(self.level[i] + 1)

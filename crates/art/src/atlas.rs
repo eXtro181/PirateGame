@@ -17,19 +17,24 @@ pub struct Spr {
 }
 
 pub struct Page {
+    pub w: i32,
+    pub h: i32,
     pub col: Vec<u8>,
     pub nrm: Vec<u8>,
     pub dirty: bool,
 }
 impl Page {
     fn new() -> Self {
-        let n = (PAGE * PAGE * 4) as usize;
+        Self::with_size(PAGE, PAGE)
+    }
+    pub fn with_size(w: i32, h: i32) -> Self {
+        let n = (w * h * 4) as usize;
         let mut nrm = vec![0u8; n];
         for i in (0..n).step_by(4) {
             nrm[i] = 128;
             nrm[i + 1] = 128;
         }
-        Page { col: vec![0; n], nrm, dirty: true }
+        Page { w, h, col: vec![0; n], nrm, dirty: true }
     }
 }
 
@@ -43,6 +48,8 @@ pub struct Atlas {
     pub nk: f32,
     /// nutzbare Breite (für Bilder, die später in einen schmaleren Streifen kopiert werden)
     pub lim: i32,
+    /// Seitenhöhe (Standard: `PAGE`, bei Teilbereichen kleiner)
+    pub page_h: i32,
     /// Bilder beim Einfügen in den Pixelstil umsetzen (`pixstyle`): Welt-Grafik ja, Oberfläche,
     /// Schrift und fertige PixelLab-Bilder nein
     pub style: bool,
@@ -56,7 +63,7 @@ impl Default for Atlas {
 
 impl Atlas {
     pub fn new() -> Self {
-        let mut a = Atlas { pages: vec![Page::new()], map: HashMap::new(), x: 4, y: 4, row: 0, nk: 0.55, lim: PAGE, style: false };
+        let mut a = Atlas { pages: vec![Page::new()], map: HashMap::new(), x: 4, y: 4, row: 0, nk: 0.68, lim: PAGE, page_h: PAGE, style: false };
         // weißes Texel für Flächen
         for j in 0..2 {
             for i in 0..2 {
@@ -65,6 +72,10 @@ impl Atlas {
             }
         }
         a
+    }
+    /// Arbeitsatlas in genau passender Streifengröße `(w, h)` – spart bis zu 33 MB pro Umbau.
+    pub fn with_size(w: i32, h: i32) -> Self {
+        Atlas { pages: vec![Page::with_size(w, h)], map: HashMap::new(), x: 4, y: 4, row: 0, nk: 0.68, lim: w, page_h: h, style: false }
     }
     pub fn get(&self, name: &str) -> Spr {
         match self.map.get(name) {
@@ -84,7 +95,11 @@ impl Atlas {
     }
     /// Belegte Seiten (letzte Seite anteilig) – für das Log.
     pub fn used(&self) -> f32 {
-        (self.pages.len() - 1) as f32 + (self.y + self.row) as f32 / PAGE as f32
+        (self.pages.len() - 1) as f32 + (self.y + self.row) as f32 / self.page_h as f32
+    }
+    /// Belegte Höhe in Pixeln auf der aktuellen Seite.
+    pub fn used_px(&self) -> i32 {
+        self.y + self.row
     }
     fn place(&mut self, w: i32, h: i32) -> (usize, i32, i32) {
         if self.x + w + 2 > self.lim {
@@ -92,8 +107,9 @@ impl Atlas {
             self.y += self.row + 3;
             self.row = 0;
         }
-        if self.y + h + 2 > PAGE {
-            self.pages.push(Page::new());
+        let pad_y = if self.page_h < PAGE { 0 } else { 2 };
+        if self.y + h + pad_y > self.page_h {
+            self.pages.push(Page::with_size(self.lim, self.page_h));
             self.x = 4;
             self.y = 4;
             self.row = 0;
@@ -113,10 +129,11 @@ impl Atlas {
             self.style = true;
             return s;
         }
-        assert!(c.w <= PAGE - 8 && c.h <= PAGE - 8, "zu groß: {name}");
+        assert!(c.w <= self.lim && c.h <= self.page_h, "zu groß: {name}");
         let (pi, px, py) = self.place(c.w, c.h);
         let nk = self.nk;
         let pg = &mut self.pages[pi];
+        let pw = pg.w;
         pg.dirty = true;
         for y in 0..c.h {
             for x in 0..c.w {
@@ -124,7 +141,7 @@ impl Atlas {
                 if c.col[i][3] == 0 {
                     continue;
                 }
-                let o = (((py + y) * PAGE + px + x) * 4) as usize;
+                let o = (((py + y) * pw + px + x) * 4) as usize;
                 let (cc, nn) = encode_px(c, x, y, nk, Some(ay));
                 pg.col[o..o + 4].copy_from_slice(&cc);
                 pg.nrm[o..o + 4].copy_from_slice(&nn);

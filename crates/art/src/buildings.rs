@@ -11,7 +11,8 @@ use crate::props::*;
 /// Schuppendach-Fläche: Reihen halbrunder Schindeln.
 #[allow(clippy::too_many_arguments)]
 pub fn scale_area(c: &mut Canvas, x0: i32, y0: i32, w: i32, h: i32, p: &[Rgba], light: f32, sw: i32, sh: i32, mask: &dyn Fn(i32, i32) -> bool) {
-    let n = p.len() as f32 - 1.0;
+    let sp0 = c.cur_spec;
+    c.cur_spec = 88;
     for y in y0..y0 + h {
         for x in x0..x0 + w {
             if !mask(x, y) {
@@ -21,39 +22,63 @@ pub fn scale_area(c: &mut Canvas, x0: i32, y0: i32, w: i32, h: i32, p: &[Rgba], 
             let off = if row % 2 == 1 { sw / 2 } else { 0 };
             let lx = (x - x0 + off).rem_euclid(sw);
             let ly = (y - y0) % sh;
-            // Schindel: unten rund
+            // Schindel: unten rund, seitlich leicht gewölbt
             let cxs = (lx as f32 + 0.5 - sw as f32 / 2.0) / (sw as f32 / 2.0);
             let bottom = (1.0 - cxs * cxs).max(0.0).sqrt() * sh as f32 * 0.55 + sh as f32 * 0.45;
-            let mut v = light - (ly as f32 / sh as f32) * 0.25 - cxs * 0.08;
-            let mut r = 2.0 + (1.0 - ly as f32 / sh as f32);
+            let mut v = light - (ly as f32 / sh as f32) * 0.24 - cxs * 0.09;
+            let mut r = 2.2 + (1.0 - ly as f32 / sh as f32) * 1.1 - cxs * cxs * 0.45;
             if ly as f32 >= bottom - 1.0 {
                 v = 0.12;
-                r = 0.5;
+                r = 0.4;
             } else if ly == 0 {
-                v += 0.12;
+                v += 0.11;
+                r += 0.25;
             }
-            v += (bayer(x, y) - 0.5) * 0.06 + (h01(x / sw, row, 3) - 0.5) * 0.08;
-            c.put(x, y, p[(v * n).round().clamp(0.0, n) as usize], r);
+            v += (bayer(x, y) - 0.5) * 0.04 + (h01(x / sw, row, 3) - 0.5) * 0.08;
+            c.put(x, y, pick(p, v.clamp(0.0, 1.0)), r);
         }
     }
+    c.cur_spec = sp0;
 }
 
-/// Fachwerkwand: Putz mit dunklen Balken.
+/// Fachwerkwand: Putz mit dunklen Balken und Schlagschatten.
 pub fn timber_wall(c: &mut Canvas, x0: i32, y0: i32, w: i32, h: i32, seed: i32) {
     let pl = plaster();
     let tb = darkwood();
-    let n = pl.len() as f32 - 1.0;
     for y in y0..y0 + h {
         for x in x0..x0 + w {
-            let v = 0.6 + (h01(x / 3, y / 3, seed) - 0.5) * 0.08 + (bayer(x, y) - 0.5) * 0.05 - ((y - y0) as f32 / h as f32) * 0.08;
-            c.put(x, y, pl[(v * n).round() as usize], 0.0);
+            let grain = (h01(x / 3, y / 3, seed) - 0.5) * 0.08 + (h01(x, y, seed + 7) - 0.5) * 0.03;
+            let v = (0.60 + grain + (bayer(x, y) - 0.5) * 0.03 - ((y - y0) as f32 / h.max(1) as f32) * 0.10).clamp(0.0, 1.0);
+            c.put(x, y, pick(&pl, v), grain * 3.5);
         }
     }
-    let beam = |c: &mut Canvas, x: i32, y: i32, w: i32, h: i32| {
-        for j in 0..h {
-            for i in 0..w {
-                let v = if j == 0 || i == 0 { 0.65 } else if j == h - 1 || i == w - 1 { 0.15 } else { 0.4 };
-                c.put(x + i, y + j, pick(&tb, v), 2.0);
+    let beam = |c: &mut Canvas, x: i32, y: i32, bw: i32, bh: i32| {
+        for j in 0..bh {
+            for i in 0..bw {
+                let v = if j == 0 || i == 0 {
+                    0.68
+                } else if j == bh - 1 || i == bw - 1 {
+                    0.15
+                } else {
+                    0.42 + (h01(x + i, y + j, seed + 13) - 0.5) * 0.08
+                };
+                let rel = if j == 0 || i == 0 { 2.4 } else if j == bh - 1 || i == bw - 1 { 1.4 } else { 2.0 };
+                c.put(x + i, y + j, pick(&tb, v.clamp(0.0, 1.0)), rel);
+            }
+        }
+        // Weicher Balken-Schlagschatten auf dem Putz rechts/unterhalb
+        if bh <= 6 {
+            for i in 0..bw {
+                if y + bh < y0 + h {
+                    c.mul(x + i, y + bh, 0.78);
+                }
+            }
+        }
+        if bw <= 6 {
+            for j in 0..bh {
+                if x + bw < x0 + w {
+                    c.mul(x + bw, y + j, 0.80);
+                }
             }
         }
     };

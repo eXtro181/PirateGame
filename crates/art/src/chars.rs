@@ -233,13 +233,15 @@ impl Ctx<'_> {
 // ------------------------------------------------------------------ Waffen
 fn draw_weapon(c: &mut Canvas, hx: f32, hy: f32, ang: f32, kind: &str, s: f32) {
     let (sa, ca) = ang.sin_cos();
-    let steel = pal(&[0x2E343C, 0x4A525C, 0x7A848E, 0xAEB6BE, 0xDCE2E6, 0xFFFFFF]);
-    let gold = pal(&[0x4A3410, 0x7A5A1C, 0xAA842C, 0xD2AE44, 0xEACC6C, 0xF8E8A0]);
+    let steel = pal(&[0x262C34, 0x444C58, 0x74808C, 0xAEB8C2, 0xDCE4EC, 0xFFFFFF]);
+    let gold = pal(&[0x4A3410, 0x7A5A1C, 0xAA842C, 0xD2AE44, 0xEACC6C, 0xFFF0B4]);
     let wood = pal(&[0x2A1A10, 0x46301E, 0x664630, 0x8A6444, 0xA8845C, 0xC4A47A]);
-    let mut along = |t: f32, side: f32, col: Rgba| {
+    let sp0 = c.cur_spec;
+    let along = |c: &mut Canvas, t: f32, side: f32, col: Rgba, spec: u8, rel: f32| {
         let x = hx + ca * t - sa * side;
         let y = hy + sa * t + ca * side;
-        c.put(x.round() as i32, y.round() as i32, col, 6.0);
+        c.cur_spec = spec;
+        c.put(x.round() as i32, y.round() as i32, col, rel);
     };
     let len = match kind {
         "cutlass" => 20.0,
@@ -258,17 +260,26 @@ fn draw_weapon(c: &mut Canvas, hx: f32, hy: f32, ang: f32, kind: &str, s: f32) {
         "hammer" | "anchor" => {
             let mut t = -3.0;
             while t < len {
-                along(t, 0.0, wood[3]);
-                along(t, 1.0, wood[1]);
+                along(c, t, 0.0, wood[3], 60, 6.0);
+                along(c, t, 1.0, wood[1], 50, 5.6);
                 t += 0.5;
             }
             let mut t = len - 6.0 * s;
             while t <= len {
                 let mut sd = -6.0 * s;
                 while sd <= 6.0 * s {
+                    let u = (sd / (6.0 * s).max(1.0)).clamp(-1.0, 1.0);
                     let edge = sd.abs() > 4.5 * s;
-                    let col = if kind == "anchor" { if edge { steel[1] } else { steel[3] } } else if t > len - 1.0 { steel[4] } else if edge { steel[1] } else { steel[2] };
-                    along(t, sd, col);
+                    let col = if kind == "anchor" {
+                        if edge { steel[1] } else { pick(&steel, (0.62 - u * 0.25).clamp(0.15, 0.92)) }
+                    } else if t > len - 1.0 {
+                        steel[4]
+                    } else if edge {
+                        steel[1]
+                    } else {
+                        pick(&steel, (0.56 - u * 0.22).clamp(0.15, 0.88))
+                    };
+                    along(c, t, sd, col, 215, 6.6 - u.abs() * 0.8);
                     sd += 0.5;
                 }
                 t += 0.5;
@@ -277,10 +288,12 @@ fn draw_weapon(c: &mut Canvas, hx: f32, hy: f32, ang: f32, kind: &str, s: f32) {
         "club" => {
             let mut t = -2.0;
             while t < len {
-                let w = 1.0 + (t / len) * 2.5 * s;
+                let w = (1.0 + (t / len) * 2.5 * s).max(0.5);
                 let mut sd = -w;
                 while sd <= w {
-                    along(t, sd, if sd < 0.0 { wood[4] } else if sd > w * 0.5 { wood[1] } else { wood[2] });
+                    let u = (sd / w).clamp(-1.0, 1.0);
+                    let col = pick(&wood, (0.58 - u * 0.30).clamp(0.12, 0.88));
+                    along(c, t, sd, col, 65, 6.4 - u * u * 0.7);
                     sd += 0.5;
                 }
                 t += 0.5;
@@ -289,33 +302,43 @@ fn draw_weapon(c: &mut Canvas, hx: f32, hy: f32, ang: f32, kind: &str, s: f32) {
         "fetish" => {
             let mut t = -2.0;
             while t < len {
-                along(t, 0.0, wood[2]);
+                along(c, t, 0.0, wood[2], 58, 6.0);
                 t += 0.5;
             }
             let bone = pal(&[0x8E8670, 0xB0A890, 0xCCC4AC, 0xE4DCC6, 0xF6F0E2]);
             for k in 0..5 {
-                along(len, k as f32 - 2.0, bone[3]);
-                along(len + 1.0, k as f32 - 2.0, bone[2]);
+                along(c, len, k as f32 - 2.0, bone[3], 90, 6.5);
+                along(c, len + 1.0, k as f32 - 2.0, bone[2], 80, 6.2);
             }
             let x = hx + ca * (len + 3.0);
             let y = hy + sa * (len + 3.0);
-            c.lit(x as i32, y as i32, hex(0x5FF2C8), 1.5);
-            c.lit(x as i32 + 1, y as i32, hex(0x5FF2C8), 1.2);
+            c.lit(x as i32, y as i32, hex(0x5FF2C8), 1.6);
+            c.lit(x as i32 + 1, y as i32, hex(0x5FF2C8), 1.3);
         }
         "cleaver" => {
             // breites Schlachterbeil: kurzer Griff, rechteckige Klinge mit heller Schneide
             let mut t = -4.0 * s;
             while t < 4.0 * s {
-                along(t, 0.0, wood[2]);
-                along(t, 1.0, wood[1]);
+                along(c, t, 0.0, wood[2], 60, 6.0);
+                along(c, t, 1.0, wood[1], 50, 5.6);
                 t += 0.5;
             }
             let mut t = 4.0 * s;
             while t < len {
                 let mut sd = -1.5 * s;
                 while sd <= 6.0 * s {
-                    let col = if sd > 5.0 * s { steel[5] } else if sd < -0.8 * s { steel[1] } else if ((t + sd) as i32) % 7 == 0 { steel[1] } else { steel[3] };
-                    along(t, sd, col);
+                    let col = if sd > 4.8 * s {
+                        steel[5]
+                    } else if sd < -0.8 * s {
+                        steel[1]
+                    } else if ((t + sd) as i32) % 7 == 0 {
+                        steel[1]
+                    } else {
+                        let u = (sd + 1.5 * s) / (7.5 * s).max(1.0);
+                        pick(&steel, (0.48 + u * 0.35).clamp(0.2, 0.9))
+                    };
+                    let sp = if sd > 4.8 * s { 245 } else { 215 };
+                    along(c, t, sd, col, sp, 6.5);
                     sd += 0.5;
                 }
                 t += 0.5;
@@ -324,46 +347,57 @@ fn draw_weapon(c: &mut Canvas, hx: f32, hy: f32, ang: f32, kind: &str, s: f32) {
         "trident" => {
             let mut t = -4.0;
             while t < len {
-                along(t, 0.0, wood[2]);
+                along(c, t, 0.0, wood[2], 62, 6.0);
                 t += 0.5;
             }
             for sd in [-3.0f32, 0.0, 3.0] {
                 let mut t = len - 6.0;
                 while t <= len + if sd == 0.0 { 2.0 } else { 0.0 } {
-                    along(t, sd * s, steel[3]);
+                    let col = if t > len - 1.5 { steel[5] } else { steel[3] };
+                    along(c, t, sd * s, col, 230, 6.6);
                     t += 0.5;
                 }
             }
             for sd in -3..=3 {
-                along(len - 6.0, sd as f32 * s, steel[2]);
+                along(c, len - 6.0, sd as f32 * s, gold[if sd < 0 { 4 } else { 2 }], 235, 6.5);
             }
         }
         _ => {
-            // Klinge mit Griff und Korb
+            // Klinge mit Griff, Parierstange und Hohlkehle
             let mut t = -4.0 * s;
             while t < 0.0 {
-                along(t, 0.0, wood[2]);
+                along(c, t, 0.0, wood[2], 65, 6.0);
                 t += 0.5;
             }
             for sd in -3..=3 {
-                along(0.0, sd as f32 * s, gold[if sd < 0 { 4 } else { 2 }]);
+                along(c, 0.0, sd as f32 * s, gold[if sd < 0 { 4 } else { 2 }], 235, 6.8);
             }
-            along(-4.5 * s, 0.0, gold[3]);
+            along(c, -4.5 * s, 0.0, gold[4], 240, 6.8);
             let wide = if kind == "greatsword" { 2.0 } else if kind == "rapier" { 0.5 } else { 1.5 };
             let mut t = 1.0;
             while t < len {
                 let curve = if kind == "cutlass" { (t / len).powi(2) * 3.0 * s } else { 0.0 };
                 let taper = if t > len - 3.0 { (len - t) / 3.0 } else { 1.0 };
-                let mut sd = -wide * s * taper;
-                while sd <= wide * s * taper {
-                    let col = if sd <= -wide * s * taper + 0.5 { steel[5] } else if sd >= wide * s * taper - 0.5 { steel[1] } else { steel[3] };
-                    along(t, sd - curve, col);
+                let hw = (wide * s * taper).max(0.25);
+                let mut sd = -hw;
+                while sd <= hw {
+                    let u = sd / hw;
+                    let col = if sd <= -hw + 0.5 {
+                        steel[5]
+                    } else if sd >= hw - 0.5 {
+                        steel[1]
+                    } else {
+                        pick(&steel, (0.65 - u * 0.25).clamp(0.22, 0.92))
+                    };
+                    let sp = if sd <= -hw + 0.5 { 248 } else { 225 };
+                    along(c, t, sd - curve, col, sp, 6.6 - u.abs() * 0.5);
                     sd += 0.5;
                 }
                 t += 0.5;
             }
         }
     }
+    c.cur_spec = sp0;
 }
 
 fn pistol(c: &mut Canvas, x: f32, y: f32, dir: f32, s: f32) {
@@ -601,32 +635,38 @@ fn paint_human(cv: &mut Canvas, dir: &str, p: &Pose, l: &Look, s: f32) {
                 let xo = if side { off * (t - 0.5) * 1.2 } else { 0.0 };
                 let mut k = 0.0;
                 while k < w {
-                    let rel = k / w;
-                    let col = if is_boot {
-                        if rel < 0.3 { boot[4] } else if rel > 0.75 { boot[1] } else { boot[2] }
+                    let rel = k / w.max(1.0);
+                    let cyl = (1.0 - (rel * 2.0 - 1.0).powi(2)).max(0.0).sqrt();
+                    let lv = (0.76 - rel * 0.50 + cyl * 0.12 - if near { 0.0 } else { 0.10 }).clamp(0.08, 0.94);
+                    let (col, sp) = if is_boot {
+                        (pick(&boot, (lv + 0.04).clamp(0.08, 0.95)), 95)
                     } else if sk {
-                        skin[if rel < 0.5 { 4 } else { 2 }]
+                        (pick(&skin, lv), 65)
                     } else if l.bird_legs {
                         let bl = if t < 0.35 { &coat } else { &boot };
-                        bl[if rel < 0.5 { 4 } else { 2 }]
+                        (pick(bl, lv), 70)
                     } else {
-                        pants[if rel < 0.3 { 4 } else if rel > 0.75 { 1 } else if near { 3 } else { 2 }]
+                        (pick(&pants, lv), 42)
                     };
-                    cx.c.put((x0 + k + xo) as i32, y as i32, col, 3.0);
+                    cx.c.cur_spec = sp;
+                    cx.c.put((x0 + k + xo) as i32, y as i32, col, 2.8 + cyl * 1.3);
                     k += 1.0;
                 }
                 if is_boot && (t - 0.62).abs() < 0.04 {
                     // umgeschlagene Stulpe: helle Kante über die ganze Breite
+                    cx.c.cur_spec = 105;
                     let mut k = 0.0;
                     while k < w {
-                        cx.c.put((x0 + k + xo) as i32, y as i32, if k < 1.0 { boot[5] } else { boot[4] }, 3.2);
+                        cx.c.put((x0 + k + xo) as i32, y as i32, if k < 1.0 { boot[5] } else { boot[4] }, 3.8);
                         k += 1.0;
                     }
                 }
                 if is_boot && (t - 0.8).abs() < 0.03 && !side {
                     // Schnalle
-                    cx.c.put((x0 + xo + w * 0.5) as i32, y as i32, hex(0x8A8A92), 3.3);
+                    cx.c.cur_spec = 220;
+                    cx.c.put((x0 + xo + w * 0.5) as i32, y as i32, hex(0xA6AAB4), 4.0);
                 }
+                cx.c.cur_spec = 0;
                 y += 1.0;
             }
             // Stiefelspitze bzw. Krallen
@@ -719,38 +759,39 @@ fn paint_human(cv: &mut Canvas, dir: &str, p: &Pose, l: &Look, s: f32) {
             let mut x = x0 - flare + sh + fem;
             while x <= x1 + flare - sh - fem {
                 let rel = (x - (x0 - flare)) / ((x1 + flare) - (x0 - flare)).max(1.0);
+                let cyl = (1.0 - (rel * 2.0 - 1.0).powi(2)).max(0.0).sqrt();
                 let open = !up && !side && rel > 0.38 && rel < 0.62 && !l.robe && y < t1;
                 let rp = if open { &shirt } else { &coat };
-                let mut v = if rel < 0.18 { 4 } else if rel > 0.82 { 1 } else { 3 };
+                let mut vf = 0.72 - rel * 0.44 + cyl * 0.14 - t.clamp(0.0, 1.4) * 0.08;
                 // Mieder: dunkle Schnürleiste mit hellen Kreuzbändern, darüber das Hemd
                 if open && l.female && t > 0.28 {
                     let mid = (rel - 0.5).abs() < 0.07;
                     let lace = ((y - t0) as i32 + (x as i32)) % 3 == 0 || ((y - t0) as i32 - (x as i32)).rem_euclid(3) == 0;
                     let c = if mid && lace { shirt[4] } else { coat[if rel < 0.5 { 2 } else { 1 }] };
-                    cx.c.put(x as i32, y as i32, c, 3.5);
+                    cx.c.put(x as i32, y as i32, c, 3.6);
                     x += 1.0;
                     continue;
                 }
                 // sanfte Rundung der Brust (Licht oben, Schatten darunter)
                 if l.female && !up && !side && t > 0.12 && t < 0.3 && ((rel - 0.32).abs() < 0.12 || (rel - 0.68).abs() < 0.12) {
-                    v += if t < 0.22 { 1 } else { -1 };
+                    vf += if t < 0.22 { 0.16 } else { -0.14 };
                 }
                 if !open && y > t1 {
-                    v -= 1;
+                    vf -= 0.14;
                 }
                 if !open && side && rel > 0.6 {
-                    v = 2;
+                    vf -= 0.12;
                 }
                 // Mantelschlitz hinten/Seite
                 if y > t1 && !l.robe && (rel - 0.5).abs() < 0.06 && !side {
                     if up {
-                        v = 0;
+                        vf = 0.04;
                     } else {
                         x += 1.0;
                         continue;
                     }
                 }
-                cx.c.put(x as i32, y as i32, rp[v.clamp(0, 5) as usize], 3.0 + (1.0 - (rel - 0.5).abs() * 2.0) * 2.0);
+                cx.c.put(x as i32, y as i32, pick(rp, vf.clamp(0.04, 0.96)), 3.0 + cyl * 2.2);
                 x += 1.0;
             }
             y += 1.0;
@@ -758,35 +799,41 @@ fn paint_human(cv: &mut Canvas, dir: &str, p: &Pose, l: &Look, s: f32) {
         // Revers / Knöpfe
         if !up && !side && !l.robe {
             let mx = (x0 + x1) / 2.0;
+            cx.c.cur_spec = 225;
             for k in 0..4 {
                 let yy = t0 + (3.0 + k as f32 * 3.0) * s;
-                cx.c.put((mx - 4.0 * s) as i32, yy as i32, hex(0xC9A04A), 4.0);
+                cx.c.put((mx - 4.0 * s) as i32, yy as i32, hex(0xD8B052), 4.4);
             }
+            cx.c.cur_spec = 0;
             let mut y = t0;
             while y < t0 + 6.0 * s {
-                cx.c.put((mx - 3.0 * s) as i32, y as i32, coat[5], 4.0);
-                cx.c.put((mx + 3.0 * s) as i32, y as i32, coat[1], 4.0);
+                cx.c.put((mx - 3.0 * s) as i32, y as i32, coat[5], 4.2);
+                cx.c.put((mx + 3.0 * s) as i32, y as i32, coat[1], 4.2);
                 y += 1.0;
             }
         }
         // Gürtel
         let by = cx.y(top(-17.0));
+        cx.c.cur_spec = 95;
         let mut x = x0;
         while x <= x1 {
-            cx.c.put(x as i32, by as i32, hex(0x1E1614), 4.0);
-            cx.c.put(x as i32, by as i32 + 1, hex(0x2E2420), 4.0);
+            cx.c.put(x as i32, by as i32, hex(0x281E1A), 4.2);
+            cx.c.put(x as i32, by as i32 + 1, hex(0x16100E), 4.1);
             x += 1.0;
         }
         if !up {
             let bx = if side { x1 - 3.0 } else { (x0 + x1) / 2.0 - 1.0 };
-            cx.c.rect_r(bx as i32, by as i32 - 1, 3, 3, hex(0xD8B24A), 5.0);
-            cx.c.put(bx as i32, by as i32 - 1, hex(0xF8E08A), 5.0);
+            cx.c.cur_spec = 235;
+            cx.c.rect_r(bx as i32, by as i32 - 1, 3, 3, hex(0xD8B24A), 5.2);
+            cx.c.put(bx as i32, by as i32 - 1, hex(0xFFE898), 5.4);
         }
+        cx.c.cur_spec = 0;
         if let Some(sc) = l.sash {
             let sp = r(sc);
             let mut x = x0;
             while x <= x1 {
-                cx.c.put(x as i32, by as i32 - 2, sp[3], 4.0);
+                let rel = (x - x0) / (x1 - x0).max(1.0);
+                cx.c.put(x as i32, by as i32 - 2, pick(&sp, (0.68 - rel * 0.32).clamp(0.15, 0.88)), 4.2);
                 x += 1.0;
             }
         }
@@ -796,8 +843,8 @@ fn paint_human(cv: &mut Canvas, dir: &str, p: &Pose, l: &Look, s: f32) {
             while y < cx.y(top(-4.0)) {
                 let mut x = x0 + 2.0 * s;
                 while x < x1 - 2.0 * s {
-                    let rel = (x - x0) / (x1 - x0);
-                    cx.c.put(x as i32, y as i32, ap[if rel < 0.3 { 4 } else { 2 }], 4.0);
+                    let rel = (x - x0) / (x1 - x0).max(1.0);
+                    cx.c.put(x as i32, y as i32, pick(&ap, (0.68 - rel * 0.36).clamp(0.15, 0.88)), 4.2);
                     x += 1.0;
                 }
                 y += 1.0;
@@ -837,7 +884,9 @@ fn paint_human(cv: &mut Canvas, dir: &str, p: &Pose, l: &Look, s: f32) {
                             cx.c.put(px as i32 + k, py as i32 + 1, coat[if flip { 2 } else { 4 }], 4.2);
                         }
                     }
-                    cx.c.put((px + 2.0 * s) as i32, py as i32 + 1, hex(0xC9A04A), 4.8);
+                    cx.c.cur_spec = 220;
+                    cx.c.put((px + 2.0 * s) as i32, py as i32 + 1, hex(0xD8B052), 4.9);
+                    cx.c.cur_spec = 0;
                 }
             }
             // Saum: dunkle Kante, darüber ein heller Umschlag
@@ -853,6 +902,7 @@ fn paint_human(cv: &mut Canvas, dir: &str, p: &Pose, l: &Look, s: f32) {
             }
             if !up && !sk {
                 // Bandelier von der Schulter zur Hüfte, mit Messingschnalle
+                cx.c.cur_spec = 92;
                 let (sx0, sy0, sx1, sy1) = if side { (x0 + 2.0 * s, t0 + 1.0, x1 - 1.0 * s, by - 1.0) } else { (x1 - 2.5 * s, t0 + 1.0, x0 + 3.0 * s, by - 1.0) };
                 let n = ((sx1 - sx0).abs().max((sy1 - sy0).abs())) as i32;
                 for k in 0..=n {
@@ -867,13 +917,17 @@ fn paint_human(cv: &mut Canvas, dir: &str, p: &Pose, l: &Look, s: f32) {
                     }
                 }
                 let (bxm, bym) = (sx0 + (sx1 - sx0) * 0.45, sy0 + (sy1 - sy0) * 0.45);
-                cx.c.rect_r(bxm as i32, bym as i32, 2, 2, hex(0xB88A3A), 5.0);
-                cx.c.put(bxm as i32, bym as i32, hex(0xF0D080), 5.1);
+                cx.c.cur_spec = 230;
+                cx.c.rect_r(bxm as i32, bym as i32, 2, 2, hex(0xB88A3A), 5.1);
+                cx.c.put(bxm as i32, bym as i32, hex(0xF8DC8C), 5.3);
                 // Gürteltasche
+                cx.c.cur_spec = 92;
                 let tx = if side { x0 + 1.0 } else { x0 + 1.0 * s };
                 cx.c.rect_r(tx as i32, by as i32 + 1, (3.0 * s) as i32, (3.0 * s) as i32, leather[2], 5.0);
                 cx.c.hline(tx as i32, (tx + 3.0 * s) as i32 - 1, by as i32 + 1, leather[4]);
-                cx.c.put((tx + 1.0 * s) as i32, by as i32 + 2, hex(0xB88A3A), 5.2);
+                cx.c.cur_spec = 225;
+                cx.c.put((tx + 1.0 * s) as i32, by as i32 + 2, hex(0xD8B052), 5.3);
+                cx.c.cur_spec = 0;
             }
         }
     }
@@ -1041,12 +1095,20 @@ fn paint_human(cv: &mut Canvas, dir: &str, p: &Pose, l: &Look, s: f32) {
                 cx.c.tube(&[(gx, hy - 1.0 * s), (gx + g * 4.0 * s, hy + 1.0 * s), (gx + g * 3.0 * s, hy + 5.0 * s)], 3.0 * s, 1.0, &fin, 0.4, 8.0);
             }
         } else {
-            // Gesicht
-            cx.c.dome(hx, hy, hr * 0.95, hr, &skin, 5.0, 8.0, 0.45, 0.08);
+            // Gesicht mit plastischer 3D-Modellierung (Nasenrücken, Wangenknochen, Kinn, lebendige Augen)
+            cx.c.dome(hx, hy, hr * 0.95, hr, &skin, 5.2, 8.0, 0.45, 0.04);
             if side {
-                // Nase
-                cx.c.put((hx + hr * 0.95) as i32, (hy + 1.0 * s) as i32, skin[3], 8.0);
-                cx.c.put((hx + hr * 0.95) as i32, (hy + 2.0 * s) as i32, skin[2], 8.0);
+                // Nase im Profil
+                cx.c.put((hx + hr * 0.95) as i32, (hy + 0.5 * s) as i32, skin[4], 8.6);
+                cx.c.put((hx + hr * 0.95) as i32, (hy + 1.5 * s) as i32, skin[3], 8.5);
+                cx.c.put((hx + hr * 0.92) as i32, (hy + 2.5 * s) as i32, skin[1], 8.2);
+            } else if !up && !l.skull_paint {
+                // Nasenrücken & Nasenspitze + feiner Nasenschatten
+                cx.c.put(hx as i32, (hy + 1.2 * s) as i32, skin[4], 8.7);
+                cx.c.put(hx as i32, (hy + 2.2 * s) as i32, skin[4], 8.9);
+                cx.c.put(hx as i32, (hy + 3.1 * s) as i32, skin[1], 8.2);
+                // Kinn-Glanzlicht
+                cx.c.put((hx - 0.5 * s) as i32, (hy + 6.5 * s) as i32, skin[4], 8.6);
             }
             if !up {
                 let ey = hy + 0.5 * s;
@@ -1056,24 +1118,36 @@ fn paint_human(cv: &mut Canvas, dir: &str, p: &Pose, l: &Look, s: f32) {
                     if pat {
                         cx.c.rect_r(*e as i32 - 1, ey as i32 - 1, (3.0 * s) as i32, (3.0 * s) as i32, hex(0x0B0B0E), 8.5);
                     } else {
-                        cx.c.put(*e as i32, ey as i32, hex(0x1A1216), 8.5);
-                        cx.c.put(*e as i32, ey as i32 + 1, hex(0x1A1216), 8.5);
-                        // Glanz im Auge
+                        // Sklera am Außenwinkel, Iris, dunkle Pupille und Hornhaut-Glanzpunkt
+                        let sclera_x = if side { *e as i32 - 1 } else if i == 0 { *e as i32 - 1 } else { *e as i32 + 2 };
                         if !l.drowned {
-                            cx.c.lit(*e as i32, ey as i32, hex(0xE8E4F0), 0.35);
+                            cx.c.put(sclera_x, ey as i32, hex(0xD8D4DE), 8.4);
                         }
-                        cx.c.put(*e as i32 + 1, ey as i32, if l.drowned { hex(l.eye_col) } else { hex(0x3A2E3A) }, 8.5);
-                        if l.drowned {
-                            cx.c.glow(*e as i32, ey as i32, hex(l.eye_col), 1.3);
-                            cx.c.glow(*e as i32 + 1, ey as i32, hex(l.eye_col), 1.3);
+                        cx.c.put(*e as i32, ey as i32, hex(0x140E12), 8.6);
+                        cx.c.put(*e as i32, ey as i32 + 1, hex(0x181016), 8.5);
+                        let iris_col = if l.drowned {
+                            hex(l.eye_col)
+                        } else if l.eye_col != 0x1A1216 {
+                            shade(hex(l.eye_col), 0.92)
+                        } else {
+                            hex(0x3E3242)
+                        };
+                        cx.c.put(*e as i32 + 1, ey as i32, iris_col, 8.6);
+                        cx.c.put(*e as i32 + 1, ey as i32 + 1, shade(iris_col, 0.78), 8.5);
+                        if !l.drowned {
+                            cx.c.lit(*e as i32, ey as i32, hex(0xF4F2FA), 0.42);
+                            cx.c.spec(*e as i32, ey as i32, 240);
+                        } else {
+                            cx.c.glow(*e as i32, ey as i32, hex(l.eye_col), 1.35);
+                            cx.c.glow(*e as i32 + 1, ey as i32, hex(l.eye_col), 1.35);
                         }
-                        // Braue
-                        cx.c.put(*e as i32, ey as i32 - 2, shade(hex(l.hair_col), 0.8), 8.5);
-                        cx.c.put(*e as i32 + 1, ey as i32 - 2, shade(hex(l.hair_col), 0.8), 8.5);
+                        // Braue mit plastischem Brauenbogen
+                        cx.c.put(*e as i32, ey as i32 - 2, shade(hex(l.hair_col), 0.78), 8.8);
+                        cx.c.put(*e as i32 + 1, ey as i32 - 2, shade(hex(l.hair_col), 0.72), 8.8);
                         // Wimpern am äußeren Augenwinkel
                         if l.female {
                             let ox = if side || *e > hx { 2 } else { -1 };
-                            cx.c.put(*e as i32 + ox, ey as i32 - 1, hex(0x140C10), 8.6);
+                            cx.c.put(*e as i32 + ox, ey as i32 - 1, hex(0x120A0E), 8.7);
                         }
                     }
                 }
@@ -1595,11 +1669,19 @@ fn dead_frame(c: &mut Canvas, l: &Look, s: f32) {
 
 /// Ein Bild einer Figur.
 /// Feinschliff jeder Figur (Spieler, NPCs, Gegner gleich): Formlicht an den Kanten, Stoffstruktur und
-/// Mantelfalten, Haarsträhnen, glatte Haut, Metallglanz und Mikrorelief für die Beleuchtung.
+/// Mantelfalten, Haarsträhnen, glatte Haut mit Subsurface-Wärme, Metallglanz und Mikrorelief.
 fn finish(c: &mut Canvas, l: &Look, seed: i32) {
     let skin = if l.skeleton { Vec::new() } else { r(l.skin) };
     let hair = r(l.hair_col);
     let coat = r(l.coat);
+    let near_pal = |pal: &[Rgba], p: Rgba| -> bool {
+        pal.iter().any(|q| {
+            let dr = p[0] as i32 - q[0] as i32;
+            let dg = p[1] as i32 - q[1] as i32;
+            let db = p[2] as i32 - q[2] as i32;
+            dr * dr + dg * dg + db * db <= 450
+        })
+    };
     let (w, h) = (c.w, c.h);
     let mut out = c.col.clone();
     let solid = |c: &Canvas, x: i32, y: i32| c.a(x, y) > 0;
@@ -1610,9 +1692,9 @@ fn finish(c: &mut Canvas, l: &Look, seed: i32) {
             if p[3] == 0 {
                 continue;
             }
-            let is_skin = skin.contains(&p);
-            let is_hair = hair.contains(&p);
-            let is_coat = coat.contains(&p);
+            let is_skin = near_pal(&skin, p);
+            let is_hair = !is_skin && near_pal(&hair, p);
+            let is_coat = !is_skin && !is_hair && near_pal(&coat, p);
             let (rf, gf, bf) = (p[0] as f32 / 255.0, p[1] as f32 / 255.0, p[2] as f32 / 255.0);
             let lum = 0.299 * rf + 0.587 * gf + 0.114 * bf;
             let mx = rf.max(gf).max(bf);
@@ -1622,43 +1704,48 @@ fn finish(c: &mut Canvas, l: &Look, seed: i32) {
             let tl = !solid(c, x - 1, y) || !solid(c, x, y - 1);
             let br = !solid(c, x + 1, y) || !solid(c, x, y + 1);
             if tl && !br {
-                k *= 1.1;
+                k *= 1.11;
             } else if br && !tl {
-                k *= 0.87;
+                k *= 0.86;
             }
             let n = h01(x, y, seed);
             if is_hair {
-                // Strähnen: schräge helle und dunkle Linien
+                // Strähnen: schräge helle und dunkle Linien + Haarglanz
                 let st = (x * 2 + y + seed) % 5;
-                k *= if st == 0 { 1.1 } else if st == 3 { 0.92 } else { 1.0 };
+                k *= if st == 0 { 1.11 } else if st == 3 { 0.91 } else { 1.0 };
+                c.emi[i][3] = c.emi[i][3].max(86);
             } else if is_skin {
-                // Haut bleibt glatt, nur ein Hauch Wärme oben
+                // Haut bleibt seidig-glatt mit natürlichem Hautglanz
                 if tl {
-                    k *= 1.03;
+                    k *= 1.04;
                 }
+                c.emi[i][3] = c.emi[i][3].max(46);
             } else {
                 // Gewebe: feines Rauschen und Köperbindung
-                k *= 0.965 + n * 0.07;
+                k *= 0.97 + n * 0.06;
                 if (x + y) & 1 == 0 {
-                    k *= 1.02;
+                    k *= 1.018;
                 }
                 if is_coat {
-                    // senkrechte Falten im Mantel
+                    // senkrechte Falten im Mantel + Relief-Wellen
                     let fo = ((x as f32 - w as f32 * 0.5) * 1.35 + y as f32 * 0.12 + seed as f32 * 0.7).sin();
-                    if fo > 0.84 {
-                        k *= 0.88;
-                    } else if fo < -0.92 {
+                    if fo > 0.80 {
+                        k *= 0.89;
+                        c.rel[i] -= 0.45;
+                    } else if fo < -0.86 {
                         k *= 1.07;
+                        c.rel[i] += 0.45;
                     }
+                    c.emi[i][3] = c.emi[i][3].max(42);
                 }
             }
             out[i] = shade(p, k);
             if !is_skin {
-                c.rel[i] += (n - 0.5) * 0.9;
+                c.rel[i] += (n - 0.5) * 0.75;
             }
-            // Stahl, Silber und Knochen glänzen
-            if sat < 0.14 && lum > 0.42 && !is_skin && !is_hair {
-                c.emi[i][3] = c.emi[i][3].max(150);
+            // Stahl, Silber, Messing und Knochen glänzen im PBR-Shader
+            if sat < 0.16 && lum > 0.40 && !is_skin && !is_hair {
+                c.emi[i][3] = c.emi[i][3].max(185);
             }
         }
     }

@@ -328,10 +328,9 @@ impl Frame {
             sway: 0,
         });
     }
-    /// Spiegelbild eines Sprites im Wasser: kopfüber unter der Wasserlinie `y`, in waagrechten
-    /// Streifen wellig verschoben. `tint.a` = Deckkraft der Spiegelung.
-    pub fn reflect(&mut self, s: &Spr, x: f32, y: f32, scale: f32, tint: [u8; 4], t: f32) {
-        let n = 24;
+    /// Spiegelbild eines Sprites im Wasser: kopfüber unter der Wasserlinie `y`, im Shader
+    /// pixelgenau wellig verzerrt. `tint.a` = Deckkraft der Spiegelung.
+    pub fn reflect(&mut self, s: &Spr, x: f32, y: f32, scale: f32, tint: [u8; 4], _t: f32) {
         let h = s.h as f32;
         // Teil über dem Fuß (über Wasser) wird gespiegelt
         let above = (s.ay as f32).min(h);
@@ -339,29 +338,26 @@ impl Frame {
             return;
         }
         let ax = s.ax as f32 * scale;
-        for i in 0..n {
-            let a0 = above * i as f32 / n as f32;
-            let a1 = above * (i + 1) as f32 / n as f32;
-            // Bildzeilen (von oben) im Atlas: Fuß minus Abstand
-            let r0 = s.ay as f32 - a0;
-            let r1 = s.ay as f32 - a1;
-            let wob = ((y + a0 * scale) * 0.09 + t * 1.8).sin() * (1.5 + a0 * 0.03);
-            let x0 = x - ax + wob;
-            let x1 = x0 + s.w as f32 * scale;
-            let (yy0, yy1) = (y + a0 * scale, y + a1 * scale);
-            let u0 = s.x as f32 / ATLAS_PX;
-            let u1 = (s.x as f32 + s.w as f32) / ATLAS_PX;
-            let v0 = (s.y as f32 + r0) / ATLAS_PX;
-            let v1 = (s.y as f32 + r1) / ATLAS_PX;
-            self.reflections.push(Q {
-                p: [[x0, yy0], [x1, yy0], [x1, yy1], [x0, yy1]],
-                uv: [[u0, v0], [u1, v0], [u1, v1], [u0, v1]],
-                col: tint,
-                ext: [s.page as u8, modes::ATLAS, 0, flags::REFLECT],
-                prm: [0.0, 0.0],
-                sway: 0,
-            });
-        }
+        let pad_px = 4.0;
+        let pad = pad_px * scale;
+        let x0 = x - ax - pad;
+        let x1 = x - ax + s.w as f32 * scale + pad;
+        let (yy0, yy1) = (y, y + above * scale);
+        let u_min = s.x as f32 / ATLAS_PX;
+        let u_max = (s.x as f32 + s.w as f32) / ATLAS_PX;
+        let u_pad = pad_px / ATLAS_PX;
+        let u0 = u_min - u_pad;
+        let u1 = u_max + u_pad;
+        let v0 = (s.y as f32 + s.ay as f32) / ATLAS_PX;
+        let v1 = (s.y as f32 + s.ay as f32 - above) / ATLAS_PX;
+        self.reflections.push(Q {
+            p: [[x0, yy0], [x1, yy0], [x1, yy1], [x0, yy1]],
+            uv: [[u0, v0], [u1, v0], [u1, v1], [u0, v1]],
+            col: tint,
+            ext: [s.page as u8, modes::ATLAS, 0, flags::REFLECT],
+            prm: [u_min, u_max],
+            sway: 0,
+        });
     }
     pub fn ground_rect(&mut self, x: f32, y: f32, w: f32, h: f32, mode: u8) {
         self.ground.push(Self::quad_rect(x, y, w, h, [255; 4], mode, 0));
@@ -450,7 +446,7 @@ pub fn pack_frame(f: ResMut<Frame>, p: ResMut<Packed>, time: Res<Time>) {
 }
 fn pack(mut f: ResMut<Frame>, mut p: ResMut<Packed>, time: Res<Time>) {
     let f = &mut *f;
-    f.world.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal).then(a.1.cmp(&b.1)));
+    f.world.sort_unstable_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
     p.verts.clear();
     let mut start = 0u32;
     let mut r = [(0u32, 0u32); 6];
@@ -483,10 +479,10 @@ fn pack(mut f: ResMut<Frame>, mut p: ResMut<Packed>, time: Res<Time>) {
     let (vx, vy, vw, vh) = f.view();
     let (cx, cy) = (vx + vw * 0.5, vy + vh * 0.5);
     f.lights.retain(|l| l.x + l.r > vx - 40.0 && l.x - l.r < vx + vw + 40.0 && l.y - l.z + l.r > vy - 40.0 && l.y - l.z - l.r < vy + vh + 120.0);
-    f.lights.sort_by(|a, b| {
+    f.lights.sort_unstable_by(|a, b| {
         let da = (a.x - cx).powi(2) + (a.y - cy).powi(2);
         let db = (b.x - cx).powi(2) + (b.y - cy).powi(2);
-        da.partial_cmp(&db).unwrap()
+        da.total_cmp(&db)
     });
     let n = f.lights.len().min(MAX_LIGHTS);
     for (i, l) in f.lights.iter().take(n).enumerate() {
