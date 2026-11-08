@@ -83,7 +83,8 @@ fn dtext(s: &str) -> std::borrow::Cow<'_, str> {
 pub fn display_width(art: &Art, s: &str, size: f32) -> f32 {
     let k = size / (14.0 * crate::art::DK);
     let mut w = 0.0;
-    for ch in dtext(s).chars() {
+    let dt = dtext(s);
+    for ch in dt.chars() {
         w += match art.dglyphs.get(&dkey(ch)) {
             Some(g) if ch != ' ' => g.adv,
             _ => 5.2 * crate::art::DK,
@@ -102,7 +103,8 @@ pub fn display(f: &mut Frame, art: &Art, s: &str, x: f32, y: f32, col: [u8; 4], 
         Al::R => x - w,
     };
     let page = sw_art::atlas::PAGE as f32;
-    for ch in dtext(s).chars() {
+    let dt = dtext(s);
+    for ch in dt.chars() {
         let Some(g) = art.dglyphs.get(&dkey(ch)) else {
             cx += 5.2 * crate::art::DK * k;
             continue;

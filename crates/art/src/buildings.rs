@@ -70,14 +70,14 @@ pub fn timber_wall(c: &mut Canvas, x0: i32, y0: i32, w: i32, h: i32, seed: i32) 
         if bh <= 6 {
             for i in 0..bw {
                 if y + bh < y0 + h {
-                    c.darken(x + i, y + bh, 0.78);
+                    c.mul(x + i, y + bh, 0.78);
                 }
             }
         }
         if bw <= 6 {
             for j in 0..bh {
                 if x + bw < x0 + w {
-                    c.darken(x + bw, y + j, 0.80);
+                    c.mul(x + bw, y + j, 0.80);
                 }
             }
         }
