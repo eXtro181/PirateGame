@@ -925,7 +925,9 @@ pub struct ChunkOut {
 /// Rand der Vorberechnung: Materialraster, seitlich (Böschungen), oben (Ränder), unten (Hänge)
 const PAD: i32 = 4;
 const MX: i32 = BANK_PX + 4;
-const MN: i32 = RIM_PX + 16;
+const MN: i32 = RIM_PX + 34;
+/// Länge des Schlagschattens einer Wand auf der tieferen Ebene (px, ≤ MN)
+const SHADOW_PX: i32 = 46;
 const MS: i32 = SLOPE_PX + 2;
 /// Festungsmauern wachsen mit dem Höhenunterschied (bis vier Ebenen): Rand unten dann größer
 const MS_HUB: i32 = FACE_PX * 4 + 2;
@@ -1383,18 +1385,25 @@ impl ChunkBake {
                     c.ev[i] = 0.0;
                     continue;
                 }
-                // Fuß der Klippe darüber und seitlicher Böschungen: Umgebungsverdeckung
+                // Fuß der Klippe darüber und seitlicher Böschungen: Umgebungsverdeckung und ein
+                // Schlagschatten der Wand auf der tieferen Ebene (hebt die obere Ebene ab)
                 let mut ao = 0.0f32;
                 let d = hi_u[pi];
                 if d < 14 {
                     ao = (1.0 - d as f32 / 14.0).powf(1.5);
+                }
+                if (d as i32) < SHADOW_PX {
+                    let k = 1.0 - d as f32 / SHADOW_PX as f32;
+                    let wob = en.at(px * 2 + 5, py) * 0.08;
+                    ao = ao.max((k * k * 0.72 + wob * k).clamp(0.0, 1.0));
                 }
                 let d = hi_l[pi].min(hi_r[pi]);
                 if d < 9 {
                     ao = ao.max((1.0 - d as f32 / 9.0) * 0.8);
                 }
                 if ao > 0.0 {
-                    col = shade(col, 1.0 - ao * 0.45);
+                    col = shade(col, 1.0 - ao * 0.55);
+                    col = mix(col, hex(0x0C1020), ao * 0.12);
                 }
                 c.put(x, y, col, rel);
                 let i = c.idx(x, y);
@@ -1505,7 +1514,7 @@ fn slope_pixel(mats: &mut Materials, en: &EdgeNoise, c: &mut Canvas, x: i32, y: 
     let side = if dir.0 < 0.0 { -0.05 } else if dir.0 > 0.0 { 0.04 } else { 0.03 };
     let e = 1.0 - d;
     // sanfte Böschung: kaum dunkler zum Fuß, selten Fels, eher offene Erde
-    let mut col = shade(stex.col[si], 0.99 - e * e * 0.15 + side + n2 * 0.04);
+    let mut col = shade(stex.col[si], 0.97 - e * e * 0.3 + side * 1.8 + n2 * 0.04);
     let mut rel = d * 13.0;
     if d > 0.93 {
         col = shade(stex.col[si], 0.8);
@@ -1527,7 +1536,7 @@ fn slope_pixel(mats: &mut Materials, en: &EdgeNoise, c: &mut Canvas, x: i32, y: 
     }
     c.put(x, y, col, rel);
     let i = c.idx(x, y);
-    c.up[i] = 20;
+    c.up[i] = (20.0 + e * 70.0) as u8;
     c.ev[i] = 0.0;
     true
 }
@@ -1761,6 +1770,10 @@ fn face_pixel<M: TerrainMap>(m: &M, mats: &mut Materials, en: &EdgeNoise, c: &mu
 /// Felsausbissen, offener Erde, Halmen und Steinen und einer weichen, hellen Kante oben.
 #[allow(clippy::too_many_arguments)]
 fn hill_pixel(mats: &mut Materials, en: &EdgeNoise, c: &mut Canvas, x: i32, y: i32, px: i32, py: i32, fy: i32, hgt: i32, bp: &BiomePal, b: Biome, top: Mat, ev: f32, water: bool) {
+    // Natürliche Kante zwischen zwei Ebenen (Nutzerwunsch 7.11.: deutlich räumlich statt
+    // bodenartig): überhängende Graslippe mit Lichtkante, dunkler Unterschnitt, ein kurzer
+    // bewachsener Hang, darunter eine Erd- und Felswand mit Gesteinsschichten, Absätzen und
+    // Rissen, nach unten immer dunkler; die Normalen zeigen als steile Fläche zur Kamera.
     let t = fy as f32 / hgt as f32;
     let surf = match top {
         Mat::Hex | Mat::Marble | Mat::Cobble | Mat::Plank => if b == Biome::Fire { Mat::Ash } else { Mat::Dirt },
@@ -1768,61 +1781,117 @@ fn hill_pixel(mats: &mut Materials, en: &EdgeNoise, c: &mut Canvas, x: i32, y: i
     };
     let tex = mats.get(surf, b);
     let ti = tex.idx(px.rem_euclid(TEX), py.rem_euclid(TEX));
+    let base = tex.col[ti];
     let n = en.at(px * 3 + 31, py * 3 + 5);
     let n2 = en.at(px * 7, py * 7 + 7);
     let n3 = en.at(px / 2 + 913, py + 77);
-    // sanfter Verlauf: der Boden läuft weiter, zum Fuß hin nur leicht im Schatten
-    let mut col = shade(tex.col[ti], 0.99 - t * 0.07 - t * t * 0.08 + n2 * 0.04);
-    let mut rel = (1.0 - t) * 18.0;
-    let lip = 2.0 + (n * 0.5 + 0.5) * 3.0;
+    // je Spalte schwankend: Tiefe der Lippe und wie weit der Bewuchs hinabreicht
+    let lip = 3.0 + (en.at(px * 2, 501) * 0.5 + 0.5) * 5.0 + ((px as f32 * 0.45).sin() * 1.2);
+    let green = matches!(surf, Mat::Grass | Mat::Meadow | Mat::Moss | Mat::Snow | Mat::Sand | Mat::Ash | Mat::Dirt);
+    let shoulder = lip + 8.0 + (en.at(px * 3 + 7, 733) * 0.5 + 0.5) * 22.0;
+    let fyf = fy as f32;
+    let (col, mut rel, up);
     if fy == 0 {
-        // Abschlusslinie: trennt die obere Ebene klar vom Hang
-        col = shade(tex.col[ti], 0.78);
-    } else if (fy as f32) < lip + 1.0 {
-        // heller Saum an der Kante
-        col = shade(tex.col[ti], 1.16);
-        rel += 1.5;
+        // Abschlusslinie: trennt die obere Ebene klar von der Kante
+        col = shade(base, 0.7);
+        rel = 3.0;
+        up = 30u8;
+    } else if fyf < lip {
+        // überhängende Lippe: heller Saum, der Licht fängt
+        let k = fyf / lip;
+        col = shade(base, 1.24 - k * 0.12);
+        rel = 4.0 - k;
+        up = (40.0 + k * 60.0) as u8;
+    } else if fyf < lip + 2.5 {
+        // Unterschnitt: tiefer Schatten unter der Lippe
+        col = shade(base, 0.42);
+        rel = -1.0;
+        up = 230;
+    } else if green && fyf < shoulder {
+        // kurzer bewachsener Hang, schon deutlich dunkler als die Fläche oben
+        let k = (fyf - lip) / (shoulder - lip).max(1.0);
+        let mut cc = shade(base, 0.8 - k * 0.16 + n2 * 0.04);
+        // Halme und Wurzeln hängen senkrecht
+        if hash(px, (fy / 5) as i32, 61) % 9 == 0 {
+            cc = shade(cc, 1.15);
+        } else if hash(px / 2, 3, 67) % 13 == 0 && k > 0.4 {
+            cc = shade(cc, 0.62);
+        }
+        col = cc;
+        rel = 2.0 - k;
+        up = (130.0 + k * 50.0) as u8;
     } else {
-        let mid = 1.0 - ((t - 0.5) * 2.0).abs().min(1.0);
-        // flache Grasstufen quer zum Hang, gewellt: oben ein Lichtsaum, darunter ein Hauch Schatten
-        let tw = (fy as f32 + n3 * 16.0 + 40.0).rem_euclid(42.0);
-        if tw < 2.0 {
-            col = shade(col, 1.05);
-            rel += 0.8;
-        } else if tw < 6.0 {
-            col = shade(col, 0.93 + (tw - 2.0) * 0.015);
-            rel -= 0.4;
+        // Erd- und Felswand aus unregelmäßigen Brocken (breiter als hoch, Licht von links oben,
+        // dunkle Fugen), dazwischen Erde; nach unten immer dunkler
+        let top_r = if green { shoulder } else { lip + 2.5 };
+        let k = ((fyf - top_r) / (hgt as f32 - top_r).max(1.0)).clamp(0.0, 1.0);
+        let sc = 1.0 / 17.0;
+        let (wx, wy) = (px as f32 * sc, (py as f32 + n3 * 6.0) * sc * 2.0);
+        let (d1, d2, id) = worley(wx, wy, 0, 41);
+        let (dx1, _, _) = worley(wx + sc, wy, 0, 41);
+        let (dy1, _, _) = worley(wx, wy + sc * 2.0, 0, 41);
+        let lgt = ((dx1 - d1) * 0.7 + (dy1 - d1) * 0.9) * 12.0;
+        let e = d2 - d1;
+        let tint = (id % 7) as f32 * 0.025 - 0.07;
+        // senkrechte Regen- und Sickerspuren
+        let streak = en.at(px * 5 + 3, 900).max(0.0) * 0.12 * (0.4 + k);
+        let mut v = 0.6 - k * 0.32 + tint - lgt * 0.35 + n2 * 0.04 - streak;
+        let mut r = 2.6 - k + (e * 5.0).min(1.6);
+        let seam = e < 0.07;
+        if seam {
+            v = 0.12 + (1.0 - k) * 0.08;
+            r = -1.0;
         }
-        // seltene Felsausbisse in der Hangmitte, offene Erde drumherum
-        if n > 0.56 - mid * 0.08 {
-            col = pickf(&bp.cliff, (0.52 + n * 0.3 + n2 * 0.2 - t * 0.12).clamp(0.0, 1.0));
-            rel += 2.5 + n2 * 2.0;
-        } else if n > 0.45 - mid * 0.08 {
-            col = mix(col, pickf(&bp.path[0..4], 0.45 + n2 * 0.3), 0.45);
+        let mut cc = pickf(&bp.cliff, v.clamp(0.0, 1.0));
+        // Erde zwischen den Brocken (oben mehr)
+        if !seam && n > 0.3 && k < 0.55 {
+            cc = mix(cc, pickf(&bp.path[0..4], 0.3 + n2 * 0.2), 0.4 * (1.0 - k));
         }
-        // Halme quer zum Hang
-        if b != Biome::Fire && hash(px / 2, py / 3, 61) % 23 == 0 {
-            col = shade(col, 1.12);
-            rel += 1.0;
+        // Moospolster auf den Oberseiten der Brocken in grünen Gebieten
+        if green && !seam && b != Biome::Fire && b != Biome::Frost && n2 > 0.4 && lgt < -0.05 {
+            cc = mix(cc, pickf(&bp.moss, 0.35 + n * 0.2), 0.55);
+            r += 0.8;
         }
-        // einzelne Steine
-        if hash(px / 4, py / 4, 93) % 71 == 0 {
-            col = pickf(&bp.stone, 0.7);
-            rel += 2.0;
+        // Eiszapfen unter der Lippe im Frost
+        if b == Biome::Frost && k < 0.3 && hash(px, 7, 19) % 7 == 0 && (fyf - top_r) < 6.0 + (hash(px, 9, 23) % 18) as f32 {
+            cc = mix(cc, hex(0xD2E4F0), 0.7);
+            r += 1.2;
         }
+        // Glut in manchen Fugen der Aschebucht
+        if seam && hash(id as i32, 3, 31) % 6 == 0 {
+            if let Some(gc) = bp.crack_glow {
+                c.put(x, y, gc, 0.0);
+                c.glow(x, y, gc, 0.5);
+                let i = c.idx(x, y);
+                c.up[i] = 220;
+                c.ev[i] = ev;
+                return;
+            }
+        }
+        col = cc;
+        rel = r;
+        up = (190.0 + k * 45.0) as u8;
     }
-    // Fuß des Hangs: deutliche Verdeckung, am Wasser nass
+    let mut col = col;
+    // Fuß: Geröll und tiefe Verdeckung, am Wasser nass
     if t > 0.8 {
         let k = (t - 0.8) / 0.2;
-        col = shade(col, 1.0 - k * k * 0.26);
+        col = shade(col, 1.0 - k * k * 0.45);
+        if hash(px / 3, py / 3, 93) % 7 == 0 && k > 0.4 {
+            col = pickf(&bp.stone, 0.5 + n2 * 0.15);
+            rel += 1.5;
+        }
         if water {
-            col = mix(col, hex(0x1A3846), k * 0.3);
+            col = mix(col, hex(0x1A3846), k * 0.35);
         }
     }
     c.put(x, y, col, rel);
     let i = c.idx(x, y);
-    c.up[i] = 22;
+    c.up[i] = up;
     c.ev[i] = ev;
+    if water && t > 0.92 {
+        c.spec(x, y, 140);
+    }
 }
 
 /// Weg zwischen den Ebenen in der Natur: festgetretene Erde im Stil des Gebiets (Schneepfad,
@@ -1870,7 +1939,7 @@ fn masonry_pixel(c: &mut Canvas, x: i32, y: i32, px: i32, fy: i32, hgt: i32, bp:
     let mut up = 255u8;
     if fy < 6 {
         // Deckplatten mit Vorsprung und Schattenkante
-        v = if fy < 4 { 0.86 - fy as f32 * 0.04 } else { 0.22 };
+        v = if fy < 4 { 0.95 - fy as f32 * 0.04 } else { 0.14 };
         up = if fy < 4 { 60 } else { 230 };
         rel = 3.0;
         if px.rem_euclid(22) == 0 {
@@ -1890,7 +1959,7 @@ fn masonry_pixel(c: &mut Canvas, x: i32, y: i32, px: i32, fy: i32, hgt: i32, bp:
             rel = 0.0;
         } else {
             // Quader: oben/links Licht, unten/rechts Schatten, leicht gewölbt
-            v = 0.58 + tint - (ry as f32 / 8.0) * 0.16 + if bx == 1 { 0.12 } else if bx == bw - 1 { -0.12 } else { 0.0 };
+            v = 0.5 + tint - (ry as f32 / 8.0) * 0.16 + if bx == 1 { 0.12 } else if bx == bw - 1 { -0.12 } else { 0.0 };
             v += (bayer(px, fy) - 0.5) * 0.06;
             rel = 2.5 - ((bx as f32 / bw as f32) - 0.5).abs() * 2.0;
             if hash(px, fy / 2, 77) % 53 == 0 {
@@ -1937,7 +2006,7 @@ fn masonry_pixel(c: &mut Canvas, x: i32, y: i32, px: i32, fy: i32, hgt: i32, bp:
             }
         }
         let t = fy as f32 / hgt as f32;
-        v -= t * if hgt > FACE_PX { 0.2 } else { 0.18 };
+        v -= t * if hgt > FACE_PX { 0.26 } else { 0.24 };
         // unten am Wasser: Algen und nasse Streifen
         if water && hgt - fy < 40 {
             let k = 1.0 - (hgt - fy) as f32 / 40.0;

@@ -222,6 +222,8 @@ fn arm_path(base: (f32, f32), c: (f32, f32), side: f32, tight: f32) -> (Vec<(f32
 impl Game {
     /// Prolog-Ende beginnen: `defeat` = die Spinne hat gewonnen.
     pub fn start_coffin(&mut self, defeat: bool) {
+        // kein weißer Treffer-Blitz mehr auf der Figur: sie wird nur eingesponnen
+        self.player.a.flash = 0.0;
         let (cx, cy) = self.world.prolog_coffin;
         let si = self.bosses.iter().position(|b| b.key == "spider");
         let spider = si.filter(|&i| !self.bosses[i].dead());
@@ -593,6 +595,12 @@ impl Game {
                 self.fx.p(P { x: p0.0 + rr(-22.0, 22.0), y: p0.1 + rr(-4.0, 4.0), z: 4.0 + rnd() * 8.0, vz: 14.0 + rnd() * 10.0, vx: rr(-12.0, 12.0), g: 20.0, life: 0.9, col: [0.85, 0.86, 0.8, 0.7], size: 2.0, drag: 1.5, ..Default::default() });
             }
         }
+        // eingesponnen: ein Stoß Seidenfetzen, wo eben noch der Leichnam lag
+        let wrap_t = p.reach + (p.lift - p.reach) * 0.6;
+        if crossed(wrap_t) {
+            self.fx.burst("snow", p0.0, p0.1 - 6.0, 22, BurstOpt { speed: Some(55.0), up: Some(45.0), g: Some(60.0), life: Some(0.9), col: Some([0.94, 0.94, 0.9, 1.0]), ..Default::default() });
+            self.sfx("silk");
+        }
         if crossed(p.lift) {
             self.sfx("crush");
         }
@@ -795,7 +803,10 @@ impl Game {
         };
         f.light(LightDef { x: lp.0, y: lp.1 + 10.0, z: 50.0, r: 130.0, col: [0.42, 0.46, 0.42], flicker: 0.05 });
         if t < p.lift {
-            let al = smooth(part(t, p.reach + 0.3, p.lift - 0.3));
+            // erst schießen die Fäden, dann ist der Leichnam auf einen Schlag eingesponnen (kein
+            // langsames Verblassen ins Weiße, das wie eine weiß werdende Figur aussah)
+            let wrap_t = p.reach + (p.lift - p.reach) * 0.6;
+            let al = smooth(part(t, wrap_t, wrap_t + 0.22));
             f.sprite_z(wh, p0.0, p0.1 - 2.0, p0.1 + 1.0, SprOpt { flip, tint: [255, 255, 255, (al * 255.0) as u8], ..Default::default() });
             // Fäden: kurz aufblitzende, durchhängende Linien vom Maul zum Leichnam
             let n = ((t - p.reach) / 0.11) as i32;
@@ -937,7 +948,7 @@ impl Game {
 }
 
 /// Ein durchhängender Spinnfaden (Überlagerung aus kleinen Vierecken) von `from` nach `to`
-fn silk(f: &mut Frame, from: (f32, f32), to: (f32, f32), sag: f32, alpha: u8) {
+pub(super) fn silk(f: &mut Frame, from: (f32, f32), to: (f32, f32), sag: f32, alpha: u8) {
     let len = (to.0 - from.0).hypot(to.1 - from.1);
     let steps = (len / 2.0).max(1.0) as i32;
     for s in 0..=steps {

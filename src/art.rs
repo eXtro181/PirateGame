@@ -1006,6 +1006,8 @@ pub fn build(frame: &mut Frame) -> Art {
         bd::townhouse(0),
         bd::townhouse(1),
         bd::townhouse(2),
+        pr::ward_post(0),
+        pr::gibbet(),
         bd::tavern(),
         bd::forge(),
         bd::wreck(),
@@ -1068,6 +1070,14 @@ pub fn build(frame: &mut Frame) -> Art {
         // Flaschenschiff des Geisterkapitäns: grünliche Glasflasche mit Korken, darin ein kleines
         // schwarzes Schiff mit Segeln
         a.add_trim("x:bottle", &bottle_ship(), 12, 8);
+        // Netze der Meeresspinne (ohne Pixelstil-Umriss, sonst würden die feinen Fäden dunkel):
+        // Klumpen, fliegendes Netz, am Boden klebend
+        a.style = false;
+        a.add_trim("x:webBall", &sw_art::structures::web_ball(), 11, 11);
+        a.add_trim("x:webNet", &sw_art::structures::web_net(), 26, 26);
+        a.add_trim("x:webG0", &sw_art::structures::web_ground(0), 38, 28);
+        a.add_trim("x:webG1", &sw_art::structures::web_ground(1), 38, 28);
+        a.style = true;
     }
     // ---------------------------------------------------------------- Glutwacht und See (Rig)
     {
@@ -1082,7 +1092,9 @@ pub fn build(frame: &mut Frame) -> Art {
             stc::slipway(),
             stc::crane(),
             stc::rope_coil(),
-            stc::gate_arch(),
+            stc::sea_gate(),
+            stc::sin_statue(),
+            stc::hub_bridge(crate::world::BRIDGE_HALF, crate::world::BRIDGE_H, crate::world::BRIDGE_HW),
             stc::brazier(),
             stc::hooded_statue(),
             stc::banner_pole(),

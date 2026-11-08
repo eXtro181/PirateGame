@@ -41,7 +41,8 @@ pub struct Critter {
     pub hop: f32,
 }
 
-const BUTTER: [[u8; 3]; 5] = [[242, 190, 216], [150, 200, 255], [255, 228, 128], [216, 150, 255], [255, 255, 255]];
+/// fahle Nachtfalter statt bunter Schmetterlinge (Dark Fantasy)
+const BUTTER: [[u8; 3]; 5] = [[150, 140, 120], [118, 110, 98], [176, 168, 150], [96, 90, 96], [140, 148, 156]];
 
 impl Game {
     fn spawn_critter(&mut self, view: (f32, f32, f32, f32)) {
@@ -77,10 +78,11 @@ impl Game {
             // Siedlungen: Hühner, Katzen, Krähen
             if w.in_settlement(x, y) || w.interior_at(x, y).is_some() {
                 let r = rnd();
-                let k = if r < 0.5 { CK::Chicken } else if r < 0.7 { CK::Cat } else { CK::Crow };
+                // Dark Fantasy: mehr Krähen, schwarze Katzen, dunkle, magere Hühner
+                let k = if r < 0.25 { CK::Chicken } else if r < 0.5 { CK::Cat } else { CK::Crow };
                 let col = match k {
-                    CK::Chicken => [[236, 228, 210], [176, 110, 62], [90, 66, 50]][(rnd() * 3.0) as usize % 3],
-                    CK::Cat => [[60, 56, 60], [200, 140, 80], [230, 226, 220]][(rnd() * 3.0) as usize % 3],
+                    CK::Chicken => [[62, 54, 48], [90, 66, 50], [44, 40, 42]][(rnd() * 3.0) as usize % 3],
+                    CK::Cat => [[26, 24, 28], [52, 48, 52], [84, 78, 76]][(rnd() * 3.0) as usize % 3],
                     _ => [34, 32, 40],
                 };
                 if w.interior_at(x, y).is_none() {
@@ -90,7 +92,7 @@ impl Game {
             }
             // Strandkrabben auf Sand, Krähen auf Wiesen und Wegen
             if g == Mat::Sand && rnd() < 0.5 {
-                self.critters.push(Critter { k: CK::Crab, life: 40.0, h: 0.0, col: [200, 90, 60], ..base });
+                self.critters.push(Critter { k: CK::Crab, life: 40.0, h: 0.0, col: [128, 66, 50], ..base });
                 return;
             }
             if matches!(g, Mat::Grass | Mat::Meadow | Mat::Dirt | Mat::Ash | Mat::Mud) && rnd() < 0.2 {
@@ -108,7 +110,7 @@ impl Game {
                 }
                 Biome::Earth => {
                     if rnd() < 0.5 {
-                        self.critters.push(Critter { k: CK::Frog, life: 40.0, col: [80, 140, 64], ..base });
+                        self.critters.push(Critter { k: CK::Frog, life: 40.0, col: [56, 84, 46], ..base });
                     } else {
                         self.critters.push(Critter { k: CK::Firefly, life: 30.0, h: 10.0 + rnd() * 30.0, col: [190, 255, 120], ..base });
                     }

@@ -185,36 +185,214 @@ pub fn wall_v() -> PropArt {
     prop("fortWallV", &r, 40, 260, 8).shadow(14.0, 4.0).boxc(13.0, 128.0)
 }
 
-/// Torbogen über dem Durchgang (keine Kollision), mit Fallgitter und Wappen.
-pub fn gate_arch() -> PropArt {
+/// Seetor der Glutwacht in der Ebene der äußeren Mauerfront (Fußpunkt = Wasserlinie in der Mitte
+/// der Einfahrt): zwei Pfeiler stehen im Wasser und reichen bis zur Mauerkrone (vier Ebenen,
+/// 384 px), dazwischen ein Spitzbogen über die ganze Einfahrt (288 px), hochgezogenes Fallgitter,
+/// Zinnen, Banner, Wandfackeln, nasser Algensaum und Eisenringe an den Pfeilern.
+pub fn sea_gate() -> PropArt {
     let mut r = Rig::new();
     let m = mats(&mut r);
+    let wet = r.mat(mat(0x1A2420).pat(Pat::Bricks(6.0)).spec(120));
+    let moss = r.mat(mat(0x2A3624).soft());
+    // halbe lichte Weite, Pfeilerbreite, Tiefe, Höhe der Mauerkrone
+    let (hw, pw, dep, top) = (146.0f32, 20.0f32, 12.0f32, 384.0f32);
+    let pc = hw + pw;
+    // Spitzbogen aus zwei Kreisbögen (Radius 0,75 × lichte Weite), Kämpfer bei 150 px
+    let (spring, rad) = (150.0f32, hw * 2.0 * 0.75);
+    let off = rad - hw;
+    let apex = spring + (rad * rad - off * off).sqrt();
+    let arch_w = |z: f32| -> f32 {
+        if z <= spring {
+            hw
+        } else if z >= apex {
+            0.0
+        } else {
+            (-off + (rad * rad - (z - spring) * (z - spring)).sqrt()).max(0.0)
+        }
+    };
     r.part();
-    r.cube(v(0.0, -12.0, 84.0), v(46.0, 12.0, 14.0), m.brick);
-    r.cube(v(0.0, -12.0, 98.5), v(47.0, 13.0, 1.6), m.trim);
-    let mut x = -42.0;
-    while x <= 42.0 {
-        r.cube(v(x, -2.5, 104.0), v(3.5, 2.5, 4.5), m.brick_d);
-        x += 10.5;
+    for sx in [-1.0f32, 1.0] {
+        let x = sx * pc;
+        // Pfeiler mit Sockel, Gesimsen und Strebestufen
+        r.cube(v(x, -dep, top * 0.5), v(pw, dep, top * 0.5), m.brick);
+        r.cube(v(x, -dep + 2.0, 16.0), v(pw + 5.0, dep + 3.0, 16.0), m.trim);
+        r.cube(v(x, 0.6, 12.0), v(pw + 5.4, 0.8, 12.0), wet);
+        for z in [64.0f32, 150.0, 260.0] {
+            r.cube(v(x, -dep + 1.0, z), v(pw + 2.0, dep + 2.0, 2.6), m.trim);
+        }
+        // Eisenring mit Kette, Fackel und Banner
+        r.tube(&[v(x - 6.0, 2.0, 46.0), v(x, 4.0, 40.0), v(x + 6.0, 2.0, 46.0)], 1.1, 1.1, m.iron);
+        for k in 0..6 {
+            r.ell(v(x + sx * -3.0, 2.6, 38.0 - k as f32 * 4.2), v(1.4, 1.0, 2.2), m.iron);
+        }
+        sconce(&mut r, &m, v(x, 0.2, 196.0));
+        banner(&mut r, &m, x, 0.8, 222.0, 330.0, 13.0);
+        // Algen und Moos laufen am Fuß hinab
+        for k in 0..7 {
+            let xx = x - pw + 3.0 + k as f32 * 6.0;
+            r.cube(v(xx, 0.3, 30.0 + (k % 3) as f32 * 6.0), v(1.0, 0.5, 8.0 + (k % 2) as f32 * 5.0), moss);
+        }
     }
-    // Spitzbogen-Untersicht aus Keilsteinen
-    for i in 0..13 {
-        let a = PI * (i as f32 / 12.0);
-        let (cx, cz) = (a.cos() * 32.0, 70.0 + a.sin() * 14.0);
-        r.cube(v(cx, 0.4, cz), v(2.4, 0.6, 2.2), m.trim);
+    // Bogenzwickel bis zur Krone in waagrechten Lagen
+    let mut z = spring;
+    while z < top {
+        let w = arch_w(z + 1.5);
+        if w < hw - 0.5 {
+            if w <= 0.5 {
+                r.cube(v(0.0, -dep, z + 1.6), v(hw + 0.5, dep, 1.7), m.brick);
+            } else {
+                for sx in [-1.0f32, 1.0] {
+                    let c = (w + hw) * 0.5 + 0.25;
+                    r.cube(v(sx * c, -dep, z + 1.6), v((hw - w) * 0.5 + 0.5, dep, 1.7), m.brick);
+                }
+            }
+        }
+        z += 3.0;
     }
-    // Fallgitter (hochgezogen)
-    for k in 0..9 {
-        let x = -28.0 + k as f32 * 7.0;
-        r.tube(&[v(x, -1.0, 70.0), v(x, -1.0, 96.0)], 0.9, 0.9, m.iron);
-        r.spike(v(x, -1.0, 70.0), v(x, -1.0, 66.0), 1.0, m.iron);
+    // Keilsteine entlang der Bogenlaibung
+    let mut zz = spring + 2.0;
+    while zz < apex - 1.0 {
+        let w = arch_w(zz);
+        for sx in [-1.0f32, 1.0] {
+            r.cube(v(sx * (w + 3.0), 1.0, zz), v(3.6, 1.0, 1.9), m.trim);
+        }
+        zz += 3.0;
     }
-    r.tube(&[v(-30.0, -1.0, 76.0), v(30.0, -1.0, 76.0)], 0.8, 0.8, m.iron);
-    // Wappen: Säbel im Feuer
-    r.ell(v(0.0, 0.8, 88.0), v(7.0, 0.8, 8.0), m.gold);
-    r.dot(v(0.0, 1.8, 88.0), 0xF07A2A, 1.6, 2);
-    r.tube(&[v(-4.0, 1.6, 84.0), v(4.0, 1.6, 93.0)], 0.6, 0.6, m.iron);
-    prop("fortArch", &r, 120, 150, 8)
+    r.cube(v(0.0, 1.6, apex + 4.0), v(6.0, 1.6, 8.0), m.trim);
+    // Wappen über dem Scheitel: Säbel im Feuer
+    r.ell(v(0.0, 3.0, apex + 16.0), v(8.0, 0.8, 9.0), m.gold);
+    r.dot(v(0.0, 4.0, apex + 16.0), 0xF07A2A, 1.6, 2);
+    r.tube(&[v(-5.0, 3.8, apex + 11.0), v(5.0, 3.8, apex + 21.0)], 0.7, 0.7, m.iron);
+    // Fallgitter, hochgezogen: nur die unteren Stäbe und Spitzen hängen unter dem Bogen
+    let zb = apex - 46.0;
+    let wb = arch_w(zb) - 6.0;
+    let mut x = -wb;
+    while x <= wb + 0.1 {
+        let ztop = spring + (rad * rad - (x.abs() + off) * (x.abs() + off)).max(0.0).sqrt();
+        r.tube(&[v(x, -dep + 4.0, zb), v(x, -dep + 4.0, ztop)], 1.0, 1.0, m.iron);
+        r.spike(v(x, -dep + 4.0, zb), v(x, -dep + 4.0, zb - 6.0), 1.2, m.iron);
+        x += 10.0;
+    }
+    for zh in [zb + 8.0, zb + 22.0] {
+        let w = arch_w(zh) - 4.0;
+        r.tube(&[v(-w, -dep + 3.0, zh), v(w, -dep + 3.0, zh)], 0.9, 0.9, m.iron);
+    }
+    // Krone: Gesims und Zinnen über die ganze Breite
+    r.cube(v(0.0, -dep, top + 4.0), v(pc + pw + 2.0, dep + 1.5, 4.0), m.trim);
+    let mut x = -(pc + pw) + 6.0;
+    while x <= pc + pw - 5.0 {
+        r.cube(v(x, -3.0, top + 16.0), v(5.5, 3.0, 8.0), m.brick_d);
+        r.cube(v(x, -3.0, top + 24.6), v(6.0, 3.4, 0.9), m.trim);
+        x += 17.0;
+    }
+    // Ruß, Risse und Salzränder
+    for i in 0..90 {
+        let x = -(pc + pw) + ((i * 37) % ((pc + pw) * 2.0) as i32) as f32;
+        let z = 8.0 + ((i * 53) % 370) as f32;
+        if x.abs() < arch_w(z) + 1.0 {
+            continue;
+        }
+        r.dot(v(x, 0.4, z), if i % 4 == 0 { 0x3A4A44 } else { 0x141216 }, 0.0, 1);
+    }
+    prop("seaGate", &r, ((pc + pw) * 2.0) as i32 + 24, 460, 12).light(0.0, 0.0, 300.0, 220.0, [1.1, 0.55, 0.22], 0.2)
+}
+
+/// Höhe des Brückendecks über dem Wasser (Glocke: an den Enden flach, in der Mitte `h`).
+pub fn bridge_z(u: f32, h: f32) -> f32 {
+    h * (1.0 + (u.clamp(-1.0, 1.0) * PI).cos()) * 0.5
+}
+
+/// Hohe, stützenlose Steinbrücke über das Hafenbecken der Glutwacht (West–Ost, Länge 2 × `half`,
+/// Deckbreite 2 × `hw`, Scheitel `h` über dem Wasser). Ein einziger flacher Bogen aus Keilsteinen
+/// trägt das Deck; Brüstungen mit Pfosten und Laternen, Ketten und Ranken hängen unter dem Bogen,
+/// an den Enden schwere Brückenköpfe mit Feuerschalen. Fußpunkt = Mitte der Südkante (Wasserhöhe).
+pub fn hub_bridge(half: f32, h: f32, hw: f32) -> PropArt {
+    let mut r = Rig::new();
+    let m = mats(&mut r);
+    let pave = r.mat(mat(0x3C3640).pat(Pat::Scales(5.0)).spec(25));
+    let moss = r.mat(mat(0x26321F).soft());
+    let vine = r.mat(mat(0x1E2A1A).soft());
+    let glass = r.mat(mat(0xFFC86A).glow(1.6).bias(0.4).soft());
+    let yc = -hw;
+    let z = |x: f32| bridge_z(x / half, h);
+    // Bogenstärke: am Scheitel schlank, zu den Enden hin mächtiger
+    let th = |x: f32| 13.0 + 16.0 * (x / half).abs().powf(1.6);
+    r.part();
+    // in geneigten Abschnitten (Quader längs der Steigung), damit Deck und Brüstung glatt laufen
+    let seg = 12.0;
+    let nseg = (2.0 * half / seg).round() as i32;
+    for k in 0..nseg {
+        let xa = -half + k as f32 * seg;
+        let xb = xa + seg;
+        let (za, zb) = (z(xa), z(xb));
+        let xm = (xa + xb) * 0.5;
+        let zm = (za + zb) * 0.5;
+        let f = v(xb - xa, 0.0, zb - za);
+        let hl = seg * 0.5 + 0.6;
+        let t = th(xm);
+        r.cube_dir(v(xm, yc, zm - 2.0), f, v(hw - 3.0, hl, 2.0), pave);
+        r.cube_dir(v(xm, yc, zm - 4.0 - t * 0.5), f, v(hw - 5.0, hl, t * 0.5), m.brick);
+        // Fugen der Keilsteine an der Südseite
+        r.cube(v(xa, -4.6, za - 4.0 - t * 0.5), v(0.5, 0.6, t * 0.5), m.soot);
+        for sy in [-1.0f32, 1.0] {
+            let yy = yc + sy * (hw - 2.5);
+            r.cube_dir(v(xm, yy, zm + 5.5), f, v(2.5, hl, 5.5), m.brick_d);
+            r.cube_dir(v(xm, yy, zm + 11.6), f, v(3.0, hl + 0.1, 0.9), m.trim);
+            r.cube_dir(v(xm, yc + sy * (hw - 4.0), zm - 4.6), f, v(1.4, hl + 0.1, 1.2), m.trim);
+        }
+    }
+    // Pfosten mit Laternen über der Brüstung, Moos auf den Decksteinen
+    let n = 8;
+    for k in 0..=n {
+        let x = -half + 2.0 * half * k as f32 / n as f32;
+        let zt = z(x);
+        for sy in [-1.0f32, 1.0] {
+            let yy = yc + sy * (hw - 2.5);
+            r.cube(v(x, yy, zt + 9.0), v(4.0, 3.6, 9.0), m.brick);
+            r.cube(v(x, yy, zt + 18.6), v(4.8, 4.4, 1.0), m.trim);
+            if k % 2 == 1 {
+                r.tube(&[v(x, yy, zt + 19.0), v(x, yy, zt + 25.0)], 0.7, 0.7, m.iron);
+                r.ell(v(x, yy, zt + 28.0), v(2.4, 2.4, 3.2), glass);
+                r.cube(v(x, yy, zt + 32.0), v(3.0, 3.0, 0.8), m.iron);
+            }
+        }
+    }
+    for k in 0..26 {
+        let x = -half + 30.0 + ((k * 197) % ((2.0 * half - 60.0) as i32)) as f32;
+        r.ell(v(x, -2.0, z(x) + 12.4), v(4.0 + (k % 3) as f32, 1.6, 0.8), moss);
+    }
+    // Ketten und Ranken hängen unter dem Bogen
+    for k in 0..14 {
+        let x = -half * 0.8 + half * 1.6 * k as f32 / 13.0;
+        let zb = z(x) - 4.0 - th(x);
+        let len = 10.0 + ((k * 7) % 5) as f32 * 6.0;
+        if zb - len < 6.0 {
+            continue;
+        }
+        if k % 3 == 0 {
+            let mut zz = zb;
+            while zz > zb - len {
+                r.ell(v(x, -6.0, zz), v(1.2, 0.9, 1.9), m.iron);
+                zz -= 3.4;
+            }
+        } else {
+            r.tube(&[v(x, -5.0, zb), v(x + 1.5, -5.0, zb - len * 0.5), v(x - 1.0, -5.0, zb - len)], 0.9, 0.5, vine);
+        }
+    }
+    // Brückenköpfe: mächtige Pfeiler mit Feuerschalen an beiden Enden
+    for sx in [-1.0f32, 1.0] {
+        let x = sx * (half - 10.0);
+        for sy in [-1.0f32, 1.0] {
+            let yy = yc + sy * (hw + 4.0);
+            r.cube(v(x, yy, 22.0), v(9.0, 7.0, 22.0), m.brick);
+            r.cube(v(x, yy, 45.0), v(10.5, 8.5, 1.6), m.trim);
+            r.cyl(v(x, yy, 46.5), 6.0, 6.0, 4.0, m.iron);
+            flame(&mut r, &m, v(x, yy, 51.0), 1.5);
+        }
+    }
+    let w = (2.0 * half) as i32 + 48;
+    let hgt = (h + 2.0 * hw + 60.0) as i32;
+    prop("hubBridge", &r, w, hgt, 10)
 }
 
 /// Schreinbau im Norden des Hofes: Fassade mit Portal, Rosette, Strebepfeilern und Dach.
@@ -359,6 +537,86 @@ pub fn hooded_statue() -> PropArt {
     let lamp = r.mat(mat(0xFFB04A).glow(1.8).bias(0.4));
     r.cube(v(10.0, 0.0, 25.0), v(2.2, 2.2, 3.0), lamp);
     prop("hoodedStatue", &r, 44, 84, 8).shadow(13.0, 4.0).circle(10.0).light(10.0, -25.0, 25.0, 100.0, [1.3, 0.8, 0.35], 0.15)
+}
+
+/// Sündenstatue der Glutwacht: ein riesiger, kniender Büßer in Kapuze, in Ketten gelegt, der eine
+/// Opferschale mit Glut vor sich hält; unter der Kapuze glühen zwei rote Augen. Auf dem gestuften
+/// Sockel brennen Kerzen, Perlen liegen als Opfergaben in der Schale.
+pub fn sin_statue() -> PropArt {
+    let mut r = Rig::new();
+    let m = mats(&mut r);
+    let st = r.mat(mat(0x3E3A44).pat(Pat::Grain).spec(25));
+    let st_d = r.mat(mat(0x2A2730).pat(Pat::Grain).spec(15));
+    let moss = r.mat(mat(0x26321F).soft());
+    let eye = r.mat(mat(0xFF3A20).glow(2.4).bias(0.5));
+    let ember = r.mat(mat(0xE04A1E).glow(1.6).bias(0.3));
+    let pearl = r.mat(mat(0xE8E2D2).spec(240).bias(0.2));
+    let wax = r.mat(mat(0xD8CCAA).soft());
+    let flame_m = r.mat(mat(0xFFB04A).glow(2.0).bias(0.45).soft());
+    // gestufter Sockel mit Inschriftband
+    r.part();
+    r.cube(v(0.0, -12.0, 5.0), v(34.0, 22.0, 5.0), m.brick_d);
+    r.cube(v(0.0, -14.0, 13.0), v(29.0, 18.0, 3.5), m.trim);
+    r.cube(v(0.0, 4.2, 9.0), v(20.0, 0.6, 2.2), m.soot);
+    for k in 0..9 {
+        r.dot(v(-16.0 + k as f32 * 4.0, 4.9, 9.0), 0x8A2A1E, 0.6, 1);
+    }
+    // Kerzen an den vorderen Ecken
+    for (x, y, hgt) in [(-26.0f32, 4.0f32, 9.0f32), (-21.0, 7.0, 6.0), (24.0, 5.0, 8.0), (28.0, 0.0, 5.0)] {
+        r.cyl(v(x, y, 10.0), 1.3, 1.3, hgt, wax);
+        r.ball(v(x, y, 11.5 + hgt), 1.1, flame_m);
+    }
+    // kniender Leib in schwerer Kutte
+    r.part();
+    r.ell(v(0.0, -16.0, 34.0), v(17.0, 14.0, 18.0), st);
+    r.ell(v(0.0, -10.0, 22.0), v(19.0, 15.0, 9.0), st);
+    // Falten der Kutte
+    for k in 0..5 {
+        let x = -12.0 + k as f32 * 6.0;
+        r.tube(&[v(x, -1.0, 44.0), v(x * 1.2, 1.5, 20.0)], 1.2, 1.6, st_d);
+    }
+    // Schultern und gesenkter Kopf unter der Kapuze
+    r.ell(v(0.0, -14.0, 52.0), v(15.0, 11.0, 9.0), st);
+    r.ell(v(0.0, -8.0, 62.0), v(9.5, 9.0, 10.0), st);
+    r.ell(v(0.0, -2.2, 60.0), v(6.0, 3.0, 6.5), m.soot);
+    for sx in [-2.4f32, 2.4] {
+        r.ball(v(sx, -0.4, 61.0), 1.1, eye);
+    }
+    // Arme halten die Opferschale vor dem Leib
+    for sx in [-1.0f32, 1.0] {
+        r.tube(&[v(sx * 13.0, -12.0, 50.0), v(sx * 14.0, -4.0, 38.0), v(sx * 8.0, 4.0, 34.0)], 4.2, 3.4, st);
+    }
+    r.cyl(v(0.0, 6.0, 29.0), 11.0, 7.0, 5.0, m.iron);
+    r.ell(v(0.0, 6.0, 34.0), v(9.0, 5.5, 1.2), ember);
+    for k in 0..6 {
+        let a = k as f32 * 1.1;
+        r.ball(v(a.cos() * 5.0, 6.0 + a.sin() * 3.0, 35.0), 1.2, pearl);
+    }
+    // Ketten über Brust und Arme, an Ringen im Sockel
+    for (a, b, c) in [(v(-16.0, -6.0, 50.0), v(0.0, 2.0, 42.0), v(17.0, -6.0, 48.0)), (v(-20.0, -2.0, 30.0), v(-24.0, 2.0, 18.0), v(-26.0, 2.0, 12.0)), (v(19.0, -2.0, 28.0), v(24.0, 3.0, 18.0), v(27.0, 1.0, 12.0))] {
+        let pts: Vec<V3> = (0..=12).map(|k| {
+            let t = k as f32 / 12.0;
+            let ab = lerp3(a, b, t);
+            let bc = lerp3(b, c, t);
+            lerp3(ab, bc, t)
+        }).collect();
+        for (k, p) in pts.iter().enumerate() {
+            if k % 1 == 0 {
+                r.ell(*p, v(1.5, 1.2, 1.5), m.iron);
+            }
+        }
+    }
+    // Moos und Risse im Stein
+    r.ell(v(-10.0, -1.5, 40.0), v(5.0, 1.0, 3.0), moss);
+    r.ell(v(12.0, -3.0, 56.0), v(4.0, 1.0, 2.5), moss);
+    for i in 0..30 {
+        let x = -16.0 + ((i * 37) % 32) as f32;
+        let z = 18.0 + ((i * 23) % 44) as f32;
+        r.dot(v(x, 0.6, z), 0x141216, 0.0, 1);
+    }
+    // imposant: anderthalbmal so groß wie gebaut
+    r.scale(1.5);
+    prop("sinStatue", &r, 138, 168, 18).shadow(48.0, 10.0).boxc(45.0, 26.0).light(0.0, 6.0, 60.0, 200.0, [1.6, 0.5, 0.22], 0.25)
 }
 
 /// Hoher Bannermast.
@@ -1019,6 +1277,115 @@ pub fn spider_web(seed: i32) -> PropArt {
     // eingesponnene Beute im Netz
     r.ell(v(w * 0.3, 0.6, h * 0.7), v(5.0, 3.0, 9.0), silk);
     prop(&format!("spiderWeb{seed}"), &r, (w * 2.0) as i32 + 16, 100, 6).shadow(w, 3.0)
+}
+
+/// Netz der Meeresspinne, flach am Boden klebend (Draufsicht wie der Boden): unregelmäßige
+/// Speichen, durchhängende Fangspirale, zerrissene Randfäden und glänzende Klebetropfen.
+/// Ursprung in der Mitte.
+pub fn web_ground(seed: i32) -> crate::canvas::Canvas {
+    let mut r = Rig::new();
+    let silk = r.mat(mat(0xE4E6DC).soft().bias(0.35).spec(120));
+    let old = r.mat(mat(0xB8BAAE).soft().bias(0.2).spec(60));
+    let drop = r.mat(mat(0xD6F0E6).spec(255).bias(0.3));
+    let h = |k: i32| (((k * 7919 + seed * 104_729) % 1000 + 1000) % 1000) as f32 / 1000.0;
+    r.part();
+    let (rx, ry) = (31.0, 22.0);
+    let c = v(0.0, 0.0, 0.5);
+    let spokes = 11;
+    let mut ends = vec![];
+    for k in 0..spokes {
+        let a = k as f32 / spokes as f32 * TAU + seed as f32 * 0.37 + (h(k) - 0.5) * 0.3;
+        let l = 0.78 + 0.22 * h(k + 40);
+        let e = v(a.cos() * rx * l, a.sin() * ry * l, 0.3);
+        r.tube(&[c, e], 0.45, 0.4, if k % 4 == 3 { old } else { silk });
+        // Haltefaden über den Rand hinaus
+        if h(k + 80) > 0.45 {
+            let f = v(a.cos() * rx * (l + 0.22), a.sin() * ry * (l + 0.22), 0.2);
+            r.tube(&[e, f], 0.36, 0.3, old);
+        }
+        ends.push(e);
+    }
+    // Fangspirale: zwischen den Speichen leicht zur Mitte durchhängend, einzelne Stücke zerrissen
+    for ring in 1..7 {
+        let t = ring as f32 / 7.0;
+        let mut pts = vec![];
+        for k in 0..=spokes {
+            let e0 = ends[(k % spokes) as usize];
+            let e1 = ends[((k + 1) % spokes) as usize];
+            pts.push(lerp3(c, e0, t));
+            if k < spokes {
+                let m = lerp3(lerp3(c, e0, t), lerp3(c, e1, t), 0.5);
+                pts.push(lerp3(m, c, 0.07));
+            }
+        }
+        // in Stücken ziehen, damit Risse entstehen
+        let mut seg = vec![];
+        for (i, p) in pts.iter().enumerate() {
+            seg.push(*p);
+            let torn = h(ring * 31 + i as i32) > 0.9;
+            if (torn || i == pts.len() - 1) && seg.len() > 1 {
+                r.tube(&seg, 0.4, 0.4, if ring % 3 == 0 { old } else { silk });
+                seg.clear();
+            }
+            if torn {
+                seg.clear();
+            }
+        }
+    }
+    // Klebetropfen auf den Fäden
+    for k in 0..16 {
+        let e = ends[((k * 5) % spokes) as usize];
+        let p = lerp3(c, e, 0.2 + 0.75 * h(k + 200));
+        r.ell(p, v(0.8, 0.8, 0.7), drop);
+    }
+    // Knoten in der Mitte
+    r.ell(v(0.0, 0.0, 0.8), v(2.6, 2.0, 1.0), silk);
+    crate::rig::render_oblique(&r, 0.0, 76, 56, 28)
+}
+
+/// Fliegendes, aufgefaltetes Netz (senkrecht zur Kamera): Speichen, Spirale und schwere
+/// Klebeklumpen an den Enden. Ursprung in der Mitte.
+pub fn web_net() -> crate::canvas::Canvas {
+    let mut r = Rig::new();
+    let silk = r.mat(mat(0xE8EAE0).soft().bias(0.4).spec(120));
+    let blob = r.mat(mat(0xD2D6C8).pat(Pat::Stripes(1.4)).soft().bias(0.25).spec(80));
+    r.part();
+    let c = v(0.0, 0.0, 0.0);
+    let n = 10;
+    let mut ends = vec![];
+    for k in 0..n {
+        let a = k as f32 / n as f32 * TAU + 0.2;
+        let l = if k % 2 == 0 { 21.0 } else { 18.5 };
+        let e = v(a.cos() * l, 0.0, a.sin() * l);
+        r.tube(&[c, e], 0.5, 0.45, silk);
+        r.ell(e, v(1.6, 1.4, 1.6), blob);
+        ends.push(e);
+    }
+    for ring in 1..5 {
+        let t = ring as f32 / 5.0;
+        let mut pts = vec![];
+        for k in 0..=n {
+            pts.push(lerp3(c, ends[k % n], t));
+        }
+        r.tube(&pts, 0.42, 0.42, silk);
+    }
+    r.ell(c, v(3.2, 2.6, 3.2), blob);
+    crate::rig::render_oblique(&r, 0.0, 52, 52, 26)
+}
+
+/// Netzklumpen (kurz nach dem Ausspeien): fest gewickelte Seidenkugel mit losen Fäden.
+pub fn web_ball() -> crate::canvas::Canvas {
+    let mut r = Rig::new();
+    let silk = r.mat(mat(0xDCDED2).pat(Pat::Stripes(1.2)).soft().bias(0.3).spec(90));
+    let wet = r.mat(mat(0xC4DCD2).spec(230).bias(0.2));
+    r.part();
+    r.ell(v(0.0, 0.0, 0.0), v(5.0, 4.6, 4.8), silk);
+    r.ell(v(-1.5, 1.0, 1.6), v(1.6, 1.0, 1.2), wet);
+    for k in 0..6 {
+        let a = k as f32 * 1.05;
+        r.tube(&[v(a.cos() * 4.0, 0.0, a.sin() * 4.0), v(a.cos() * 7.5, 0.4, a.sin() * 7.0 - 1.5)], 0.4, 0.3, silk);
+    }
+    crate::rig::render_oblique(&r, 0.0, 22, 22, 11)
 }
 
 /// Kokon: eingesponnener Ertrunkener (liegend) bzw. eingesponnenes Fass (stehend).

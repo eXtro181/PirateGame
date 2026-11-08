@@ -80,6 +80,8 @@ pub struct Look {
     pub shirt: u32,
     pub patch: bool,
     pub weapon: Option<&'static str>,
+    /// Größe der Waffe (die Spielerfigur führt eine größere Klinge, 1 = normal)
+    pub weapon_scale: f32,
     pub skeleton: bool,
     pub rags: bool,
     pub drowned: bool,
@@ -136,6 +138,7 @@ impl Default for Look {
             shirt: 0xD8CCB0,
             patch: false,
             weapon: Some("cutlass"),
+            weapon_scale: 1.0,
             skeleton: false,
             rags: false,
             drowned: false,
@@ -178,6 +181,8 @@ pub fn player_look(v: &[i32; 8], weapon: &'static str) -> Look {
         coat: COATS[v[6].clamp(0, 5) as usize].1,
         patch: v[7] == 1,
         weapon: Some(weapon),
+        // die Klinge des Ertrunkenen ist deutlich größer als die der übrigen Figuren
+        weapon_scale: 1.45,
         ..Default::default()
     }
 }
@@ -549,7 +554,7 @@ fn paint_human(cv: &mut Canvas, dir: &str, p: &Pose, l: &Look, s: f32) {
         }
         if let Some(w) = l.weapon {
             let (hx, hy) = hand_pos(cx, side, up);
-            draw_weapon(cx.c, hx, hy, p.w_ang, w, s);
+            draw_weapon(cx.c, hx, hy, p.w_ang, w, s * l.weapon_scale);
         }
     };
     if weapon_first {
@@ -1612,8 +1617,10 @@ fn finish(c: &mut Canvas, l: &Look, seed: i32) {
 }
 
 pub fn frame(l: &Look, dir: &str, anim: &str, f: usize, s: f32) -> Canvas {
-    let fw = (64.0 * s) as i32;
-    let fh = (72.0 * s) as i32 + if l.crown.is_some() || l.hat == 4 || l.snake_hair { (8.0 * s) as i32 } else { 0 } + ((l.hover + 2.0) * s) as i32 * (l.hover > 0.0) as i32;
+    // größere Waffe: mehr Platz zu beiden Seiten und nach oben (die Figur bleibt unten mittig)
+    let big = (l.weapon_scale - 1.0).max(0.0);
+    let fw = (64.0 * s) as i32 + (big * 25.0 * s) as i32 * 2;
+    let fh = (72.0 * s) as i32 + if l.crown.is_some() || l.hat == 4 || l.snake_hair { (8.0 * s) as i32 } else { 0 } + ((l.hover + 2.0) * s) as i32 * (l.hover > 0.0) as i32 + (big * 28.0 * s) as i32;
     let mut c = Canvas::new(fw, fh);
     match anim {
         "roll" => roll_frame(&mut c, dir, f, l, s),
@@ -1677,14 +1684,20 @@ pub fn preset(name: &str) -> (Look, f32) {
         "crewIce" => Look { skin: 0xE0B896, hair_col: 0xE8E4E0, hair: 2, coat: 0x2E4466, hat: 0, weapon: Some("rapier"), ..d() },
         "crewWind" => Look { skin: 0x6A4430, hair_col: 0x26201E, hair: 4, beard: 1, coat: 0x4A6170, hat: 1, weapon: Some("dagger"), ..d() },
         "crewEarth" => Look { skin: 0xC49674, hair_col: 0x5A3A22, hair: 1, beard: 2, body: 1, coat: 0x4A5A36, hat: 2, band_col: 0x34473A, weapon: Some("club"), ..d() },
-        "villagerA" => Look { skin: 0xE0B896, hair_col: 0x8A3A22, hair: 3, coat: 0x4A6A8A, robe: true, hat: 2, band_col: 0xE8DCC0, weapon: None, ..d() },
-        "villagerB" => Look { skin: 0xC49674, hair_col: 0xA8A8A0, hair: 1, beard: 2, coat: 0x6A5A3A, hat: 0, weapon: None, ..d() },
-        "villagerC" => Look { skin: 0x9A6A4C, hair_col: 0x26201E, hair: 2, coat: 0x8A3A4A, robe: true, hat: 0, weapon: None, ..d() },
-        "villagerD" => Look { skin: 0xE0B896, hair_col: 0x5A3A22, hair: 4, beard: 1, coat: 0x3E6A5A, hat: 1, hat_col: 0x4A3A2A, weapon: None, ..d() },
-        "villagerE" => Look { skin: 0xD8A888, hair_col: 0xD0CCC4, hair: 2, coat: 0x5A4A6A, robe: true, hat: 3, apron: true, weapon: None, ..d() },
-        "villagerF" => Look { skin: 0xB07A58, hair_col: 0x3A2A1E, hair: 1, beard: 3, coat: 0x8A7A4A, hat: 2, band_col: 0x2A4A6A, apron: true, weapon: None, ..d() },
-        "villagerG" => Look { skin: 0xE8C0A0, hair_col: 0xB8642A, hair: 3, coat: 0x6A3A2A, robe: true, hat: 0, sash: Some(0xC8A048), weapon: None, ..d() },
+        // Dorfbewohner (Dark Fantasy): fahle Haut, abgetragene, gedeckte Kleidung
+        "villagerA" => Look { skin: 0xC8A88C, hair_col: 0x5A2A1A, hair: 3, coat: 0x343E4A, robe: true, hat: 2, band_col: 0x8A8270, weapon: None, ..d() },
+        "villagerB" => Look { skin: 0xB08A70, hair_col: 0x8A8A84, hair: 1, beard: 2, coat: 0x4A4030, hat: 0, weapon: None, ..d() },
+        "villagerC" => Look { skin: 0x8A6450, hair_col: 0x1E1A18, hair: 2, coat: 0x4E2228, robe: true, hat: 0, weapon: None, ..d() },
+        "villagerD" => Look { skin: 0xC8A88C, hair_col: 0x3E2A1A, hair: 4, beard: 1, coat: 0x2A3C34, hat: 1, hat_col: 0x2E2620, weapon: None, ..d() },
+        "villagerE" => Look { skin: 0xC09A80, hair_col: 0xB0ACA4, hair: 2, coat: 0x3C3446, robe: true, hat: 3, apron: true, weapon: None, ..d() },
+        "villagerF" => Look { skin: 0x9C7058, hair_col: 0x2A2018, hair: 1, beard: 3, coat: 0x524a34, hat: 2, band_col: 0x22303E, apron: true, weapon: None, ..d() },
+        "villagerG" => Look { skin: 0xD0AA90, hair_col: 0x7A4422, hair: 3, coat: 0x46261E, robe: true, hat: 0, sash: Some(0x6A5A3A), weapon: None, ..d() },
         "villagerH" => Look { skin: 0x8A5A40, hair_col: 0xA8A8A0, hair: 0, beard: 2, coat: 0x2E3E4E, hat: 1, hat_col: 0x2A2A30, weapon: None, patch: true, ..d() },
+        // aufgebrachter Mob einer feindlich gewordenen Siedlung (wie die Dorfbewohner gekleidet,
+        // aber bewaffnet: Knüppel, Mistgabel, Messer)
+        "mobA" => Look { skin: 0xC8A88C, hair_col: 0x3E2A1A, hair: 4, beard: 1, coat: 0x2A3C34, hat: 1, hat_col: 0x2E2620, apron: true, weapon: Some("club"), ..d() },
+        "mobB" => Look { skin: 0xB08A70, hair_col: 0x8A8A84, hair: 1, beard: 2, coat: 0x4A4030, hat: 2, band_col: 0x4A2220, weapon: Some("trident"), ..d() },
+        "mobC" => Look { skin: 0x8A6450, hair_col: 0x1E1A18, hair: 2, coat: 0x4E2228, robe: true, hat: 0, weapon: Some("dagger"), ..d() },
         // Händler der Siedlungen
         "smithIlka" => Look { skin: 0x9A6A4C, hair_col: 0xC2502E, hair: 3, coat: 0x4A2A22, apron: true, body: 1, sash: Some(0xF0742A), weapon: Some("hammer"), ..d() },
         "furWendla" => Look { skin: 0xF0D0B8, hair_col: 0xE8E4E0, hair: 2, coat: 0xC8C0B0, robe: true, hat: 3, sash: Some(0x6A8AA8), hold_lantern: Some(0x9AE8FF), weapon: None, ..d() },
@@ -1716,7 +1729,7 @@ pub fn preset(name: &str) -> (Look, f32) {
     (l, s)
 }
 
-pub const PRESET_NAMES: [&str; 41] = [
+pub const PRESET_NAMES: [&str; 44] = [
     "abyssPirate", "voodoo", "orcCaptain", "stormHarpy", "bellConstruct", "gorgonQueen", "clockStorm",
-    "skeleton", "skelBrute", "skelGunner", "drowned", "drownedIce", "ashSkeleton", "stormSailor", "lanternMaid", "smith", "merchant", "shipmaster", "carver", "crewFire", "crewIce", "crewWind", "crewEarth", "villagerA", "villagerB", "villagerC", "villagerD", "villagerE", "villagerF", "villagerG", "villagerH", "smithIlka", "furWendla", "mapOrrin", "witchMabel", "kingFire", "kingIce", "kingWind", "kingEarth", "malakor", "ghostCaptain",
+    "skeleton", "skelBrute", "skelGunner", "drowned", "drownedIce", "ashSkeleton", "stormSailor", "lanternMaid", "smith", "merchant", "shipmaster", "carver", "crewFire", "crewIce", "crewWind", "crewEarth", "villagerA", "villagerB", "villagerC", "villagerD", "villagerE", "villagerF", "villagerG", "villagerH", "smithIlka", "furWendla", "mapOrrin", "witchMabel", "kingFire", "kingIce", "kingWind", "kingEarth", "malakor", "ghostCaptain", "mobA", "mobB", "mobC",
 ];

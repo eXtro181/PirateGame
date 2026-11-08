@@ -6,6 +6,20 @@ use super::boss::*;
 use super::data::*;
 use super::*;
 
+/// Figur angehoben zeichnen (z. B. auf dem Deck der hohen Brücke): `lift` px höher, mit eigenem
+/// Sortierwert (über der Brücke), ohne Bodenschatten.
+pub fn draw_char_lift(f: &mut Frame, sh: &CharSheet, a: &Actor, fl: u8, tint: [u8; 4], lift: f32, sort: f32) {
+    if sh.f.is_empty() {
+        return;
+    }
+    let ai = anim_index(a.anim);
+    let dir = if a.anim == "dead" { 0 } else { a.dir() };
+    let n = sh.f[dir.min(2)][ai].len().max(1);
+    let fi = (a.frame.max(0.0) as usize) % n;
+    let s = sh.get(dir, ai, fi);
+    f.sprite_z(&s, a.x, a.y - lift, sort, SprOpt { flip: a.flip(), flags: fl, tint, ..Default::default() });
+}
+
 pub fn draw_char(f: &mut Frame, sh: &CharSheet, a: &Actor, fl: u8, tint: [u8; 4], shadow: f32) {
     if sh.f.is_empty() {
         return;
@@ -69,6 +83,34 @@ impl Game {
         self.fx.draw_under(f);
         self.draw_wake(art, f);
         self.draw_prolog_coffin(art, f);
+        // Laternen und Feuerschalen der hohen Brücke über dem Hafenbecken
+        if let Some(b) = self.world.bridge {
+            if vis((b.x0 + b.x1) * 0.5, b.y, (b.x1 - b.x0) * 0.5 + 100.0) {
+                let half = (b.x1 - b.x0) * 0.5;
+                for k in [1.0f32, 3.0, 5.0, 7.0] {
+                    let x = b.x0 + half * 2.0 * k / 8.0;
+                    let z = b.z(x) + 28.0;
+                    f.light(LightDef { x, y: b.y + b.hw * 0.4, z, r: 150.0, col: [1.25, 0.72, 0.32], flicker: 0.12 });
+                }
+                for sx in [-1.0f32, 1.0] {
+                    let x = (b.x0 + b.x1) * 0.5 + sx * (half - 10.0);
+                    f.light(LightDef { x, y: b.y, z: 52.0, r: 190.0, col: [1.5, 0.62, 0.22], flicker: 0.3 });
+                }
+            }
+        }
+        // Netze der Meeresspinne am Boden (flach: vor allem Aufrechten darauf gezeichnet)
+        for w in &self.webs {
+            if !vis(w.x, w.y, 60.0) {
+                continue;
+            }
+            let key = if w.v & 1 == 0 { "x:webG0" } else { "x:webG1" };
+            if let Some(s) = art.map.get(key) {
+                let fin = (w.t / 0.22).min(1.0);
+                let fout = ((super::boss::WEB_LIFE - w.t) / 0.8).clamp(0.0, 1.0);
+                let al = fin.min(fout);
+                f.sprite_z(s, w.x, w.y, w.y - 60.0, SprOpt { flip: w.v & 2 != 0, scale: 0.75 + 0.25 * fin, tint: [236, 238, 230, (al * 235.0) as u8], ev: 6.0, ..Default::default() });
+            }
+        }
         // Spieler
         let p = &self.player;
         if !p.hidden {
@@ -80,8 +122,18 @@ impl Game {
                 b.y -= (t * std::f32::consts::PI).sin() * 22.0;
                 f.shadow(p.a.x, p.a.y, 10.0, 3.5, 0.35);
                 draw_char(f, &art.player, &b, fl, [255, 255, 255, a], 0.0);
+            } else if let Some(b) = self.world.bridge.filter(|b| !self.sailing && b.on(p.a.x, p.a.y, 0.0)) {
+                // auf dem Deck der hohen Brücke: so hoch wie das Deck, über der Brücke einsortiert
+                draw_char_lift(f, &art.player, &p.a, fl, [255, 255, 255, a], b.z(p.a.x), b.y + b.hw + 1.0);
             } else {
                 draw_char(f, &art.player, &p.a, fl, [255, 255, 255, a], 0.45);
+            }
+            // eingesponnen: ein Netz klebt über der Figur und zittert, solange man sich losreißt
+            if self.web_t > 0.0 {
+                if let Some(s) = art.map.get("x:webNet") {
+                    let wob = (self.t * 31.0).sin() * 0.05;
+                    f.sprite_z(s, p.a.x, p.a.y - 15.0, p.a.y + 1.0, SprOpt { rot: 0.35 + wob, scale: 0.82, tint: [236, 238, 230, 228], ev: 6.0, ..Default::default() });
+                }
             }
             f.light(LightDef { x: p.a.x, y: p.a.y + 4.0, z: 70.0, r: 180.0, col: [0.5, 0.4, 0.3], flicker: 0.0 });
         }
@@ -208,7 +260,7 @@ impl Game {
         }
         // NPCs und Dorfbewohner
         for (i, n) in self.npcs.iter().enumerate() {
-            if !vis(n.a.x, n.a.y, 80.0) {
+            if !vis(n.a.x, n.a.y, 80.0) || self.npc_mobbed(i) {
                 continue;
             }
             // der Geisterkapitän: durchscheinend, nach der Übergabe löst er sich auf
@@ -218,7 +270,7 @@ impl Game {
                 continue;
             }
             if let Some(sh) = art.chars.get(n.def.preset) {
-                let fl = if self.hover == Hover::Npc(i) { flags::OUTLINE } else { 0 } | if ghost { flags::GHOST } else { 0 };
+                let fl = if self.hover == Hover::Npc(i) { flags::OUTLINE } else { 0 } | if ghost { flags::GHOST } else { 0 } | if n.a.flash > 0.0 { flags::FLASH } else { 0 };
                 let tint = if ghost { [220, 255, 250, (210.0 * fade) as u8] } else { [255; 4] };
                 draw_char(f, sh, &n.a, fl, tint, if ghost { 0.15 * fade } else { 0.4 });
             }
@@ -227,12 +279,12 @@ impl Game {
                 f.light(LightDef { x: n.a.x, y: n.a.y, z: 40.0, r: 150.0 * fade, col: [0.45, 1.0, 0.92], flicker: 0.25 });
             }
         }
-        for w in &self.walkers {
-            if !vis(w.a.x, w.a.y, 80.0) {
+        for (i, w) in self.walkers.iter().enumerate() {
+            if !vis(w.a.x, w.a.y, 80.0) || self.walker_mobbed(i) {
                 continue;
             }
             if let Some(sh) = art.chars.get(w.preset) {
-                draw_char(f, sh, &w.a, 0, [255; 4], 0.4);
+                draw_char(f, sh, &w.a, if w.a.flash > 0.0 { flags::FLASH } else { 0 }, [255; 4], 0.4);
             }
         }
         // Gegenstände am Boden: Seelenglanz
@@ -282,6 +334,19 @@ impl Game {
                 "soul" => {
                     f.glow(s.x, y, 9.0, [95, 242, 200, 230]);
                     f.light(LightDef { x: s.x, y: s.y, z: s.z, r: 90.0, col: [0.35, 1.0, 0.8], flicker: 0.1 });
+                }
+                "web" => {
+                    // Netz im hohen Bogen: der Schatten zeigt den Aufschlag, erst ein Klumpen, dann
+                    // entfaltet es sich drehend; ein Faden reicht noch zurück zum Maul der Spinne
+                    let k = if s.fly > 0.0 { (s.t / s.fly).clamp(0.0, 1.0) } else { 1.0 };
+                    f.shadow(s.x, s.y, 6.0 + 18.0 * k, 2.5 + 7.0 * k, 0.15 + 0.3 * k);
+                    if let Some((ox, oy, oz)) = s.from {
+                        super::coffin::silk(f, (ox, oy - oz), (s.x, y), 8.0 * (1.0 - k), ((1.0 - k) * 200.0) as u8);
+                    }
+                    let (key, sc) = if k < 0.3 { ("x:webBall", 1.0) } else { ("x:webNet", 0.35 + 0.65 * ((k - 0.3) / 0.7)) };
+                    if let Some(sp) = art.map.get(key) {
+                        f.sprite_z(sp, s.x, y, s.y + 2.0, SprOpt { rot: s.t * if k < 0.3 { 9.0 } else { 4.5 }, scale: sc, tint: [240, 242, 234, 240], ev: 6.0, ..Default::default() });
+                    }
                 }
                 "shard" => {
                     f.glow(s.x, y, 8.0, [170, 230, 255, 220]);

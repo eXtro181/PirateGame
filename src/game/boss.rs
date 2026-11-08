@@ -78,6 +78,21 @@ pub struct Atk {
     spots: Vec<(f32, f32, f32, bool)>,
 }
 
+/// Netz der Meeresspinne, am Boden klebend
+#[derive(Clone, Copy)]
+pub struct WebPatch {
+    pub x: f32,
+    pub y: f32,
+    /// Alter (s)
+    pub t: f32,
+    /// Abwandlung des Bildes (0/1) und Drehung (gespiegelt)
+    pub v: u8,
+}
+/// Halbachsen eines Netzes am Boden (px) und Lebensdauer (s)
+pub const WEB_RX: f32 = 30.0;
+pub const WEB_RY: f32 = 20.0;
+pub const WEB_LIFE: f32 = 7.0;
+
 pub struct Boss {
     pub a: Actor,
     pub key: &'static str,
@@ -173,7 +188,7 @@ fn table(mega: bool, phase: i32, el: &str) -> Vec<(AK, f32, AO)> {
         return vec![
             (Dash, 3.0, AO { len: 156.0 * s, ..o() }),
             (Sweep, 3.0, AO { reach: 80.0 * s, ..o() }),
-            (Volley, 2.0, AO { n: 3, spread: 0.45, ..o() }),
+            (Volley, 3.0, AO { n: 3, spread: 0.45, ..o() }),
             (Leap, 1.0, AO { r: 52.0 * s, ..o() }),
         ];
     }
@@ -653,7 +668,8 @@ impl Game {
             return;
         };
         a.t += dt;
-        let cast = matches!(a.kind, AK::Volley | AK::Rain | AK::Nova | AK::Gust | AK::Spikes | AK::Cone | AK::Lash);
+        // die Spinne hat keine Zauberhaltung („cast“ sind ihre Kletterbilder): sie bäumt sich auf
+        let cast = matches!(a.kind, AK::Volley | AK::Rain | AK::Nova | AK::Gust | AK::Spikes | AK::Cone | AK::Lash) && b.key != "spider";
         let me = Target::Boss(idx);
         match a.phase {
             AP::Windup => {
@@ -873,16 +889,37 @@ impl Game {
                 self.slam_hit(idx, b, a.tx, a.ty, a.o.r);
                 Self::boss_recover(b, a, if a.o.double { 1.3 } else { 1.0 });
             }
+            AK::Volley if b.el == "spider" => {
+                // Netze im hohen Bogen: eines auf den Spieler, die anderen links und rechts daneben
+                let (mx, my, mz) = (b.a.x + ang.cos() * 34.0, b.a.y + ang.sin() * 22.0, 46.0);
+                for i in 0..a.o.n {
+                    let off = if a.o.n > 1 { (i as f32 / (a.o.n - 1) as f32 - 0.5) * 2.0 } else { 0.0 };
+                    let (tx, ty) = (px - ang.sin() * off * 54.0, py + ang.cos() * off * 54.0);
+                    let d = (tx - mx).hypot(ty - my);
+                    let t = (d / 240.0).clamp(0.55, 1.2) + i as f32 * 0.06;
+                    let g = 640.0;
+                    let mut s = Shot::new(Owner::Enemy, "web", mx, my, mz, (tx - mx) / t, (ty - my) / t, Self::boss_dmg(b, 0.45));
+                    s.vz = Some((0.5 * g * t * t - mz) / t);
+                    s.grav = g;
+                    s.r = 16.0;
+                    s.life = t + 1.0;
+                    s.fly = t;
+                    s.on_hit = OnHit::Web;
+                    s.from = Some((mx, my, mz));
+                    self.shots.push(s);
+                }
+                self.fx.burst("snow", mx, my, 10, BurstOpt { speed: Some(90.0), up: Some(80.0), col: Some([0.92, 0.93, 0.88, 0.86]), z: Some(mz), ..Default::default() });
+                self.sfx("silk");
+            }
             AK::Volley => {
                 for i in 0..a.o.n {
                     let an = ang + if a.o.n > 1 { (i as f32 / (a.o.n - 1) as f32 - 0.5) * a.o.spread * 2.0 } else { 0.0 };
                     let sp = if b.el == "wind" { 300.0 } else { 220.0 };
-                    let kind = if b.el == "bone" { "boneshard" } else if b.el == "spider" { "shard" } else { shot_kind(b.el) };
+                    let kind = if b.el == "bone" { "boneshard" } else { shot_kind(b.el) };
                     let mut s = Shot::new(Owner::Enemy, kind, b.a.x + an.cos() * 28.0, b.a.y + an.sin() * 20.0, if b.human { 36.0 } else { 48.0 }, an.cos() * sp, an.sin() * sp * 0.8, Self::boss_dmg(b, 0.6));
                     s.r = 8.0;
                     s.life = 2.2;
                     s.glow = match kind {
-                        _ if b.el == "spider" => Some([1.0, 1.0, 0.9]),
                         "fireball" => Some([1.5, 0.6, 0.2]),
                         "shard" => Some([0.6, 1.0, 1.3]),
                         "feather" => Some([1.0, 1.0, 1.2]),
@@ -1120,4 +1157,85 @@ impl Game {
 
 pub fn king_for_zone(z: &str) -> &'static str {
     KINGS.iter().find(|k| k.zone == z).map(|k| k.key).unwrap_or("fire")
+}
+
+// ================================================================ Netze der Meeresspinne
+impl Game {
+    /// Ein Netz schlägt auf: trifft es den Spieler, spinnt es ihn ein, sonst klebt es am Boden.
+    pub(super) fn web_lands(&mut self, x: f32, y: f32, r: f32, dmg: f32) {
+        let (px, py) = (self.player.a.x, self.player.a.y);
+        self.fx.px.play(Px::Poof, x, y + 1.0).scale(0.55).tint([236, 238, 228, 220]);
+        self.fx.burst("snow", x, y, 12, BurstOpt { speed: Some(80.0), up: Some(40.0), g: Some(90.0), life: Some(0.7), col: Some([0.92, 0.93, 0.88, 0.9]), ..Default::default() });
+        self.sfx("silk");
+        let rolling = self.player.state == PS::Roll && self.player.iframes > 0.0;
+        if !self.sailing && !self.player.hidden && self.player.state != PS::Dead && !rolling && (px - x).hypot((py - y) * 1.3) < r + 6.0 {
+            if self.hurt_player(dmg, Target::Player, HurtOpt { unparryable: true, ..Default::default() }) {
+                self.web_t = 1.25;
+                self.ui.toast("Eingesponnen! Reiß dich los!");
+            }
+        }
+        // am Boden nur auf begehbarem Grund (nicht im Wasser oder an der Klippe)
+        if self.world.blocked(x, y, 4.0, false, None) {
+            return;
+        }
+        if self.webs.len() >= 7 {
+            self.webs.remove(0);
+        }
+        let v = (self.webs.len() as u32 + (x as u32 ^ y as u32)) as u8 & 3;
+        self.webs.push(WebPatch { x, y, t: 0.0, v });
+    }
+
+    /// Testlauf (`&webs`): zwei Netze am Boden, drei Netze fliegen von Nordosten heran.
+    pub fn debug_webs(&mut self) {
+        let (px, py) = (self.player.a.x, self.player.a.y);
+        self.webs.push(WebPatch { x: px - 70.0, y: py + 30.0, t: 1.0, v: 0 });
+        self.webs.push(WebPatch { x: px + 80.0, y: py - 10.0, t: 1.0, v: 3 });
+        let (mx, my, mz) = (px + 220.0, py - 160.0, 46.0);
+        for i in 0..3 {
+            let (tx, ty) = (px + (i as f32 - 1.0) * 60.0, py + 50.0);
+            let t = 2.5 + i as f32 * 0.4;
+            let g = 640.0;
+            let mut s = Shot::new(Owner::Enemy, "web", mx, my, mz, (tx - mx) / t, (ty - my) / t, 1.0);
+            s.vz = Some((0.5 * g * t * t - mz) / t);
+            s.grav = g;
+            s.r = 16.0;
+            s.life = t + 1.0;
+            s.fly = t;
+            s.on_hit = OnHit::Web;
+            s.from = Some((mx, my, mz));
+            self.shots.push(s);
+        }
+    }
+
+    /// Netze altern, verlangsamen den Spieler und zerreißen, wenn er hindurchrollt.
+    pub(super) fn update_webs(&mut self, dt: f32) {
+        self.web_slow = (self.web_slow - dt).max(0.0);
+        if self.web_t > 0.0 && (self.player.state == PS::Dead || self.cutscene.is_some()) {
+            self.web_t = 0.0;
+        }
+        if self.webs.is_empty() {
+            return;
+        }
+        let (px, py) = (self.player.a.x, self.player.a.y);
+        let rolling = self.player.state == PS::Roll;
+        let mut torn = None;
+        for (i, w) in self.webs.iter_mut().enumerate() {
+            w.t += dt;
+            let inside = ((px - w.x) / WEB_RX).powi(2) + ((py - w.y) / WEB_RY).powi(2) < 1.0;
+            if inside && w.t > 0.2 && w.t < WEB_LIFE - 0.6 {
+                if rolling {
+                    torn = Some(i);
+                } else {
+                    self.web_slow = 0.12;
+                }
+            }
+        }
+        if let Some(i) = torn {
+            let w = self.webs.remove(i);
+            self.fx.px.play(Px::Poof, w.x, w.y + 1.0).scale(0.7).tint([236, 238, 228, 220]);
+            self.fx.burst("snow", w.x, w.y, 14, BurstOpt { speed: Some(110.0), up: Some(50.0), g: Some(90.0), life: Some(0.8), col: Some([0.92, 0.93, 0.88, 0.9]), ..Default::default() });
+            self.sfx("silk");
+        }
+        self.webs.retain(|w| w.t < WEB_LIFE);
+    }
 }

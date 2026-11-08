@@ -259,6 +259,12 @@ fn setup(world: &mut bevy::ecs::world::World) {
                 if let Scene::Play(g) = &mut app.scene {
                     let p = if pos == "whirl" {
                         Some((g.world.pier_end.0, g.world.pier_end.1 + 20.0))
+                    } else if let Some(k) = pos.strip_prefix("town") {
+                        // Testlauf: mitten in eine Siedlung (pos=townasche, pos=townraben)
+                        g.world.settlement_keys.iter().position(|s| *s == k).map(|i| (g.world.settlements[i].0, g.world.settlements[i].1 + 40.0))
+                    } else if pos == "sin" {
+                        // Testlauf: vor der Sündenstatue der Glutwacht
+                        g.world.sin_statue.map(|si| (g.world.props[si].x, g.world.props[si].y + 60.0))
                     } else if pos == "ghost" {
                         // Testlauf: neben dem Geisterkapitän auf dem Steg des Galgenstrands
                         g.npcs.iter().find(|n| n.def.id == "ghostCaptain").map(|n| (n.a.x - 34.0, n.a.y + 26.0))
@@ -312,6 +318,19 @@ fn setup(world: &mut bevy::ecs::world::World) {
                 // Testlauf: mit so vielen Lebenspunkten beginnen (z. B. &hp=1: der erste Treffer tötet)
                 if let Scene::Play(g) = &mut app.scene {
                     g.player.hp = hp.clamp(1.0, g.player.d.max_hp);
+                }
+            }
+            if let Some(v) = app.params.get("hostile").cloned() {
+                // Testlauf: diese Siedlungen sind feindlich (z. B. &hostile=asche,hain)
+                if let Scene::Play(g) = &mut app.scene {
+                    g.save.hostile = v.split(',').filter(|s| !s.is_empty()).map(String::from).collect();
+                    g.hostile_dirty = true;
+                }
+            }
+            if app.params.contains_key("webs") {
+                // Testlauf: Netze der Meeresspinne – zwei kleben schon am Boden, drei fliegen heran
+                if let Scene::Play(g) = &mut app.scene {
+                    g.debug_webs();
                 }
             }
             if app.params.contains_key("die") {

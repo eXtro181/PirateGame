@@ -1,5 +1,6 @@
-//! Große Bauwerke: Fachwerkhäuser mit türkisen Schuppendächern (wie im Beispiel),
-//! Taverne, Schmiede, Schiffswrack und der Seelenbaum des Schiffshains.
+//! Große Bauwerke: düstere Fachwerkhäuser (verrußter Putz, Schieferdächer mit Moos, vernagelte
+//! Fenster, Schädel über der Tür – Dark Fantasy statt bunter Dörfer), Taverne, Schmiede,
+//! Schiffswrack und der Seelenbaum des Schiffshains.
 
 use crate::canvas::Canvas;
 use crate::color::*;
@@ -118,6 +119,36 @@ pub fn window(c: &mut Canvas, x: i32, y: i32, w: i32, h: i32, lit: bool, flowers
     }
 }
 
+/// Vernageltes Fenster: zwei schiefe Bretter mit Nägeln über dem dunklen Glas.
+pub fn boarded(c: &mut Canvas, x: i32, y: i32, w: i32, h: i32, seed: i32) {
+    let wd = p6(&[0x1A120C, 0x281C12, 0x382818, 0x4A3620, 0x5C462A, 0x6E5634]);
+    let ir = iron();
+    for (k, yy) in [(0, y + h / 3), (1, y + 2 * h / 3)] {
+        let tilt = if (k + seed) % 2 == 0 { 3 } else { -3 };
+        for i in -2..w + 2 {
+            let dy = (i * tilt) / w.max(1);
+            for j in 0..4 {
+                let v = if j == 0 { 0.7 } else if j == 3 { 0.2 } else { 0.45 } + (h01(i / 4, k + seed, 5) - 0.5) * 0.15;
+                c.put(x + i, yy + dy + j - 2, pick(&wd, v), 3.0);
+            }
+        }
+        c.set(x, yy - 1, ir[4]);
+        c.set(x + w - 1, yy - 1 + tilt.signum() * 0, ir[4]);
+    }
+}
+
+/// Rußspur über einer Öffnung (nach oben auslaufend)
+fn soot(c: &mut Canvas, x: i32, y: i32, w: i32, h: i32) {
+    for j in 0..h {
+        for i in 0..w {
+            let k = (1.0 - j as f32 / h as f32) * (1.0 - ((i as f32 + 0.5) / w as f32 - 0.5).abs() * 2.0);
+            if k > 0.0 && h01(x + i, y - j, 17) < k * 1.2 {
+                c.tint(x + i, y - j, hex(0x0C0A08), 0.35 * k);
+            }
+        }
+    }
+}
+
 pub fn door(c: &mut Canvas, x: i32, y: i32, w: i32, h: i32) {
     let wd = p6(&[0x2A160E, 0x40221A, 0x5A3424, 0x744830, 0x8E5E40, 0xAA7A56]);
     let st = stone();
@@ -165,17 +196,33 @@ pub fn townhouse(v: i32) -> PropArt {
             c.put(x, y, pick(&st, v2), 1.0);
         }
     }
-    // Fenster und Tür
-    let fl = [hex(0xE85A8A), hex(0xF6F2E4), hex(0xF2C84A)][v as usize % 3];
+    // Fenster und Tür: wenige Kerzen hinter trübem Glas, manche Fenster vernagelt, Ruß darüber
     let ww = 18;
     let wy = roof_h + 10;
     let door_x = ox + w / 2 - 10 + if v == 1 { -30 } else { 0 };
     door(&mut c, door_x, roof_h + wall_h - 36, 20, 30);
+    soot(&mut c, door_x + 2, roof_h + wall_h - 38, 16, 14);
+    // Schädel als Abwehrzeichen über der Tür, daneben eine Laterne am Haken
+    skull(&mut c, (door_x + 10) as f32, (roof_h + wall_h - 42) as f32, 1.2);
+    let ir = iron();
+    let lx = door_x + 26;
+    c.hline(lx - 4, lx, roof_h + wall_h - 34, ir[2]);
+    c.rect_r(lx - 2, roof_h + wall_h - 33, 5, 7, ir[1], 4.0);
+    for yy in roof_h + wall_h - 32..roof_h + wall_h - 27 {
+        for xx in lx - 1..lx + 2 {
+            c.lit(xx, yy, hex(0xE89A40), 1.2);
+        }
+    }
     let mut x = ox + 14;
     let mut k = 0;
     while x + ww < ox + w - 10 {
-        if x + ww < door_x - 6 || x > door_x + 26 {
-            window(&mut c, x, wy, ww, 24, (k + v) % 3 == 0, Some(fl));
+        if x + ww < door_x - 6 || x > door_x + 30 {
+            let lit = (k + v) % 4 == 0;
+            window(&mut c, x, wy, ww, 24, lit, None);
+            if !lit && (k + v * 2) % 3 == 1 {
+                boarded(&mut c, x, wy, ww, 24, k + v);
+            }
+            soot(&mut c, x + 1, wy - 1, ww - 2, 9);
         }
         x += ww + 16;
         k += 1;
@@ -225,9 +272,31 @@ pub fn townhouse(v: i32) -> PropArt {
             }
         }
     }
-    // Schornstein
+    // Moospolster und fehlende Schindeln auf dem Dach
+    let moss = p6(&[0x101A10, 0x182416, 0x20301C, 0x2A3C22, 0x344828, 0x40562E]);
+    for i in 0..10 {
+        let mx = ox + 6 + (h01(i, v, 31) * (w - 12) as f32) as i32;
+        let my = 8 + (h01(i, v, 37) * (roof_h - 20) as f32) as i32;
+        if h01(i, v, 41) > 0.45 {
+            c.dome(mx as f32, my as f32, 5.0 + h01(i, v, 43) * 6.0, 2.5 + h01(i, v, 47) * 2.0, &moss, 2.0, 7.0, 0.5, 0.0);
+        } else {
+            for yy in my..my + 4 {
+                for xx in mx..mx + 7 {
+                    c.put(xx, yy, hex(0x0A0A0C), 3.0);
+                }
+            }
+        }
+    }
+    // Schornstein mit Ruß
     let chx = ox + if v == 2 { 30 } else { w - 40 };
     block(&mut c, chx, 0, 14, 4, 18, &st, &st, 7.0);
+    soot(&mut c, chx, 6, 14, 6);
+    // eine Krähe auf dem First
+    let crow = p6(&[0x060608, 0x0E0E12, 0x16161C, 0x202028, 0x2A2A34, 0x363642]);
+    let cxr = ox + w / 2 + if v == 1 { -40 } else { 34 };
+    c.dome(cxr as f32, (ridge - 4) as f32, 4.0, 3.0, &crow, 2.0, 8.0, 0.3, 0.1);
+    c.dome((cxr + 3) as f32, (ridge - 7) as f32, 2.0, 2.0, &crow, 2.0, 9.0, 0.3, 0.1);
+    c.put(cxr + 5, ridge - 7, hex(0x5A4A2A), 9.0);
     c.outline(true, 0.8);
     let ay = h - 4;
     PropArt::new(&format!("townhouse{v}"), c, (w + 12) / 2, ay)
@@ -254,18 +323,25 @@ pub fn tavern() -> PropArt {
     }
     c.rect_r(ox + 4, roof_h - 4, w - 8, 5, tb[3], 2.0);
     door(&mut c, ox + w / 2 - 14, roof_h + wall_h - 42, 28, 36);
-    for &x in &[ox + 22, ox + 60, ox + w - 82, ox + w - 44] {
-        window(&mut c, x, roof_h + 14, 22, 28, true, Some(hex(0xF2C84A)));
+    for (k, &x) in [ox + 22, ox + 60, ox + w - 82, ox + w - 44].iter().enumerate() {
+        window(&mut c, x, roof_h + 14, 22, 28, k != 2, None);
+        if k == 2 {
+            boarded(&mut c, x, roof_h + 14, 22, 28, 1);
+        }
+        soot(&mut c, x + 1, roof_h + 13, 20, 10);
     }
+    skull(&mut c, (ox + w / 2) as f32, (roof_h + wall_h - 48) as f32, 1.4);
     // Schild
     let sx = ox + w / 2 + 30;
     c.hline(sx, sx + 26, roof_h + 4, tb[1]);
     block(&mut c, sx + 2, roof_h + 8, 24, 2, 16, &wd, &wd, 4.0);
-    let mug = gold();
-    c.rect_r(sx + 10, roof_h + 12, 7, 9, mug[3], 5.0);
-    c.hline(sx + 10, sx + 16, roof_h + 12, hex(0xFFF4DC));
-    // Dach (rot-braune Schindeln)
-    let rf = p6(&[0x3A1612, 0x5A221A, 0x7E3422, 0xA04A2E, 0xC26A44, 0xDC9064]);
+    // Schild: ein Schädel über gekreuzten Knochen
+    skull(&mut c, (sx + 14) as f32, (roof_h + 15) as f32, 1.2);
+    let b = bone();
+    c.tube(&[((sx + 7) as f32, (roof_h + 20) as f32), ((sx + 21) as f32, (roof_h + 23) as f32)], 1.0, 1.0, &b, 2.0, 5.0);
+    c.tube(&[((sx + 7) as f32, (roof_h + 23) as f32), ((sx + 21) as f32, (roof_h + 20) as f32)], 1.0, 1.0, &b, 2.0, 5.0);
+    // Dach (dunkle, ochsenblutfarbene Schindeln)
+    let rf = p6(&[0x140A0A, 0x221010, 0x341614, 0x481E1A, 0x5C2820, 0x703428]);
     let ridge = (roof_h as f32 * 0.35) as i32;
     let roof_mask = |xx: i32, yy: i32| -> bool { xx >= ox - 6 && xx < ox + w + 6 && yy >= 6 && yy < roof_h };
     scale_area(&mut c, ox - 8, 6, w + 16, ridge - 6, &rf, 0.4, 12, 7, &roof_mask);

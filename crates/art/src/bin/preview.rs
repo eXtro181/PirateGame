@@ -15,6 +15,18 @@ impl TerrainMap for Flat {
     fn biome(&self, _tx: i32, _ty: i32) -> Biome { self.0 }
 }
 
+/// Stufe zum Testen der Kanten: oben Ebene 1 (wellige Kante), unten Ebene 0
+struct Steps(Biome, Mat);
+impl TerrainMap for Steps {
+    fn size(&self) -> (i32, i32) { (64, 64) }
+    fn mat(&self, _tx: i32, _ty: i32) -> Mat { self.1 }
+    fn level(&self, _tx: i32, ty: i32) -> u8 { if ty < 10 { 1 } else { 0 } }
+    fn lpx(&self, px: i32, py: i32) -> u8 { if (py as f32) < 300.0 + (px as f32 / 37.0).sin() * 14.0 { 1 } else { 0 } }
+    fn face(&self, _tx: i32, _ty: i32) -> Option<(i32, i32, u8, u8)> { None }
+    fn stairs(&self, _tx: i32, _ty: i32) -> bool { false }
+    fn biome(&self, _tx: i32, _ty: i32) -> Biome { self.0 }
+}
+
 fn save_lit(c: &Canvas, path: &str, scale: u32) {
     let env = LightEnv {
         ambient: [0.5, 0.52, 0.62],
@@ -106,6 +118,22 @@ fn main() {
                 bg.place(&pa.c, *x, *y, pa.ax, pa.ay);
             }
             save_lit(&bg, &format!("{out}/props.png"), 1);
+        }
+        "village" => {
+            // Dorf im Dark-Fantasy-Stil (Häuser, Taverne, Brunnen, Stände, Lumpen, Bannpfahl, Galgen)
+            use sw_art::buildings::*;
+            use sw_art::props::*;
+            let mut bg = bake_chunk(&Flat(Biome::Wind, Mat::Cobble), &mut mats, &en, 0, 0, 1280).crop(0, 0, w, h);
+            let list: Vec<(PropArt, i32, i32)> = vec![
+                (townhouse(0), 110, 250), (townhouse(1), 330, 250), (townhouse(2), 580, 250), (tavern(), 900, 260),
+                (well(), 120, 420), (stall(0), 260, 440), (stall(1), 400, 440), (laundry(2), 520, 420),
+                (flower_pot(1), 600, 420), (ward_post(0), 660, 430), (gibbet(), 760, 460), (lamppost(), 860, 430),
+            ];
+            for (pa, x, y) in &list {
+                let c = sw_art::pixstyle::pixel_style(&pa.c);
+                bg.place(&c, *x, *y, pa.ax + (c.w - pa.c.w) / 2, pa.ay + (c.h - pa.c.h) / 2);
+            }
+            save_lit(&bg, &format!("{out}/village.png"), 1);
         }
         "dutchman" => {
             let t = std::time::Instant::now();
@@ -390,6 +418,105 @@ fn main() {
             eprintln!("Schiffe: {:?}", t.elapsed());
             save_lit(&bg, &format!("{out}/ships.png"), 1);
         }
+        "bridge" => {
+            // hohe Steinbrücke der Glutwacht über dunklem Wasser
+            let t = std::time::Instant::now();
+            let g = sw_art::structures::hub_bridge(768.0, 150.0, 36.0);
+            eprintln!("Brücke: {:?}, {}×{}", t.elapsed(), g.c.w, g.c.h);
+            let mut bg = Canvas::new(g.c.w + 40, g.c.h + 80);
+            let water = sw_art::color::hex(0x10222A);
+            for y in 0..bg.h { for x in 0..bg.w { let i = bg.idx(x, y); bg.col[i] = water; } }
+            let (bw, bh) = (bg.w, bg.h);
+            bg.place(&g.c, bw / 2, bh - 40, g.ax, g.ay);
+            save_lit(&bg, &format!("{out}/bridge.png"), 1);
+        }
+        "sin" => {
+            let g = sw_art::structures::sin_statue();
+            let mut bg = Canvas::new(200, 160);
+            let floor = sw_art::color::hex(0x3A3440);
+            for y in 0..bg.h { for x in 0..bg.w { let i = bg.idx(x, y); bg.col[i] = floor; } }
+            bg.place(&g.c, 100, 140, g.ax, g.ay);
+            save_lit(&bg, &format!("{out}/sin.png"), 3);
+        }
+        "seagate" => {
+            // Seetor vor einer 384 px hohen Mauerfront, darunter Wasser
+            let g = sw_art::structures::sea_gate();
+            let mut bg = Canvas::new(700, 560);
+            let (wall, water) = (sw_art::color::hex(0x2A2630), sw_art::color::hex(0x10222A));
+            for y in 0..bg.h {
+                for x in 0..bg.w {
+                    let i = bg.idx(x, y);
+                    let in_gap = (x - 350).abs() < 146;
+                    bg.col[i] = if y > 500 || (in_gap && y > 116) { water } else if y > 116 { wall } else { sw_art::color::hex(0x3A3440) };
+                }
+            }
+            bg.place(&g.c, 350, 500, g.ax, g.ay);
+            save_lit(&bg, &format!("{out}/seagate.png"), 1);
+        }
+        "cliffs" => {
+            // Kanten zwischen zwei Ebenen in mehreren Gebieten (Natur) und die Festungsmauer
+            let list = [(Biome::Coast, Mat::Grass), (Biome::Fire, Mat::Ash), (Biome::Frost, Mat::Snow), (Biome::Wind, Mat::Grass), (Biome::Hub, Mat::Cobble)];
+            let (cw, chh) = (256, 512);
+            let mut bg = Canvas::new(cw * list.len() as i32, chh);
+            let t = std::time::Instant::now();
+            for (k, (b, m)) in list.iter().enumerate() {
+                let c = bake_chunk(&Steps(*b, *m), &mut mats, &en, 0, 0, cw);
+                let c2 = bake_chunk(&Steps(*b, *m), &mut mats, &en, 0, cw, cw);
+                bg.place(&c, k as i32 * cw, 0, 0, 0);
+                bg.place(&c2, k as i32 * cw, cw, 0, 0);
+            }
+            eprintln!("Kanten: {:?}", t.elapsed());
+            save_lit(&bg, &format!("{out}/cliffs.png"), 1);
+        }
+        "webs" => {
+            // Netze der Meeresspinne: Klumpen, fliegendes Netz, am Boden klebend (zwei Abwandlungen)
+            use sw_art::structures::*;
+            let parts = [web_ball(), web_net(), web_ground(0), web_ground(1)];
+            let w: i32 = parts.iter().map(|c| c.w + 8).sum();
+            let mut bg = Canvas::new(w, 64);
+            let ground = sw_art::color::hex(0x3A3428);
+            for y in 0..bg.h { for x in 0..bg.w { let i = bg.idx(x, y); bg.col[i] = ground; } }
+            let mut x = 4;
+            for c in parts.iter() {
+                bg.place(c, x + c.w / 2, 32, c.w / 2, c.h / 2);
+                x += c.w + 8;
+            }
+            save_lit(&bg, &format!("{out}/webs.png"), 4);
+        }
+        "playerfit" => {
+            // passt der Spieler-Bogen (alle Richtungen und Animationen, Pixelstil) in den Spielerstreifen (2040 × 208)?
+            use sw_art::chars::*;
+            let l = player_look(&[0, 0, 0, 0, 0, 0, 0, 0], "cutlass");
+            let mut a = sw_art::atlas::Atlas::new();
+            a.lim = 2040;
+            a.style = true;
+            let t = std::time::Instant::now();
+            let mut atk = vec![];
+            for dir in DIRS {
+                for (anim, n) in ANIMS {
+                    if dir != "down" && anim == "dead" {
+                        continue;
+                    }
+                    for i in 0..n {
+                        let c = frame(&l, dir, anim, i, 1.0);
+                        if anim == "atk" || (anim == "idle" && i == 0) {
+                            atk.push(c.clone());
+                        }
+                        let ay = c.h - 4;
+                        a.add_trim(&format!("{dir}:{anim}:{i}"), &c, c.w / 2, ay);
+                    }
+                }
+            }
+            eprintln!("Spieler-Bogen: belegt {:.0} px von 208, {} Seiten ({:?})", a.used() * 2048.0, a.pages.len(), t.elapsed());
+            if !atk.is_empty() {
+                let (w, h) = (atk[0].w, atk[0].h);
+                let mut bg = Canvas::new(w * atk.len() as i32, h);
+                for (k, c) in atk.iter().enumerate() {
+                    bg.place(c, k as i32 * w + w / 2, h - 4, c.w / 2, c.h - 4);
+                }
+                save_lit(&bg, &format!("{out}/player_attack.png"), 3);
+            }
+        }
         "shipfit" => {
             // passt das eigene Schiff (9 Kurse, Pixelstil +2 px) in den Schiffsstreifen (2040 × 300)?
             use sw_art::ships::*;
@@ -477,7 +604,7 @@ fn main() {
                 (wall_h(0), 640, 330),
                 (wall_h(1), 790, 330),
                 (wall_v(), 900, 330),
-                (gate_arch(), 1000, 330),
+                (brazier(), 1000, 330),
                 (brazier(), 1100, 330),
                 (sword_grave(0), 1150, 330),
                 (candles(0), 1200, 330),

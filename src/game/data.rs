@@ -181,6 +181,10 @@ pub fn enemies() -> Vec<EnemyDef> {
     use Body::*;
     vec![
         en("skeleton", "Ertrunkener Matrose", 60.0, 16.0, 38.0, 110.0, 22.0, 0.5, 0.6, 60.0, Sheet("skeleton"), 20.0),
+        // aufgebrachter Mob einer feindlichen Siedlung
+        en("mobA", "Aufgebrachter Dorfbewohner", 70.0, 11.0, 40.0, 150.0, 22.0, 0.55, 0.7, 25.0, Sheet("mobA"), 14.0),
+        en("mobB", "Aufgebrachter Dorfbewohner", 64.0, 13.0, 38.0, 150.0, 26.0, 0.6, 0.7, 25.0, Sheet("mobB"), 12.0),
+        en("mobC", "Aufgebrachte Dorfbewohnerin", 56.0, 10.0, 46.0, 150.0, 18.0, 0.42, 0.6, 25.0, Sheet("mobC"), 10.0),
         EnemyDef { aoe: 52.0, ..en("skelBrute", "Ankerträger", 150.0, 32.0, 28.0, 100.0, 28.0, 0.95, 1.0, 180.0, Sheet("skelBrute"), 60.0) },
         EnemyDef { ranged: true, ..en("skelGunner", "Musketen-Gerippe", 45.0, 20.0, 30.0, 150.0, 130.0, 0.9, 1.2, 80.0, Sheet("skelGunner"), 10.0) },
         EnemyDef { burn: true, ..en("ashSkeleton", "Aschegänger", 80.0, 20.0, 42.0, 120.0, 22.0, 0.45, 0.5, 110.0, Sheet("ashSkeleton"), 25.0) },
@@ -402,6 +406,10 @@ pub struct Save {
     /// Flaschenschiff vom Geisterkapitän am Galgenstrand (noch nicht ins Meer geworfen)
     #[serde(default)]
     pub bottle: bool,
+    /// Siedlungen, die dem Spieler feindlich gesinnt sind (Schlüssel wie „asche“, „raben“, „hain“);
+    /// an der Sündenstatue der Glutwacht kauft man Frieden
+    #[serde(default)]
+    pub hostile: Vec<String>,
     /// das Schiff ist schon einmal aus der Tiefe gestiegen (danach ruft man es an jedem Steg);
     /// Spielstände vor v7 hatten es von Anfang an
     #[serde(default)]
@@ -574,6 +582,7 @@ pub fn new_save(name: &str, look: LookIdx, origin: &str, gift: &str, now: f64) -
         prolog: true,
         spider: false,
         bottle: false,
+        hostile: vec![],
         ship_raised: false,
         ship_speed: 0,
         ship_def: 0,

@@ -16,6 +16,7 @@ pub mod seaboss;
 pub mod seamon;
 pub mod ship;
 pub mod summon;
+pub mod hostile;
 
 pub use crate::art::{anim_index, Art, CharSheet};
 pub use crate::gfx::{flags, modes, Frame, LightDef, SprOpt};
@@ -61,6 +62,8 @@ pub enum Use {
     Bottle(usize),
     /// noch kein Schiff (Flaschenschiff fehlt)
     NoShip,
+    /// Sündenstatue der Glutwacht: Frieden mit feindlichen Siedlungen erkaufen
+    Sin,
     Stain,
     /// Laden betreten / verlassen
     Enter(usize),
@@ -153,6 +156,14 @@ pub struct Game {
     pub lock: Option<Target>,
     pub talk_to: Option<usize>,
     pub slow_t: f32,
+    /// feindliche Siedlungen haben sich geändert: Mob anlegen bzw. entfernen
+    pub hostile_dirty: bool,
+    /// Netze der Meeresspinne am Boden (verlangsamen, zerreißen beim Hindurchrollen)
+    pub webs: Vec<boss::WebPatch>,
+    /// Spieler eingesponnen (Volltreffer eines Netzes): so lange festgehalten (s)
+    pub web_t: f32,
+    /// Spieler steht in einem Netz (wird jedes Bild neu gesetzt)
+    pub web_slow: f32,
     pub sailing: bool,
     pub flash_light: Option<(f32, f32, f32)>,
     /// Testansicht (`&fxzoo`): alle PixelFX-Effekte im Raster um den Spieler, Zeit bis zur nächsten Runde
@@ -280,6 +291,10 @@ impl Game {
             lock: None,
             talk_to: None,
             slow_t: 0.0,
+            hostile_dirty: false,
+            webs: vec![],
+            web_t: 0.0,
+            web_slow: 0.0,
             sailing: false,
             flash_light: None,
             fx_zoo: None,
@@ -582,6 +597,8 @@ impl Game {
             },
             Target::Player => Some((self.player.a.x, self.player.a.y, self.player.a.hurt_r, 28.0)),
             Target::Ship => Some((self.ship.hull.x, self.ship.hull.y, 56.0, 28.0)),
+            Target::Npc(i) => self.npcs.get(i).map(|n| (n.a.x, n.a.y, 14.0, 24.0)),
+            Target::Walker(i) => self.walkers.get(i).map(|w| (w.a.x, w.a.y, 14.0, 24.0)),
         }
     }
     pub fn hurt_target(&mut self, t: Target, dmg: f32, _from: Target, o: HurtOpt) {
@@ -598,6 +615,7 @@ impl Game {
                 self.hurt_player(dmg, Target::Player, o);
             }
             Target::Ship => self.ship_damage((dmg * 0.5).round()),
+            Target::Npc(_) | Target::Walker(_) => self.provoke(t),
         }
     }
     pub fn stagger_target(&mut self, t: Target) {
@@ -640,6 +658,8 @@ impl Game {
     pub fn spawn_all(&mut self, art: &Art) {
         let spawns = self.world.spawns.clone();
         self.enemies = spawns.iter().map(|s| self.make_enemy(s, art)).collect();
+        // feindliche Siedlungen: der Mob kehrt mit allen Gegnern zurück
+        self.sync_hostile(art);
         self.spawn_sea();
     }
     fn fire_idx(&self, id: &str) -> usize {
@@ -706,6 +726,7 @@ impl Game {
         self.shake_k = (self.shake_k - dt * 28.0).max(0.0);
         self.flash_c[3] = (self.flash_c[3] - dt * 2.5).max(0.0);
         self.slow_t = (self.slow_t - dt).max(0.0);
+        self.update_webs(dt);
         self.shanty_t = (self.shanty_t - dt).max(0.0);
         self.lightning = (self.lightning - dt).max(0.0);
         self.pearl_gain_t -= dt;
@@ -765,6 +786,10 @@ impl Game {
         }
         self.update_coffin_reveal(dt);
         self.update_ghost(dt);
+        if self.cutscene.is_some() {
+            // der Treffer-Blitz läuft auch in Zwischensequenzen aus (sonst bliebe die Figur weiß)
+            self.player.a.flash = (self.player.a.flash - dt).max(0.0);
+        }
         self.update_cutscene(dt, art);
         if !modal && self.cutscene.is_none() {
             if self.input.pressed(Act::Menu) {
@@ -891,6 +916,9 @@ impl Game {
         }
         if let Some(full) = self.refresh.take() {
             self.refresh_player(full, art, frame);
+        }
+        if self.hostile_dirty {
+            self.sync_hostile(art);
         }
     }
 
@@ -1211,10 +1239,14 @@ impl Game {
             out.extend(f(fi.x, fi.y, 72.0, if s.lit_fires.contains(&fi.id) { "Rasten" } else { "Feuer entzünden" }, Use::Fire(i), Some(fi.prop)));
         }
         for (i, n) in self.npcs.iter().enumerate() {
-            if self.npc_gone(i) {
+            if self.npc_gone(i) || self.npc_mobbed(i) {
                 continue;
             }
             out.extend(f(n.a.x, n.a.y, 72.0, "Sprechen", Use::Npc(i), None));
+        }
+        if let Some(si) = self.world.sin_statue {
+            let p = &self.world.props[si];
+            out.extend(f(p.x, p.y, 96.0, "Sündenstatue", Use::Sin, Some(si)));
         }
         for (i, it) in self.items.iter().enumerate() {
             out.extend(f(it.x, it.y, 40.0, "Aufheben", Use::Item(i), None));
@@ -1343,6 +1375,7 @@ impl Game {
             match f.act {
                 Use::Fire(i) => self.use_fire(i, art),
                 Use::Npc(i) => self.talk(i),
+                Use::Sin => self.sin_menu(),
                 Use::Item(i) => self.pick_up(i),
                 Use::Chest(ci) => self.open_chest(ci, art),
                 Use::Gate(gi) => self.enter_gate(gi),
@@ -1465,6 +1498,8 @@ impl Game {
     }
     fn respawn(&mut self, art: &Art) {
         self.reset_end();
+        self.webs.clear();
+        self.web_t = 0.0;
         self.death_t = None;
         self.ui.fade = 0.0;
         self.player.hidden = false;
@@ -1596,6 +1631,7 @@ impl Game {
             }
             Cmd::ShopAt(id) => self.shop_at(id),
             Cmd::TakeBottle => self.take_bottle(),
+            Cmd::Atone(k) => self.atone(k),
             Cmd::Buy(w, p) => self.buy(w, p),
             Cmd::RestMenu(i) => self.rest_menu(i),
             Cmd::TravelMenu(i) => self.travel_menu(i),
@@ -2171,6 +2207,8 @@ impl Game {
         self.ship.sunk = false;
         self.ship.sinking = None;
         self.ship.depth = 0.0;
+        self.ship.lift = 0.0;
+        self.ship.tilt = 0.0;
         self.sailing = true;
         self.player.state = PS::Ship;
         self.player.hidden = true;
@@ -2199,6 +2237,7 @@ impl Game {
         // das Schiff kehrt in die Tiefe zurück, bis man es wieder ruft
         self.ship.sinking = Some(0.0);
         self.sfx("bubbles");
+        self.sfx("creak");
         self.persist(true);
     }
     fn sing_shanty(&mut self) {

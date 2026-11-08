@@ -49,6 +49,10 @@ pub struct Ship {
     pub sunk: bool,
     /// Versinken nach dem Anlegen läuft (s)
     pub sinking: Option<f32>,
+    /// so hoch springt das Schiff beim Auftauchen über die Wasserlinie (px)
+    pub lift: f32,
+    /// Krängung beim Auftauchen/Versinken (Bogenmaß, Drehung des Bildes um die Wasserlinie)
+    pub tilt: f32,
 }
 pub struct GhostShip {
     pub hull: Hull,
@@ -110,7 +114,7 @@ pub const KRAKEN_HOME: (f32, f32) = (crate::world::HUB.0 as f32 - 96.0, crate::w
 
 impl Ship {
     pub fn new(x: f32, y: f32, h: f32) -> Self {
-        Ship { hull: Hull::new(x, y, h), sail: 0, hp: 120.0, max_hp: 120.0, cool: [0.0; 2], depth: 1.0, wet: 0.0, sunk: true, sinking: None }
+        Ship { hull: Hull::new(x, y, h), sail: 0, hp: 120.0, max_hp: 120.0, cool: [0.0; 2], depth: 1.0, wet: 0.0, sunk: true, sinking: None, lift: 0.0, tilt: 0.0 }
     }
 }
 
@@ -503,7 +507,9 @@ impl Game {
             let a = (h.alpha * 255.0) as u8;
             let fl = if h.flash > 0.0 { flags::FLASH } else { 0 } | if self.hover == Hover::Ship { flags::OUTLINE } else { 0 };
             if depth < 0.6 {
-                f.shadow(h.x, h.y + 6.0, 129.0, 36.0, 0.3 * (1.0 - depth / 0.6));
+                // springt es über die Wasserlinie, bleibt der Schatten auf dem Wasser und wird blasser
+                let lk = 1.0 - (self.ship.lift / 60.0).clamp(0.0, 0.6);
+                f.shadow(h.x, h.y + 6.0, 129.0, 36.0, 0.3 * (1.0 - depth / 0.6) * lk);
             }
             // tropfnass nach dem Auftauchen: dunkler und kühler, trocknet ab
             let wet = (self.ship.wet / summon::WET).clamp(0.0, 1.0);
@@ -511,7 +517,8 @@ impl Game {
             // beim Auftauchen/Versinken: das Bild um den untergetauchten Teil tiefer und an der
             // Wasserlinie (Unterkante des Bildes) abgeschnitten – die Masten tauchen zuerst auf
             let sub = depth * s.h as f32;
-            f.sprite(&s, h.x, h.y + b + sub, SprOpt { flip, tint, flags: fl, cut_bottom: depth, ..Default::default() });
+            f.sprite(&s, h.x, h.y + b + sub - self.ship.lift, SprOpt { flip, tint, flags: fl, cut_bottom: depth, rot: self.ship.tilt, ..Default::default() });
+            self.draw_ship_vortex(art, f, h.x, h.y);
             if depth > 0.005 {
                 // Gischt, wo das Schiff die Oberfläche durchbricht
                 let wl = h.y + b + (s.h as f32 - s.ay as f32);

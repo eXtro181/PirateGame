@@ -149,6 +149,8 @@ pub struct Enemy {
     pub body_y: f32,
     pub h: f32,
     pub valid: bool,
+    /// Mob einer feindlichen Siedlung (Schlüssel), verschwindet nach der Buße
+    pub folk: Option<&'static str>,
 }
 
 pub struct Npc {
@@ -183,6 +185,8 @@ pub enum OnHit {
     Explode,
     Shard,
     Splash,
+    /// Netz der Meeresspinne: fliegt im Bogen, klebt am Boden fest bzw. spinnt den Spieler ein
+    Web,
 }
 #[derive(Clone)]
 pub struct Shot {
@@ -205,10 +209,14 @@ pub struct Shot {
     pub explode_end: bool,
     pub glow: Option<[f32; 3]>,
     pub hit: Vec<Target>,
+    /// Abschusspunkt (x, y, z) für einen Faden zum Geschoss (Netze der Spinne)
+    pub from: Option<(f32, f32, f32)>,
+    /// geplante Flugzeit im Bogen (s)
+    pub fly: f32,
 }
 impl Shot {
     pub fn new(owner: Owner, kind: &'static str, x: f32, y: f32, z: f32, vx: f32, vy: f32, dmg: f32) -> Self {
-        Shot { owner, kind, x, y, z, vx, vy, vz: None, grav: 0.0, dmg, r: 8.0, life: 2.0, t: 0.0, pierce: false, sea: false, on_hit: OnHit::Damage, explode_end: false, glow: None, hit: vec![] }
+        Shot { owner, kind, x, y, z, vx, vy, vz: None, grav: 0.0, dmg, r: 8.0, life: 2.0, t: 0.0, pierce: false, sea: false, on_hit: OnHit::Damage, explode_end: false, glow: None, hit: vec![], from: None, fly: 0.0 }
     }
 }
 
@@ -226,6 +234,9 @@ pub enum Target {
     EndShip,
     Player,
     Ship,
+    /// friedliche Figur bzw. Dorfbewohner (angreifbar: macht ihre Siedlung feindlich)
+    Npc(usize),
+    Walker(usize),
 }
 
 pub struct HurtOpt {
@@ -439,8 +450,24 @@ impl Game {
         let lock_t = self.lock.and_then(|t| self.target_pos(t).map(|q| (q.0, q.1)));
         let moving = ax.length() > 0.15;
         match p.state {
+            PS::Free if self.web_t > 0.0 => {
+                // eingesponnen: festgehalten; Angreifen oder Ausweichen reißt an den Fäden
+                p.a.anim = "hurt";
+                p.a.frame = 0.0;
+                let inp = &self.input;
+                if inp.pressed(Act::Roll) || inp.pressed(Act::Attack) || inp.pressed(Act::Heavy) {
+                    self.web_t -= 0.34;
+                    self.fx.burst("snow", p.a.x, p.a.y - 10.0, 5, BurstOpt { speed: Some(70.0), up: Some(60.0), col: Some([0.92, 0.93, 0.89, 0.9]), ..Default::default() });
+                    self.sfx("silk");
+                    p.a.x += rr(-1.0, 1.0);
+                    if self.web_t <= 0.0 {
+                        self.web_t = 0.0;
+                        self.fx.px.play(Px::Poof, p.a.x, p.a.y + 1.0).scale(0.55);
+                    }
+                }
+            }
             PS::Free => {
-                let sp = (60.0 + self.save.stats.dex as f32 * 0.8) * S * if self.slow_t > 0.0 { 0.6 } else { 1.0 };
+                let sp = (60.0 + self.save.stats.dex as f32 * 0.8) * S * if self.slow_t > 0.0 { 0.6 } else { 1.0 } * if self.web_slow > 0.0 { 0.42 } else { 1.0 };
                 if moving {
                     let mut a = p.a;
                     self.move_actor(&mut a, ax.x * sp * dt, ax.y * sp * dt);
@@ -713,7 +740,8 @@ impl Game {
 
     fn player_strike(&mut self, p: &Player) {
         let w = weapon(&self.save.weapon);
-        let reach = (w.range * 14.0 + 6.0) * S;
+        // die Klinge des Spielers ist größer gezeichnet (`Look::weapon_scale`) und reicht etwas weiter
+        let reach = (w.range * 14.0 + 6.0) * S * 1.15;
         let dmg = p.d.dmg * if p.heavy { w.heavy_mul } else { 1.0 } * (1.0 + p.combo as f32 * 0.1);
         let ang = p.a.fy.atan2(p.a.fx);
         // PixelFX: Säbelhieb, zweiter Hieb von unten, dritter als Stoß; schwer = Doppelhieb.
@@ -744,7 +772,10 @@ impl Game {
         }
         i.scale(sc).tint(tint).front(8.0).gain(1.15);
         let mut hit = false;
-        for t in self.hittables() {
+        // auch friedliche Figuren lassen sich treffen (in Siedlungen mit Folgen)
+        let mut targets = self.hittables();
+        targets.extend(self.npc_targets());
+        for t in targets {
             let Some((tx, ty, thr, by)) = self.target_pos(t) else { continue };
             let extra = if matches!(t, Target::Boss(_)) { thr * 0.5 } else { 0.0 };
             if !p.a.in_arc(tx, ty, thr, reach + extra, if p.heavy { 1.3 } else { 1.15 }) {
@@ -965,6 +996,7 @@ impl Game {
             body_y: if matches!(d.body, Body::Beast(_)) { h * 0.45 } else { 22.0 * sc },
             h,
             valid: true,
+            folk: None,
         }
     }
 
@@ -1283,6 +1315,8 @@ impl Game {
                     s.life = 0.0;
                     if s.on_hit == OnHit::Explode {
                         self.explode(s.x, s.y, 64.0, s.dmg);
+                    } else if s.on_hit == OnHit::Web {
+                        self.web_lands(s.x, s.y, s.r, s.dmg);
                     }
                     continue;
                 }
@@ -1312,7 +1346,11 @@ impl Game {
                 continue;
             }
             let targets: Vec<Target> = match s.owner {
-                Owner::Player => self.hittables(),
+                Owner::Player => {
+                    let mut v = self.hittables();
+                    v.extend(self.npc_targets());
+                    v
+                }
                 Owner::Enemy => {
                     if self.sailing {
                         vec![Target::Ship]
@@ -1322,6 +1360,10 @@ impl Game {
                 }
                 Owner::None => vec![],
             };
+            // Netze fliegen im hohen Bogen über alles hinweg und wirken erst beim Aufschlag
+            if s.on_hit == OnHit::Web {
+                continue;
+            }
             for t in targets {
                 if s.hit.contains(&t) {
                     continue;
@@ -1346,9 +1388,6 @@ impl Game {
                                 self.fx.px.play(Px::Splash, s.x, s.y).scale(0.5);
                             } else if s.kind == "bullet" {
                                 self.fx.px.play(Px::Bullet, s.x, s.y).z(s.z).dir(s.vy.atan2(s.vx) + std::f32::consts::PI);
-                            } else if s.kind == "shard" && s.glow == Some([1.0, 1.0, 0.9]) {
-                                // Netz der Meeresspinne: zerreißt als weißer Wölkchen-Puff
-                                self.fx.px.play(Px::Poof, s.x, s.y + 1.0).scale(0.6);
                             } else if s.kind == "shard" {
                                 self.fx.px.play(Px::IceShatter, s.x, s.y + 1.0).scale(0.45);
                             } else if s.kind == "soul" {
@@ -1374,6 +1413,7 @@ impl Game {
         let (cx, cy) = self.cam_f;
         let near = |x: f32, y: f32| (x - cx).abs() < 1500.0 && (y - cy).abs() < 1000.0;
         for n in self.npcs.iter_mut() {
+            n.a.flash = (n.a.flash - dt).max(0.0);
             if !near(n.a.x, n.a.y) {
                 continue;
             }
@@ -1385,6 +1425,7 @@ impl Game {
             n.a.anim = if n.def.sit { "sit" } else { "idle" };
         }
         for w in self.walkers.iter_mut() {
+            w.a.flash = (w.a.flash - dt).max(0.0);
             if !near(w.a.x, w.a.y) {
                 continue;
             }

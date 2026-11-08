@@ -43,6 +43,8 @@ pub enum Cmd {
     ShopAt(&'static str),
     /// das Flaschenschiff vom Geisterkapitän annehmen
     TakeBottle,
+    /// an der Sündenstatue Frieden mit einer Siedlung erkaufen
+    Atone(&'static str),
 }
 
 #[derive(Clone)]
@@ -78,6 +80,13 @@ pub fn entry(label: &str, right: &str, desc: &str, disabled: bool, cmd: Cmd) -> 
 const FIGS: [&str; 4] = ["fire", "ice", "wind", "earth"];
 
 pub fn dialog_for(g: &mut Game, ni: usize) -> Script {
+    // feindliche Siedlung: kein Wort, kein Handel
+    if g.npc_refuses(ni) {
+        return Script {
+            pages: pages(&["„Mörder! Mit dir rede ich nicht.“", "„Geh zur Sündenstatue in der Glutwacht und tu Buße – vorher siehst du hier keine Ware und kein freundliches Gesicht.“"]),
+            choices: vec![],
+        };
+    }
     let def = g.npcs[ni].def.clone();
     let s = &mut g.save;
     let missing = FIGS.iter().filter(|f| !s.mounted.get(**f).copied().unwrap_or(false)).count();

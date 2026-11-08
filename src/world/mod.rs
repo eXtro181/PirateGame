@@ -323,6 +323,33 @@ pub struct Slot {
     pub x: f32,
     pub y: f32,
 }
+/// Hohe, stützenlose Steinbrücke über das Hafenbecken der Glutwacht (West–Ost über dem Strudel).
+/// Begehbar ist der Streifen |y − `y`| ≤ `hw` − Radius zwischen `x0` und `x1`; das Deck liegt
+/// `z(x)` über dem Wasser (Figuren darauf werden so viel höher gezeichnet), Schiffe fahren darunter.
+#[derive(Clone, Copy, Debug)]
+pub struct HubBridge {
+    pub x0: f32,
+    pub x1: f32,
+    pub y: f32,
+    pub hw: f32,
+    pub h: f32,
+}
+impl HubBridge {
+    /// Höhe des Decks bei x (an den Enden 0)
+    pub fn z(&self, x: f32) -> f32 {
+        let half = (self.x1 - self.x0) * 0.5;
+        sw_art::structures::bridge_z((x - self.x0 - half) / half, self.h)
+    }
+    /// Punkt (mit Radius r) steht auf dem Deck?
+    pub fn on(&self, x: f32, y: f32, r: f32) -> bool {
+        x >= self.x0 && x <= self.x1 && (y - self.y).abs() <= self.hw - r
+    }
+}
+/// Halbe Länge, Scheitelhöhe und halbe Deckbreite der Brücke (px; die Kunst nutzt dieselben Werte)
+pub const BRIDGE_HALF: f32 = 768.0;
+pub const BRIDGE_H: f32 = 150.0;
+pub const BRIDGE_HW: f32 = 36.0;
+
 #[derive(Clone, Debug)]
 /// Ein besiegtes Bossschiff im See der Glutwacht (sichtbar, sobald der Seeboss besiegt ist).
 pub struct HubWreck {
@@ -431,9 +458,15 @@ pub struct World {
     pub doors: Vec<Door>,
     /// Siedlungen (Mitte und Halbachsen in px): keine Gegner
     pub settlements: Vec<(f32, f32, f32, f32)>,
+    /// Schlüssel je Siedlung (gleiche Reihenfolge wie `settlements`)
+    pub settlement_keys: Vec<&'static str>,
+    /// Sündenstatue in der Glutwacht (Requisite)
+    pub sin_statue: Option<usize>,
     pub waterfalls: Vec<Waterfall>,
     pub ghost_routes: Vec<Vec<(f32, f32)>>,
     pub whirlpool: (f32, f32),
+    /// hohe Steinbrücke über dem Hafenbecken der Glutwacht
+    pub bridge: Option<HubBridge>,
     pub end_arrive: (f32, f32),
     /// Ende der Welt: Meeresgebiet (Kacheln x0, y0, x1, y1) in der Südost-Ecke
     pub end_rect: (i32, i32, i32, i32),
@@ -526,9 +559,12 @@ impl World {
             walkers: vec![],
             doors: vec![],
             settlements: vec![],
+            settlement_keys: vec![],
+            sin_statue: None,
             waterfalls: vec![],
             ghost_routes: vec![],
             whirlpool: (0.0, 0.0),
+            bridge: None,
             end_arrive: (0.0, 0.0),
             end_rect: (0, 0, 0, 0),
             end_props: vec![],
@@ -1431,6 +1467,7 @@ impl World {
         self.flat_areas.push((cx, cy, rx + 3, ry + 3));
         let (wx, wy) = tpos(cx, cy);
         self.settlements.push((wx, wy, (rx as f32 + 2.0) * TS as f32, (ry as f32 + 2.0) * TS as f32));
+        self.settlement_keys.push(key);
         // Gewächs und Geröll vom Platz räumen
         for p in self.props.iter_mut() {
             if p.sea || p.interact.is_some() {
@@ -1465,8 +1502,10 @@ impl World {
         self.prop_t("bench", cx - 11, cy + 2);
         self.prop_t("table", cx + 11, cy + 2);
         self.prop_t("laundry", cx - 9, cy - 3);
-        self.prop_tn("flowerPot", cx - 6, cy - 3);
-        self.prop_tn("flowerPot", cx + 10, cy - 3);
+        // Dark Fantasy: Bannpfähle mit Schädeln statt Blumentöpfen, ein Galgen mit Käfig
+        self.prop_t("wardPost", cx - 6, cy - 3);
+        self.prop_t("wardPost", cx + 10, cy - 3);
+        self.prop_t("gibbet", cx - 15, cy - 1);
         for (i, d) in decor.iter().enumerate() {
             let (x, y) = [(-13, 4), (13, 5), (-2, 6), (2, -3)][i % 4];
             self.prop_t(d, cx + x, cy + y);
@@ -1547,7 +1586,7 @@ impl World {
             "asche" => "anchorDeco",
             "frost" => "logPile",
             "raben" => "cannon",
-            _ => "flowerPot",
+            _ => "candles1",
         };
         self.prop_tn(extra, ix0 + 3, iy0 + 8);
     }
@@ -1797,24 +1836,13 @@ impl World {
             let a = a.to_radians();
             self.hub_wrecks.push(HubWreck { el: ["fire", "ice", "wind", "earth"][k], x: hx + a.cos() * 410.0, y: hy + a.sin() * 360.0, h: a + std::f32::consts::PI });
         }
-        let (s0, s1) = (cy - (BASIN as i32) - 1, cy - 12);
-        for y in s0..=s1 {
-            for x in cx - 1..=cx + 1 {
-                let i = idx(x, y);
-                self.ground[i] = Mat::Plank;
-                self.path[i] = true;
-                self.level[i] = 0;
-            }
-        }
-        for y in (s0 + 1..=s1).step_by(2) {
-            self.prop_t("bridgePost", cx - 2, y);
-            self.prop_t("bridgePost", cx + 2, y);
-        }
-        self.prop_t("lamppost", cx - 2, s1);
-        self.prop_t("lamppost", cx + 2, s1);
-        self.pier_end = ((cx * TS + TS / 2) as f32, (s1 * TS) as f32 + 8.0);
+        // statt des alten Stegs: eine hohe, stützenlose Steinbrücke von West nach Ost über das
+        // Becken, genau über dem Strudel (Schiffe fahren darunter durch)
+        self.pier_end = (hx, hy - 12.0 * TS as f32 + 8.0);
+        self.bridge = Some(HubBridge { x0: hx - BRIDGE_HALF, x1: hx + BRIDGE_HALF, y: hy, hw: BRIDGE_HW, h: BRIDGE_H });
+        self.prop_x("hubBridge", hx, hy + BRIDGE_HW, |p| p.no_collide = true);
         // ---- Kai (Ebene 0): Liegeplatz und Schiffsmeister im Osten, Werft auf dem Südostplatz
-        self.dock(Zone::Hain, cx + 23, cy, -1, 0);
+        self.dock(Zone::Hain, cx + 23, cy + 6, -1, 0);
         self.npc("shipmaster", cx + 24, cy - 3, "shipmaster", "Schiffsmeister Brack", "shipmaster", false, None);
         for y in cy + 9..=cy + 24 {
             for x in cx + 8..=cx + 30 {
@@ -1834,7 +1862,7 @@ impl World {
         self.prop_t("flagPole", cx + 29, cy + 9);
         self.prop_t("lamppost", cx + 12, cy + 10);
         self.prop_t("lamppost", cx + 26, cy + 23);
-        self.prop_t("signpost", cx + 21, cy + 6);
+        self.prop_t("signpost", cx + 25, cy + 3);
         self.prop_t("chainPost", cx + 7, cy + 12);
         // Crew-Tafel auf dem Südwestplatz, Feuerbecken und Fässer
         let (tx, ty) = (cx - 17, cy + 14);
@@ -1851,16 +1879,22 @@ impl World {
         self.prop_t("hullArch", cx - 14, cy + 25);
         self.prop_t("rowboat", cx - 24, cy + 22);
         // Westkai: Gedenkstätte der Ertrunkenen (Säbelgräber, Kerzen, Statue)
-        for (k, (gx, gy)) in [(cx - 23, cy - 6), (cx - 24, cy - 2), (cx - 24, cy + 2), (cx - 23, cy + 6)].iter().enumerate() {
+        // (die Brücke landet in der Mitte: zwei Statuen säumen den Brückenkopf)
+        for (k, (gx, gy)) in [(cx - 22, cy - 8), (cx - 24, cy - 6), (cx - 24, cy + 6), (cx - 22, cy + 8)].iter().enumerate() {
             self.prop_t(&format!("swordGrave{}", k % 3), *gx, *gy);
         }
-        self.prop_tn("candles0", cx - 22, cy - 4);
-        self.prop_tn("candles2", cx - 22, cy + 4);
-        self.prop_t("hoodedStatue", cx - 24, cy);
+        self.prop_tn("candles0", cx - 21, cy - 5);
+        self.prop_tn("candles2", cx - 21, cy + 5);
+        self.prop_t("hoodedStatue", cx - 24, cy - 3);
+        self.prop_t("hoodedStatue", cx - 24, cy + 3);
         // Nordkai beidseits des Stegs: Netze, Poller, Laternen
-        for (x, y, kind) in [(cx - 8, cy - 22, "nets"), (cx + 8, cy - 22, "barrels"), (cx - 13, cy - 19, "chainPost"), (cx + 13, cy - 19, "chainPost"), (cx - 5, cy - 23, "lamppost"), (cx + 5, cy - 23, "lamppost")] {
+        for (x, y, kind) in [(cx + 8, cy - 22, "barrels"), (cx - 13, cy - 19, "chainPost"), (cx + 13, cy - 19, "chainPost"), (cx - 5, cy - 23, "lamppost"), (cx + 5, cy - 23, "lamppost")] {
             self.prop_t(kind, x, y);
         }
+        // Sündenstatue am Nordkai: wer eine Siedlung gegen sich aufgebracht hat, kauft hier Frieden
+        let (sx, sy) = tpos(cx - 9, cy - 22);
+        let si = self.prop_x("sinStatue", sx, sy, |p| p.interact = Some("sin"));
+        self.sin_statue = Some(si);
         // ---- unterer Ring (Ebene 1): Schmied im Westen, Händlerin im Osten, Feuerbecken an der Treppe
         let (sx, sy) = (cx - 37, cy - 2);
         self.prop_t("forge", sx - 1, sy - 2);
@@ -1979,7 +2013,9 @@ impl World {
         for dx in [-(GATE + 2.4), GATE + 2.4] {
             self.prop("gateTower", hx + dx * TS as f32, gy);
         }
-        self.prop_x("fortArch", hx, hy + (OUT - 3.0) * TS as f32, |p| p.no_collide = true);
+        // Seetor in der Ebene der äußeren Mauerfront: die Pfeiler stehen auf der Wasserlinie am Fuß
+        // der Mauer, der Bogen reicht bis zur Krone (vier Ebenen)
+        self.prop_x("seaGate", hx, hy + (OUT * OUT - GATE * GATE).sqrt() * TS as f32, |p| p.no_collide = true);
         self.prop("fortKeep", hx, hy - (OUT + 4.5) * TS as f32);
         for dx in [-5.0f32, 5.0] {
             self.prop("bannerPole", hx + dx * TS as f32, hy - (OUT - 1.5) * TS as f32);
@@ -3294,8 +3330,10 @@ impl World {
         self.prop_t("laundry", cx - 16, cy + 13);
         self.prop_t("laundry", cx + 10, cy - 9);
         for (x, y) in [(-24, 4), (0, 14), (-8, -7), (12, 14)] {
-            self.prop_t("flowerPot", cx + x, cy + y);
+            self.prop_t("wardPost", cx + x, cy + y);
         }
+        self.prop_t("gibbet", cx - 28, cy + 6);
+        self.prop_t("gibbet", cx + 24, cy + 10);
         self.arena("raben", cx - 2, cy - 28, 9, Mat::Cobble, (0, 1));
         self.fire("raben2", cx + 2, cy - 19);
         self.plateau(cx + 20, cy - 26, 14, 10, 1);
@@ -3320,6 +3358,7 @@ impl World {
         // Rabenwacht ist schon eine Stadt: Gegner hinaus, ein Haus wird zum Laden
         let (wx, wy) = tpos(cx - 2, cy + 3);
         self.settlements.push((wx, wy, 30.0 * TS as f32, 22.0 * TS as f32));
+        self.settlement_keys.push("raben");
         self.clear_spawns(wx, wy, 28, 20);
         self.town_shop("raben", 3, cx - 10, cy + 9, "mapOrrin");
         self.npc("rabenFolk1", cx - 6, cy + 5, "villagerG", "Fischweib", "town_raben", true, None);
@@ -3369,7 +3408,7 @@ impl World {
         self.item("pearls", cx + 14, cy + 14);
         self.item("soulflower", cx - 16, cy + 10);
         self.npc("crewEarth", cx - 20, cy + 4, "crewEarth", "Zimmermann Ode", "crewEarth", true, Some("earth"));
-        self.settlement("mangroven", 4, cx - 27, cy + 14, Mat::Plank, "witchMabel", ["villagerC", "villagerD", "villagerH", "villagerG"], &["nets", "barrels", "flowerPot", "crates"]);
+        self.settlement("mangroven", 4, cx - 27, cy + 14, Mat::Plank, "witchMabel", ["villagerC", "villagerD", "villagerH", "villagerG"], &["nets", "barrels", "wardPost", "crates"]);
     }
     /// Ende der Welt: ein abgeschlossenes Meer in der Südost-Ecke der Karte. Im Süden und Osten
     /// stürzt das Wasser über den Weltrand ins Nichts; im Westen und Norden trennt ein Riff aus
@@ -3531,6 +3570,19 @@ impl World {
     pub fn interior_at(&self, x: f32, y: f32) -> Option<usize> {
         self.doors.iter().position(|d| x >= d.room.0 - 64.0 && y >= d.room.1 - 64.0 && x <= d.room.0 + d.room.2 + 64.0 && y <= d.room.1 + d.room.3 + 64.0)
     }
+    /// Zu welcher Siedlung gehört dieser Ort? (die Glutwacht zählt als Siedlung „hain“)
+    pub fn settlement_of(&self, x: f32, y: f32) -> Option<&'static str> {
+        for (k, s) in self.settlements.iter().enumerate() {
+            if ((x - s.0) / s.2).powi(2) + ((y - s.1) / s.3).powi(2) < 1.0 {
+                return self.settlement_keys.get(k).copied();
+            }
+        }
+        let (tx, ty) = ((x / TS as f32).floor() as i32, (y / TS as f32).floor() as i32);
+        if inb(tx, ty) && self.zone[idx(tx, ty)] == Some(Zone::Hain) {
+            return Some("hain");
+        }
+        None
+    }
     pub fn in_settlement(&self, x: f32, y: f32) -> bool {
         self.settlements.iter().any(|s| ((x - s.0) / s.2).powi(2) + ((y - s.1) / s.3).powi(2) < 1.0)
     }
@@ -3597,6 +3649,10 @@ impl World {
         mask & ok == 0
     }
     pub fn blocked(&self, x: f32, y: f32, r: f32, sailing: bool, mask: Option<u8>) -> bool {
+        // auf dem Deck der Brücke über dem Hafenbecken (Brüstungen halten seitlich)
+        if !sailing && self.bridge.is_some_and(|b| b.on(x, y, r)) {
+            return false;
+        }
         let mask = mask.unwrap_or(if sailing { 1 } else { self.level_mask(x, y) });
         let t = TS as f32;
         for ty in ((y - r) / t).floor() as i32..=((y + r) / t).floor() as i32 {

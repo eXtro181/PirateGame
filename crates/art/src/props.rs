@@ -28,11 +28,31 @@ pub fn marble() -> Vec<Rgba> {
 pub fn gold() -> Vec<Rgba> {
     FPal::get("gold")
 }
+/// verrußter, fleckiger Putz (Dark Fantasy statt hellem Fachwerk)
 pub fn plaster() -> Vec<Rgba> {
-    p6(&[0x8A7A62, 0xB0A084, 0xCCBE9E, 0xE2D6B8, 0xF0E8D0, 0xFAF6E8])
+    p6(&[0x2E2A24, 0x423C32, 0x575042, 0x6C6452, 0x807662, 0x948870])
 }
+/// verwitterte Schieferschindeln
 pub fn scale_roof() -> Vec<Rgba> {
-    p6(&[0x0C3036, 0x14484E, 0x1E666A, 0x2A8686, 0x40A6A2, 0x6CC6BE])
+    p6(&[0x121216, 0x1C1C22, 0x28282E, 0x36363E, 0x46464E, 0x5A5862])
+}
+/// Knochen und Schädel
+pub fn bone() -> Vec<Rgba> {
+    p6(&[0x3A342A, 0x5A5244, 0x7E7462, 0xA09680, 0xBEB49A, 0xD6CCB0])
+}
+
+/// kleiner Schädel (Mitte cx, cy), Blick nach vorn; `s` = Größe
+pub fn skull(c: &mut Canvas, cx: f32, cy: f32, s: f32) {
+    let b = bone();
+    c.dome(cx, cy, 4.2 * s, 3.8 * s, &b, 3.0, 4.0, 0.5, 0.1);
+    c.rect_r((cx - 2.4 * s) as i32, (cy + 2.2 * s) as i32, (4.8 * s).max(2.0) as i32, (1.8 * s).max(1.0) as i32, b[3], 3.0);
+    for sx in [-1.5f32, 1.5] {
+        c.put((cx + sx * s) as i32, (cy + 0.2 * s) as i32, hex(0x0E0A08), 1.0);
+        if s > 1.2 {
+            c.put((cx + sx * s) as i32 + if sx < 0.0 { -1 } else { 1 }, (cy + 0.2 * s) as i32, hex(0x1A1410), 1.0);
+        }
+    }
+    c.put(cx as i32, (cy + 1.4 * s) as i32, hex(0x1E1814), 1.0);
 }
 
 /// Quader in 3/4-Ansicht: Oberseite (top_h hoch) über Vorderseite (front_h).
@@ -669,8 +689,8 @@ pub fn well() -> PropArt {
     }
     c.cur_up = 30;
     c.ellipse(32.0, 44.0, 26.0, 9.0, st[3]);
-    c.ellipse(32.0, 44.0, 21.0, 6.5, hex(0x0E1A22));
-    c.ellipse(32.0, 45.0, 17.0, 4.5, hex(0x1E4A5A));
+    c.ellipse(32.0, 44.0, 21.0, 6.5, hex(0x080C10));
+    c.ellipse(32.0, 45.0, 17.0, 4.5, hex(0x0E1E24));
     c.cur_up = 255;
     // Dach
     for &x in &[10, 52] {
@@ -709,7 +729,8 @@ pub fn stall(seed: i32) -> PropArt {
     // Theke
     block(&mut c, 6, 52, 84, 10, 26, &wd, &wd, 3.0);
     // Waren
-    let goods = [hex(0xD8442E), hex(0xF2C84A), hex(0x7AB84A), hex(0xE88A3A), hex(0x8A5AB8)];
+    // Ware: Trockenfisch, Dörrfleisch, Talgkerzen, dunkle Flaschen, Blutwurst
+    let goods = [hex(0x666C6E), hex(0x46382C), hex(0x948A70), hex(0x20281E), hex(0x421612)];
     for i in 0..9 {
         let gx = 14.0 + i as f32 * 8.5;
         let col = goods[((i + seed) % 5) as usize];
@@ -718,7 +739,8 @@ pub fn stall(seed: i32) -> PropArt {
         c.dome(gx + 2.0, 52.0, 3.0, 2.5, &p, 2.0, 6.0, 0.4, 0.1);
     }
     // Markise gestreift
-    let a = if seed % 2 == 0 { (p6(&[0x6A1E22, 0x962A2E, 0xC23E3E, 0xE06A5E, 0xF09A8A, 0xFAC8B8]), p6(&[0xA89A82, 0xCCBEA4, 0xE6DCC4, 0xF4EEDC, 0xFCF8EE, 0xFFFFFF])) } else { (scale_roof(), plaster()) };
+    // Markise: ochsenblutrot und schwarz bzw. schmutziges Leinen und Schiefergrau, zerschlissen
+    let a = if seed % 2 == 0 { (p6(&[0x160A0A, 0x281010, 0x3E1614, 0x56201A, 0x6E2C22, 0x86382A]), p6(&[0x141214, 0x1E1C1E, 0x2A2628, 0x363034, 0x443C40, 0x544A4C])) } else { (p6(&[0x302A22, 0x443C30, 0x58503E, 0x6C624C, 0x80745A, 0x948668]), scale_roof()) };
     for y in 4..30 {
         let t = (y - 4) as f32 / 26.0;
         for x in 2..94 {
@@ -728,16 +750,22 @@ pub fn stall(seed: i32) -> PropArt {
             c.put(x, y, pick(p, v), 6.0 - t * 2.0);
         }
     }
-    // gewellte Kante
+    // zerschlissene Kante: ungleich lange Fetzen, ein paar Löcher
     for x in 2..94 {
-        let k = (x - 2) % 10;
-        let d = if k < 5 { k } else { 10 - k };
         let stripe = ((x - 2) / 10) % 2 == 0;
         let p = if stripe { &a.0 } else { &a.1 };
-        for y in 30..30 + d / 2 + 1 {
-            c.put(x, y, p[2], 4.0);
+        let len = 1 + (h01(x / 3, seed, 7) * 7.0) as i32;
+        for y in 30..30 + len {
+            c.put(x, y, p[1 + ((y - 30) % 2) as usize], 4.0);
+        }
+        if h01(x / 4, seed + 3, 9) > 0.86 {
+            for y in 18..22 {
+                c.clear(x, y);
+            }
         }
     }
+    // ein Schädel als Zeichen am Pfosten, Krähenfeder
+    skull(&mut c, 10.0, 40.0, 1.0);
     c.outline(true, 0.75);
     PropArt::new("stall", c, 48, 88).shadow(44.0, 7.0).boxc(42.0, 12.0)
 }
@@ -808,7 +836,7 @@ pub fn nets() -> PropArt {
     // Schwimmer
     for i in 0..4 {
         let x = 10.0 + i as f32 * 12.0;
-        c.dome(x, 8.0 + (i % 2) as f32 * 16.0, 3.0, 2.5, &p6(&[0x8A3A1E, 0xB8542A, 0xE07A3A, 0xF0A05A, 0xF8C88A, 0xFFE8C0]), 2.0, 2.0, 0.3, 0.1);
+        c.dome(x, 8.0 + (i % 2) as f32 * 16.0, 3.0, 2.5, &p6(&[0x2A1A12, 0x3E2618, 0x54341E, 0x6A4428, 0x7E5634, 0x946A44]), 2.0, 2.0, 0.3, 0.1);
     }
     c.outline(true, 0.6);
     PropArt::new("nets", c, 30, 30)
@@ -854,7 +882,8 @@ pub fn laundry(seed: i32) -> PropArt {
         let sag = ((x as f32 - 46.0) / 40.0).powi(2);
         c.put(x, (12.0 + (1.0 - sag) * 5.0) as i32, rope[2], 4.0);
     }
-    let cloth = [hex(0xE8E0CC), hex(0xB83A3A), hex(0x3A6EA8), hex(0xD8B24A), hex(0x6A9A5A)];
+    // graue Lumpen, ochsenblutrote und dunkle Tücher, ein Netz mit Trockenfisch
+    let cloth = [hex(0x6A6254), hex(0x4A2220), hex(0x2C323C), hex(0x524632), hex(0x343C2E)];
     for i in 0..5 {
         let x0 = 12 + i * 15;
         let sag = (((x0 + 5) as f32 - 46.0) / 40.0).powi(2);
@@ -875,7 +904,7 @@ pub fn laundry(seed: i32) -> PropArt {
 
 pub fn flower_pot(seed: i32) -> PropArt {
     let mut c = Canvas::new(26, 30);
-    let terra = p6(&[0x5A2A1A, 0x7E3A22, 0xA2502E, 0xC26E44, 0xD89060, 0xEAB284]);
+    let terra = p6(&[0x2A1A14, 0x3C241A, 0x503020, 0x643E2A, 0x7A4E36, 0x8E6044]);
     for y in 16..28 {
         let half = 8 - (y - 16) / 4;
         for x in 13 - half..13 + half {
@@ -884,18 +913,101 @@ pub fn flower_pot(seed: i32) -> PropArt {
         }
     }
     c.hline(4, 21, 16, terra[4]);
-    let fl = [hex(0xE85A8A), hex(0xF2C84A), hex(0xF6F2E4), hex(0x8A6AE0)][(seed % 4) as usize];
-    let green = FPal::get("green");
-    c.dome(13.0, 12.0, 9.0, 6.0, &green, 3.0, 4.0, 0.5, 0.1);
-    for i in 0..6 {
-        let x = 7 + (h01(i, seed, 1) * 12.0) as i32;
-        let y = 8 + (h01(i, seed, 2) * 6.0) as i32;
-        c.put(x, y, fl, 6.0);
-        c.put(x + 1, y, shade(fl, 0.8), 6.0);
-        c.put(x, y - 1, mix(fl, hex(0xFFFFFF), 0.4), 6.0);
+    // verdorrte, dornige Pflanze statt Blumen
+    let dead = p6(&[0x1E1810, 0x2E2418, 0x403220, 0x52422A, 0x645234, 0x76623E]);
+    for i in 0..7 {
+        let a = -1.2 + i as f32 * 0.4 + (h01(i, seed, 1) - 0.5) * 0.3;
+        let l = 6.0 + h01(i, seed, 2) * 7.0;
+        c.tube(&[(13.0, 16.0), (13.0 + a.sin() * l * 0.6, 16.0 - l * 0.6), (13.0 + a.sin() * l, 16.0 - l)], 1.2, 0.5, &dead, 2.0, 4.0);
     }
     c.outline(true, 0.75);
     PropArt::new("flowerPot", c, 13, 28).shadow(8.0, 3.0).circle(7.0)
+}
+
+/// Bannpfahl (Dark Fantasy): krummer Pfahl mit festgezurrten Schädeln, Knochen und schwarzen
+/// Federn, oben eine Talgkerze in einer Laterne.
+pub fn ward_post(seed: i32) -> PropArt {
+    let (w, h) = (34, 78);
+    let mut c = Canvas::new(w, h);
+    let dk = darkwood();
+    let rope = p6(&[0x2A2218, 0x3C3222, 0x50442E, 0x645638, 0x786842, 0x8C7A4E]);
+    c.tube(&[(17.0, 76.0), (16.0, 50.0), (18.0, 24.0), (17.0, 14.0)], 3.0, 2.2, &dk, 3.0, 2.0);
+    // Querholz mit hängenden Knochen
+    c.tube(&[(5.0, 30.0), (29.0, 28.0)], 1.6, 1.4, &dk, 2.0, 3.0);
+    let b = bone();
+    for (i, x) in [7.0f32, 12.0, 22.0, 27.0].iter().enumerate() {
+        let len = 6.0 + h01(i as i32, seed, 4) * 7.0;
+        c.vline(*x as i32, 30, (30.0 + len * 0.4) as i32, rope[2]);
+        c.tube(&[(*x, 31.0 + len * 0.4), (*x, 31.0 + len)], 1.1, 1.0, &b, 2.0, 3.0);
+    }
+    // Schädel am Pfahl, festgebunden
+    skull(&mut c, 17.0, 40.0, 1.4);
+    c.hline(12, 22, 44, rope[3]);
+    skull(&mut c, 16.0, 56.0, 1.1);
+    // schwarze Federn
+    for k in 0..3 {
+        let x = 20 + k * 2;
+        c.tube(&[(x as f32, 46.0), (x as f32 + 3.0, 54.0 + k as f32 * 2.0)], 1.2, 0.4, &p6(&[0x08080A, 0x101014, 0x18181E, 0x22222A, 0x2C2C36, 0x383844]), 1.0, 3.0);
+    }
+    // Laterne mit Kerze
+    let ir = iron();
+    c.rect_r(13, 6, 8, 9, ir[1], 4.0);
+    for y in 7..14 {
+        for x in 14..20 {
+            c.lit(x, y, pick(&p6(&[0x6A2A0E, 0xA2501E, 0xD8802E, 0xF0A84A, 0xFAD07A, 0xFFF0C0]), 0.9 - (y - 7) as f32 * 0.08), 1.3);
+        }
+    }
+    c.hline(12, 21, 5, ir[3]);
+    c.hline(12, 21, 15, ir[2]);
+    c.outline(true, 0.8);
+    PropArt::new("wardPost", c, 17, 76).shadow(8.0, 3.0).circle(5.0).light(0.0, -2.0, 66.0, 90.0, [1.4, 0.8, 0.35], 0.3)
+}
+
+/// Galgen mit eisernem Käfig, darin ein Skelett (Dark-Fantasy-Dorf).
+pub fn gibbet() -> PropArt {
+    let (w, h) = (70, 124);
+    let mut c = Canvas::new(w, h);
+    let dk = darkwood();
+    let ir = iron();
+    let b = bone();
+    // Pfosten, Arm und Strebe
+    c.rect_r(10, 6, 7, 116, dk[2], 2.0);
+    c.vline(10, 6, 121, dk[4]);
+    c.vline(16, 6, 121, dk[1]);
+    c.rect_r(10, 6, 52, 6, dk[2], 3.0);
+    c.hline(10, 61, 6, dk[4]);
+    c.tube(&[(17.0, 34.0), (38.0, 12.0)], 2.2, 2.0, &dk, 2.0, 3.0);
+    // Kette
+    for k in 0..5 {
+        let y = 12 + k * 4;
+        c.ellipse(52.0, y as f32 + 1.5, 1.5, 2.0, ir[3 - (k % 2) as usize]);
+    }
+    // Käfig: Ring oben und unten, Stäbe, Kuppel
+    let (cx, top, bot) = (52.0f32, 34.0f32, 86.0f32);
+    for k in 0..7 {
+        let x = cx - 12.0 + k as f32 * 4.0;
+        let bend = ((k as f32 - 3.0) / 3.0).powi(2) * 3.0;
+        c.tube(&[(cx + (x - cx) * 0.4, top - 4.0), (x, top + bend), (x, bot - bend), (cx + (x - cx) * 0.5, bot + 4.0)], 0.9, 0.9, &ir, 2.0, 4.0);
+    }
+    c.hline((cx - 12.0) as i32, (cx + 12.0) as i32, top as i32 + 2, ir[4]);
+    c.hline((cx - 12.0) as i32, (cx + 12.0) as i32, bot as i32 - 2, ir[2]);
+    // Skelett im Käfig, zusammengesunken
+    skull(&mut c, cx - 2.0, top + 10.0, 1.3);
+    c.tube(&[(cx - 1.0, top + 16.0), (cx + 1.0, top + 34.0)], 1.4, 1.2, &b, 2.0, 3.0);
+    for k in 0..4 {
+        let y = top + 19.0 + k as f32 * 4.0;
+        c.tube(&[(cx - 5.0, y), (cx + 6.0, y + 1.0)], 0.8, 0.7, &b, 1.5, 3.0);
+    }
+    c.tube(&[(cx - 1.0, top + 18.0), (cx - 8.0, top + 30.0), (cx - 6.0, top + 42.0)], 1.0, 0.8, &b, 1.5, 3.0);
+    c.tube(&[(cx + 2.0, top + 34.0), (cx + 7.0, bot - 2.0)], 1.1, 0.9, &b, 1.5, 3.0);
+    c.tube(&[(cx - 1.0, top + 34.0), (cx - 6.0, bot + 2.0)], 1.1, 0.9, &b, 1.5, 3.0);
+    // Krähe auf dem Arm
+    let crow = p6(&[0x060608, 0x0E0E12, 0x16161C, 0x202028, 0x2A2A34, 0x363642]);
+    c.dome(30.0, 3.0, 4.0, 3.0, &crow, 2.0, 5.0, 0.3, 0.1);
+    c.dome(33.0, 0.5, 2.0, 2.0, &crow, 2.0, 6.0, 0.3, 0.1);
+    c.put(35, 1, hex(0x5A4A2A), 6.0);
+    c.outline(true, 0.8);
+    PropArt::new("gibbet", c, 13, 121).shadow(14.0, 4.0).circle(6.0).sway(10)
 }
 
 pub fn stone_column(seed: i32) -> PropArt {
@@ -972,7 +1084,8 @@ pub fn log_pile() -> PropArt {
 pub fn tent() -> PropArt {
     let (w, h) = (96, 76);
     let mut c = Canvas::new(w, h);
-    let cl = p6(&[0x5A4A36, 0x7E6A4E, 0xA48C68, 0xC4AE88, 0xDCCAA8, 0xF0E4CC]);
+    // schmutziges, geflicktes Zelttuch
+    let cl = p6(&[0x26221C, 0x363026, 0x4A4232, 0x5E5440, 0x72664E, 0x86785C]);
     for y in 8..72 {
         let t = (y - 8) as f32 / 64.0;
         let half = 8.0 + t * 38.0;

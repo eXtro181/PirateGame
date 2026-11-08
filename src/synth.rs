@@ -625,6 +625,8 @@ pub fn sfx(name: &str) -> Vec<f32> {
     let len = match name {
         "death" | "rise" | "bell" => 3.2,
         "bubbles" => 1.6,
+        "surge" => 2.4,
+        "plunge" => 1.6,
         "glass" => 0.9,
         "kindle" | "roar" => 1.8,
         "cannon" | "crash" | "tide" | "level" | "pearls" | "chest" | "zap" | "fog" => 1.0,
@@ -635,6 +637,25 @@ pub fn sfx(name: &str) -> Vec<f32> {
     let mut x = Fx::new(len, name.bytes().map(|b| b as u32).sum::<u32>() + 3);
     match name {
         "swing" => x.noise(0.0, 900.0, 3200.0, 0.16, 0.35, Band, 1.5, false),
+        // das Schiff bricht durch die Oberfläche: tiefes Grollen, rauschende Wassermassen, Blasen
+        "surge" => {
+            x.tone(0.0, Sine, 38.0, 62.0, 1.6, 0.9);
+            x.tone(0.0, Saw, 55.0, 80.0, 0.9, 0.18);
+            x.noise(0.0, 420.0, 160.0, 2.2, 0.9, Low, 1.0, false);
+            x.noise(0.05, 1400.0, 700.0, 1.6, 0.45, Band, 0.7, false);
+            for k in 0..12 {
+                let t = 0.3 + k as f32 * 0.13 + x.rng.u() * 0.08;
+                let (a, b) = (220.0 + x.rng.u() * 300.0, 700.0 + x.rng.u() * 500.0);
+                x.tone(t, Sine, a, b, 0.08, 0.07);
+            }
+        }
+        // das Schiff kracht zurück ins Meer: dumpfer Schlag, Gischt, nachrieselndes Wasser
+        "plunge" => {
+            x.tone(0.0, Sine, 70.0, 34.0, 0.5, 0.9);
+            x.noise(0.0, 900.0, 300.0, 0.5, 0.9, Low, 0.9, false);
+            x.noise(0.02, 2600.0, 1200.0, 1.3, 0.5, Band, 0.6, false);
+            x.noise(0.4, 3800.0, 3800.0, 1.1, 0.16, Band, 2.0, false);
+        }
         // Glas zerspringt: helles Klirren, rieselnde Scherben
         "glass" => {
             x.noise(0.0, 4200.0, 6500.0, 0.08, 0.5, Band, 4.0, false);
