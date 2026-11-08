@@ -44,63 +44,81 @@ pub fn bone() -> Vec<Rgba> {
 /// kleiner Schädel (Mitte cx, cy), Blick nach vorn; `s` = Größe
 pub fn skull(c: &mut Canvas, cx: f32, cy: f32, s: f32) {
     let b = bone();
-    c.dome(cx, cy, 4.2 * s, 3.8 * s, &b, 3.0, 4.0, 0.5, 0.1);
-    c.rect_r((cx - 2.4 * s) as i32, (cy + 2.2 * s) as i32, (4.8 * s).max(2.0) as i32, (1.8 * s).max(1.0) as i32, b[3], 3.0);
+    let sp0 = c.cur_spec;
+    c.cur_spec = 75;
+    c.dome(cx, cy, 4.2 * s, 3.8 * s, &b, 3.0, 4.0, 0.55, 0.04);
+    c.rect_r((cx - 2.4 * s) as i32, (cy + 2.2 * s) as i32, (4.8 * s).max(2.0) as i32, (1.8 * s).max(1.0) as i32, b[3], 2.6);
     for sx in [-1.5f32, 1.5] {
-        c.put((cx + sx * s) as i32, (cy + 0.2 * s) as i32, hex(0x0E0A08), 1.0);
+        c.put((cx + sx * s) as i32, (cy + 0.2 * s) as i32, hex(0x0E0A08), 0.5);
         if s > 1.2 {
-            c.put((cx + sx * s) as i32 + if sx < 0.0 { -1 } else { 1 }, (cy + 0.2 * s) as i32, hex(0x1A1410), 1.0);
+            c.put((cx + sx * s) as i32 + if sx < 0.0 { -1 } else { 1 }, (cy + 0.2 * s) as i32, hex(0x1A1410), 0.8);
         }
     }
-    c.put(cx as i32, (cy + 1.4 * s) as i32, hex(0x1E1814), 1.0);
+    c.put(cx as i32, (cy + 1.4 * s) as i32, hex(0x1E1814), 0.7);
+    c.cur_spec = sp0;
 }
 
 /// Quader in 3/4-Ansicht: Oberseite (top_h hoch) über Vorderseite (front_h).
 #[allow(clippy::too_many_arguments)]
 pub fn block(c: &mut Canvas, x: i32, y: i32, w: i32, top_h: i32, front_h: i32, top: &[Rgba], front: &[Rgba], rel: f32) {
-    let nt = top.len() as f32 - 1.0;
-    let nf = front.len() as f32 - 1.0;
     let up0 = c.cur_up;
+    let wf = w.max(1) as f32;
+    let thf = top_h.max(1) as f32;
+    let fhf = front_h.max(1) as f32;
     c.cur_up = 40;
     for j in 0..top_h {
+        let ty = j as f32 / thf;
         for i in 0..w {
-            let v = 0.7 - (i as f32 / w as f32) * 0.15 + if j == 0 { 0.15 } else { 0.0 } + (bayer(x + i, y + j) - 0.5) * 0.08;
-            c.put(x + i, y + j, top[(v * nt).round().clamp(0.0, nt) as usize], rel);
+            let tx = i as f32 / wf;
+            let bevel = if j == 0 || i == 0 { 0.12 } else if j == top_h - 1 { 0.08 } else { 0.0 };
+            let v = (0.72 - tx * 0.16 - ty * 0.06 + bevel + (bayer(x + i, y + j) - 0.5) * 0.04).clamp(0.0, 1.0);
+            let r_off = (1.0 - (tx - 0.45).abs() * 0.5) * 0.4 + if j == top_h - 1 { 0.6 } else { 0.0 };
+            c.put(x + i, y + j, pick(top, v), rel + r_off);
         }
     }
     c.cur_up = 255;
     for j in 0..front_h {
+        let t = j as f32 / fhf;
         for i in 0..w {
-            let t = j as f32 / front_h.max(1) as f32;
-            let v = 0.55 - t * 0.25 - if i == w - 1 { 0.15 } else { 0.0 } + if i == 0 { 0.1 } else { 0.0 } + (bayer(x + i, y + j) - 0.5) * 0.08;
-            c.put(x + i, y + top_h + j, front[(v * nf).round().clamp(0.0, nf) as usize], rel - 1.0);
+            let tx = i as f32 / wf;
+            let edge = if i == 0 { 0.10 } else if i == w - 1 { -0.14 } else { 0.0 };
+            let ao = if j >= front_h - 2 { -0.08 } else { 0.0 };
+            let v = (0.58 - t * 0.26 - tx * 0.08 + edge + ao + (bayer(x + i, y + j) - 0.5) * 0.04).clamp(0.0, 1.0);
+            let r_off = -1.0 - t * 0.6 + if i == 0 { 0.35 } else if i == w - 1 { -0.45 } else { 0.0 };
+            c.put(x + i, y + top_h + j, pick(front, v), rel + r_off);
         }
     }
-    // Kante zwischen Oberseite und Front
+    // Kante (Bevel-Highlight) zwischen Oberseite und Front
     for i in 0..w {
-        c.put(x + i, y + top_h, front[(nf * 0.75) as usize], rel);
+        let tx = i as f32 / wf;
+        c.put(x + i, y + top_h, pick(front, (0.78 - tx * 0.12).clamp(0.0, 1.0)), rel + 0.5);
     }
     c.cur_up = up0;
 }
 
 /// Holzbretter-Fläche (senkrechte oder waagerechte Bretter).
 pub fn planks(c: &mut Canvas, x: i32, y: i32, w: i32, h: i32, p: &[Rgba], vertical: bool, bw: i32, seed: i32) {
-    let n = p.len() as f32 - 1.0;
+    let bwf = bw.max(2) as f32;
     for j in 0..h {
         for i in 0..w {
             let (a, b) = if vertical { (i, j) } else { (j, i) };
             let k = a / bw;
             let la = a % bw;
+            let u = (la as f32 + 0.5) / bwf;
+            let arch = (1.0 - (u * 2.0 - 1.0).powi(2)).max(0.0);
             let tone = (h01(k, 1, seed) - 0.5) * 0.15;
-            let grain = ((b as f32 * 0.4 + k as f32 * 3.0).sin() * 0.04) + (h01(b / 3, k, seed) - 0.5) * 0.06;
-            let mut v = 0.55 + tone + grain;
+            let grain = ((b as f32 * 0.38 + k as f32 * 3.1).sin() * 0.045) + (h01(b / 3, k, seed) - 0.5) * 0.05;
+            let mut v = 0.54 + tone + grain + (1.0 - u) * 0.08;
+            let mut rel = 0.8 + arch * 0.9;
             if la == 0 {
-                v += 0.15;
+                v += 0.14;
+                rel += 0.35;
             }
             if la == bw - 1 {
                 v = 0.12;
+                rel = -1.2;
             }
-            c.put(x + i, y + j, p[(v * n).round().clamp(0.0, n) as usize], if la == bw - 1 { -1.0 } else { 1.0 });
+            c.put(x + i, y + j, pick(p, v.clamp(0.0, 1.0)), rel);
         }
     }
 }

@@ -735,8 +735,11 @@ fn render_full(rig: &Rig, yaw: f32, w: i32, h: i32, foot: i32, oblique: bool) ->
             // Bildschirmnormale (x rechts, y unten, z zur Kamera) wie im Canvas
             let ns = [hh.n[0], dot(hh.n, down), dot(hh.n, b)];
             let l = ns[0] * LIGHT[0] + ns[1] * LIGHT[1] + ns[2] * LIGHT[2];
-            let nn = m.pal.len() as f32 - 1.0;
-            let mut vv = (l * 0.75 + 0.35 + m.bias) * nn + pat_off(m.pat, hh.q) + (bayer(x, y) - 0.5) * 0.55;
+            let wrap = ((l + 0.25) / 1.25).max(0.0);
+            let bounce = ns[1].max(0.0) * 0.08 * (1.0 - l.max(0.0));
+            let rim = (1.0 - ns[2].max(0.0)).powi(2) * (0.07 + (-ns[0] - ns[1]).max(0.0) * 0.10);
+            let nn = (m.pal.len() as f32 - 1.0).max(1.0);
+            let mut vv = (wrap * 0.82 + 0.08 + bounce + rim + m.bias) * nn + pat_off(m.pat, hh.q) * 0.85 + (bayer(x, y) - 0.5) * 0.06;
             // Höhlenschatten: nähere Teile ringsum verschatten Ansätze, Spalten und Kehlen
             let mut occ = 0.0;
             for (dx, dy) in [(2, 0), (-2, 0), (0, 2), (0, -2), (2, 2), (-2, 2), (2, -2), (-2, -2), (3, 0), (-3, 0), (0, 3), (0, -3)] {
@@ -751,12 +754,15 @@ fn render_full(rig: &Rig, yaw: f32, w: i32, h: i32, foot: i32, oblique: bool) ->
                     }
                 }
             }
-            vv -= occ * 0.2;
-            // Glanzlicht auf Metall, Gold und Panzern (Blinn, Blick zur Kamera)
-            if m.spec > 90 {
+            vv -= occ * 0.22;
+            // Glanzlicht auf Metall, Gold, Chitin und Panzern (Blinn, Blick zur Kamera)
+            let mut spec_boost = 0.0;
+            if m.spec > 50 {
                 let hv = norm([LIGHT[0], LIGHT[1], LIGHT[2] + 1.0]);
                 let nh = (ns[0] * hv[0] + ns[1] * hv[1] + ns[2] * hv[2]).max(0.0);
-                vv += nh.powi(24) * 1.6 * (m.spec as f32 / 255.0);
+                let sp = m.spec as f32 / 255.0;
+                vv += nh.powi(18) * 1.35 * sp;
+                spec_boost = nh.powi(28) * 0.22 * sp;
             }
             // Innenkontur: weiter hinten liegender Pixel neben einem näheren Teil
             if m.contour {
@@ -768,17 +774,20 @@ fn render_full(rig: &Rig, yaw: f32, w: i32, h: i32, foot: i32, oblique: bool) ->
                     if let Some(o) = &buf[(yy * w + xx) as usize] {
                         let other_part = o.g != hh.g || o.m != hh.m;
                         if (other_part && o.d > hh.d + 1.2) || o.d > hh.d + 5.0 {
-                            vv -= 1.6;
+                            vv -= 1.35;
                             break;
                         }
                     }
                 }
             }
-            let col = m.pal[vv.round().clamp(0.0, nn) as usize];
+            let mut col = pick(&m.pal, (vv / nn).clamp(0.0, 1.0));
+            if spec_boost > 0.01 {
+                col = shade(col, 1.0 + spec_boost);
+            }
             // Aufrecht-Anteil aus der echten Normale: Oberseiten liegen flach, Fronten stehen
             cv.cur_up = ((1.0 - hh.n[2].max(0.0)) * 255.0) as u8;
-            cv.cur_spec = m.spec;
-            cv.put(x, y, col, (hh.d - dmin) * 0.6);
+            cv.cur_spec = m.spec.max(48);
+            cv.put(x, y, col, (hh.d - dmin) * 0.65 + ns[2] * 1.4);
             // Höhe über dem eigenen Bodenpunkt (Bildschirm-px): Schatten und Tiefenschärfe folgen der Grundfläche
             cv.set_ev(x, y, (hh.q[2] * cp).max(0.0));
             if m.glow > 0.0 {
@@ -806,7 +815,7 @@ fn render_full(rig: &Rig, yaw: f32, w: i32, h: i32, foot: i32, oblique: bool) ->
                         cv.set_ev(x, y, (d.p[2] * cp).max(0.0));
                     } else {
                         let r = cv.rel[i];
-                        cv.put(x, y, d.col, r);
+                        cv.put(x, y, d.col, r + 0.6);
                     }
                     if d.glow > 0.0 {
                         cv.glow(x, y, d.col, d.glow);
@@ -817,7 +826,7 @@ fn render_full(rig: &Rig, yaw: f32, w: i32, h: i32, foot: i32, oblique: bool) ->
     }
     cv.cur_up = 255;
     cv.cur_spec = 0;
-    cv.outline(true, 0.95);
+    cv.outline(true, 0.72);
     cv.fill_ev();
     cv
 }

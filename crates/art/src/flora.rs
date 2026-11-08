@@ -39,7 +39,9 @@ impl FPal {
 /// Ein einzelnes Büschel: gewellter Rand, Kuppel-Schattierung, darauf viele kleine Blätter/Blüten.
 #[allow(clippy::too_many_arguments)]
 pub fn clump(c: &mut Canvas, cx: f32, cy: f32, rx: f32, ry: f32, p: &[Rgba], seed: i32, light_bias: f32, base_rel: f32) {
-    let n = p.len() as f32 - 1.0;
+    let n = (p.len() as f32 - 1.0).max(1.0);
+    let sp0 = c.cur_spec;
+    c.cur_spec = 56;
     let nz_a = h01(seed, 1, 3) * 6.28;
     let scal = 6.0 + (h01(seed, 2, 3) * 5.0).floor();
     let x0 = (cx - rx - 2.0).floor() as i32;
@@ -47,8 +49,8 @@ pub fn clump(c: &mut Canvas, cx: f32, cy: f32, rx: f32, ry: f32, p: &[Rgba], see
     let y0 = (cy - ry - 2.0).floor() as i32;
     let y1 = (cy + ry + 2.0).ceil() as i32;
     let shade_v = |dx: f32, dy: f32, nzv: f32| -> f32 {
-        let l = dx * -0.6 + dy * -0.7 + nzv * 0.4;
-        (l * 0.75 + 0.4 + light_bias) * n
+        let l = dx * -0.6 + dy * -0.7 + nzv * 0.42;
+        (l * 0.75 + 0.42 + light_bias) * n
     };
     // Grundfläche (etwas dunkler, die Blätter darauf heben sich ab)
     for y in y0..=y1 {
@@ -62,12 +64,12 @@ pub fn clump(c: &mut Canvas, cx: f32, cy: f32, rx: f32, ry: f32, p: &[Rgba], see
                 continue;
             }
             let nzv = (1.0 - d2).max(0.0).sqrt();
-            let mut v = shade_v(dx, dy, nzv) - 0.8;
+            let mut v = shade_v(dx, dy, nzv) - 0.75;
             if d2 > 0.7 && (dx + dy) > 0.25 {
-                v -= 0.8;
+                v -= 0.75;
             }
-            v += (bayer(x, y) - 0.5) * 0.5;
-            c.put(x, y, p[v.round().clamp(0.0, n) as usize], base_rel + nzv * rx.min(ry) * 0.45);
+            v += (bayer(x, y) - 0.5) * 0.08;
+            c.put(x, y, pick(p, (v / n).clamp(0.0, 1.0)), base_rel + nzv * rx.min(ry) * 0.48);
         }
     }
     // Blätter/Blüten: kleine Schuppen (helle Oberkante, dunkle Unterkante)
@@ -84,17 +86,17 @@ pub fn clump(c: &mut Canvas, cx: f32, cy: f32, rx: f32, ry: f32, p: &[Rgba], see
         let dx = (lx - cx) / rx;
         let dy = (ly - cy) / ry;
         let nzv = (1.0 - dx * dx - dy * dy).max(0.0).sqrt();
-        let v = shade_v(dx, dy, nzv) + (h01(i as i32, seed, 13) - 0.5) * 0.8;
+        let v = shade_v(dx, dy, nzv) + (h01(i as i32, seed, 13) - 0.5) * 0.75;
         let w = 2 + (h01(i as i32, seed, 14) * 2.0) as i32;
         let xi = lx as i32;
         let yi = ly as i32;
-        let top = p[(v + 0.6).round().clamp(0.0, n) as usize];
-        let mid = p[v.round().clamp(0.0, n) as usize];
-        let bot = p[(v - 1.2).round().clamp(0.0, n) as usize];
-        let rr = base_rel + nzv * rx.min(ry) * 0.45 + 1.0;
+        let top = pick(p, ((v + 0.65) / n).clamp(0.0, 1.0));
+        let mid = pick(p, (v / n).clamp(0.0, 1.0));
+        let bot = pick(p, ((v - 1.15) / n).clamp(0.0, 1.0));
+        let rr = base_rel + nzv * rx.min(ry) * 0.48 + 1.1;
         for k in 0..w {
             if c.a(xi + k, yi - 1) > 0 {
-                c.put(xi + k, yi - 1, top, rr + 0.5);
+                c.put(xi + k, yi - 1, top, rr + 0.6);
             }
         }
         for k in -1..=w {
@@ -104,7 +106,7 @@ pub fn clump(c: &mut Canvas, cx: f32, cy: f32, rx: f32, ry: f32, p: &[Rgba], see
         }
         for k in 0..w {
             if c.a(xi + k, yi + 1) > 0 {
-                c.put(xi + k, yi + 1, bot, rr - 0.5);
+                c.put(xi + k, yi + 1, bot, rr - 0.6);
             }
         }
     }
@@ -117,8 +119,10 @@ pub fn clump(c: &mut Canvas, cx: f32, cy: f32, rx: f32, ry: f32, p: &[Rgba], see
         let py = cy + a.sin() * ry * d;
         if (px - cx) / rx + (py - cy) / ry < -0.2 {
             c.set(px as i32, py as i32, p[p.len() - 1]);
+            c.spec(px as i32, py as i32, 95);
         }
     }
+    c.cur_spec = sp0;
 }
 
 /// Krone aus vielen Büscheln: hinten (oben) zuerst, vorne (unten) zuletzt.

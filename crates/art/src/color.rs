@@ -27,10 +27,24 @@ pub fn mix(a: Rgba, b: Rgba, t: f32) -> Rgba {
     ]
 }
 pub fn shade(c: Rgba, f: f32) -> Rgba {
+    if (f - 1.0).abs() < 1e-4 {
+        return c;
+    }
+    let [r, g, b] = rgbf(c);
+    let (nr, ng, nb) = if f < 1.0 {
+        // Physikalisch motivierte Schattentönung: Schatten verschieben sich sanft ins Kühle/Tiefblaue
+        let k = f.max(0.0);
+        (r * k.powf(1.07), g * k.powf(1.02), b * k.powf(0.93))
+    } else {
+        // Warme Lichter mit weichem Roll-Off statt hartem Kanal-Clipping
+        let boost = f - 1.0;
+        let ro = |x: f32, w: f32| 1.0 - (1.0 - x) / (1.0 + boost * w);
+        (ro(r, 1.08).max(r * f), ro(g, 1.0).max(g * f), ro(b, 0.90).max(b * (1.0 + boost * 0.88)))
+    };
     [
-        (c[0] as f32 * f).clamp(0.0, 255.0) as u8,
-        (c[1] as f32 * f).clamp(0.0, 255.0) as u8,
-        (c[2] as f32 * f).clamp(0.0, 255.0) as u8,
+        (nr.clamp(0.0, 1.0) * 255.0 + 0.5) as u8,
+        (ng.clamp(0.0, 1.0) * 255.0 + 0.5) as u8,
+        (nb.clamp(0.0, 1.0) * 255.0 + 0.5) as u8,
         c[3],
     ]
 }
@@ -78,17 +92,18 @@ fn towards(h: f32, t: f32, amt: f32) -> f32 {
     let d = ((t - h + 540.0) % 360.0) - 180.0;
     h + d.signum() * d.abs().min(amt)
 }
-/// Rampe mit `n` Stufen um eine Grundfarbe; Schatten Richtung Blau/Violett, Lichter Richtung Gelb.
+/// Rampe mit `n` Stufen um eine Grundfarbe; Schatten Richtung Blau/Violett, Lichter Richtung Warmgold.
 pub fn ramp_n(base: Rgba, n: usize, spread: f32) -> Vec<Rgba> {
     let [h, s, l] = to_hsl(base);
     let mid = (n as f32 - 1.0) / 2.0;
     (0..n)
         .map(|i| {
             let k = (i as f32 - mid) / mid.max(1.0) * 2.0; // -2..2
-            let dl = k * 0.09 * spread;
-            let hh = if k < 0.0 { towards(h, 245.0, -k * 13.0) } else { towards(h, 52.0, k * 11.0) };
-            let ss = (s * if k < 0.0 { 1.0 - k * 0.06 } else { 1.0 - k * 0.07 }).min(1.0);
-            from_hsl([hh, ss, (l + dl).clamp(0.02, 0.97)])
+            // S-Kurven-Kontrast für plastischere Tiefen und klare Spitzlichter
+            let dl = k * (0.096 + k.abs() * 0.008) * spread;
+            let hh = if k < 0.0 { towards(h, 246.0, -k * 15.0) } else { towards(h, 48.0, k * 12.5) };
+            let ss = (s * if k < 0.0 { 1.0 - k * 0.085 } else { 1.0 - k * 0.065 }).clamp(0.0, 1.0);
+            from_hsl([hh, ss, (l + dl).clamp(0.018, 0.975)])
         })
         .collect()
 }

@@ -335,20 +335,36 @@ pub fn prop_arts() -> Vec<PropArt> {
                     if p[3] < 100 {
                         continue;
                     }
+                    let l0 = lum(x, y).max(0.0);
                     let (mut sum, mut k) = (0.0, 0.0);
-                    for (dx, dy) in [(0, 0), (1, 0), (-1, 0), (0, 1), (0, -1)] {
+                    for (dx, dy) in [(0, 0), (1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (-1, -1), (1, -1), (-1, 1)] {
                         let l = lum(x + dx, y + dy);
                         if l >= 0.0 {
                             sum += l;
                             k += 1.0;
                         }
                     }
-                    let l = sum / k;
+                    let l_avg = sum / k;
+                    let l_micro = l0 - l_avg;
                     let (a, b) = span[y as usize];
                     let hw = ((b - a) as f32 * 0.5).max(1.0);
                     let u = ((x as f32 - (a + b) as f32 * 0.5) / hw).clamp(-1.0, 1.0);
                     let dome = (1.0 - u * u).max(0.0).sqrt();
-                    c.put(x, y, [p[0], p[1], p[2], 255], (l - 0.4) * 3.0 + dome * 3.5);
+                    let rel = (l_avg - 0.38) * 3.2 + l_micro * 5.2 + dome * 3.8;
+                    let col = [p[0], p[1], p[2], 255];
+                    c.put(x, y, col, rel);
+
+                    // Emissives Glühen für Glut, Leuchtpilze und Geisterblumen direkt im G-Buffer
+                    if (o.name == "plFirePit" || o.name == "plCharTree") && p[0] > 145 && p[0] as i32 - p[2] as i32 > 45 && l0 > 0.36 {
+                        c.glow(x, y, col, ((l0 - 0.32) * 1.4).clamp(0.35, 0.92));
+                    } else if (o.name == "plGlowShroom" || o.name == "plMushrooms" || o.name == "plFlowersGhost")
+                        && (p[1] > 115 || p[2] > 125)
+                        && p[2] >= p[0]
+                        && l0 > 0.40
+                    {
+                        let base_g = if o.name == "plGlowShroom" { 0.85 } else { 0.52 };
+                        c.glow(x, y, col, (base_g * (l0 + 0.25)).clamp(0.28, 0.90));
+                    }
                 }
             }
             let (ax, ay) = foot(&img);
