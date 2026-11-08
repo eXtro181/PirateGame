@@ -363,7 +363,7 @@ fn fs_gbuf(v: VOut) -> GOut {
 
 // Schatten/Abziehbilder: nur Farbe abdunkeln (Mischung), Normale und Höhe bleiben.
 @fragment
-fn fs_decal(v: VOut) -> @location(0) vec4<f32> {
+fn fs_decal(v: VOut) -> GOut {
     var a = v.col.a;
     if (v.ext.y == 6u) {
         let d = length(v.uv * 2.0 - 1.0);
@@ -375,7 +375,12 @@ fn fs_decal(v: VOut) -> @location(0) vec4<f32> {
         let c = textureSampleLevel(t_acol, s_near, v.uv, i32(v.ext.x), 0.0);
         a *= step(0.45, c.a);
     }
-    return vec4<f32>(v.col.rgb, a);
+    // nur die Farbe: Normale und Leuchten mit Alpha 0 (gleiche Mischung für alle Ziele, siehe render.rs)
+    var o: GOut;
+    o.alb = vec4<f32>(v.col.rgb, a);
+    o.nrm = vec4<f32>(0.0);
+    o.emi = vec4<f32>(0.0);
+    return o;
 }
 
 // ---------------------------------------------------------------- Überlagerung (nach dem Licht)

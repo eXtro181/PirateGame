@@ -143,7 +143,10 @@ impl Fx {
     }
     pub fn p(&mut self, p: P) {
         if self.parts.len() > 1400 {
-            self.parts.swap_remove(0);
+            // die ältesten auf einmal entfernen: Reihenfolge bleibt (`swap_remove(0)` holte das
+            // jüngste Teilchen nach vorn, danach wären immer die neuesten verschwunden), und nur
+            // alle 200 Teilchen wird einmal umkopiert
+            self.parts.drain(..200);
         }
         let mut p = p;
         p.max = p.life;

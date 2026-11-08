@@ -267,7 +267,6 @@ impl Gpu {
         let bgl_gb = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor { label: Some("bgl_gb"), entries: &[tex_entry(0, Dm::D2, true), tex_entry(1, Dm::D2, true)] });
         let pl_over = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("pl_over"), bind_group_layouts: &[&bgl0, &bgl_scene, &bgl_gb], push_constant_ranges: &[] });
         let all = wgpu::ColorWrites::ALL;
-        let none = wgpu::ColorWrites::empty();
         let p_gbuf = pipe(d, "gbuf", &pl_scene, &scene_mod, "vs_world", "fs_gbuf", true, &[ct(ALB, None, all), ct(NRM, None, all), ct(hdr, None, all)]);
         let p_decal = pipe(
             d,
@@ -277,7 +276,15 @@ impl Gpu {
             "vs_world",
             "fs_decal",
             true,
-            &[ct(ALB, Some(wgpu::BlendState::ALPHA_BLENDING), wgpu::ColorWrites::COLOR), ct(NRM, None, none), ct(hdr, None, none)],
+            // WebGL2 kennt keine getrennten Misch- und Schreibmasken je Ziel (INDEPENDENT_BLEND fehlt,
+            // sonst bricht schon das Anlegen der Pipeline ab): alle drei Ziele mischen gleich und
+            // schreiben nur Farbe; Normale und Leuchten gibt `fs_decal` mit Alpha 0 aus, dort
+            // bleibt also alles, wie es ist
+            &[
+                ct(ALB, Some(wgpu::BlendState::ALPHA_BLENDING), wgpu::ColorWrites::COLOR),
+                ct(NRM, Some(wgpu::BlendState::ALPHA_BLENDING), wgpu::ColorWrites::COLOR),
+                ct(hdr, Some(wgpu::BlendState::ALPHA_BLENDING), wgpu::ColorWrites::COLOR),
+            ],
         );
         // Überlagerung schreibt nur Farbe: Alpha der Szene trägt die Bodenzeile für die Tiefenschärfe
         let col = wgpu::ColorWrites::COLOR;
