@@ -22,6 +22,7 @@ pub mod look;
 pub mod feel;
 pub mod sealife;
 pub mod gallows;
+pub mod hub;
 
 pub use crate::art::{anim_index, Art, CharSheet};
 pub use crate::gfx::{flags, modes, Frame, LightDef, SprOpt};
@@ -264,6 +265,8 @@ pub struct Game {
     pub gallows_night: bool,
     /// Sarg-Sequenz: Aufblenden nach dem Sprung über einen langen Schleifweg (Restzeit, s)
     pub coffin_hop: f32,
+    /// Glutwacht: Krakenaugen im Becken, Spinne unter der Brücke
+    pub hub: hub::HubLife,
     pub focus: Option<Focus>,
     pub hover: Hover,
     pub stain_t: f32,
@@ -401,6 +404,7 @@ impl Game {
             cur_folk: false,
             gallows_night: false,
             coffin_hop: 0.0,
+            hub: Default::default(),
             focus: None,
             hover: Hover::None,
             stain_t: 0.0,
@@ -824,7 +828,8 @@ impl Game {
         if let Some(i) = self.sea_boss {
             let d = self.sea_bosses[i].def();
             crate::art::build_sea_boss(art, frame, d.el, Some(d.beast));
-        } else if self.save.prolog {
+        } else if self.save.prolog || self.hub_spider_on() {
+            // im Prolog der Gegner, in der Glutwacht die verschonte Spinne unter der Brücke
             crate::art::build_prolog_boss(art, frame);
         } else if !matches!(self.end.state, EP::Dormant | EP::Done) || self.world.in_end(self.player.a.x, self.player.a.y) && !self.sailing {
             crate::art::build_malakor(art, frame);
@@ -1018,6 +1023,7 @@ impl Game {
         self.update_focus();
         self.update_zone(dt);
         self.update_hub_wrecks(dt);
+        self.update_hub_life(dt);
         self.update_boss_arena();
         self.update_prolog(dt);
         self.update_camera(dt, frame);

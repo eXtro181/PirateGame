@@ -133,6 +133,8 @@ impl Game {
         self.fx.draw_under(f);
         // Fischschwärme in Ufernähe, Treibgut auf hoher See
         self.draw_sealife(art, f);
+        // Glutwacht: Krakenaugen unter Wasser, die Spinne unter der Brücke
+        self.draw_hub_life(art, f);
         self.draw_wake(art, f);
         self.draw_prolog_coffin(art, f);
         // Prolog: der Gehängte am Galgenweg und die stumme Menge
