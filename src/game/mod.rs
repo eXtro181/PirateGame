@@ -18,6 +18,9 @@ pub mod ship;
 pub mod summon;
 pub mod hostile;
 pub mod prolog;
+pub mod look;
+pub mod feel;
+pub mod sealife;
 
 pub use crate::art::{anim_index, Art, CharSheet};
 pub use crate::gfx::{flags, modes, Frame, LightDef, SprOpt};
@@ -135,6 +138,8 @@ pub struct Options {
     pub touch: u8,
     /// FullHD: doppelte interne Auflösung, weiche Schattierung
     pub hd: bool,
+    /// Kamera nah: Zoomstufe 1,22 statt 1
+    pub near: bool,
 }
 
 pub struct Game {
@@ -166,6 +171,8 @@ pub struct Game {
     pub skitter_t: f32,
     /// Klänge mit eigener Lautstärke (Schritte der Spinne)
     pub sfx_vol: Vec<(&'static str, f32)>,
+    /// Klänge an einem Ort (Lautstärke, Stereo-Panorama)
+    pub sfx_pan: Vec<(&'static str, f32, f32)>,
     /// Netze der Meeresspinne am Boden (verlangsamen, zerreißen beim Hindurchrollen)
     pub webs: Vec<boss::WebPatch>,
     /// Spieler eingesponnen (Volltreffer eines Netzes): so lange festgehalten (s)
@@ -226,6 +233,26 @@ pub struct Game {
     pub step_t: f32,
     pub last_pos: (f32, f32),
     pub env_cur: Env,
+    /// Bildwirkungen, Wetter und Tageszeit
+    pub look: look::Look,
+    /// Bossauftritt: Kinobalken und Kamera nah heran (Restzeit, s)
+    pub boss_intro_t: f32,
+    /// Trefferstopp (s): die Welt hält für einen Wimpernschlag an
+    pub hitstop: f32,
+    /// Zeitlupe: Restzeit (Echtzeit, s) und Tempo
+    pub slowmo: f32,
+    pub slowmo_k: f32,
+    /// gerichteter Kamerastoß (px), klingt federnd ab
+    pub cam_kick: (f32, f32),
+    /// Nachbilder der Spielfigur beim Ausweichen (Pose, Restzeit)
+    pub afterimg: Vec<(Actor, f32)>,
+    /// diese Rolle kann noch ein perfektes Ausweichen auslösen
+    pub dodge_ok: bool,
+    /// Anzeige blendet sich außerhalb von Kämpfen aus (0..1) und Zeit ohne Anlass
+    pub hud_a: f32,
+    pub hud_idle: f32,
+    /// Bildzeit in Echtzeit (Trefferstopp und Zeitlupe verlangsamen nur das Spiel)
+    pub real_dt: f32,
     pub focus: Option<Focus>,
     pub hover: Hover,
     pub stain_t: f32,
@@ -304,6 +331,7 @@ impl Game {
             prolog_hint: 0,
             skitter_t: 0.0,
             sfx_vol: vec![],
+            sfx_pan: vec![],
             webs: vec![],
             web_t: 0.0,
             web_slow: 0.0,
@@ -347,6 +375,17 @@ impl Game {
             step_t: 0.0,
             last_pos: (0.0, 0.0),
             env_cur: env::env("kueste", false),
+            look: look::Look::default(),
+            boss_intro_t: 0.0,
+            hitstop: 0.0,
+            slowmo: 0.0,
+            slowmo_k: 1.0,
+            cam_kick: (0.0, 0.0),
+            afterimg: vec![],
+            dodge_ok: false,
+            hud_a: 1.0,
+            hud_idle: 0.0,
+            real_dt: 0.016,
             focus: None,
             hover: Hover::None,
             stain_t: 0.0,
@@ -537,10 +576,49 @@ impl Game {
             self.sfx_q.push(n);
         }
     }
+    /// Klang an einem Weltort: leiser mit der Entfernung, links/rechts nach der Lage zur Kamera
+    pub fn sfx_at(&mut self, n: &'static str, x: f32, y: f32) {
+        let (cx, cy) = self.cam;
+        let d = (x - cx).hypot((y - cy) * 1.3);
+        let vol = (1.0 - (d - 120.0).max(0.0) / 900.0).clamp(0.15, 1.0);
+        let pan = ((x - cx) / 340.0).clamp(-0.85, 0.85);
+        if self.sfx_pan.len() < 24 {
+            self.sfx_pan.push((n, vol, pan));
+        }
+    }
+    /// Kampfspannung (0..1) für die dunkle Klanglage: Bosse, verfolgende Gegner in der Nähe
+    pub fn tension(&self) -> f32 {
+        if self.boss.is_some() || self.sea_boss.is_some() {
+            return 1.0;
+        }
+        let (px, py) = (self.player.a.x, self.player.a.y);
+        let n = self.enemies.iter().filter(|e| e.valid && matches!(e.state, ES::Chase | ES::Windup | ES::Strike | ES::Recover) && (e.a.x - px).hypot(e.a.y - py) < 500.0).count();
+        (n as f32 * 0.35).min(1.0)
+    }
     pub fn shake(&mut self, k: f32) {
         if self.opt.shake {
             self.shake_k = self.shake_k.max(k);
         }
+    }
+    /// Trefferstopp: die Welt hält für `t` Sekunden an (Wucht eines Treffers)
+    pub fn hit_stop(&mut self, t: f32) {
+        self.hitstop = self.hitstop.max(t);
+    }
+    /// Zeitlupe für `t` Sekunden Echtzeit mit Tempo `k`
+    pub fn slow_mo(&mut self, t: f32, k: f32) {
+        if self.slowmo <= 0.0 || k < self.slowmo_k {
+            self.slowmo_k = k;
+        }
+        self.slowmo = self.slowmo.max(t);
+    }
+    /// gerichteter Kamerastoß (px) in Richtung (dx, dy)
+    pub fn kick(&mut self, dx: f32, dy: f32, k: f32) {
+        if !self.opt.shake {
+            return;
+        }
+        let m = dx.hypot(dy).max(0.001);
+        self.cam_kick.0 += dx / m * k;
+        self.cam_kick.1 += dy / m * k;
     }
     pub fn flash(&mut self, c: [f32; 3], a: f32) {
         self.flash_c = [c[0], c[1], c[2], a];
@@ -661,8 +739,10 @@ impl Game {
         self.pearl_gain_t = 2.0;
         if let Some((x, y)) = src {
             let (px, py) = (self.player.a.x, self.player.a.y);
-            for _ in 0..10 {
-                self.fx.p(P { x: x + rr(-10.0, 10.0), y: y - 8.0, z: 12.0, vz: 60.0 + rnd() * 40.0, vx: (px - x) * 0.8, vy: (py - y) * 0.8, life: 1.0, col: c::SOUL, glow: 1.5, drag: 0.3, ..Default::default() });
+            // Seelenperlen steigen auf und werden zur Figur gezogen
+            let _ = (px, py);
+            for _ in 0..12 {
+                self.fx.p(P { x: x + rr(-10.0, 10.0), y: y - 8.0, z: 12.0, vz: 70.0 + rnd() * 50.0, vx: rr(-40.0, 40.0), vy: rr(-20.0, 20.0), life: 2.2, max: 2.2, col: c::SOUL, glow: 1.5, seek: true, ..Default::default() });
             }
         }
         self.sfx("pearls");
@@ -709,6 +789,18 @@ impl Game {
 
     // ---------------------------------------------------------------- Hauptschleife
     pub fn update(&mut self, dt: f32, art: &mut Art, frame: &mut Frame) {
+        // Trefferstopp und Zeitlupe: das Spiel hält kurz an bzw. läuft langsamer (Kamera, Licht und
+        // Bildwirkungen laufen in Echtzeit weiter)
+        self.real_dt = dt;
+        let dt = if self.hitstop > 0.0 {
+            self.hitstop -= dt;
+            dt * 0.05
+        } else if self.slowmo > 0.0 {
+            self.slowmo -= dt;
+            dt * self.slowmo_k
+        } else {
+            dt
+        };
         self.t += dt;
         // Schiffsbilder: eigenes Schiff mit Ausbauten, aktiver Seeboss (beides nur bei Änderung)
         let s = &self.save;
@@ -740,6 +832,7 @@ impl Game {
         self.shake_k = (self.shake_k - dt * 28.0).max(0.0);
         self.flash_c[3] = (self.flash_c[3] - dt * 2.5).max(0.0);
         self.slow_t = (self.slow_t - dt).max(0.0);
+        self.boss_intro_t = (self.boss_intro_t - dt).max(0.0);
         self.update_webs(dt);
         self.shanty_t = (self.shanty_t - dt).max(0.0);
         self.lightning = (self.lightning - dt).max(0.0);
@@ -837,6 +930,9 @@ impl Game {
                 }
             } else {
                 self.update_player(dt);
+                self.update_feel(dt);
+                self.fx.seek_to = (self.player.a.x, self.player.a.y);
+                self.update_fires_alive(dt);
                 if self.input.pressed(Act::Interact) {
                     self.interact(art);
                 }
@@ -923,6 +1019,10 @@ impl Game {
         };
         if self.sailing || self.world.interior_at(self.player.a.x, self.player.a.y).is_none() {
             self.fx.ambient(dt, frame.view(), biome, self.sailing);
+            if self.opt.fx_high || rnd() < 0.5 {
+                let l = &self.look;
+                self.fx.weather(dt, frame.view(), l.rain, l.snow, l.ash, l.wind_dir, l.wind);
+            }
         }
         self.save_t -= dt;
         if self.save_dirty && self.save_t <= 0.0 {
@@ -1119,14 +1219,27 @@ impl Game {
     }
 
     // ---------------------------------------------------------------- Kamera, Zonen
-    fn update_camera(&mut self, dt: f32, frame: &mut Frame) {
+    fn update_camera(&mut self, _dt: f32, frame: &mut Frame) {
+        let dt = self.real_dt;
         let (mut tx, mut ty) = if let Some(h) = self.cam_hold {
             h
         } else if self.sailing {
             (self.ship.hull.x, self.ship.hull.y - 20.0)
         } else {
-            (self.player.a.x + self.player.a.fx * 32.0, self.player.a.y - 24.0 + self.player.a.fy * 20.0)
+            // Blick voraus: in Laufrichtung (Schwung), sonst in Blickrichtung
+            let (mx, my) = self.player.mv;
+            let sp = mx.hypot(my);
+            let (lx, ly) = if sp > 8.0 { (mx / sp * 40.0, my / sp * 26.0) } else { (self.player.a.fx * 28.0, self.player.a.fy * 18.0) };
+            (self.player.a.x + lx, self.player.a.y - 24.0 + ly)
         };
+        // anvisiertes Ziel mit ins Bild nehmen
+        let lock_pos = self.lock.and_then(|t| self.target_pos(t));
+        if self.cam_hold.is_none() && !self.sailing {
+            if let Some((lx, ly, _, _)) = lock_pos {
+                tx += (lx - tx) * 0.32;
+                ty += (ly - 24.0 - ty) * 0.32;
+            }
+        }
         if self.sailing && matches!(self.end.state, EP::Rise | EP::Ship | EP::Drain) {
             // der Holländer ist riesig: Blick zwischen eigenes Schiff und seinen Rumpf
             let (ex, ey) = (self.end.x, self.end.y - 260.0);
@@ -1144,9 +1257,20 @@ impl Game {
         self.cam_f.0 += (tx - self.cam_f.0) * k;
         self.cam_f.1 += (ty - self.cam_f.1) * k;
         let (sx, sy) = if self.shake_k > 0.0 { (rr(-1.0, 1.0) * self.shake_k, rr(-1.0, 1.0) * self.shake_k) } else { (0.0, 0.0) };
-        self.cam = (self.cam_f.0 + sx, self.cam_f.1 + sy);
+        // gerichteter Kamerastoß: federt zurück
+        let kd = (-dt * 13.0).exp();
+        self.cam_kick = (self.cam_kick.0 * kd, self.cam_kick.1 * kd);
+        self.cam = (self.cam_f.0 + sx + self.cam_kick.0, self.cam_f.1 + sy + self.cam_kick.1);
         frame.set_camera(self.cam.0, self.cam.1);
-        frame.focus_y = Some(if self.sailing { self.ship.hull.y } else { self.player.a.y });
+        // Schärfe folgt dem Blick: beim Anvisieren zwischen Spieler und Ziel
+        let fy = if self.sailing {
+            self.ship.hull.y
+        } else if let Some((_, ly, _, _)) = lock_pos {
+            self.player.a.y + (ly - self.player.a.y) * 0.4
+        } else {
+            self.player.a.y
+        };
+        frame.focus_y = Some(fy);
     }
 
     fn update_zone(&mut self, dt: f32) {
@@ -1163,6 +1287,14 @@ impl Game {
             self.zone_name = self.place_name();
             if !self.sailing || on_island {
                 self.zone_t = 4.0;
+                // zum ersten Mal hier: leise Glocken der Entdeckung
+                let k = match wild {
+                    Some(i) => self.world.wild[i].key.clone(),
+                    None => z.def().key.to_string(),
+                };
+                if !self.save.explored.contains(&k) {
+                    self.sfx("discover");
+                }
             }
         }
         // Prolog: Dorf, Galgenweg und Spinnenschlund haben eigene Namen
@@ -1216,19 +1348,54 @@ impl Game {
         if sea.0 > 0.0 {
             target = env::mix(&target, &env::sea_env(sea.1), sea.0);
         }
+        // Tageszeit: draußen sinkt in der zweiten Tageshälfte die tiefe Nacht über die Stimmung
+        if !inside {
+            target = env::night(&target, self.look.night());
+        }
+        // Bosskampf: die Arena rückt zusammen
+        let fighting = self.sea_boss.is_some() || self.boss.is_some_and(|bi| !self.bosses[bi].dead() && self.bosses[bi].state != BS::Dormant);
+        if fighting {
+            target = env::arena(&target, 1.0);
+            // zweite Phase: die Arena verändert sich mit dem Element des Bosses
+            if let Some(b) = self.boss.map(|bi| &self.bosses[bi]).filter(|b| b.phase >= 2 && !b.dead()) {
+                match b.el {
+                    "fire" => {
+                        target.heat = target.heat.max(0.45);
+                        target.ash = target.ash.max(0.8);
+                    }
+                    "ice" => target.snow = 1.0,
+                    "wind" => {
+                        target.rain = 1.0;
+                        target.wind = 1.0;
+                        if rnd() < dt * 0.25 {
+                            self.lightning = 0.35;
+                            self.sfx("crash");
+                        }
+                    }
+                    "earth" => target.rain = target.rain.max(0.6),
+                    _ => target.ash = target.ash.max(0.5),
+                }
+            }
+        }
         self.sea_el = (sea.0 > 0.5).then_some(sea.1);
         if self.sea_el == Some("wind") && rnd() < dt * 0.12 {
             self.lightning = 0.3;
             self.sfx("crash");
         }
         self.env_cur = env::mix(&self.env_cur, &target, (dt * 1.5).min(1.0));
+        // Kinobalken in erzählten Zwischensequenzen (nicht beim Reisen und an Türen)
+        let story = matches!(self.cutscene, Some(Cut::Wake { .. } | Cut::Washed { .. } | Cut::Coffin { .. } | Cut::Summon { .. } | Cut::Whirl { .. }));
+        let intro = self.boss_intro_t > 0.0;
+        self.look.base_zoom = if self.opt.near && !self.sailing && self.cutscene.is_none() { 1.22 } else { 1.0 };
+        self.look.update(self.real_dt, &self.env_cur, inside, story, intro);
         let mut mood = if self.sailing { "sea" } else { self.place_music() };
         if self.sea_boss.is_some() {
             mood = "boss";
         }
         if let Some(bi) = self.boss {
             if !self.bosses[bi].dead() && self.bosses[bi].state != BS::Dormant {
-                mood = "boss";
+                // bewusste Stille: beim Auftritt schweigt die Musik einen Atemzug lang
+                mood = if self.boss_intro_t > 1.3 && self.bosses[bi].state == BS::Intro { "silence" } else { "boss" };
             }
         }
         if self.player.state == PS::Sit {
@@ -2075,6 +2242,13 @@ impl Game {
                     for _ in 0..2 {
                         self.fx.p(P { x: px + rr(-3.0, 3.0), y: py, z: 1.0, vx: rr(-14.0, 14.0), vz: 10.0 + rnd() * 12.0, g: 30.0, life: 0.5, col, size: 2.0, drag: 2.0, ..Default::default() });
                     }
+                }
+                // nasser Boden: jeder Schritt spritzt
+                if self.look.wet > 0.35 && self.world.interior_at(x, y).is_none() {
+                    for _ in 0..3 {
+                        self.fx.p(P { x: px + rr(-2.0, 2.0), y: py, z: 1.0, vx: rr(-18.0, 18.0), vy: rr(-6.0, 6.0), vz: 24.0 + rnd() * 20.0, g: 260.0, life: 0.35, col: [0.7, 0.78, 0.84, 0.7], size: 1.0, ..Default::default() });
+                    }
+                    self.fx.drops.push((px, py, 0.05));
                 }
             }
         }

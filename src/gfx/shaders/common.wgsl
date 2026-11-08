@@ -21,6 +21,15 @@ struct Globals {
     hd: vec4<f32>,        // HD-2D: Kippung, Tiefenschärfe, Fokuszeile, Lichtstrahlen
     hd2: vec4<f32>,       // HD-2D: Verdeckung, Bokeh-Staub, Randlicht, Farbsaum
     hd3: vec4<f32>,       // FullHD: weiche Normalen, Auflösungsstufe, frei, frei
+    fx0: vec4<f32>,       // Aufprallbild, wenig Leben, Tinten-Übergang, Kinobalken
+    fx1: vec4<f32>,       // Druckwelle: Weltort xy, Radius, Stärke
+    fx2: vec4<f32>,       // Wetter: Nässe, Schnee, Asche, Windstärke
+    fx3: vec4<f32>,       // Hitzeflimmern, Nacht, Zoom, Sterne
+    fx4: vec4<f32>,       // Rückstrahlung, leuchtende Flächen, Randlicht der Lichter, Lesbarkeit
+    fx5: vec4<f32>,       // Spieler xy (Pflanzen biegen sich weg), Windrichtung xy
+    fx6: vec4<f32>,       // Wolkenbedeckung, frei, frei, frei
+    tone_lo: vec4<f32>,   // Farbtrennung: Faktor Schatten
+    tone_hi: vec4<f32>,   // Farbtrennung: Faktor Lichter
     lights: array<Light, 48>,
 };
 @group(0) @binding(0) var<uniform> G: Globals;

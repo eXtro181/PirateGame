@@ -55,6 +55,8 @@ mod web {
         pub amb: GainNode,
         pub wind: GainNode,
         pub drone: GainNode,
+        /// Regen (Wetter)
+        pub rain: GainNode,
         pub cur: Vec<AudioBufferSourceNode>,
         pub bufs: std::collections::HashMap<String, AudioBuffer>,
     }
@@ -73,7 +75,7 @@ mod web {
     }
 
     impl Graph {
-        pub fn new(ctx: AudioContext, amb: [&[f32]; 3]) -> Option<Graph> {
+        pub fn new(ctx: AudioContext, amb: [&[f32]; 4]) -> Option<Graph> {
             let g = |v: f32| -> Option<GainNode> {
                 let n = ctx.create_gain().ok()?;
                 n.gain().set_value(v);
@@ -119,12 +121,14 @@ mod web {
             waves.connect_with_audio_node(&ambg).ok()?;
             let drone = g(0.0)?;
             drone.connect_with_audio_node(&master).ok()?;
-            for (data, to) in [(amb[0], &waves), (amb[1], &wind), (amb[2], &drone)] {
+            let rain = g(0.0)?;
+            rain.connect_with_audio_node(&master).ok()?;
+            for (data, to) in [(amb[0], &waves), (amb[1], &wind), (amb[2], &drone), (amb[3], &rain)] {
                 let b = buffer(&ctx, data, crate::synth::SR)?;
                 let s = source(&ctx, &b, to, true)?;
                 s.start().ok()?;
             }
-            Some(Graph { ctx, master, music, sfx, amb: ambg, wind, drone, cur: vec![], bufs: Default::default() })
+            Some(Graph { ctx, master, music, sfx, amb: ambg, wind, drone, rain, cur: vec![], bufs: Default::default() })
         }
         pub fn fade(&self, p: &AudioParam, v: f32, secs: f64) {
             let now = self.ctx.current_time();
@@ -146,6 +150,11 @@ pub struct Audio {
     render: Option<SongRender>,
     queue: Vec<&'static str>,
     crackle_t: f32,
+    /// Wetter (Regen, Wind) und Kampfspannung (0..1), geglättet auf die Lagen gelegt
+    pub rain: f32,
+    pub wind: f32,
+    pub tension: f32,
+    lv: [f32; 3],
     #[cfg(target_arch = "wasm32")]
     g: Option<web::Graph>,
 }
@@ -171,6 +180,10 @@ impl Audio {
             render: None,
             queue: synth::SONGS.to_vec(),
             crackle_t: 0.0,
+            rain: 0.0,
+            wind: 0.0,
+            tension: 0.0,
+            lv: [0.0; 3],
             #[cfg(target_arch = "wasm32")]
             g: None,
         }
@@ -221,9 +234,33 @@ impl Audio {
         #[cfg(target_arch = "wasm32")]
         if let Some(g) = &self.g {
             let m = self.mood;
-            g.fade(&g.drone.gain(), if m == "death" { 0.25 } else { 0.0 }, 1.5);
             g.fade(&g.amb.gain(), if m == "death" { 0.1 } else if m == "sea" { 0.55 } else if m == "title" { 0.4 } else { 0.3 }, 2.0);
-            g.fade(&g.wind.gain(), if m == "sea" || m == "sturm" { 0.35 } else { 0.05 }, 2.0);
+        }
+    }
+
+    /// Klang an einem Ort: links/rechts im Stereobild (`pan` −1..1)
+    pub fn sfx_pan(&mut self, name: &'static str, vol: f32, pan: f32) {
+        #[cfg(target_arch = "wasm32")]
+        {
+            let Some(g) = self.g.as_mut() else { return };
+            if !g.bufs.contains_key(name) {
+                if let Some(b) = web::buffer(&g.ctx, &synth::sfx(name), synth::SR) {
+                    g.bufs.insert(name.to_string(), b);
+                }
+            }
+            if let (Some(b), Ok(gn), Ok(pn)) = (g.bufs.get(name), g.ctx.create_gain(), g.ctx.create_stereo_panner()) {
+                gn.gain().set_value(vol);
+                pn.pan().set_value(pan.clamp(-1.0, 1.0));
+                let _ = gn.connect_with_audio_node(&pn);
+                let _ = pn.connect_with_audio_node(&g.sfx);
+                if let Some(s) = web::source(&g.ctx, b, &gn, false) {
+                    let _ = s.start();
+                }
+            }
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let _ = (name, vol, pan);
         }
     }
 
@@ -292,8 +329,8 @@ impl Audio {
             if self.g.is_none() {
                 let ctx = web::CTX.with(|c| c.borrow().clone());
                 if let Some(ctx) = ctx {
-                    let amb = [synth::ambience("waves"), synth::ambience("wind"), synth::ambience("drone")];
-                    self.g = web::Graph::new(ctx, [&amb[0], &amb[1], &amb[2]]);
+                    let amb = [synth::ambience("waves"), synth::ambience("wind"), synth::ambience("drone"), synth::ambience("rain")];
+                    self.g = web::Graph::new(ctx, [&amb[0], &amb[1], &amb[2], &amb[3]]);
                     self.playing = None;
                     self.swap_t = 0.0;
                     let m = self.mood;
@@ -304,6 +341,20 @@ impl Audio {
             }
             let Some(g) = self.g.as_mut() else { return };
             g.master.gain().set_value(self.volume);
+            // Lagen: Regen nach Wetter, Wind nach Wetter und Ort, dunkle Spannung im Kampf
+            let m = self.mood;
+            let to = [
+                self.rain * 0.38,
+                if m == "sea" || m == "sturm" { 0.35 } else { 0.05 } + self.wind * 0.22,
+                if m == "death" { 0.25 } else { self.tension * 0.15 },
+            ];
+            let k = (dt * 1.2).min(1.0);
+            for i in 0..3 {
+                self.lv[i] += (to[i] - self.lv[i]) * k;
+            }
+            g.rain.gain().set_value(self.lv[0]);
+            g.wind.gain().set_value(self.lv[1]);
+            g.drone.gain().set_value(self.lv[2]);
             // fertige Lieder in Browser-Puffer umziehen (eins je Bild) und die eigene Kopie freigeben
             if let Some((&n, v)) = self.songs.iter_mut().find(|(_, v)| !v.is_empty()) {
                 let key = format!("{n}:m");

@@ -25,6 +25,20 @@ pub struct Env {
     pub abyss: f32,
     /// Lichtstrahlen (HD-2D), skaliert mit der Sonne
     pub rays: f32,
+    /// Farbtrennung (Farbskript je Zone): Faktoren für Schatten und Lichter
+    pub tone_lo: [f32; 3],
+    pub tone_hi: [f32; 3],
+    /// Hitzeflimmern überall (0..1)
+    pub heat: f32,
+    /// Sterne spiegeln sich im Wasser (0..1)
+    pub stars: f32,
+    /// Wetterneigung: Regen, Schnee, Asche, Wind (0..1, das Wetter schwankt darum in Fronten)
+    pub rain: f32,
+    pub snow: f32,
+    pub ash: f32,
+    pub wind: f32,
+    /// wie stark die Tageszeit hier wirkt (0 = feste Stimmung)
+    pub nightk: f32,
 }
 
 fn l(c: u32, k: f32) -> [f32; 3] {
@@ -57,6 +71,15 @@ pub fn env(zone: &str, sailing_open_sea: bool) -> Env {
         light_k: 1.0,
         abyss: 1.0,
         rays: 0.5,
+        tone_lo: [0.96, 1.0, 1.05],
+        tone_hi: [1.02, 1.0, 0.97],
+        heat: 0.0,
+        stars: 0.2,
+        rain: 0.0,
+        snow: 0.0,
+        ash: 0.0,
+        wind: 0.25,
+        nightk: 0.0,
     };
     if sailing_open_sea {
         return Env {
@@ -69,6 +92,12 @@ pub fn env(zone: &str, sailing_open_sea: bool) -> Env {
             water_b: l(0x124A70, 1.0),
             water_c: l(0xD8F0F6, 1.0),
             rays: 0.3,
+            tone_lo: [0.94, 0.99, 1.07],
+            tone_hi: [1.02, 1.0, 0.97],
+            stars: 0.45,
+            rain: 0.3,
+            wind: 0.6,
+            nightk: 0.8,
             ..base
         };
     }
@@ -92,6 +121,12 @@ pub fn env(zone: &str, sailing_open_sea: bool) -> Env {
             water_c: l(0xB8CCCC, 1.0),
             rays: 0.35,
             light_k: 1.2,
+            tone_lo: [0.93, 1.0, 1.08],
+            tone_hi: [1.0, 1.0, 1.02],
+            stars: 0.6,
+            rain: 0.35,
+            wind: 0.35,
+            nightk: 0.6,
             ..base
         },
         // Glutwacht: Aschedämmerung wie am Feuerbandschrein, nur Glut und Laternen spenden Wärme
@@ -112,6 +147,12 @@ pub fn env(zone: &str, sailing_open_sea: bool) -> Env {
             water_b: l(0x1C5268, 1.0),
             water_c: l(0xC8E8E0, 1.0),
             light_k: 1.25,
+            tone_lo: [0.95, 0.95, 1.09],
+            tone_hi: [1.06, 0.99, 0.9],
+            heat: 0.04,
+            ash: 0.25,
+            wind: 0.3,
+            nightk: 0.5,
             ..base
         },
         // Aschebucht: roter Nebel, Glut, kaum Sonne
@@ -131,6 +172,12 @@ pub fn env(zone: &str, sailing_open_sea: bool) -> Env {
             water_b: l(0x2A1426, 1.0),
             water_c: l(0xE8A0A8, 1.0),
             light_k: 1.2,
+            tone_lo: [1.02, 0.97, 0.99],
+            tone_hi: [1.04, 0.99, 0.92],
+            heat: 0.35,
+            ash: 0.8,
+            wind: 0.25,
+            nightk: 0.3,
             ..base
         },
         // Frostgrotte: kalte Nacht, Mondlicht
@@ -147,6 +194,12 @@ pub fn env(zone: &str, sailing_open_sea: bool) -> Env {
             water_a: l(0x6EA8C0, 1.0),
             water_b: l(0x24506E, 1.0),
             water_c: l(0xF0FAFF, 1.0),
+            tone_lo: [0.95, 0.99, 1.07],
+            tone_hi: [1.0, 1.0, 1.02],
+            stars: 0.7,
+            snow: 0.85,
+            wind: 0.5,
+            nightk: 0.6,
             ..base
         },
         // Rabenwacht: Sturm, grau, Regen
@@ -163,6 +216,11 @@ pub fn env(zone: &str, sailing_open_sea: bool) -> Env {
             water_b: l(0x18486A, 1.0),
             water_c: l(0xC8E4EA, 1.0),
             light_k: 1.15,
+            tone_lo: [0.95, 1.0, 1.06],
+            tone_hi: [1.0, 1.0, 1.0],
+            rain: 0.9,
+            wind: 0.8,
+            nightk: 0.5,
             ..base
         },
         // Fluchmangroven: fauliges Grün, Dunkelheit unter den Kronen
@@ -180,6 +238,11 @@ pub fn env(zone: &str, sailing_open_sea: bool) -> Env {
             water_b: l(0x12302E, 1.0),
             water_c: l(0x9AC0B0, 1.0),
             light_k: 1.2,
+            tone_lo: [0.93, 1.05, 0.96],
+            tone_hi: [1.03, 1.03, 0.91],
+            rain: 0.45,
+            wind: 0.15,
+            nightk: 0.5,
             ..base
         },
         // Ende der Welt: Schwarz und Blutrot
@@ -200,6 +263,11 @@ pub fn env(zone: &str, sailing_open_sea: bool) -> Env {
             water_c: l(0xE08A90, 1.0),
             light_k: 1.25,
             abyss: 1.4,
+            tone_lo: [1.03, 0.92, 1.0],
+            tone_hi: [1.06, 0.96, 0.94],
+            heat: 0.1,
+            ash: 0.4,
+            wind: 0.4,
             ..base
         },
         // wilde Inseln: Zwielicht über dem Ozean, Seenebel, kühles Grün und Bernstein
@@ -219,6 +287,12 @@ pub fn env(zone: &str, sailing_open_sea: bool) -> Env {
             water_b: l(0x14405A, 1.0),
             water_c: l(0xD0E8E4, 1.0),
             light_k: 1.15,
+            tone_lo: [0.95, 1.0, 1.05],
+            tone_hi: [1.03, 1.0, 0.95],
+            stars: 0.35,
+            rain: 0.35,
+            wind: 0.35,
+            nightk: 0.7,
             ..base
         },
         // Stillwasser (Prolog, Norden): ein heller, klarer Morgen – warmes Sonnenlicht, Lichtstrahlen,
@@ -242,6 +316,9 @@ pub fn env(zone: &str, sailing_open_sea: bool) -> Env {
             water_c: l(0xE8F6F2, 1.0),
             // Laternen brennen am Tag nur schwach
             light_k: 0.4,
+            tone_lo: [0.98, 1.0, 1.03],
+            tone_hi: [1.04, 1.01, 0.95],
+            wind: 0.2,
             ..base
         },
         // die Kneipe „Zur Letzten Flut“: Tageslicht durch die Fenster, warmes Kerzenlicht
@@ -258,6 +335,9 @@ pub fn env(zone: &str, sailing_open_sea: bool) -> Env {
             bloom: 0.7,
             vignette: 1.0,
             light_k: 1.1,
+            tone_lo: [1.0, 0.97, 0.93],
+            tone_hi: [1.05, 1.0, 0.9],
+            wind: 0.0,
             ..base
         },
         // Spinnenschlund (Prolog, Süden): kaltes, fahles Mondlicht, dichter Nebel, schwarzes Wasser
@@ -279,6 +359,9 @@ pub fn env(zone: &str, sailing_open_sea: bool) -> Env {
             water_b: l(0x010203, 1.0),
             water_c: l(0x6A7880, 1.0),
             light_k: 1.25,
+            tone_lo: [0.93, 0.98, 1.1],
+            tone_hi: [0.98, 1.0, 1.04],
+            wind: 0.3,
             ..base
         },
         // Ladenräume: warmes Kerzen- und Fackellicht, kein Nebel
@@ -295,6 +378,9 @@ pub fn env(zone: &str, sailing_open_sea: bool) -> Env {
             bloom: 0.6,
             vignette: 1.1,
             light_k: 1.2,
+            tone_lo: [1.0, 0.97, 0.93],
+            tone_hi: [1.05, 1.0, 0.9],
+            wind: 0.0,
             ..base
         },
         // Ende der Welt vor dem Kampf: spiegelglatte Stille, kaltes Mondsilber
@@ -315,6 +401,9 @@ pub fn env(zone: &str, sailing_open_sea: bool) -> Env {
             water_b: l(0x0C1420, 1.0),
             water_c: l(0xC8D8F0, 1.0),
             light_k: 1.3,
+            tone_lo: [0.93, 0.98, 1.1],
+            stars: 0.9,
+            wind: 0.0,
             ..base
         },
         // Phase 2: Umkehr – violetter Himmel, die Sonne liegt tief unter dem Schiff
@@ -339,6 +428,11 @@ pub fn env(zone: &str, sailing_open_sea: bool) -> Env {
             water_b: l(0x0A1C22, 1.0),
             water_c: l(0xB8E0D8, 1.0),
             light_k: 1.3,
+            tone_lo: [0.94, 1.03, 1.0],
+            tone_hi: [0.98, 1.03, 1.0],
+            stars: 0.0,
+            rain: 0.7,
+            wind: 0.8,
             ..base
         },
         // Meeresgrund: trockengefallen, grünes Zwielicht, Nebel aus Gischt und Salz
@@ -360,6 +454,9 @@ pub fn env(zone: &str, sailing_open_sea: bool) -> Env {
             water_b: l(0x0A1A18, 1.0),
             water_c: l(0xA8D8C8, 1.0),
             light_k: 1.4,
+            tone_lo: [0.95, 1.03, 1.0],
+            stars: 0.0,
+            wind: 0.2,
             ..base
         },
         // Phase 5: die Unterseite – fast weiß, ausgeblichen, still
@@ -389,6 +486,9 @@ pub fn sea_env(el: &str) -> Env {
             water_b: l(0x5A2C2A, 1.0),
             water_c: l(0xE8A070, 1.0),
             light_k: 1.0,
+            tone_lo: [1.04, 0.95, 0.95],
+            heat: 0.3,
+            ash: 0.45,
             ..base
         },
         // Eismeer: Polarlicht-Kälte, heller Nebel
@@ -405,6 +505,9 @@ pub fn sea_env(el: &str) -> Env {
             water_a: l(0x7EC8D8, 1.0),
             water_b: l(0x1E5A7A, 1.0),
             water_c: l(0xFFFFFF, 1.0),
+            tone_lo: [0.92, 0.98, 1.12],
+            snow: 0.6,
+            wind: 0.55,
             ..base
         },
         // Sturmsee: schwarze Wolken, Regen, Blitze
@@ -422,6 +525,9 @@ pub fn sea_env(el: &str) -> Env {
             water_b: l(0x10283C, 1.0),
             water_c: l(0xB8D0D8, 1.0),
             light_k: 1.2,
+            rain: 0.95,
+            wind: 0.9,
+            stars: 0.0,
             ..base
         },
         // Tiefengrund: grünes Leuchten aus der Tiefe, schwerer Nebel
@@ -440,6 +546,7 @@ pub fn sea_env(el: &str) -> Env {
             water_c: l(0x7AE0A0, 1.0),
             light_k: 1.3,
             abyss: 1.3,
+            tone_lo: [0.94, 1.04, 0.98],
             ..base
         },
     }
@@ -472,7 +579,56 @@ pub fn mix(a: &Env, b: &Env, t: f32) -> Env {
         light_k: lerp(a.light_k, b.light_k, t),
         abyss: lerp(a.abyss, b.abyss, t),
         rays: lerp(a.rays, b.rays, t),
+        tone_lo: lerp3(a.tone_lo, b.tone_lo, t),
+        tone_hi: lerp3(a.tone_hi, b.tone_hi, t),
+        heat: lerp(a.heat, b.heat, t),
+        stars: lerp(a.stars, b.stars, t),
+        rain: lerp(a.rain, b.rain, t),
+        snow: lerp(a.snow, b.snow, t),
+        ash: lerp(a.ash, b.ash, t),
+        wind: lerp(a.wind, b.wind, t),
+        nightk: lerp(a.nightk, b.nightk, t),
     }
+}
+
+/// Tiefe Nacht über einer Stimmung: der Mond statt der Sonne, kühles schwaches Himmelslicht,
+/// Laternen leuchten heller, Sterne über dem Wasser (Tageszeit, `k` = 0..1)
+pub fn night(e: &Env, k: f32) -> Env {
+    if k <= 0.001 {
+        return *e;
+    }
+    let n = Env {
+        ambient: [e.ambient[0] * 0.55, e.ambient[1] * 0.6, e.ambient[2] * 0.78],
+        sky: e.sky * 0.85,
+        sun_dir: n3([0.45, -0.3, 0.8]),
+        sun: l(0xA8B8E0, 0.42),
+        shadow: e.shadow.max(0.45),
+        fog: [e.fog[0] * 0.62, e.fog[1] * 0.68, e.fog[2] * 0.82],
+        fog_k: e.fog_k + 0.025,
+        sat: e.sat * 0.84,
+        light_k: e.light_k * 1.4,
+        rays: e.rays * 0.45,
+        tone_lo: [e.tone_lo[0] * 0.97, e.tone_lo[1] * 0.99, e.tone_lo[2] * 1.05],
+        stars: 1.0,
+        water_a: [e.water_a[0] * 0.7, e.water_a[1] * 0.75, e.water_a[2] * 0.85],
+        water_b: [e.water_b[0] * 0.6, e.water_b[1] * 0.66, e.water_b[2] * 0.8],
+        ..*e
+    };
+    mix(e, &n, k * e.nightk.clamp(0.0, 1.0))
+}
+
+/// Bosskampf: die Arena rückt zusammen – dunklerer Rand, mehr Kontrast, kühleres Umgebungslicht
+pub fn arena(e: &Env, k: f32) -> Env {
+    let a = Env {
+        ambient: [e.ambient[0] * 0.84, e.ambient[1] * 0.86, e.ambient[2] * 0.95],
+        contrast: e.contrast + 0.06,
+        vignette: e.vignette + 0.25,
+        sat: e.sat * 0.95,
+        light_k: e.light_k * 1.15,
+        tone_lo: [e.tone_lo[0] * 0.98, e.tone_lo[1] * 0.98, e.tone_lo[2] * 1.04],
+        ..*e
+    };
+    mix(e, &a, k)
 }
 
 /// In die Shader-Konstanten schreiben. `dark` = Option „Düster“, `exposure` = Helligkeit.
@@ -496,4 +652,16 @@ pub fn apply(e: &Env, g: &mut Globals, dark: bool, exposure: f32, fx_high: bool)
     let hk = if fx_high { 1.0 } else { 0.0 };
     g.hd = [crate::gfx::TILT, hk, g.hd[2], e.rays * hk * if dark { 0.7 } else { 1.0 }];
     g.hd2 = [hk, 0.6 * hk, 0.55, 0.5 * hk];
+    // Grundwerte der Bildwirkungen (das Spiel setzt sie danach über `Look::apply`)
+    g.fx0 = [0.0; 4];
+    g.fx1 = [0.0; 4];
+    g.fx2 = [0.0, 0.0, 0.0, e.wind * 0.4];
+    g.fx3 = [e.heat, 0.0, 1.0, e.stars];
+    g.fx5 = [-1.0e6, -1.0e6, 1.0, 0.2];
+    g.fx6 = [0.35 + e.rain * 0.3, 0.0, 0.0, 0.0];
+    g.counts[1] = 0.0;
+    g.tone_lo = [e.tone_lo[0], e.tone_lo[1], e.tone_lo[2], 0.0];
+    g.tone_hi = [e.tone_hi[0], e.tone_hi[1], e.tone_hi[2], 0.0];
+    // Rückstrahlung, leuchtende Flächen, Randlicht der Laternen, Lesbarkeit der Spielfigur
+    g.fx4 = [0.22 * hk, 0.55 * hk, 0.85, 1.0];
 }

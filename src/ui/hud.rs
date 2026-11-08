@@ -452,15 +452,72 @@ impl Game {
         let (w, h) = f.ui_size();
         self.draw_world_labels(f, art);
         if !self.hide_hud && self.cutscene.is_none() {
+            // außerhalb von Kämpfen blendet sich die Anzeige aus (alle Vierecke dieser Anzeige)
+            let i0 = f.ui.len();
             if self.sailing {
                 self.draw_ship_hud(f, art);
             } else {
                 self.draw_hud(f, art);
             }
+            if self.hud_a < 0.999 {
+                for q in f.ui[i0..].iter_mut() {
+                    q.col[3] = (q.col[3] as f32 * self.hud_a) as u8;
+                }
+            }
         }
         if self.zone_t > 0.0 && self.ui.banners.is_empty() {
-            let a = self.zone_t.min(4.0 - self.zone_t).min(1.0);
-            text::display(f, art, self.zone_name, w / 2.0, 14.0, text::a(col::BONE, a), Al::C, 13.0);
+            // Ortsname: Buchstabe für Buchstabe steigt er auf und rückt zusammen, darunter wächst
+            // eine feine Linie aus der Mitte
+            let age = 4.0 - self.zone_t;
+            let a_out = self.zone_t.min(1.0);
+            let size = 13.0;
+            let name = self.zone_name;
+            let n = name.chars().count();
+            let tw = text::display_width(art, name, size);
+            let spread = (1.0 - (age / 1.3).min(1.0)).powi(2) * 5.0;
+            let total = tw + spread * n.saturating_sub(1) as f32;
+            let x0 = w / 2.0 - total / 2.0;
+            for (i, (bi, ch)) in name.char_indices().enumerate() {
+                let ci = ((age * 16.0 - i as f32) / 4.0).clamp(0.0, 1.0);
+                if ci <= 0.0 {
+                    continue;
+                }
+                let x = x0 + text::display_width(art, &name[..bi], size) + spread * i as f32;
+                let s = &name[bi..bi + ch.len_utf8()];
+                text::display(f, art, s, x.round(), 14.0 + ((1.0 - ci) * 5.0).round(), text::a(col::BONE, ci * a_out), Al::L, size);
+            }
+            let lk = ((age - 0.25) / 0.9).clamp(0.0, 1.0);
+            let lw = ((tw + 24.0) * lk * lk * (3.0 - 2.0 * lk)).round();
+            if lw > 1.0 {
+                Ui::rect(f, (w / 2.0 - lw / 2.0).round(), 14.0 + size + 6.0, lw, 1.0, [196, 168, 118, (a_out * 170.0) as u8]);
+            }
+        }
+        // Porträt des Gesprächspartners über dem Dialog (Kopf und Schultern, vergrößert)
+        if self.ui.dialog.is_some() {
+            if let Some(n) = self.talk_to.and_then(|i| self.npcs.get(i)) {
+                if let Some(sh) = art.chars.get(n.def.preset).filter(|sh| sh.f.first().is_some_and(|d| d.first().is_some_and(|a| !a.is_empty()))) {
+                    let s = sh.get(0, 0, ((self.t * 2.5) as usize) % sh.f[0][0].len().max(1));
+                    let bw = (w - 16.0).min(440.0);
+                    let (bx, by) = ((w / 2.0 - bw / 2.0).round(), h - 66.0 - 10.0);
+                    let (pw, ph) = (56.0, 56.0);
+                    let (px, py) = (bx, by - ph - 18.0);
+                    Ui::panel(f, art, px, py, pw, ph);
+                    // Ausschnitt: Mitte des Bildes, oberer Teil der Figur (aus dem Ankerpunkt)
+                    let page = sw_art::atlas::PAGE as f32;
+                    let cw = 26.0f32.min(s.w as f32);
+                    let top = (s.ay as f32 - 64.0).max(0.0);
+                    let (u0, v0) = ((s.x as f32 + s.ax as f32 - cw / 2.0) / page, (s.y as f32 + top) / page);
+                    let (u1, v1) = (u0 + cw / page, v0 + 26.0 / page);
+                    f.ui.push(crate::gfx::Q {
+                        p: [[px + 3.0, py + 3.0], [px + pw - 3.0, py + 3.0], [px + pw - 3.0, py + ph - 3.0], [px + 3.0, py + ph - 3.0]],
+                        uv: [[u0, v0], [u1, v0], [u1, v1], [u0, v1]],
+                        col: [255; 4],
+                        ext: [s.page as u8, crate::gfx::modes::ATLAS, 0, 0],
+                        prm: [0.0, 0.0],
+                        sway: 0,
+                    });
+                }
+            }
         }
         self.ui.draw_overlays(f, art);
         if self.ui.map_open {
@@ -472,7 +529,10 @@ impl Game {
             Ui::rect(f, 0.0, 0.0, w, h, [(c[0].min(1.0) * 255.0) as u8, (c[1].min(1.0) * 255.0) as u8, (c[2].min(1.0) * 255.0) as u8, (c[3] * 0.5 * 255.0) as u8]);
         }
         if self.ui.fade > 0.0 {
-            Ui::rect(f, 0.0, 0.0, w, h, [0, 0, 0, (self.ui.fade * 255.0) as u8]);
+            // mit hohen Effekten läuft die Schwärze wie Tinte ins Bild (Endbild-Shader); über
+            // der Anzeige wird es erst zum Schluss schwarz
+            let a = if self.opt.fx_high { ((self.ui.fade - 0.72) / 0.28).clamp(0.0, 1.0) } else { self.ui.fade };
+            Ui::rect(f, 0.0, 0.0, w, h, [0, 0, 0, (a * 255.0) as u8]);
         }
     }
 
@@ -662,6 +722,13 @@ impl Game {
                 Ui::rect(f, bx, by, (bw * kk).round(), 1.0, col::BLOOD_L);
                 if b.phase == 1 && b.key != "spider" {
                     Ui::rect(f, bx + bw / 2.0, by - 1.0, 1.0, 7.0, col::BRASS);
+                }
+                // Haltung: wächst von der Mitte aus; voll = der Boss taumelt
+                let pk = self.posture_k(bi);
+                if pk > 0.01 {
+                    let pw = (bw * 0.6 * pk).round();
+                    let warm = (pk * 255.0) as u8;
+                    Ui::rect(f, (bx + bw / 2.0 - pw / 2.0).round(), by + 7.0, pw, 2.0, [230, 150 + warm / 3, 60, 230]);
                 }
             }
         }

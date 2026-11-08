@@ -53,6 +53,12 @@ pub struct Ship {
     pub lift: f32,
     /// Krängung beim Auftauchen/Versinken (Bogenmaß, Drehung des Bildes um die Wasserlinie)
     pub tilt: f32,
+    /// Rollen im Seegang und Krängung in Kurven (Bogenmaß), letzter Kurs
+    pub roll: f32,
+    pub last_h: f32,
+    /// Kielwasser: Heckpunkte (x, y, Alter, Kurs, Fahrt)
+    pub trail: Vec<(f32, f32, f32, f32, f32)>,
+    trail_t: f32,
 }
 pub struct GhostShip {
     pub hull: Hull,
@@ -114,7 +120,7 @@ pub const KRAKEN_HOME: (f32, f32) = (crate::world::HUB.0 as f32 - 96.0, crate::w
 
 impl Ship {
     pub fn new(x: f32, y: f32, h: f32) -> Self {
-        Ship { hull: Hull::new(x, y, h), sail: 0, hp: 120.0, max_hp: 120.0, cool: [0.0; 2], depth: 1.0, wet: 0.0, sunk: true, sinking: None, lift: 0.0, tilt: 0.0 }
+        Ship { hull: Hull::new(x, y, h), sail: 0, hp: 120.0, max_hp: 120.0, cool: [0.0; 2], depth: 1.0, wet: 0.0, sunk: true, sinking: None, lift: 0.0, tilt: 0.0, roll: 0.0, last_h: h, trail: vec![], trail_t: 0.0 }
     }
 }
 
@@ -176,6 +182,40 @@ impl Game {
     }
 
     fn wake(&mut self, h: &mut Hull, dt: f32) {
+        // Krängung in Kurven (folgt der Drehrate), dazu Rollen im Seegang
+        let dh = wrap(h.h - self.ship.last_h + std::f32::consts::PI) - std::f32::consts::PI;
+        self.ship.last_h = h.h;
+        let heel = (-dh / dt.max(0.001) * 0.05 * (h.v / 150.0).min(1.0)).clamp(-0.05, 0.05);
+        self.ship.roll += (heel - self.ship.roll) * (dt * 2.5).min(1.0);
+        // Kielwasser: alle 0,07 s ein Heckpunkt, solange das Schiff Fahrt macht
+        self.ship.trail_t -= dt;
+        if h.v > 12.0 && self.ship.trail_t <= 0.0 && self.ship.depth <= 0.0 {
+            self.ship.trail_t = 0.07;
+            let (fx, fy) = (h.h.sin(), -h.h.cos() * 0.75);
+            self.ship.trail.push((h.x - fx * 44.0, h.y - fy * 44.0 + 4.0, 0.0, h.h, h.v));
+        }
+        for p in self.ship.trail.iter_mut() {
+            p.2 += dt;
+        }
+        self.ship.trail.retain(|p| p.2 < 3.2);
+        // Bugspray bei schneller Fahrt
+        if h.v > 70.0 && rnd() < (h.v - 70.0) / 90.0 {
+            let (fx, fy) = (h.h.sin(), -h.h.cos() * 0.75);
+            let s = if rnd() < 0.5 { -1.0 } else { 1.0 };
+            self.fx.p(P {
+                x: h.x + fx * 62.0 + h.h.cos() * s * 6.0,
+                y: h.y + fy * 62.0 + h.h.sin() * s * 4.0 + 4.0,
+                z: 6.0,
+                vx: fx * h.v * 0.4 + h.h.cos() * s * rr(20.0, 50.0),
+                vy: fy * h.v * 0.4 + h.h.sin() * s * rr(10.0, 30.0),
+                vz: rr(40.0, 90.0),
+                g: 260.0,
+                life: 0.7,
+                col: [0.85, 0.93, 0.98, 0.85],
+                size: 2.0,
+                ..Default::default()
+            });
+        }
         if h.v > 16.0 && rnd() < h.v / 120.0 {
             let (fx, fy) = (h.h.sin(), -h.h.cos() * 0.75);
             for s in [-1.0f32, 1.0] {
@@ -496,6 +536,25 @@ impl Game {
     pub fn draw_sea(&self, art: &Art, f: &mut Frame) {
         let (vx, vy, vw, vh) = f.view();
         let vis = |x: f32, y: f32, m: f32| x > vx - m && x < vx + vw + m && y > vy - m && y < vy + vh + m * 1.5;
+        // Kielwasser: zwei auseinanderlaufende Schaumbänder hinter dem Heck, die verblassen
+        for &(x, y, age, hd, v) in &self.ship.trail {
+            if !vis(x, y, 80.0) {
+                continue;
+            }
+            let k = age / 3.2;
+            let spread = 6.0 + age * (16.0 + v * 0.1);
+            let (nx, ny) = (hd.cos(), hd.sin() * 0.75);
+            let a = ((1.0 - k) * (1.0 - k) * 120.0 * (v / 120.0).min(1.0)) as u8;
+            let w = 3.0 + age * 2.5;
+            for side in [-1.0f32, 1.0] {
+                let (px, py) = (x + nx * spread * side, y + ny * spread * side);
+                f.decals.push(Frame::quad_rect(px - w, py - w * 0.4, w * 2.0, w * 0.8, [225, 238, 245, a], modes::SOFT, 0));
+            }
+            if age < 1.2 {
+                let c = ((1.0 - age / 1.2) * 70.0) as u8;
+                f.decals.push(Frame::quad_rect(x - 5.0, y - 2.0, 10.0, 4.0, [210, 230, 240, c], modes::SOFT, 0));
+            }
+        }
         // eigenes Schiff
         let h = &self.ship.hull;
         let summoning = matches!(self.cutscene, Some(Cut::Summon { .. }));
@@ -517,7 +576,9 @@ impl Game {
             // beim Auftauchen/Versinken: das Bild um den untergetauchten Teil tiefer und an der
             // Wasserlinie (Unterkante des Bildes) abgeschnitten – die Masten tauchen zuerst auf
             let sub = depth * s.h as f32;
-            f.sprite(&s, h.x, h.y + b + sub - self.ship.lift, SprOpt { flip, tint, flags: fl, cut_bottom: depth, rot: self.ship.tilt, ..Default::default() });
+            // Rollen im Seegang (sanft, mit dem Wind stärker) und Krängung in Kurven
+            let sea = if summoning { 0.0 } else { (self.t * 0.85 + h.x * 0.0011).sin() * (0.008 + self.look.wind * 0.012) + self.ship.roll };
+            f.sprite(&s, h.x, h.y + b + sub - self.ship.lift, SprOpt { flip, tint, flags: fl, cut_bottom: depth, rot: self.ship.tilt + sea, ..Default::default() });
             self.draw_ship_vortex(art, f, h.x, h.y);
             if depth > 0.005 {
                 // Gischt, wo das Schiff die Oberfläche durchbricht
@@ -652,6 +713,17 @@ impl Game {
                 for k in 0..10 {
                     let a = k as f32 / 10.0 * TAU - t * 1.1;
                     f.glow(wx + a.cos() * 24.0, wy + a.sin() * 24.0, 5.0, [95, 242, 200, 120]);
+                }
+                // drei Schaumarme ziehen spiralförmig in den Trichter, innen dunkler Schlund
+                f.shadow(wx, wy + 2.0, 46.0, 30.0, 0.55);
+                for arm in 0..3 {
+                    for j in 0..18 {
+                        let u = j as f32 / 17.0;
+                        let r = 130.0 * (1.0 - u) + 16.0;
+                        let a = arm as f32 * TAU / 3.0 + u * 5.2 - t * 1.6;
+                        let al = (u * (1.0 - u) * 4.0 * 110.0) as u8;
+                        f.glow(wx + a.cos() * r, wy + a.sin() * r * 0.72, 3.0 + (1.0 - u) * 3.0, [210, 245, 240, al]);
+                    }
                 }
                 f.glow(wx, wy, 26.0, [95, 242, 200, 160]);
                 f.light(LightDef { x: wx, y: wy, z: 20.0, r: 280.0, col: [0.35, 1.0, 0.82], flicker: 0.3 });
