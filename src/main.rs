@@ -271,8 +271,12 @@ fn setup(world: &mut bevy::ecs::world::World) {
                     let p = if pos == "whirl" {
                         Some((g.world.pier_end.0, g.world.pier_end.1 + 20.0))
                     } else if let Some(k) = pos.strip_prefix("town") {
-                        // Testlauf: mitten in eine Siedlung (pos=townasche, pos=townraben)
-                        g.world.settlement_keys.iter().position(|s| *s == k).map(|i| (g.world.settlements[i].0, g.world.settlements[i].1 + 40.0))
+                        // Testlauf: mitten in eine Siedlung (pos=townasche, pos=townraben), mit
+                        // Versatz in Kacheln: pos=townasche:0,-7
+                        let (k, off) = k.split_once(':').unwrap_or((k, "0,0"));
+                        let o: Vec<f32> = off.split(',').filter_map(|v| v.parse().ok()).collect();
+                        let (ox, oy) = (o.first().copied().unwrap_or(0.0) * 32.0, o.get(1).copied().unwrap_or(0.0) * 32.0);
+                        g.world.settlement_keys.iter().position(|s| *s == k).map(|i| (g.world.settlements[i].0 + ox, g.world.settlements[i].1 + 40.0 + oy))
                     } else if pos == "sin" {
                         // Testlauf: vor der Sündenstatue der Glutwacht
                         g.world.sin_statue.map(|si| (g.world.props[si].x, g.world.props[si].y + 46.0))
@@ -282,6 +286,15 @@ fn setup(world: &mut bevy::ecs::world::World) {
                     } else if pos == "ghost" {
                         // Testlauf: neben dem Geisterkapitän auf dem Steg des Galgenstrands
                         g.npcs.iter().find(|n| n.def.id == "ghostCaptain").map(|n| (n.a.x - 34.0, n.a.y + 26.0))
+                    } else if let Some((kind, n)) = pos.strip_prefix("surf").map(|n| (true, n)).or_else(|| pos.strip_prefix("rock").map(|n| (false, n))) {
+                        // Testlauf: an eine Brandungsstelle (pos=surf3: Klippe/Mauer, pos=rock3:
+                        // Felsufer), zwei Kacheln landwärts
+                        let n = n.parse::<usize>().unwrap_or(0);
+                        let list: Vec<_> = g.world.surf.iter().filter(|p| (p.big > 1.0) == kind).collect();
+                        (!list.is_empty()).then(|| {
+                            let p = list[(n * 997) % list.len()];
+                            (p.x - p.nx * 70.0, p.y - p.ny * 70.0)
+                        })
                     } else if let Some(n) = pos.strip_prefix("isle").and_then(|n| n.parse::<usize>().ok()) {
                         // Testlauf: am Anleger der n-ten wilden Insel (pos=isle12)
                         let key = format!("i{n}");

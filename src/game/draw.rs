@@ -133,6 +133,8 @@ impl Game {
         self.fx.draw_under(f);
         // Fischschwärme in Ufernähe, Treibgut auf hoher See
         self.draw_sealife(art, f);
+        // Brandung an Fels und Klippen
+        self.draw_surf(f);
         // Glutwacht: Krakenaugen unter Wasser, die Spinne unter der Brücke
         self.draw_hub_life(art, f);
         self.draw_wake(art, f);

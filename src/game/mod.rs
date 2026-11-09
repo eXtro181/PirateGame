@@ -23,6 +23,7 @@ pub mod feel;
 pub mod sealife;
 pub mod gallows;
 pub mod hub;
+pub mod surf;
 
 pub use crate::art::{anim_index, Art, CharSheet};
 pub use crate::gfx::{flags, modes, Frame, LightDef, SprOpt};
@@ -267,6 +268,8 @@ pub struct Game {
     pub coffin_hop: f32,
     /// Glutwacht: Krakenaugen im Becken, Spinne unter der Brücke
     pub hub: hub::HubLife,
+    /// Brandung: Zeit bis zum nächsten Donnern
+    pub surf_snd: f32,
     pub focus: Option<Focus>,
     pub hover: Hover,
     pub stain_t: f32,
@@ -405,6 +408,7 @@ impl Game {
             gallows_night: false,
             coffin_hop: 0.0,
             hub: Default::default(),
+            surf_snd: 0.0,
             focus: None,
             hover: Hover::None,
             stain_t: 0.0,
@@ -1024,6 +1028,7 @@ impl Game {
         self.update_zone(dt);
         self.update_hub_wrecks(dt);
         self.update_hub_life(dt);
+        self.update_surf(dt);
         self.update_boss_arena();
         self.update_prolog(dt);
         self.update_camera(dt, frame);

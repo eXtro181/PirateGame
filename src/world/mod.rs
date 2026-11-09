@@ -11,6 +11,7 @@
 mod nature;
 mod plisle;
 mod prolog;
+pub mod surf;
 pub mod view;
 mod wild;
 
@@ -438,6 +439,9 @@ pub struct World {
     pub path: Vec<bool>,
     /// Abstand zum Land in Kacheln (Wasser; 0 = Land, höchstens 31)
     pub shore: Vec<u8>,
+    /// Brandung an Fels und Klippen (`surf.rs`), nach 512-px-Feldern einsortiert
+    pub surf: Vec<surf::SurfPt>,
+    pub surf_idx: HashMap<(i32, i32), (u32, u32)>,
     /// Standort je Kachel (`nature::NAT_*`): Landabstand zum Wasser, Schatten, Hangfuß, Binnenwasser
     pub nat: Vec<u8>,
     /// die wilden Inseln im weiten Ozean
@@ -552,6 +556,8 @@ impl World {
             stairs: vec![false; n],
             path: vec![false; n],
             shore: vec![31; n],
+            surf: vec![],
+            surf_idx: HashMap::new(),
             nat: vec![0; n],
             wild: vec![],
             props: vec![],
@@ -855,6 +861,7 @@ impl World {
         }).collect();
         let mut rng = Rng::new(9191);
         self.sea_props(&mut rng);
+        self.compute_surf();
         lap("See", &mut t);
         self.ghost_routes = self.outer_routes();
         bevy::log::info!("Welt: {} wilde Inseln, gesamt {:.0} ms", self.wild.len(), t0.elapsed().as_secs_f64() * 1000.0);
@@ -2259,6 +2266,24 @@ impl World {
         for &(cx, cy, rx, ry) in &self.low_areas {
             flat.push((cx, cy, rx, ry, true));
         }
+        // Häuser stehen ganz auf einer Ebene, mit ebenem Grund vor der Tür (Nutzerwunsch 8.11.:
+        // vorher liefen Stützmauern und Felsstufen mitten durch Häuser und über Dorfplätze)
+        for p in &self.props {
+            let k = p.kind.as_str();
+            let half = match k {
+                "townhouse0" => 85.0,
+                "townhouse1" => 75.0,
+                "townhouse2" => 95.0,
+                "tavern" => 115.0,
+                "forge" => 75.0,
+                _ => continue,
+            };
+            if p.hidden {
+                continue;
+            }
+            let (a, b) = t(p.x, p.y);
+            flat.push((a, b, (half / TS as f32).ceil() as i32 + 2, 4, false));
+        }
         flat.retain(|f| inside(f.0, f.1) && self.zone[idx(f.0, f.1)] == Some(z));
         // Abstand zum Wasser (Kacheln, Breitensuche)
         let mut wd = vec![99i32; n];
@@ -3390,6 +3415,8 @@ impl World {
         self.road(&[(cx - 22, cy + 12), (cx + 18, cy + 12)], Mat::Cobble, 1);
         self.road(&[(cx - 22, cy - 10), (cx + 18, cy - 10)], Mat::Cobble, 1);
         self.plaza(cx + 10, cy + 3, 5, 3, Mat::Cobble, Some(0));
+        // Hauptgasse mit Markt und Brunnen auf einer Ebene (keine Stützmauer quer über den Markt)
+        self.flat_areas.push((cx + 2, cy + 1, 24, 4));
         self.fire("raben", cx + 18, cy + 3);
         let rows: [(i32, &[i32]); 4] = [(-15, &[-24, -17, -10, 6, 13, 19]), (-3, &[-24, -17, -10, 6, 13, 19]), (9, &[-24, -17, -10, 6, 13, 19]), (21, &[-24, -17, -10, 6, 13])];
         let mut hi = 0;
