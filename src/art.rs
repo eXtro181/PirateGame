@@ -130,9 +130,9 @@ impl DynSlot {
     }
 }
 
-/// Endkampf gegen Malakor (im Boss-Bereich): der Fliegende Holländer (ein Bild, Bug nach
-/// Nordost, gespiegelt für Nordwest), Kopf und Armglied des roten Kraken, Schädelmantel und
-/// Wirbel des Knochenkraken.
+/// Endkampf gegen Malakor (im Boss-Bereich): der Fliegende Holländer (PixelLab, Seitenansicht,
+/// Bug rechts, ×8; gespiegelt für Bug links), Kopf und Armglied des roten Kraken, der Spiegelmond,
+/// Kettenglieder der Ankerketten und Wirbel der Knochenarme des Mondfressers.
 pub fn build_malakor(art: &mut Art, frame: &mut Frame) {
     if art.boss_loaded.as_deref() == Some("malakor") {
         return;
@@ -140,24 +140,21 @@ pub fn build_malakor(art: &mut Art, frame: &mut Frame) {
     let t0 = bevy::platform::time::Instant::now();
     let slot = art.boss_slot;
     let mut a = slot.atlas();
-    let (_, h, foot) = sw_art::ships::ship_size("dutchman");
-    let ship = sw_art::ships::ship_frame("dutchman", 3, Default::default());
     use sw_art::malakor as mk;
     let red = mk::red_mantle();
-    let b0 = mk::bone_mantle(false);
-    let b1 = mk::bone_mantle(true);
-    let v: Vec<(String, Spr)> = vec![
-        ("mk:ship".into(), a.add_trim("mk:ship", &ship, ship.w / 2, h - foot)),
-        ("mk:red".into(), a.add_trim("mk:red", &red, red.w / 2, red.h - 10)),
-        ("mk:bone0".into(), a.add_trim("mk:bone0", &b0, b0.w / 2, b0.h - 20)),
-        ("mk:bone1".into(), a.add_trim("mk:bone1", &b1, b1.w / 2, b1.h - 20)),
-    ];
-    // Armglieder und Wirbel werden zu Ketten gereiht: ohne Umriss (sonst Fugen)
+    let mut v: Vec<(String, Spr)> = vec![("mk:red".into(), a.add_trim("mk:red", &red, red.w / 2, red.h - 10))];
+    // PixelLab-Bild, Mond und Ketten ohne Pixelstil-Umriss (Ketten werden gereiht)
     a.style = false;
-    let mut v = v;
+    let (ship, sx, sy) = sw_art::pixellab::dutchman();
+    v.push(("mk:ship".into(), a.add_trim("mk:ship", &ship, sx, sy)));
+    let moon = mk::moon_orb();
+    v.push(("mk:moon".into(), a.add("mk:moon", &moon, 70, 70)));
+    v.push(("mk:link0".into(), a.add("mk:link0", &mk::chain_link(false), 9, 6)));
+    v.push(("mk:link1".into(), a.add("mk:link1", &mk::chain_link(true), 9, 3)));
     v.push(("mk:rseg".into(), a.add("mk:rseg", &mk::tentacle_seg(0x8A1E16, 0x3A0A0A, 0xE8A08A), 20, 20)));
     v.push(("mk:vert".into(), a.add("mk:vert", &mk::vertebra(), 22, 20)));
     if !slot.upload(frame, &mut a) {
+        art.boss_loaded = Some("malakor".into());
         return;
     }
     if let Some(old) = art.boss_loaded.take() {
@@ -167,8 +164,53 @@ pub fn build_malakor(art: &mut Art, frame: &mut Frame) {
         slot.fix(&mut s);
         art.map.insert(k, s);
     }
+    art.chars.remove("seaSpider");
     art.boss_loaded = Some("malakor".into());
     info!("Malakor gezeichnet in {:.2}s", t0.elapsed().as_secs_f32());
+}
+
+/// Meeresgrund und Sieg-Sequenz (im Boss-Bereich): der Spiegelmond, Kettenglieder, die Wirbel der
+/// Knochenarme und die Meeresspinne, die in der Letzten Flut den Mond zurück an den Himmel hängt.
+/// (Holländer und roter Kraken werden hier nicht mehr gebraucht – beides zusammen passt nicht.)
+pub fn build_seabed(art: &mut Art, frame: &mut Frame) {
+    if art.boss_loaded.as_deref() == Some("seabed") {
+        return;
+    }
+    let t0 = bevy::platform::time::Instant::now();
+    let slot = art.boss_slot;
+    let mut a = slot.atlas();
+    use sw_art::malakor as mk;
+    let mut spider = beast_sheet(&mut a, "seaSpider");
+    a.style = false;
+    let moon = mk::moon_orb();
+    let mut v: Vec<(String, Spr)> = vec![("mk:moon".into(), a.add("mk:moon", &moon, 70, 70))];
+    v.push(("mk:link0".into(), a.add("mk:link0", &mk::chain_link(false), 9, 6)));
+    v.push(("mk:link1".into(), a.add("mk:link1", &mk::chain_link(true), 9, 3)));
+    v.push(("mk:vert".into(), a.add("mk:vert", &mk::vertebra(), 22, 20)));
+    if !slot.upload(frame, &mut a) {
+        art.boss_loaded = Some("seabed".into());
+        return;
+    }
+    if let Some(old) = art.boss_loaded.take() {
+        art.ships.remove(&old);
+    }
+    for k in ["mk:ship", "mk:red", "mk:rseg"] {
+        art.map.remove(k);
+    }
+    for (k, mut s) in v {
+        slot.fix(&mut s);
+        art.map.insert(k, s);
+    }
+    for d in spider.f.iter_mut() {
+        for an in d.iter_mut() {
+            for s in an.iter_mut() {
+                slot.fix(s);
+            }
+        }
+    }
+    art.chars.insert("seaSpider".into(), spider);
+    art.boss_loaded = Some("seabed".into());
+    info!("Meeresgrund (Mond, Spinne) gezeichnet in {:.2}s", t0.elapsed().as_secs_f32());
 }
 
 /// Titelbild „Der Thron der Ertrunkenen“ (im Boss-Bereich): Thron, gebrochene Säulen, schwebende
@@ -179,30 +221,10 @@ pub fn build_title(art: &mut Art, frame: &mut Frame) {
     }
     let slot = art.boss_slot;
     let mut a = slot.atlas();
-    // das Titelbild bleibt weich gemalt (Schriftzug, verkleinerte Motive)
+    // der Schriftzug bleibt weich gemalt; die Szene selbst malt der Shader (Sturmnacht)
     a.style = false;
-    use sw_art::throne as th;
-    // gemalt in voller Größe, verkleinert in den Atlas (ruhige Details beim Kameraschwenk)
-    let throne = th::downscale(&th::throne(), 0.55);
-    let p0 = th::downscale(&th::pillar(0), 0.56);
-    let p1 = th::downscale(&th::pillar(1), 0.56);
-    let p2 = th::downscale(&th::pillar(2), 0.5);
-    let crown = th::downscale(&th::crown(), 0.62);
-    let logo = th::title_logo();
-    // Krakenarm-Glied: dunkle, glänzende Haut mit hellen Saugnäpfen auf der Unterseite
-    let n = 40;
-    let seg = tentacle_seg(0x3A2236, 0x6A4450, 0xC8A8A0);
-    let mut v: Vec<(String, Spr)> = vec![
-        ("t:throne".into(), a.add_trim("t:throne", &throne, throne.w / 2, throne.h - 4)),
-        ("t:pillar0".into(), a.add_trim("t:pillar0", &p0, p0.w / 2, p0.h - 3)),
-        ("t:pillar1".into(), a.add_trim("t:pillar1", &p1, p1.w / 2, p1.h - 3)),
-        ("t:pillar2".into(), a.add_trim("t:pillar2", &p2, p2.w / 2, p2.h - 3)),
-        ("t:crown".into(), a.add_trim("t:crown", &crown, crown.w / 2, crown.h)),
-        ("t:link0".into(), a.add("t:link0", &th::link(false), 7, 8)),
-        ("t:link1".into(), a.add("t:link1", &th::link(true), 4, 8)),
-        ("t:seg".into(), a.add("t:seg", &seg, n / 2, n / 2)),
-        ("t:logo".into(), a.add("t:logo", &logo, 0, 0)),
-    ];
+    let logo = sw_art::throne::title_logo();
+    let mut v: Vec<(String, Spr)> = vec![("t:logo".into(), a.add("t:logo", &logo, 0, 0))];
     if !slot.upload(frame, &mut a) {
         return;
     }

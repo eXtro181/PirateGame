@@ -135,6 +135,27 @@ fn main() {
             }
             save_lit(&bg, &format!("{out}/village.png"), 1);
         }
+        "dutchpl" => {
+            // PixelLab-Holländer (×8) neben dem eigenen Schiff, dazu Spiegelmond und Kettenglieder
+            let t = std::time::Instant::now();
+            let (c, ax, ay) = sw_art::pixellab::dutchman();
+            eprintln!("Holländer (PixelLab): {:?} {}×{} Fuß {ax},{ay}", t.elapsed(), c.w, c.h);
+            let pl = sw_art::ships::ship_frame("player", 4, Default::default());
+            let mut bg = Canvas::new(1800, 1200);
+            let water = sw_art::color::ramp_n(sw_art::color::hex(0x1E3A4A), 6, 1.0);
+            for y in 0..bg.h { for x in 0..bg.w { let i = bg.idx(x, y); bg.col[i] = water[2]; } }
+            bg.place(&c, 640, 1080, ax, ay);
+            bg.place(&pl, 1450, 1100, pl.w / 2, pl.h - 92);
+            let m = sw_art::malakor::moon_orb();
+            bg.place(&m, 1500, 300, 70, 70);
+            let l0 = sw_art::malakor::chain_link(false);
+            let l1 = sw_art::malakor::chain_link(true);
+            for k in 0..8 {
+                let l = if k % 2 == 0 { &l0 } else { &l1 };
+                bg.place(l, 1380 + k * 14, 470, 9, l.h / 2);
+            }
+            save_lit(&bg, &format!("{out}/dutchpl.png"), 1);
+        }
         "dutchman" => {
             let t = std::time::Instant::now();
             let c = sw_art::ships::ship_frame("dutchman", std::env::var("K").ok().and_then(|v| v.parse().ok()).unwrap_or(4), Default::default());

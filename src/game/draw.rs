@@ -133,6 +133,8 @@ impl Game {
         self.fx.draw_under(f);
         // Fischschwärme in Ufernähe, Treibgut auf hoher See
         self.draw_sealife(art, f);
+        // Brandung an Fels und Klippen
+        self.draw_surf(f);
         // Glutwacht: Krakenaugen unter Wasser, die Spinne unter der Brücke
         self.draw_hub_life(art, f);
         self.draw_wake(art, f);
@@ -295,7 +297,7 @@ impl Game {
                 }
             };
             if b.mega && !b.human {
-                self.draw_bone_kraken(art, f, b, fl);
+                self.draw_moon_eater(art, f, b, fl);
             } else if b.mega {
                 // Malakor: Sprungbogen, vorschnellender Tentakelbart
                 let mut a = b.a;
@@ -560,6 +562,8 @@ impl Game {
         self.draw_end(art, f);
         self.draw_drain(f);
         self.draw_seabed(art, f);
+        // Sieg über Malakor: die Letzte Flut
+        self.draw_tide(art, f);
         // im Laden: alles außerhalb der Wände ist Nacht
         if let Some(di) = self.world.interior_at(self.player.a.x, self.player.a.y).filter(|_| !self.sailing) {
             let (rx, ry, rw, rh) = self.world.doors[di].room;
@@ -576,11 +580,32 @@ impl Game {
         self.draw_critters(f);
         self.fx.draw(f, &art.pfx);
         self.fx.lights(f, &art.pfx);
-        // Nebelschichten je Zone
-        let z = self.env_key();
+        // Nebelschichten je Zone (am Ende der Welt je nach Abschnitt des Endkampfs)
+        let z = if self.zone_key == Zone::Ende {
+            match (self.cutscene, self.end.state) {
+                (Some(Cut::Tide { t }), _) => {
+                    if t < 43.0 {
+                        "end_mond"
+                    } else {
+                        "end_morgen"
+                    }
+                }
+                (_, EP::Dormant | EP::Approach) => "end_stille",
+                (_, EP::Rise | EP::Ship) => "end_sturm",
+                (_, EP::Drain | EP::Seabed) => "end_grund",
+                (_, EP::Done) => "end_mond",
+            }
+        } else {
+            self.env_key()
+        };
         let (fc, fa, sp) = match z {
             "asche" => ([200, 70, 80], 42, 14.0),
             "ende" => ([140, 20, 40], 60, 10.0),
+            "end_stille" => ([120, 135, 165], 34, 4.0),
+            "end_sturm" => ([80, 120, 115], 48, 16.0),
+            "end_grund" => ([105, 125, 115], 40, 7.0),
+            "end_mond" => ([140, 158, 185], 26, 5.0),
+            "end_morgen" => ([215, 180, 160], 22, 6.0),
             "mangroven" => ([90, 130, 90], 70, 6.0),
             "frost" => ([190, 215, 235], 22, 8.0),
             "raben" => ([120, 130, 140], 70, 18.0),
@@ -670,87 +695,91 @@ impl Game {
     }
 
     /// Malakors Gebein: Schädelmantel und acht Wirbelarme, je nach Angriff bewegt.
-    fn draw_bone_kraken(&self, art: &Art, f: &mut Frame, b: &Boss, fl: u8) {
+    /// Malakors zweite Gestalt, der Mondfresser: der verdunkelte Spiegelmond mit Malakors Schatten
+    /// darin schwebt über dem Grund, acht Knochenarme brechen aus dem Schlick und greifen an. Beim
+    /// Sprung steigt der Mond hoch auf und stürzt herab.
+    fn draw_moon_eater(&self, art: &Art, f: &mut Frame, b: &Boss, fl: u8) {
         let t = self.t;
         let info = b.atk_info();
-        // Auftauchen nach der Verwandlung
+        // Verwandlung: Malakor steigt in den Mond (bis 2,2 s), dann brechen die Arme hervor
         let rise = if b.state == BS::Transform { ((b.st_t - 2.2) / 1.6).clamp(0.0, 1.0) } else { 1.0 };
-        if rise <= 0.0 {
-            return;
-        }
         let mut z = 0.0;
         if let Some((AK::Leap, ph, at, _, _, _)) = info {
             z = match ph {
-                0 => -(at / 0.9).min(1.0) * 60.0,
-                1 => ((at / 0.8).min(1.0) * std::f32::consts::PI).sin() * 200.0,
+                0 => (at / 0.9).min(1.0) * 240.0,
+                1 => 240.0 * (1.0 - (at / 0.3).min(1.0)),
                 _ => 0.0,
             };
         }
         let (bx, by) = (b.a.x, b.a.y);
-        if let Some(seg) = art.map.get("mk:vert") {
-            for i in 0..8 {
-                let fi = i as f32;
-                let a = fi / 8.0 * std::f32::consts::TAU + 0.4;
-                let (sx, sy) = (bx + a.cos() * 110.0, by + a.sin() * 70.0);
-                let sway = (t * 1.3 + fi * 1.9).sin();
-                let ra = a + sway * 0.4;
-                let (mut tx, mut ty, mut tz) = (sx + ra.cos() * 110.0, sy + ra.sin() * 76.0, 70.0 + sway * 40.0);
-                let mut arch = 90.0;
-                match info {
-                    Some((AK::Sweep, ph, at, ang, _, _)) if i == 0 || i == 4 => {
-                        // Tentakelfeger: ein Arm fegt im Bogen über den Boden
-                        let k = match ph {
-                            0 => -1.0,
-                            1 => -1.0 + (at / 0.2).min(1.0) * 2.0,
-                            _ => 1.0,
-                        };
-                        let an = ang + k * 1.2 * if i == 0 { 1.0 } else { -1.0 };
-                        tx = bx + an.cos() * 330.0;
-                        ty = by + an.sin() * 230.0;
-                        tz = if ph == 1 { 14.0 } else { 120.0 };
-                        arch = 70.0;
+        // die Arme ziehen sich zurück, solange der Mond hoch oben schwebt
+        let arms = rise * (1.0 - (z / 240.0).clamp(0.0, 1.0) * 0.8);
+        if arms > 0.02 {
+            if let Some(seg) = art.map.get("mk:vert") {
+                for i in 0..8 {
+                    let fi = i as f32;
+                    let a = fi / 8.0 * std::f32::consts::TAU + 0.4;
+                    let (sx, sy) = (bx + a.cos() * 130.0, by + a.sin() * 80.0);
+                    let sway = (t * 1.3 + fi * 1.9).sin();
+                    let ra = a + sway * 0.4;
+                    let (mut tx, mut ty, mut tz) = (sx + ra.cos() * 110.0, sy + ra.sin() * 76.0, 80.0 + sway * 40.0);
+                    let mut arch = 90.0;
+                    match info {
+                        Some((AK::Sweep, ph, at, ang, _, _)) if i == 0 || i == 4 => {
+                            // ein Arm fegt im Bogen über den Grund
+                            let k = match ph {
+                                0 => -1.0,
+                                1 => -1.0 + (at / 0.2).min(1.0) * 2.0,
+                                _ => 1.0,
+                            };
+                            let an = ang + k * 1.2 * if i == 0 { 1.0 } else { -1.0 };
+                            tx = bx + an.cos() * 330.0;
+                            ty = by + an.sin() * 230.0;
+                            tz = if ph == 1 { 14.0 } else { 120.0 };
+                            arch = 70.0;
+                        }
+                        Some((AK::Spikes, ph, _, ang, _, _)) if ph < 2 => {
+                            // die Arme bohren sich in den Grund und brechen unter dem Ziel hervor
+                            let d = 140.0 + fi * 18.0;
+                            tx = bx + ang.cos() * d + (fi - 3.5) * 12.0;
+                            ty = by + ang.sin() * d * 0.8;
+                            tz = 0.0;
+                            arch = 120.0;
+                        }
+                        Some((AK::Volley, _, _, _, _, _)) => {
+                            // gespreizt, Knochensplitter fliegen
+                            tx = sx + a.cos() * 160.0;
+                            ty = sy + a.sin() * 110.0;
+                            tz = 180.0;
+                        }
+                        _ => {}
                     }
-                    Some((AK::Spikes, ph, _, ang, _, _)) if ph < 2 => {
-                        // Arme bohren sich in den Grund
-                        let d = 140.0 + fi * 18.0;
-                        tx = bx + ang.cos() * d + (fi - 3.5) * 12.0;
-                        ty = by + ang.sin() * d * 0.8;
-                        tz = 0.0;
-                        arch = 120.0;
-                    }
-                    Some((AK::Volley, _, _, _, _, _)) => {
-                        // gespreizt, Splitter fliegen
-                        tx = sx + a.cos() * 160.0;
-                        ty = sy + a.sin() * 110.0;
-                        tz = 180.0;
-                    }
-                    _ => {}
+                    // aus dem Schlick: Sand spritzt am Austritt
+                    f.decals.push(Frame::quad_rect(sx - 20.0, sy - 7.0, 40.0, 14.0, [40, 34, 26, (arms * 120.0) as u8], modes::SOFT, 0));
+                    draw_tentacle_bones(f, seg, (sx, sy), (sx + (tx - sx) * arms, sy + (ty - sy) * arms, tz * arms), arch * arms, t * 1.5 + fi * 1.3);
                 }
-                draw_tentacle_bones(f, seg, (sx, sy), (tx, ty, (tz + z) * rise), arch * rise, t * 1.5 + fi * 1.3);
             }
         }
-        let open = matches!(info, Some((AK::Volley | AK::Spikes, _, _, _, _, _))) || b.state == BS::Transform;
-        if let Some(m) = art.map.get(if open { "mk:bone1" } else { "mk:bone0" }).copied() {
-            let cut = 1.0 - rise;
-            f.shadow(bx, by + 4.0, 150.0 - z * 0.2, 40.0, 0.4);
-            f.sprite(&m, bx, by + 30.0 - z + m.h as f32 * cut, SprOpt { cut_bottom: cut, flags: fl, ev: z.max(0.0), ..Default::default() });
+        // der verdunkelte Mond, darin Malakors Schatten
+        let mz = 130.0 + (t * 0.9).sin() * 8.0 + z;
+        let k = 0.9 + 0.1 * (t * 2.0).sin() + if b.a.flash > 0.0 { 0.8 } else { 0.0 };
+        let red = if b.state == BS::Transform { ((b.st_t - 1.4) / 0.8).clamp(0.0, 1.0) } else { 1.0 };
+        super::endboss::draw_moon(f, art, bx, by, mz, red, k, 1.15, t);
+        if red > 0.3 {
+            if let Some(sh) = art.chars.get("malakor") {
+                let ai = crate::art::anim_index(if matches!(b.state, BS::Attack) { "cast" } else { "idle" });
+                let n = sh.f[0][ai].len().max(1);
+                let s = sh.get(0, ai, ((t * 4.0) as usize) % n);
+                let a = (red * 210.0) as u8;
+                f.sprite_z(&s, bx, by - mz + 34.0, by + 2.0, SprOpt { scale: 1.25, tint: [70, 18, 30, a], flags: fl & flags::FLASH, ev: mz, ..Default::default() });
+                // zwei glühende Augen
+                for j in [-1.0f32, 1.0] {
+                    f.glow(bx + j * 5.0, by - mz - 20.0, 4.0, [255, 90, 80, a]);
+                }
+            }
         }
-        f.light(LightDef { x: bx, y: by, z: 140.0 + z, r: 320.0, col: [0.4, 1.4, 0.9], flicker: 0.2 });
-    }
-
-    /// Meeresgrund: das Wrack des Holländers liegt schief im Schlick.
-    fn draw_seabed(&self, art: &Art, f: &mut Frame) {
-        if !self.world.drained || matches!(self.end.state, crate::game::endboss::EP::Drain) {
-            return;
-        }
-        let Some(s) = art.map.get("mk:ship").copied() else { return };
-        let (ax, ay, _, _) = self.end_arena();
-        let (x, y) = (ax + 80.0, ay - 560.0);
-        f.shadow(x, y + 10.0, 560.0, 120.0, 0.45);
-        f.sprite(&s, x, y + 60.0, SprOpt { cut_bottom: 0.08, rot: -0.08, tint: [150, 165, 155, 255], ..Default::default() });
-        for i in 0..4 {
-            let lx = x + (i as f32 - 1.5) * 220.0;
-            f.light(LightDef { x: lx, y, z: 60.0, r: 220.0, col: [0.3, 0.9, 0.6], flicker: 0.3 });
+        if b.a.flash > 0.0 {
+            f.glow(bx, by - mz, 90.0, [255, 255, 255, 90]);
         }
     }
 }

@@ -19,7 +19,6 @@ use bevy::input::ButtonState;
 use bevy::prelude::*;
 use bevy::window::{CursorMoved, PrimaryWindow, WindowResolution};
 use game::data::*;
-use game::fx::Fx;
 use game::input::Input;
 use game::{Game, Options};
 use gfx::*;
@@ -47,7 +46,6 @@ struct App {
     infos: Infos,
     profile: Option<save::Profile>,
     t: f32,
-    fx: Fx,
     env: game::env::Env,
     params: HashMap<String, String>,
     /// dynamische Auflösung: gleitende Bildzeit, auf einfache Auflösung zurückgeschaltet, Zeit im Zustand
@@ -189,7 +187,6 @@ fn setup(world: &mut bevy::ecs::world::World) {
         infos,
         profile: None,
         t: 0.0,
-        fx: Fx::default(),
         // Titelbild: nächtliches offenes Meer, das brennende Schiff ist die Hauptlichtquelle
         env: { let mut e = game::env::env("kueste", true); e.sun = [e.sun[0] * 0.45, e.sun[1] * 0.4, e.sun[2] * 0.45]; e.ambient = [e.ambient[0] * 0.6, e.ambient[1] * 0.6, e.ambient[2] * 0.7]; e.fog_k = 0.16; e },
         params,
@@ -271,8 +268,12 @@ fn setup(world: &mut bevy::ecs::world::World) {
                     let p = if pos == "whirl" {
                         Some((g.world.pier_end.0, g.world.pier_end.1 + 20.0))
                     } else if let Some(k) = pos.strip_prefix("town") {
-                        // Testlauf: mitten in eine Siedlung (pos=townasche, pos=townraben)
-                        g.world.settlement_keys.iter().position(|s| *s == k).map(|i| (g.world.settlements[i].0, g.world.settlements[i].1 + 40.0))
+                        // Testlauf: mitten in eine Siedlung (pos=townasche, pos=townraben), mit
+                        // Versatz in Kacheln: pos=townasche:0,-7
+                        let (k, off) = k.split_once(':').unwrap_or((k, "0,0"));
+                        let o: Vec<f32> = off.split(',').filter_map(|v| v.parse().ok()).collect();
+                        let (ox, oy) = (o.first().copied().unwrap_or(0.0) * 32.0, o.get(1).copied().unwrap_or(0.0) * 32.0);
+                        g.world.settlement_keys.iter().position(|s| *s == k).map(|i| (g.world.settlements[i].0 + ox, g.world.settlements[i].1 + 40.0 + oy))
                     } else if pos == "sin" {
                         // Testlauf: vor der Sündenstatue der Glutwacht
                         g.world.sin_statue.map(|si| (g.world.props[si].x, g.world.props[si].y + 46.0))
@@ -282,6 +283,15 @@ fn setup(world: &mut bevy::ecs::world::World) {
                     } else if pos == "ghost" {
                         // Testlauf: neben dem Geisterkapitän auf dem Steg des Galgenstrands
                         g.npcs.iter().find(|n| n.def.id == "ghostCaptain").map(|n| (n.a.x - 34.0, n.a.y + 26.0))
+                    } else if let Some((kind, n)) = pos.strip_prefix("surf").map(|n| (true, n)).or_else(|| pos.strip_prefix("rock").map(|n| (false, n))) {
+                        // Testlauf: an eine Brandungsstelle (pos=surf3: Klippe/Mauer, pos=rock3:
+                        // Felsufer), zwei Kacheln landwärts
+                        let n = n.parse::<usize>().unwrap_or(0);
+                        let list: Vec<_> = g.world.surf.iter().filter(|p| (p.big > 1.0) == kind).collect();
+                        (!list.is_empty()).then(|| {
+                            let p = list[(n * 997) % list.len()];
+                            (p.x - p.nx * 70.0, p.y - p.ny * 70.0)
+                        })
                     } else if let Some(n) = pos.strip_prefix("isle").and_then(|n| n.parse::<usize>().ok()) {
                         // Testlauf: am Anleger der n-ten wilden Insel (pos=isle12)
                         let key = format!("i{n}");
@@ -394,6 +404,14 @@ fn setup(world: &mut bevy::ecs::world::World) {
             if let Some(n) = app.params.get("endphase").and_then(|v| v.parse::<u32>().ok()) {
                 if let Scene::Play(g) = &mut app.scene {
                     g.debug_end_phase(n);
+                    // Sieg-Sequenz ab Sekunde s
+                    if let Some(s) = app.params.get("tide").and_then(|v| v.parse::<f32>().ok()) {
+                        g.debug_tide_at(s);
+                    }
+                    // Meeresgrund: die Wasserkante steht genau am Spieler (Bildprüfung des Shaders)
+                    if app.params.contains_key("tidefront") {
+                        g.world.tide = g.world.tide_u(g.player.a.x, g.player.a.y);
+                    }
                 }
             } else if app.params.contains_key("endsea") {
                 if let Scene::Play(g) = &mut app.scene {
@@ -488,7 +506,10 @@ fn tick(
     win: Query<&Window, With<PrimaryWindow>>,
 ) {
     let raw_dt = time.delta_secs();
-    let dt = raw_dt.min(0.05);
+    // Testlauf `&tscale=<k>`: größere Zeitschritte erlauben (Swiftshader zeichnet nur ~1 Bild je
+    // Sekunde – lange Zwischensequenzen laufen so k-mal schneller ab)
+    let tscale = app.params.get("tscale").and_then(|v| v.parse::<f32>().ok()).unwrap_or(1.0).clamp(1.0, 12.0);
+    let dt = raw_dt.min(0.05 * tscale);
     let app = &mut *app;
     let f = &mut *f;
     // dynamische Auflösung: dauerhaft langsame Bilder (über 30 ms) schalten FullHD auf die
@@ -653,21 +674,16 @@ fn tick(
                 app.input.mouse = starts[0].1;
                 app.input.click = true;
             }
-            // Titelbild: das brennende schwarze Schiff im Meer, umschlungen von Krakenarmen
+            // Titelbild (Runde 14): eine Sturmnacht auf hoher See in voller Auflösung aus dem
+            // Endbild-Shader (`title_scene` in post.wgsl) – die Galeone in der Dünung, Kopf und Arme
+            // eines Riesenkraken, Blitze, Regen. Die Welt wird dahinter nicht gezeichnet (sie wird
+            // nur schon erzeugt, damit das Spiel gleich beginnen kann); aus dem Titelbild-Bereich
+            // kommt nur noch der Schriftzug.
             art::build_title(art, f);
-            if let Some((w, v)) = app.title.as_mut() {
-                let t = app.t * 0.05;
-                let (cx, cy) = (ui::title::TITLE_SEA.0 + t.sin() * 30.0, ui::title::TITLE_SEA.1 + (t * 0.7).cos() * 12.0);
-                f.set_camera(cx, cy);
-                game::env::apply(&app.env, &mut f.g, app.opt.dark, app.opt.exposure * 0.9, app.opt.fx_high);
-                v.draw(w, art, f, (cx, cy + 240.0), None, dt);
-                ui::title::draw(art, f, &mut app.fx, app.t, dt);
-                app.fx.ambient(dt, f.view(), 6, true);
-                app.fx.update(dt);
-                app.fx.draw(f, &art.pfx);
-                let (vx, vy, vw, vh) = f.view();
-                f.fog(vx - 20.0, vy - 20.0, vw + 40.0, vh + 40.0, [70, 90, 110, 60], 5.0);
-            }
+            let (cx, cy) = ui::title::TITLE_SEA;
+            f.set_camera(cx, cy);
+            game::env::apply(&app.env, &mut f.g, app.opt.dark, app.opt.exposure * 0.9, app.opt.fx_high);
+            f.g.fx6 = [0.0, 1.0, app.t, 0.0];
             audio.set_mood("title");
             audio.rain = 0.0;
             audio.tension = 0.0;

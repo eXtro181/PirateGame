@@ -174,6 +174,94 @@ fn soot(c: &mut Canvas, x: i32, y: i32, w: i32, h: i32) {
     }
 }
 
+/// Dach plastisch machen (Runde 14, „mehr 3D-Look der Häuser“): Die Dachflächen bekommen eine
+/// echte Neigung im Relief – die Rückseite (oben bis zum First) steigt zum First an und blickt nach
+/// Norden, die Vorderseite fällt vom First zur Traufe und neigt sich dem Betrachter zu (vorher galt
+/// das ganze Dach als senkrechte Wand und wirkte wie eine flache schwarze Platte). Dazu ein Lichtsaum
+/// am First, eine dunkle Kehle unter der Traufe und der Schatten des Dachüberstands auf der Wand.
+/// `skip` = Bereiche, die aufrecht bleiben (Schornstein, Krähe): (x0, y0, x1, y1).
+pub fn roof_3d(c: &mut Canvas, x0: i32, x1: i32, top: i32, ridge: i32, eave: i32, wall_end: i32, skip: &[(i32, i32, i32, i32)]) {
+    let back = (ridge - top).max(1) as f32;
+    let front = (eave - ridge).max(1) as f32;
+    let hr = back * 0.9;
+    // Einzug des Walms am First (px), höchstens ein Viertel der Dachbreite
+    let hip_w = (front * 0.55).min((x1 - x0) as f32 * 0.25);
+    for y in top..eave {
+        for x in x0..x1 {
+            if c.a(x, y) == 0 || skip.iter().any(|r| x >= r.0 && x < r.2 && y >= r.1 && y < r.3) {
+                continue;
+            }
+            let i = c.idx(x, y);
+            // Walmdach: an beiden Enden eine dreieckige Fläche (links im Licht, rechts im Schatten),
+            // die Firstlinie wird kürzer – mit einer feinen Gratkante zwischen den Flächen
+            let k_eave = ((y - top) as f32 / (eave - top).max(1) as f32).clamp(0.0, 1.0);
+            let hip = 6.0 + hip_w * if y < ridge { (ridge - y) as f32 / back } else { (eave - y) as f32 / front };
+            let (dl, dr) = ((x - x0) as f32, (x1 - 1 - x) as f32);
+            let side = if dl < hip { -1 } else if dr < hip { 1 } else { 0 };
+            let grat = (dl - hip).abs() < 1.0 || (dr - hip).abs() < 1.0;
+            let (ramp, up, shade) = if side != 0 {
+                // Walmfläche: Höhe steigt zur Mitte, Normale zeigt nach außen
+                let d = if side < 0 { dl } else { dr };
+                let f = if side < 0 { 1.42 } else { 0.5 };
+                (d * 0.25 + 2.0, 60u8, f * (0.85 + 0.15 * k_eave))
+            } else if y < ridge {
+                // Rückseite: steigt zum First, vom Betrachter abgewandt und dunkler
+                let k = (y - top) as f32 / back;
+                (k * hr, 0u8, 0.5 + 0.25 * k)
+            } else {
+                // Vorderseite: fällt zur Traufe, am First im Licht, zur Traufe hin satter
+                let k = (y - ridge) as f32 / front;
+                let edge = if y - ridge < 2 { 1.45 } else if y - ridge < 5 { 1.22 } else { 1.0 };
+                ((1.0 - k) * hr, 118u8, (1.32 - 0.36 * k) * edge)
+            };
+            // insgesamt etwas heller als das alte Schieferschwarz, damit die Flächen im Dunkeln lesbar bleiben
+            let shade = if grat { shade * 1.5 } else { shade } * 1.18;
+            c.rel[i] += ramp;
+            c.up[i] = up;
+            let p = c.col[i];
+            c.col[i] = [(p[0] as f32 * shade).min(255.0) as u8, (p[1] as f32 * shade).min(255.0) as u8, (p[2] as f32 * shade).min(255.0) as u8, p[3]];
+        }
+    }
+    // Gebäudeecken: links fängt die Wandkante Licht, rechts dreht sie sich in den Schatten
+    let (mut l, mut r) = (i32::MAX, i32::MIN);
+    for x in x0..x1 {
+        if c.a(x, eave + 14) > 0 {
+            l = l.min(x);
+            r = r.max(x);
+        }
+    }
+    if l < r {
+        for y in eave..wall_end {
+            for d in 0..10 {
+                let (xl, xr) = (l + d, r - d);
+                let fl = 1.0 + 0.2 * (1.0 - d as f32 / 3.0).max(0.0);
+                let fr = 0.62 + 0.38 * (d as f32 / 9.0);
+                for (x, f) in [(xl, fl), (xr, fr)] {
+                    if c.a(x, y) == 0 {
+                        continue;
+                    }
+                    let i = c.idx(x, y);
+                    let p = c.col[i];
+                    c.col[i] = [(p[0] as f32 * f).min(255.0) as u8, (p[1] as f32 * f).min(255.0) as u8, (p[2] as f32 * f).min(255.0) as u8, p[3]];
+                }
+            }
+        }
+    }
+    // Schatten des Dachüberstands auf der Wand: unter der Traufe dunkel, nach unten auslaufend
+    for y in eave..(eave + 12).min(wall_end) {
+        let k = (y - eave) as f32 / 12.0;
+        let f = 0.52 + 0.48 * k * k;
+        for x in x0..x1 {
+            if c.a(x, y) == 0 {
+                continue;
+            }
+            let i = c.idx(x, y);
+            let p = c.col[i];
+            c.col[i] = [(p[0] as f32 * f) as u8, (p[1] as f32 * f) as u8, (p[2] as f32 * f) as u8, p[3]];
+        }
+    }
+}
+
 pub fn door(c: &mut Canvas, x: i32, y: i32, w: i32, h: i32) {
     let wd = p6(&[0x2A160E, 0x40221A, 0x5A3424, 0x744830, 0x8E5E40, 0xAA7A56]);
     let st = stone();
@@ -322,6 +410,7 @@ pub fn townhouse(v: i32) -> PropArt {
     c.dome(cxr as f32, (ridge - 4) as f32, 4.0, 3.0, &crow, 2.0, 8.0, 0.3, 0.1);
     c.dome((cxr + 3) as f32, (ridge - 7) as f32, 2.0, 2.0, &crow, 2.0, 9.0, 0.3, 0.1);
     c.put(cxr + 5, ridge - 7, hex(0x5A4A2A), 9.0);
+    roof_3d(&mut c, ox - 6, ox + w + 6, 4, ridge, roof_h, roof_h + wall_h, &[(chx - 1, 0, chx + 16, 24), (cxr - 6, ridge - 12, cxr + 8, ridge + 1)]);
     c.outline(true, 0.8);
     let ay = h - 4;
     PropArt::new(&format!("townhouse{v}"), c, (w + 12) / 2, ay)
@@ -383,6 +472,7 @@ pub fn tavern() -> PropArt {
     }
     let st = stone();
     block(&mut c, ox + 40, 0, 18, 4, 22, &st, &st, 7.0);
+    roof_3d(&mut c, ox - 8, ox + w + 8, 6, ridge, roof_h, roof_h + wall_h, &[(ox + 39, 0, ox + 60, 28)]);
     c.outline(true, 0.8);
     PropArt::new("tavern", c, (w + 16) / 2, h - 4)
         .shadow(w as f32 * 0.5, 10.0)
@@ -431,6 +521,7 @@ pub fn forge() -> PropArt {
     let rf = scale_roof();
     let mask = |xx: i32, yy: i32| -> bool { xx >= 74 && xx < 150 && yy >= 26 && yy < 50 };
     scale_area(&mut c, 74, 26, 76, 24, &rf, 0.65, 10, 6, &mask);
+    roof_3d(&mut c, 74, 150, 26, 27, 50, 126, &[]);
     // Amboss
     block(&mut c, 92, 100, 30, 6, 8, &ir, &ir, 4.0);
     c.rect_r(100, 114, 14, 12, ir[2], 2.0);

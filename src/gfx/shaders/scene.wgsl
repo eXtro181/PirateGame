@@ -92,12 +92,35 @@ fn wave_h(p: vec2<f32>, t: f32) -> f32 {
     return mix(h, h * h * (1.35 - 0.35 * h), 0.55);
 }
 
+// Dünung (Runde 14): lange Wellenzüge mit dem Wind – schmale Kämme, breite Täler, leicht gebogen
+// und nach einigen Längen abbrechend. Gibt Höhe (0..1) und die Steigung (px⁻¹) zurück; die
+// Steigung kommt analytisch, damit das Feld nur einmal je Pixel gerechnet wird.
+fn swell(p: vec2<f32>, t: f32) -> vec3<f32> {
+    var d = G.fx5.zw;
+    if (dot(d, d) < 0.01) { d = vec2<f32>(1.0, 0.25); }
+    d = normalize(d);
+    let wob = noise_at(p * 0.0045 + vec2<f32>(t * 0.013, t * 0.007)).g;
+    let k = 0.045;
+    let ph = dot(p, d) * k - t * 1.2 + wob * 6.0;
+    let s = 0.5 + 0.5 * sin(ph);
+    let sh = pow(s, 2.4);
+    let dsh = 1.2 * pow(s, 1.4) * cos(ph) * k;
+    let seg = smoothstep(0.22, 0.6, noise_at(p * 0.0021 + vec2<f32>(-t * 0.004, t * 0.009)).b);
+    return vec3<f32>(sh * seg, d * (dsh * seg));
+}
+
 fn water(p_in: vec2<f32>) -> GOut {
     return water_s(p_in, -1.0);
 }
 
 // Wasser; `shore_in` ≥ 0: pixelgenauer Uferabstand aus dem Boden-Chunk, sonst aus der groben Maske
 fn water_s(p_in: vec2<f32>, shore_in: f32) -> GOut {
+    return water_x(p_in, shore_in, -1.0);
+}
+
+// Wasser mit fester Tiefe (`depth_in` ≥ 0, sonst aus der Maske), z. B. über dem Meeresgrund am
+// Ende der Welt, solange das Meer abläuft bzw. zurückkehrt
+fn water_x(p_in: vec2<f32>, shore_in: f32, depth_in: f32) -> GOut {
     var o: GOut;
     let hd = G.hd3.x > 0.5;
     // Pixelraster: in FullHD halbe Weltpixel, sonst ganze
@@ -107,7 +130,8 @@ fn water_s(p_in: vec2<f32>, shore_in: f32) -> GOut {
     let m = mask_at(p);
     var shore = m.r;          // 0 am Ufer → 1 weit weg (über ~64 px)
     if (shore_in >= 0.0) { shore = shore_in; }
-    let depth = m.b;          // 0 flach → 1 tief
+    var depth = m.b;          // 0 flach → 1 tief
+    if (depth_in >= 0.0) { depth = depth_in; }
     // Grundfarbe mit Tiefe: im Flachen schimmert der Grund durch, in der Tiefe wird es dunkel
     let dd = smoothstep(0.0, 1.0, max(depth, shore * 0.85));
     var c = mix(G.water_a.rgb, G.water_b.rgb, dd * (0.85 + 0.15 * dd));
@@ -120,6 +144,13 @@ fn water_s(p_in: vec2<f32>, shore_in: f32) -> GOut {
     c *= 0.84 + h0 * 0.32;
     let sss_col = mix(G.water_a.rgb * vec3<f32>(0.78, 1.26, 1.12), G.sun_col.rgb, 0.22);
     c += sss_col * smoothstep(0.52, 0.82, h0) * (0.22 + (1.0 - dd) * 0.15);
+    // Dünung: in der Tiefe und bei Wind stärker, zum Ufer hin flacher (dort brechen die Brecher)
+    let sw = swell(p, t);
+    let swk = (0.3 + 0.7 * dd) * (0.55 + 0.65 * G.fx2.w) * smoothstep(0.0, 0.35, shore);
+    c *= 0.9 + sw.x * 0.26 * swk;
+    c += sss_col * smoothstep(0.55, 0.95, sw.x) * 0.16 * swk;
+    // heller Saum oben auf dem Kamm
+    c += vec3<f32>(0.05, 0.07, 0.08) * smoothstep(0.82, 0.97, sw.x) * swk;
     // Kaustik nur im Flachen berechnen (Voronoi-Netz aus der Rauschtextur)
     var caust = 0.0;
     if (dd < 0.995) {
@@ -141,18 +172,32 @@ fn water_s(p_in: vec2<f32>, shore_in: f32) -> GOut {
             let foam_ring = smoothstep(0.76, 0.92, ring) * (1.0 - smoothstep(0.0, fw * 1.6, shore)) * smoothstep(0.38, 0.62, fn1);
             let edge_lace = smoothstep(0.32, 0.52, foam_edge + (fn2 - 0.5) * 0.55);
             let crest = smoothstep(0.66, 0.78, h0) * (1.0 - smoothstep(0.0, fw * 3.0, shore)) * smoothstep(0.42, 0.62, noise_at(p * 2.6 - t * 5.0).b);
-            foam = max(max(edge_lace, foam_ring * 0.88), crest * 0.68);
+            // Brecher: helle Schaumlinie, die aufs Ufer zuläuft, dahinter ein milchiger Schwall
+            let bw = fract(shore * 2.4 - t * 0.22 + fn1 * 0.12);
+            let near = 1.0 - smoothstep(fw * 0.4, fw * 2.6, shore);
+            let breaker = smoothstep(0.84, 0.93, bw) * (1.0 - smoothstep(0.95, 0.995, bw)) * near * smoothstep(0.3, 0.55, fn2);
+            let wash = smoothstep(0.55, 0.88, bw) * (1.0 - smoothstep(0.88, 0.95, bw)) * near;
+            c = mix(c, G.water_c.rgb * 0.8 + c * 0.2, wash * 0.16);
+            foam = max(max(max(edge_lace, foam_ring * 0.88), crest * 0.68), breaker * 0.8);
         } else {
             let foam_ring = step(0.82, ring) * (1.0 - smoothstep(0.0, fw * 1.5, shore)) * step(0.45, fn1);
-            foam = max(step(0.4, foam_edge + (fn2 - 0.5) * 0.6), foam_ring * 0.85);
+            let bw = fract(shore * 2.4 - t * 0.22 + fn1 * 0.12);
+            let breaker = step(0.86, bw) * step(bw, 0.94) * (1.0 - smoothstep(fw * 0.4, fw * 2.4, shore)) * step(0.42, fn2);
+            foam = max(max(step(0.4, foam_edge + (fn2 - 0.5) * 0.6), foam_ring * 0.85), breaker * 0.8);
         }
         c = mix(c, G.water_c.rgb, foam * 0.92);
+    }
+    // Schaumkronen auf den Kämmen der Dünung, wenn der Wind auffrischt
+    let cap = smoothstep(0.86, 0.98, sw.x) * smoothstep(0.55, 0.75, noise_at(p * 1.1 + vec2<f32>(t * 1.5, -t * 0.7)).b) * smoothstep(0.3, 0.85, G.fx2.w) * swk;
+    if (cap > 0.0) {
+        c = mix(c, G.water_c.rgb, cap * 0.7);
+        foam = max(foam, cap * 0.7);
     }
     // Normale aus dem Wellenfeld
     let e = select(1.0, 0.65, hd);
     let hx = wave_h(p + vec2<f32>(e, 0.0), t) - h0;
     let hy = wave_h(p + vec2<f32>(0.0, e), t) - h0;
-    let nxy = clamp(vec2<f32>(-hx, -hy) * (9.5 / e) * G.water_a.w, vec2<f32>(-0.68), vec2<f32>(0.68));
+    let nxy = clamp((vec2<f32>(-hx, -hy) * (9.5 / e) - sw.yz * (8.5 * swk)) * G.water_a.w, vec2<f32>(-0.68), vec2<f32>(0.68));
     var em = vec3<f32>(caust * 0.07);
     var spec = select(0.78, 0.18, foam > 0.5);
     if (hd) {
@@ -182,6 +227,21 @@ fn water_s(p_in: vec2<f32>, shore_in: f32) -> GOut {
     // Alpha 0,5 im Leuchtpuffer kennzeichnet die Wasseroberfläche für den Licht-Pass (Glitzern)
     o.emi = vec4<f32>(em, 0.5);
     return o;
+}
+
+// ---------------------------------------------------------------- Gezeiten am Ende der Welt
+// Das Meer läuft über den Rand der Welt leer bzw. kehrt zurück (`G.fx7` Rechteck des Meeresgrunds,
+// `G.fx8.x` Lage der Wasserkante auf der Achse Nordwest 0 → Südost 1). Rückgabe > 0: Tiefe unter
+// der Kante (1 ≈ 1000 px dahinter), < 0: schon trocken; außerhalb des Rechtecks −99.
+fn tide_depth(p: vec2<f32>) -> f32 {
+    let r = G.fx7;
+    if (G.fx8.y < 0.5 || p.x < r.x || p.y < r.y || p.x > r.z || p.y > r.w) { return -99.0; }
+    let u = ((p.x - r.x) / (r.z - r.x) + (p.y - r.y) / (r.w - r.y)) * 0.5;
+    // die Kante buchtet sich aus (grob) und franst aus (fein)
+    let n1 = noise_at(p * 0.0019 + vec2<f32>(0.37, 0.71)).r;
+    let n2 = noise_at(p * 0.012 + vec2<f32>(7.0, 3.0)).g;
+    let ord = u + (n1 - 0.5) * 0.05 + (n2 - 0.5) * 0.016;
+    return (ord - G.fx8.x) * 9.0;
 }
 
 // ---------------------------------------------------------------- Abgrund mit Tiefenebenen
@@ -264,6 +324,12 @@ fn fs_gbuf(v: VOut) -> GOut {
     if (mode == 3u) {
         if (mask_at(v.world).g > 0.5) {
             return abyss(v.world);
+        }
+        // Ende der Welt, solange das Meer abläuft bzw. zurückkehrt: Ersatzwasser (noch kein
+        // Boden-Chunk) mit der Tiefe hinter der Wasserkante statt Uferschaum aus der Maske
+        let td = tide_depth(v.world);
+        if (td > -90.0) {
+            return water_x(v.world, clamp(td * 16.0, 0.3, 1.0), clamp(td * 1.2, 0.0, 1.0));
         }
         return water(v.world);
     }
@@ -360,6 +426,32 @@ fn fs_gbuf(v: VOut) -> GOut {
         let m2 = noise_at(v.world * 0.061 + vec2<f32>(31.0, 17.0)).r;
         rgb *= 0.84 + m1 * 0.3 + (m2 - 0.5) * 0.1;
         rgb *= mix(vec3<f32>(1.05, 1.0, 0.93), vec3<f32>(0.95, 1.0, 1.06), smoothstep(0.3, 0.7, m2));
+    }
+    if (chunk && G.fx8.y > 0.5) {
+        let td = tide_depth(v.world);
+        if (td > -90.0) {
+            if (td > 0.0) {
+                // über dem Grund steht noch (bzw. schon) Wasser: an der Kante flach und
+                // durchscheinend mit Schaumsaum und Brechern, dahinter tief
+                var w = water_x(v.world, clamp(td * 16.0, 0.0, 1.0), clamp(td * 1.2, 0.0, 1.0));
+                let clear = 1.0 - smoothstep(0.0, 0.3, td);
+                w.alb = vec4<f32>(mix(w.alb.rgb, rgb * vec3<f32>(0.62, 0.78, 0.84), clear * 0.55), 1.0);
+                return w;
+            }
+            // gerade trockengefallen: dunkler, nass glänzender Grund; in Senken bleiben Pfützen
+            let wet = 1.0 - smoothstep(0.0, 1.2, -td);
+            let pud = noise_at(v.world * 0.0085 + vec2<f32>(3.1, 9.2)).b + (noise_at(v.world * 0.05).r - 0.5) * 0.08;
+            if (pud > 0.7) {
+                // Pfütze: flaches, klares Wasser über dem Grund, der Himmel spiegelt sich schwach
+                var w = water_x(v.world, clamp((pud - 0.7) * 5.0, 0.0, 0.5), 0.0);
+                let k = smoothstep(0.7, 0.73, pud);
+                let sky = G.ambient.rgb * 0.22 + G.fog.rgb * 0.3;
+                w.alb = vec4<f32>(mix(rgb * 0.62, mix(w.alb.rgb, rgb * 0.7 + sky, 0.6), k), 1.0);
+                return w;
+            }
+            rgb *= 1.0 - 0.34 * wet;
+            n = vec4<f32>(n.rg, n.b, max(n.a, wet * 0.78));
+        }
     }
     if ((flags & 64u) != 0u) {
         // Spiegelung: die Wasseroberfläche bleibt, das Bild schimmert wellig gebrochen hindurch

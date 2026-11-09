@@ -23,6 +23,8 @@ pub mod feel;
 pub mod sealife;
 pub mod gallows;
 pub mod hub;
+pub mod surf;
+pub mod tide;
 
 pub use crate::art::{anim_index, Art, CharSheet};
 pub use crate::gfx::{flags, modes, Frame, LightDef, SprOpt};
@@ -123,6 +125,9 @@ pub enum Cut {
     /// Prolog: von den Ertrunkenen erschlagen und am Galgen `pi` aufgehängt, die Nacht sinkt herab,
     /// die Spinne holt den Leichnam (`gallows.rs`); (x0, y0) = Todesort
     Gallows { t: f32, pi: usize, x0: f32, y0: f32 },
+    /// Sieg über Malakor: die Letzte Flut (`tide.rs`) – Ketten reißen, die Spinne hängt den Mond
+    /// zurück an den Himmel, das Meer kehrt zurück, die Ertrunkenen ziehen heim
+    Tide { t: f32 },
 }
 
 /// Zeitplan des Erwachens (s): Dunkel mit Klopfen, Aufblenden, Deckel ruckelt, rutscht weg,
@@ -267,6 +272,8 @@ pub struct Game {
     pub coffin_hop: f32,
     /// Glutwacht: Krakenaugen im Becken, Spinne unter der Brücke
     pub hub: hub::HubLife,
+    /// Brandung: Zeit bis zum nächsten Donnern
+    pub surf_snd: f32,
     pub focus: Option<Focus>,
     pub hover: Hover,
     pub stain_t: f32,
@@ -405,6 +412,7 @@ impl Game {
             gallows_night: false,
             coffin_hop: 0.0,
             hub: Default::default(),
+            surf_snd: 0.0,
             focus: None,
             hover: Hover::None,
             stain_t: 0.0,
@@ -481,12 +489,16 @@ impl Game {
             g.apply_slot(si);
         }
         g.whirlpool_open = g.whirl_ready();
-        if g.save.end_naval {
+        if g.save.end_won {
+            // die Letzte Flut ist gekommen: das Meer ist zurück, in der Mitte ragt der Mondfels
+            // mit dem Säbelfeuer
+            g.world.raise_end_isle();
+            g.world.show_end_fire();
+            g.view.refresh(&g.world, frame);
+        } else if g.save.end_naval {
             // der Holländer ist versenkt: das Meer am Ende der Welt ist leergelaufen
             g.world.drain_end();
-            if g.save.end_won {
-                g.world.show_end_fire();
-            }
+            g.world.tide = Some(endboss::TIDE_DRY);
             g.view.refresh(&g.world, frame);
         }
         g.reset_end();
@@ -540,7 +552,7 @@ impl Game {
         g.zone_key = g.world.zone_at(g.player.a.x, g.player.a.y);
         g.wild_cur = g.world.wild_at(g.player.a.x, g.player.a.y);
         g.zone_name = g.place_name();
-        g.env_cur = env::env(g.env_key(), false);
+        g.env_cur = env::env(if g.world.zone_at(g.player.a.x, g.player.a.y) == Zone::Ende { g.end.env_key() } else { g.env_key() }, false);
         // alte Spielstände: die Seekarte um die schon erkundeten Inseln aufdecken
         if g.save.chart.is_empty() {
             for k in g.save.explored.clone() {
@@ -579,6 +591,8 @@ impl Game {
     fn place_music(&self) -> &'static str {
         match (self.zone_key, self.wild_cur) {
             (Zone::Prolog, _) => self.prolog_music(),
+            // nach der Letzten Flut ist das Ende der Welt ein stilles Meer unter dem Mond
+            (Zone::Ende, _) if self.save.end_won => "salz",
             (Zone::Wild, Some(i)) => match self.world.wild[i].r.biome {
                 sw_art::terrain::Biome::Fire => "glut",
                 sw_art::terrain::Biome::Frost => "frost",
@@ -702,7 +716,7 @@ impl Game {
             Target::EndShip => match self.end.state {
                 EP::Ship => match self.end.kraken.filter(|k| k.dying <= 0.0) {
                     Some(k) => Some((k.x, k.y, 120.0, 120.0)),
-                    None => Some((self.end.x, self.end.y, 300.0, 120.0)),
+                    None => Some((self.end.x, self.end.y, 230.0, 100.0)),
                 },
                 _ => None,
             },
@@ -831,6 +845,9 @@ impl Game {
         } else if self.save.prolog || self.hub_spider_on() {
             // im Prolog der Gegner, in der Glutwacht die verschonte Spinne unter der Brücke
             crate::art::build_prolog_boss(art, frame);
+        } else if self.end.state == EP::Seabed || matches!(self.cutscene, Some(Cut::Tide { .. })) || (self.world.drained && self.world.in_end(self.player.a.x, self.player.a.y) && !self.sailing) {
+            // Meeresgrund und Letzte Flut: Mond, Ketten, Knochenarme und die Meeresspinne
+            crate::art::build_seabed(art, frame);
         } else if !matches!(self.end.state, EP::Dormant | EP::Done) || self.world.in_end(self.player.a.x, self.player.a.y) && !self.sailing {
             crate::art::build_malakor(art, frame);
         }
@@ -987,7 +1004,8 @@ impl Game {
             self.update_critters(dt, frame);
             self.update_life(dt, art);
             self.update_shots(dt);
-            let steer = self.sailing && !modal && self.cutscene.is_none();
+            // während der Holländer aufsteigt bzw. das Meer leerläuft, führt die Sequenz das Schiff
+            let steer = self.sailing && !modal && self.cutscene.is_none() && !matches!(self.end.state, EP::Rise | EP::Drain);
             self.update_ship(dt, steer);
             self.update_sea(dt);
             self.update_sea_monsters(dt);
@@ -1024,6 +1042,7 @@ impl Game {
         self.update_zone(dt);
         self.update_hub_wrecks(dt);
         self.update_hub_life(dt);
+        self.update_surf(dt);
         self.update_boss_arena();
         self.update_prolog(dt);
         self.update_camera(dt, frame);
@@ -1203,6 +1222,15 @@ impl Game {
                     }
                 }
             }
+            Cut::Tide { t } => {
+                let nt = t + dt;
+                if self.update_tide(t, nt) {
+                    self.cutscene = None;
+                    self.cam_hold = None;
+                } else if matches!(self.cutscene, Some(Cut::Tide { .. })) {
+                    self.cutscene = Some(Cut::Tide { t: nt });
+                }
+            }
             Cut::Gallows { t, pi, x0, y0 } => {
                 let nt = t + dt;
                 match self.update_gallows(t, nt, pi, (x0, y0)) {
@@ -1294,7 +1322,7 @@ impl Game {
         }
         if self.sailing && matches!(self.end.state, EP::Rise | EP::Ship | EP::Drain) {
             // der Holländer ist riesig: Blick zwischen eigenes Schiff und seinen Rumpf
-            let (ex, ey) = (self.end.x, self.end.y - 260.0);
+            let (ex, ey) = (self.end.x, self.end.y - 200.0);
             tx += (ex - tx) * 0.4;
             ty += (ey - ty) * 0.45;
         }
@@ -1380,6 +1408,9 @@ impl Game {
         let mut target = if inside {
             // die Kneipe des Prologs ist hell und warm, die Läden kerzenbeleuchtet
             env::env(if z == Zone::Prolog { "kneipe" } else { "innen" }, false)
+        } else if let Some(Cut::Tide { t }) = self.cutscene {
+            // die Letzte Flut: Zwielicht am Grund, Silber des befreiten Mondes, Morgengrauen
+            tide::tide_env(t)
         } else if z == Zone::Ende {
             env::env(self.end.env_key(), false)
         } else if z == Zone::Prolog {
@@ -1456,7 +1487,7 @@ impl Game {
         }
         self.env_cur = env::mix(&self.env_cur, &target, (dt * 1.5).min(1.0));
         // Kinobalken in erzählten Zwischensequenzen (nicht beim Reisen und an Türen)
-        let story = matches!(self.cutscene, Some(Cut::Wake { .. } | Cut::Washed { .. } | Cut::Coffin { .. } | Cut::Summon { .. } | Cut::Whirl { .. } | Cut::Gallows { .. }));
+        let story = matches!(self.cutscene, Some(Cut::Wake { .. } | Cut::Washed { .. } | Cut::Coffin { .. } | Cut::Summon { .. } | Cut::Whirl { .. } | Cut::Gallows { .. } | Cut::Tide { .. }));
         let intro = self.boss_intro_t > 0.0;
         self.look.base_zoom = if self.opt.near && !self.sailing && self.cutscene.is_none() { 1.22 } else { 1.0 };
         self.look.update(self.real_dt, &self.env_cur, inside, story, intro);
@@ -1483,6 +1514,9 @@ impl Game {
         if matches!(self.cutscene, Some(Cut::Gallows { .. })) {
             // am Galgen schweigt die Musik; man hört nur die Glocke, die Menge und die Spinne
             mood = "silence";
+        }
+        if let Some(Cut::Tide { t }) = self.cutscene {
+            mood = tide::tide_music(t);
         }
         self.mood = mood;
     }
@@ -1706,7 +1740,7 @@ impl Game {
 
     // ---------------------------------------------------------------- Tod
     pub fn player_died(&mut self) {
-        if self.death_t.is_some() || matches!(self.cutscene, Some(Cut::Coffin { .. } | Cut::Gallows { .. })) {
+        if self.death_t.is_some() || matches!(self.cutscene, Some(Cut::Coffin { .. } | Cut::Gallows { .. } | Cut::Tide { .. })) {
             return;
         }
         self.player.state = PS::Dead;
@@ -2424,6 +2458,7 @@ impl Game {
         if key == "mega" {
             self.save.end_naval = true;
             self.world.drain_end();
+            self.world.tide = Some(endboss::TIDE_DRY);
             self.world_dirty = true;
             self.end.state = EP::Seabed;
         }
@@ -2565,7 +2600,7 @@ impl Game {
     }
     /// Ankunft auf dem Meer am Ende der Welt (nach dem Strudel).
     fn arrive_end(&mut self) {
-        if self.save.end_naval {
+        if self.save.end_naval && !self.save.end_won {
             // das Meer ist schon leergelaufen: zu Fuß auf dem Meeresgrund
             self.end_land();
             self.ui.banner("DER MEERESGRUND", "Malakor wartet", "boss", 3.5);
@@ -2673,7 +2708,7 @@ impl Game {
         items.push(head("Das Ende der Welt"));
         let whirl = if self.whirl_ready() { "offen" } else { "geschlossen" };
         items.push(entry("Der Strudel", whirl, "Öffnet sich, wenn vier Galionsfiguren thronen und vier Ungeheuer versenkt sind.", false, Cmd::None));
-        items.push(entry(crate::game::endboss::END_NAME, if s.end_won { "besiegt" } else { "wartet" }, "Der Fliegende Holländer, sein roter Kraken, Malakor und sein Gebein.", false, Cmd::None));
+        items.push(entry(crate::game::endboss::END_NAME, if s.end_won { "besiegt" } else { "wartet" }, "Der Fliegende Holländer, sein roter Kraken, Malakor und der Mondfresser.", false, Cmd::None));
         items.push(entry("Fahrt", &if s.ng > 0 { format!("Neues Spiel+{}", s.ng) } else { "Erste Fahrt".into() }, "", false, Cmd::None));
         self.ui.open_list("Fortschritt", items, Cmd::Close, true, true);
     }

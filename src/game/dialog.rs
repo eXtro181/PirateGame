@@ -117,9 +117,10 @@ pub fn dialog_for(g: &mut Game, ni: usize) -> Script {
                     "Willkommen in Stillwasser, Ertrunkener. Hier ist immer Morgen, und das Bier schmeckt nach Salz. Beschwert hat sich noch keiner.",
                     "Einen Rat gebe ich dir umsonst: Geh nicht nach Süden. Hinter dem Dorf wird es dunkel. Da stehen die Galgen, und dahinter liegt das Gebein.",
                     "Und ganz unten am großen Fall … da raschelt es. Manche gehen trotzdem hin. Sie sagen, dort stehe ein Sarg, und wer darin einschläft, wacht dort auf, wo das Meer noch Wellen schlägt.",
+                    "Weißt du, warum die Kneipe »Zur Letzten Flut« heißt? Einmal kommt eine Flut, die uns alle heimträgt. Seit der Mond nicht mehr ins Wasser schaut, kommt sie nicht. Also schenke ich aus und warte.",
                 ])
             } else {
-                pages(&["Noch einen? Geht aufs Haus. Hier geht alles aufs Haus.", "Du willst also doch nach Süden. Dann geh leise. Sie hört jeden Schritt."])
+                pages(&["Noch einen? Geht aufs Haus. Hier geht alles aufs Haus.", "Du willst also doch nach Süden. Dann geh leise. Sie hört jeden Schritt.", "Und falls du je den Mond findest, Fremder … bring ihn zurück. Die Runde zur Letzten Flut geht auf mich."])
             },
             choices: vec![bye],
         },
@@ -217,6 +218,7 @@ pub fn dialog_for(g: &mut Game, ni: usize) -> Script {
                     "Ich habe es in eine Flasche gebannt, als die Wellen über uns zusammenschlugen. Hier – nimm es.",
                     "Wenn du zum ersten Mal in See stechen willst, wirf die Flasche vom Steg ins Meer. Das Glas wird brechen, und dein Schiff steigt aus der Tiefe.",
                     "Danach musst du es nur noch rufen. An jedem Steg. Es kennt jetzt deine Stimme.",
+                    "Und noch etwas: Malakor hat das Spiegelbild des Mondes gestohlen. Ohne den Mond steht die See still, und keiner von uns kommt hinüber. Hol ihn zurück – dann sehen wir uns auf der anderen Seite.",
                 ])
             } else {
                 pages(&["Nimm das Schiff. Mich hält hier nichts mehr außer ihm.", "Wirf die Flasche vom Steg ins Meer, wenn du ablegen willst."])
@@ -232,6 +234,8 @@ pub fn dialog_for(g: &mut Game, ni: usize) -> Script {
                         "Um das Feuer stehen vier leere Throne. Vier Könige der Geisterflotte tragen ihre Galionsfiguren in sich: Glut, Frost, Sturm und Tiefe.",
                         "Und draußen auf der See schlafen vier Ungeheuer, die einst Schiffe waren. Versenk sie, dann brennen ihre Schiffe im See der Festung.",
                         "Erst wenn die Throne besetzt sind und vier Schiffe im See brennen, öffnet sich der Strudel zum Ende der Welt.",
+                        "Dort hat Malakor, der Ertrunkene König, sich verkrochen. Er wollte nicht hinüber, als er ertrank. Also fischte er das Spiegelbild des Mondes aus der See – denn an seinem Spiegelbild zieht der Mond die Gezeiten – und kettete es in den Bauch seines Holländers.",
+                        "Seitdem steht das Meer still. Keine Ebbe, keine Flut. Und ohne die Letzte Flut, die die Ertrunkenen heimträgt, spuckt die See uns immer wieder aus. Dich auch.",
                         "Am Steg im Norden wartet ein Kapitän, der längst keiner mehr ist. Er hat etwas für dich – ohne Schiff kommst du hier nicht fort.",
                     ]),
                     choices: vec![bye],
@@ -239,7 +243,7 @@ pub fn dialog_for(g: &mut Game, ni: usize) -> Script {
             }
             if missing == 0 {
                 if wrecks_missing == 0 {
-                    return Script { pages: pages(&["Der Strudel ruft dich. Mitten in der Glutwacht, zwischen den brennenden Schiffen. Fahr mit dem Schiff hinein.", "Und wenn du am Ende der Welt stehst … grüß Malakor nicht von mir."]), choices: vec![bye] };
+                    return Script { pages: pages(&["Der Strudel ruft dich. Mitten in der Glutwacht, zwischen den brennenden Schiffen. Fahr mit dem Schiff hinein.", "Und wenn du am Ende der Welt stehst … grüß Malakor nicht von mir. Hol den Mond zurück, Ertränkter. Dann kommt die Flut – und wir dürfen endlich gehen."]), choices: vec![bye] };
                 }
                 return Script {
                     pages: vec![
@@ -266,14 +270,15 @@ pub fn dialog_for(g: &mut Game, ni: usize) -> Script {
             } else if wrecks_missing > 0 {
                 pages(&["Die Gesichter sind heimgekehrt. Doch der See ist noch nicht satt. Er will die Schiffe der vier Ungeheuer."])
             } else if s.end_won {
-                pages(&["Malakor liegt am Grund, und das Meer am Ende der Welt ist leer. Du hast den Ertrunkenen König gestürzt.", "Doch die See vergisst nicht. Sie füllt sich wieder mit Königen und Ungeheuern, stärker als zuvor. Wenn du willst, beginnt deine Fahrt von vorn – du behältst alles, was du bist."])
+                pages(&["Der Mond hängt wieder am Himmel, und die Letzte Flut hat die Ertrunkenen heimgetragen. Hörst du, wie still es in der Festung geworden ist? Nur du bist geblieben – und ich, die das Feuer hütet.", "Doch die See vergisst nicht. Sie füllt sich wieder mit Königen und Ungeheuern, stärker als zuvor. Wenn du willst, beginnt deine Fahrt von vorn – du behältst alles, was du bist."])
             } else {
-                pages(&["Hörst du es? Der See singt. Der Strudel ist offen. Fahr mit dem Schiff hinein – zwischen den Armen hindurch.", "Am Ende der Welt wartet Malakor, der Ertrunkene König, auf seinem Fliegenden Holländer."])
+                pages(&["Hörst du es? Der See singt. Der Strudel ist offen. Fahr mit dem Schiff hinein – zwischen den Armen hindurch.", "Am Ende der Welt wartet Malakor, der Ertrunkene König, auf seinem Fliegenden Holländer. In dessen Bauch liegt der gestohlene Mond. Befreie ihn, und die Letzte Flut kommt."])
             },
             choices: [
                 vec![ch("Stufe aufsteigen", Cmd::LevelMenu)],
                 if s.end_won { vec![ch(&crate::game::ng_label(s.ng + 1), Cmd::NewGamePlus)] } else { vec![] },
                 vec![ch("Über das Säbelfeuer", Cmd::TalkPages(pages(&["Das Feuer brennt auf den Klingen aller Kapitäne, die hier fielen. Es verlöscht nie ganz.", "Solange es brennt, kehrst du zurück. Wie wir alle. Das ist der Fluch der Glutwacht – und ihr Trost."]))),
+                    ch("Über die Letzte Flut", Cmd::TalkPages(pages(&["Früher kam sie in jeder hundertsten Nacht: die Letzte Flut. Sie stieg leise, trug die Ertrunkenen hinüber und sank wieder.", "Dann stahl Malakor das Spiegelbild des Mondes, und die See hielt den Atem an. Keine Ebbe, keine Flut. Seitdem kehren wir zurück, immer wieder – weil uns nichts mehr fortträgt."]))),
                 bye],
             ]
             .concat(),
