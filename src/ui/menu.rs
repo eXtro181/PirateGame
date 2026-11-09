@@ -340,24 +340,64 @@ impl Menu {
         out
     }
 
+    /// Menüpunkt des Hauptmenüs (Runde 14, „modern“): kein Kasten, nur Schrift; der gewählte
+    /// Punkt leuchtet golden, eine Marke gleitet herein, dahinter ein weicher Lichtstreif.
+    #[allow(clippy::too_many_arguments)]
+    fn menu_item(&mut self, f: &mut Frame, art: &Art, inp: &Input, x: f32, y: f32, w: f32, label: &str, size: f32) -> bool {
+        let (id, mut sel) = self.nav();
+        let h = size + 10.0;
+        let r = [x - 14.0, y - 5.0, w + 14.0, h];
+        let over = Self::hit(inp, r);
+        if over && inp.mouse_moved {
+            self.sel = id;
+            sel = true;
+        }
+        let k = if sel { 0.5 + 0.5 * (self.t * 3.2).sin() } else { 0.0 };
+        if sel {
+            // Lichtstreif hinter dem Punkt, zur Seite auslaufend
+            for i in 0..10 {
+                let a = (1.0 - i as f32 / 10.0) * (34.0 + 12.0 * k);
+                f.ui_rect(x - 6.0 + i as f32 * w * 0.09, y - 3.0, w * 0.09, size + 6.0, [232, 164, 67, a as u8]);
+            }
+            // Marke: schmale leuchtende Linie links
+            Ui::rect(f, x - 12.0, y - 2.0, 2.0, size + 4.0, col::GOLD);
+            f.ui_soft(x - 18.0, y - 6.0, 14.0, size + 12.0, [255, 190, 90, (90.0 + 60.0 * k) as u8]);
+        }
+        let c = if sel { [255, 214, 140, 255] } else { [216, 207, 184, 200] };
+        text::display(f, art, label, x + if sel { 4.0 } else { 0.0 }, y, c, Al::L, size);
+        (inp.click && over) || (sel && self.activate)
+    }
+
     fn main(&mut self, f: &mut Frame, art: &Art, inp: &Input, sfx: &mut Vec<&'static str>) -> MenuOut {
         let (w, h) = f.ui_size();
-        // Schriftzug in der Zierschrift (weich gefiltert), mit dunklem Hof für die Lesbarkeit
+        let wide = w > 520.0;
+        // Lesbarkeit: die linke Bildhälfte dunkelt weich ab (die Sturmszene liegt rechts)
+        let gw = if wide { w * 0.56 } else { w };
+        // lückenlos auf ganzen UI-Pixeln (überlappende Streifen zeichneten sonst feine Linien)
+        let n = 48;
+        for i in 0..n {
+            let (x0, x1) = ((i as f32 * gw / n as f32).floor(), ((i + 1) as f32 * gw / n as f32).floor());
+            let a = (1.0 - i as f32 / n as f32).powf(1.4) * if wide { 150.0 } else { 90.0 };
+            f.ui_rect(x0, 0.0, x1 - x0, h, [2, 4, 8, a as u8]);
+        }
+        let lx = if wide { (w * 0.07).round() } else { 14.0 };
+        // Schriftzug links oben, darunter eine goldene Linie und die Unterzeile
+        let mut y = (h * 0.1).round();
         if let Some(l) = art.map.get("t:logo").copied() {
-            let lw = (w * 0.78).min(l.w as f32 * 0.9);
+            let lw = if wide { (w * 0.44).min(l.w as f32 * 0.85) } else { w - 28.0 };
             let sc = lw / l.w as f32;
             let lh = l.h as f32 * sc;
-            let (lx, ly) = ((w / 2.0 - lw / 2.0).round(), (h * 0.04).round());
-            f.ui_soft(lx - 60.0, ly - 40.0, lw + 120.0, lh + 70.0, [0, 0, 0, 170]);
-            let k = 0.5 + 0.5 * (self.t * 0.9).sin();
-            text::smooth_spr(f, &l, lx, ly, lw, lh, [255, 255, 255, 255]);
-            // Seelenschimmer über dem Schriftzug
-            f.ui_soft(lx + lw * (0.1 + 0.8 * ((self.t * 0.13) % 1.0)) - 30.0, ly + lh * 0.2, 60.0, lh * 0.5, [120, 255, 210, (40.0 * k) as u8]);
-            text::draw(f, art, "Ein Soulslike über Ertrunkene, Geisterkönige und das Ende der Welt", w / 2.0, ly + lh + 2.0, text::a(col::BONE, 0.7 + 0.25 * k), Al::C, 1.0, true);
-        } else if let Some(l) = art.map.get("ui:logo") {
-            let sc = ((w * 0.8) / l.w as f32).clamp(1.0, 3.0).floor();
-            let lx = (w / 2.0 - l.w as f32 * sc / 2.0).round();
-            f.ui_spr(l, lx, (h * 0.16).round(), SprOpt { scale: sc, ..Default::default() });
+            let k = 0.5 + 0.5 * (self.t * 0.8).sin();
+            text::smooth_spr(f, &l, lx, y, lw, lh, [255, 255, 255, 255]);
+            // ein kalter Lichtschimmer wandert über den Schriftzug
+            f.ui_soft(lx + lw * ((self.t * 0.11) % 1.0) - 26.0, y + lh * 0.15, 52.0, lh * 0.7, [170, 220, 255, (34.0 * k) as u8]);
+            y += lh + 6.0;
+            for i in 0..20 {
+                let a = (1.0 - i as f32 / 20.0) * 200.0;
+                f.ui_rect(lx + i as f32 * lw * 0.035, y, lw * 0.035 + 0.5, 1.0, [232, 164, 67, a as u8]);
+            }
+            y += 6.0;
+            text::draw(f, art, "Ein Soulslike über Ertrunkene, Geisterkönige und das Ende der Welt", lx, y, [190, 200, 205, 200], Al::L, 1.0, true);
         }
         let has = !self.profiles.is_empty();
         let mut items: Vec<(&str, Screen)> = vec![];
@@ -367,14 +407,12 @@ impl Menu {
         items.push(("Neues Spiel", Screen::Creator));
         items.push(("Optionen", Screen::Options));
         items.push(("Credits", Screen::Credits));
-        // Menü links, der Thron steht rechts im Bild
-        let bw = 150.0;
-        let bx = if w > 520.0 { (w * 0.26 - bw / 2.0).round() } else { (w / 2.0 - bw / 2.0).round() };
-        let y0 = (h * 0.5).round();
-        f.ui_soft(bx - 40.0, y0 - 24.0, bw + 80.0, items.len() as f32 * 24.0 + 44.0, [0, 0, 0, 120]);
+        let size = if wide { 11.0 } else { 10.0 };
+        let step = size + 13.0;
+        let y0 = (h * 0.5).max(y + 30.0).round();
         let mut out = MenuOut::None;
         for (i, (label, s)) in items.iter().enumerate() {
-            if self.button(f, art, inp, bx, y0 + i as f32 * 24.0, bw, 19.0, label, i == 0, true) {
+            if self.menu_item(f, art, inp, lx + 12.0, y0 + i as f32 * step, 170.0, label, size) {
                 sfx.push("click");
                 self.go(*s);
                 // neuer Ertrunkener: beim ersten Öffnen zufällig gewürfelt (Aussehen und Name)
@@ -384,7 +422,9 @@ impl Menu {
                 }
             }
         }
-        text::tr(f, art, "v0.7 · Rust/Bevy", w - 6.0, h - 12.0, [143, 163, 168, 160]);
+        // Fußzeile: Bedienhinweis links, Fassung rechts
+        text::draw(f, art, "↑↓ wählen  ·  Enter bestätigen", lx + 12.0, h - 16.0, [143, 163, 168, 150], Al::L, 1.0, true);
+        text::tr(f, art, "v0.8 · Rust/Bevy", w - 8.0, h - 14.0, [143, 163, 168, 140]);
         out
     }
 

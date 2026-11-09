@@ -179,30 +179,10 @@ pub fn build_title(art: &mut Art, frame: &mut Frame) {
     }
     let slot = art.boss_slot;
     let mut a = slot.atlas();
-    // das Titelbild bleibt weich gemalt (Schriftzug, verkleinerte Motive)
+    // der Schriftzug bleibt weich gemalt; die Szene selbst malt der Shader (Sturmnacht)
     a.style = false;
-    use sw_art::throne as th;
-    // gemalt in voller Größe, verkleinert in den Atlas (ruhige Details beim Kameraschwenk)
-    let throne = th::downscale(&th::throne(), 0.55);
-    let p0 = th::downscale(&th::pillar(0), 0.56);
-    let p1 = th::downscale(&th::pillar(1), 0.56);
-    let p2 = th::downscale(&th::pillar(2), 0.5);
-    let crown = th::downscale(&th::crown(), 0.62);
-    let logo = th::title_logo();
-    // Krakenarm-Glied: dunkle, glänzende Haut mit hellen Saugnäpfen auf der Unterseite
-    let n = 40;
-    let seg = tentacle_seg(0x3A2236, 0x6A4450, 0xC8A8A0);
-    let mut v: Vec<(String, Spr)> = vec![
-        ("t:throne".into(), a.add_trim("t:throne", &throne, throne.w / 2, throne.h - 4)),
-        ("t:pillar0".into(), a.add_trim("t:pillar0", &p0, p0.w / 2, p0.h - 3)),
-        ("t:pillar1".into(), a.add_trim("t:pillar1", &p1, p1.w / 2, p1.h - 3)),
-        ("t:pillar2".into(), a.add_trim("t:pillar2", &p2, p2.w / 2, p2.h - 3)),
-        ("t:crown".into(), a.add_trim("t:crown", &crown, crown.w / 2, crown.h)),
-        ("t:link0".into(), a.add("t:link0", &th::link(false), 7, 8)),
-        ("t:link1".into(), a.add("t:link1", &th::link(true), 4, 8)),
-        ("t:seg".into(), a.add("t:seg", &seg, n / 2, n / 2)),
-        ("t:logo".into(), a.add("t:logo", &logo, 0, 0)),
-    ];
+    let logo = sw_art::throne::title_logo();
+    let mut v: Vec<(String, Spr)> = vec![("t:logo".into(), a.add("t:logo", &logo, 0, 0))];
     if !slot.upload(frame, &mut a) {
         return;
     }

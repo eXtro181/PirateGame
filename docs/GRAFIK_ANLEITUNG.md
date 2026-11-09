@@ -27,6 +27,7 @@ Bezugsdateien im Repo: `crates/art/src/*` (Kunst aus Code), `src/gfx/mod.rs` + `
 18. Nebel, Partikel, Spiegelungen, Schatten am Boden
 19. Pixel-Modus gegen FullHD-Modus
 19a. Ausbau 2026 (Runde 13): Licht, Wetter, Tageszeit, Bildwirkungen, Stilrichtlinie und Farbskript
+19b. Runde 14: Wellen, Brandung, plastische Dächer, Titelbild „Sturmnacht“
 20. Schritt-für-Schritt-Plan für das neue Projekt
 21. Fallstricke
 22. Anhang: Shader im Wortlaut
@@ -641,6 +642,16 @@ Zusätzliche Shader-Konstanten (in `Globals` und `common.wgsl` vor `lights`, bei
 **Tageszeit**: ein Tag dauert 30 min; in der zweiten Hälfte sinkt die tiefe Nacht (`env::night`: Mond statt Sonne, Umgebung ×0,55/0,6/0,78, Nebel dunkler und +0,025, Laternen ×1,4, Strahlen ×0,45, Sterne) mit der Zonenstärke `nightk` über die Stimmung. **Bosskampf** (`env::arena`): Umgebung ×0,84–0,95, Kontrast +0,06, Vignette +0,25, Laternen ×1,15; in Phase 2 wandelt sich das Wetter mit dem Element (Feuer: Hitze und Asche, Eis: Schnee, Sturm: Regen, Wind und Blitze, Erde: Regen).
 
 ---
+
+## 19b. Runde 14: Wellen, Brandung, plastische Dächer, Titelbild „Sturmnacht“
+
+**Dünung** (`scene.wgsl: swell`): Richtung `d` = Windrichtung (`fx5.zw`), `ph = dot(p, d)·0,045 − t·1,2 + wob·6` mit `wob` = langsames Rauschen (biegt die Kämme), Höhe `sh = (0,5 + 0,5·sin ph)^2,4` (schmale Kämme, breite Täler), abbrechend über ein grobes Rauschen `seg`; Steigung analytisch `1,2·s^1,4·cos(ph)·k·d`. Stärke `swk = (0,3 + 0,7·Tiefe)·(0,55 + 0,65·Wind)·smoothstep(0, 0,35, Ufer)`. Wirkung: `c *= 0,9 + sh·0,26·swk`, Durchscheinen auf den Kämmen, heller Saum ab `sh` 0,82, Normale `−∇·8,5·swk`, Schaumkronen `smoothstep(0,86, 0,98, sh)·Rauschen·smoothstep(0,3, 0,85, Wind)`. **Brecher** am Ufer: `bw = fract(Ufer·2,4 − t·0,22 + n·0,12)`, Schaumlinie bei `bw` 0,84–0,995, milchiger Schwall davor (0,55–0,88), nur im Uferband (`fw·0,4 … fw·2,6`).
+
+**Brandung** (`world/surf.rs`, `game/surf.rs`): Stellen = Wasserkacheln mit Uferabstand 1 am offenen Meer neben Fels/Basalt/Asche/Eis oder Land höherer Ebene; je Stelle Takt `3 + 3,2·seed` s. Beim Anschlag PixelFX `Splash` (Maßstab `(0,7 + 0,55·seed)·big·(0,85 + 0,45·Wind)`), dann 2 s lang: Schaumfleck (Radius `(14 + 36·√k)·big`, Deckkraft `(1 − k)²·110`), Gischtschleier als `glow` (steigt `(10 + 30k)·big`, verweht mit dem Wind), dazu ständig ein atmender Schaumsaum.
+
+**Plastische Dächer** (`buildings.rs: roof_3d`): Relief-Rampe Rückseite `k·hr` (`up` 0), Vorderseite `(1 − k)·hr` (`up` 118), `hr = 0,9·(First − Oberkante)`; Walmflächen innerhalb `hip = 6 + hip_w·…` vom Rand (Relief `0,25·d + 2`, `up` 60, links ×1,42, rechts ×0,5), Grate ×1,5, Vorderseite ×(1,32 − 0,36k), am First ×1,45/1,22, Rückseite ×(0,5 + 0,25k), alles ×1,18; Traufschatten 12 Zeilen `0,52 + 0,48k²`, Gebäudeecken links ×1,2, rechts ×0,62…1.
+
+**Titelbild „Sturmnacht“** (`post.wgsl: title_scene`, `fx6.y` = 1, `fx6.z` = Zeit): Koordinaten `q = ((u − 0,5)·Seitenverhältnis, 0,5 − v)` plus sanftes Schweben, Horizont `0,06`. Himmel: Verlauf `(0,055, 0,075, 0,095)` → `(0,005, 0,007, 0,018)`, Mond bei `(0,28·asp, 0,34)` Radius 0,036 mit zwei Höfen, Wolken `tfbm(q.x·cz·0,1 + t·0,011, cz·0,055 − t·0,0035)` mit `cz = 1/(hy + 0,1)`, Dichte `smoothstep(0,34, 0,74, n)`, beleuchtet vom Mond und vom Blitz. Blitz (`t_flash`): Periode 7 s, Zeitpunkt zufällig, `exp(−10d) + 0,7·exp(−9(d − 0,16))`, Strahl aus zwei Rauschlagen. See: Abstand `z = 0,12/dy`, vier Wellenzüge (Richtung, Frequenz 1,1/1,7/2,9/4,3, Amplituden ×0,55), Fresnel, Helligkeit `0,45 + 1,1·h`, Mondpfad `exp(−|x − Mond + n.x·0,6(0,2 + dy)|·(5 + 26dy))` mit Glitzern, Schaumkronen, Dunst `exp(−22dy)·0,75`. Galeone `ship_cov` im Schiffsraum (Länge 1, Maßstab 0,36, Rollen `0,045·sin 0,62t + 0,02·sin 0,27t`): Rumpf, drei Masten mit je drei geblähten, an der Unterkante zerfransten Segeln mit Löchern, Bugspriet, Takelage, Flagge; Randlicht = Deckung minus Deckung um 0,006 Richtung Mond. Kraken: Kopf `(sx + 0,34, hz − 0,06 + 0,07·rise)`, Ellipse 0,15, gefleckt; Augen bernstein mit waagrechter Pupille, Blinzeln `fract(0,07t)`; Arme `tentacle` (16 Glieder, Winkelzuwachs `(0,05 + 0,32u³)·sin(…) + (0,02 + 0,16u²)·Richtung`, Radius `r0·(1 − 0,88u)`, Seite für die helle Unterseite mit Saugnäpfen `fract(26u)`), drei hinter (r0 0,032), zwei vor dem Schiff (0,045). Endbild: `tonemap(c·1,3)`, kühle Schatten/warme Lichter, Vignette `1 − 0,6·v^2,4`, Körnung 0,025. Kosten: Arme und Schiff nur in ihren Begrenzungsrechtecken.
 
 ## 20. Schritt-für-Schritt-Plan für das neue Projekt
 
