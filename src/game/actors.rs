@@ -833,7 +833,7 @@ impl Game {
         let mut hit = false;
         // auch friedliche Figuren lassen sich treffen (in Siedlungen mit Folgen)
         let mut targets = self.hittables();
-        targets.extend(self.npc_targets());
+        targets.extend(self.npc_targets(p.a.x, p.a.y));
         for t in targets {
             let Some((tx, ty, thr, by)) = self.target_pos(t) else { continue };
             let extra = if matches!(t, Target::Boss(_)) { thr * 0.5 } else { 0.0 };
@@ -1481,7 +1481,7 @@ impl Game {
             let targets: Vec<Target> = match s.owner {
                 Owner::Player => {
                     let mut v = self.hittables();
-                    v.extend(self.npc_targets());
+                    v.extend(self.npc_targets(s.x, s.y));
                     v
                 }
                 Owner::Enemy => {
