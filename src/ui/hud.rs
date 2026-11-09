@@ -48,6 +48,8 @@ pub struct Ui {
     /// Gedanke/Vorahnung: leise Zeile in der Bildmitte, die auf- und wieder abblendet
     pub whisper_t: f32,
     pub whisper_text: String,
+    /// Erzählseite über dem Schwarz (Epilog): Überschrift, Text, Deckkraft
+    pub story: Option<(String, String, f32)>,
     pub dialog: Option<Dialog>,
     pub list: Option<List>,
     pub map_open: bool,
@@ -533,6 +535,19 @@ impl Game {
             // der Anzeige wird es erst zum Schluss schwarz
             let a = if self.opt.fx_high { ((self.ui.fade - 0.72) / 0.28).clamp(0.0, 1.0) } else { self.ui.fade };
             Ui::rect(f, 0.0, 0.0, w, h, [0, 0, 0, (a * 255.0) as u8]);
+        }
+        // Erzählseite über dem Schwarz (Epilog der Letzten Flut)
+        if let Some((title, body, a)) = &self.ui.story {
+            let a = a.clamp(0.0, 1.0);
+            let mut y = h * 0.42;
+            if !title.is_empty() {
+                text::display(f, art, title, w / 2.0, y - 30.0, text::a([232, 192, 115, 255], a), Al::C, 13.0);
+                Ui::rect(f, w / 2.0 - 60.0, y - 8.0, 120.0, 1.0, [232, 164, 67, (110.0 * a) as u8]);
+                y += 4.0;
+            }
+            for (i, l) in text::wrap(art, body, (w * 0.72).min(320.0)).iter().enumerate() {
+                text::tc(f, art, l, w / 2.0, y + i as f32 * 13.0, text::a([214, 220, 224, 255], a));
+            }
         }
     }
 

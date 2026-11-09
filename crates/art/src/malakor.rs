@@ -224,3 +224,77 @@ pub fn shark_skeleton(seed: i32) -> PropArt {
     c.outline(true, 0.6);
     PropArt::new(&format!("sharkSkel{seed}"), c, 75, 44).shadow(60.0, 8.0)
 }
+
+/// Der Spiegelmond: das Spiegelbild des Mondes, das Malakor aus der See gefischt hat – eine
+/// silberne Scheibe mit Mondmeeren und Kratern, über die wie auf Wasser feine Wellenbänder laufen;
+/// sie leuchtet selbst (kaltes Silberlicht). 140×140, Mitte (70, 70).
+pub fn moon_orb() -> Canvas {
+    let n = 140;
+    let mut c = Canvas::new(n, n);
+    let silver = p6(&[0x4A5A78, 0x7484A4, 0xA2B0CC, 0xC8D2E6, 0xE4EAF6, 0xFAFCFF]);
+    let nz = Noise::new(907);
+    let (cx, cy, r) = (70.0f32, 70.0f32, 62.0f32);
+    for y in 0..n {
+        for x in 0..n {
+            let (dx, dy) = ((x as f32 + 0.5 - cx) / r, (y as f32 + 0.5 - cy) / r);
+            let d2 = dx * dx + dy * dy;
+            if d2 > 1.0 {
+                continue;
+            }
+            let nzz = (1.0 - d2).sqrt();
+            // Mondmeere: weiche dunkle Flecken, dazu kleine Krater mit hellem Rand
+            let maria = nz.fbm(x as f32 * 0.035 + 3.0, y as f32 * 0.035, 3);
+            let crater = nz.fbm(x as f32 * 0.16 + 40.0, y as f32 * 0.16, 2);
+            // Spiegelbild auf Wasser: waagrechte Wellenbänder, leicht gebrochen
+            let ripple = ((y as f32 * 0.55 + nz.fbm(x as f32 * 0.05, y as f32 * 0.2, 2) * 5.0).sin() * 0.5 + 0.5).powf(3.0);
+            let mut l = 0.62 + nzz * 0.22 - dx * 0.12 - dy * 0.08;
+            l -= (maria - 0.05).max(0.0) * 0.9;
+            if crater > 0.34 {
+                l -= 0.14;
+            } else if crater > 0.28 {
+                l += 0.08;
+            }
+            l += ripple * 0.1;
+            // heller Saum am Rand (Lichthof)
+            l += (1.0 - nzz).powf(4.0) * 0.35;
+            let col = pick(&silver, l.clamp(0.0, 1.0));
+            c.put(x, y, col, nzz * 16.0 + ripple * 1.5);
+            c.glow(x, y, col, (0.26 + l * 0.3).clamp(0.2, 0.62));
+            if l > 0.8 {
+                c.spec(x, y, 160);
+            }
+        }
+    }
+    c
+}
+
+/// Kettenglied, flach (Ring, 18×12) bzw. hochkant (Steg, 18×6): dunkles, nasses Eisen mit Rost
+/// und einer Glanzkante – zu Ketten gereiht (ohne Umriss).
+pub fn chain_link(edge: bool) -> Canvas {
+    let (w, h) = if edge { (18, 6) } else { (18, 12) };
+    let mut c = Canvas::new(w, h);
+    let iron = p6(&[0x14161A, 0x24282E, 0x383E46, 0x545C66, 0x7C8690, 0xA8B2BC]);
+    let rust = hex(0x5A3020);
+    let nz = Noise::new(211);
+    for y in 0..h {
+        for x in 0..w {
+            let (dx, dy) = ((x as f32 + 0.5 - w as f32 * 0.5) / (w as f32 * 0.5), (y as f32 + 0.5 - h as f32 * 0.5) / (h as f32 * 0.5));
+            let d = (dx * dx + dy * dy).sqrt();
+            let ring = if edge { d <= 1.0 } else { d <= 1.0 && d >= 0.52 };
+            if !ring {
+                continue;
+            }
+            let t = if edge { 1.0 - dy.abs() } else { 1.0 - ((d - 0.76) / 0.24).abs() };
+            let l = (t * 0.6 - dy * 0.3 + 0.2).clamp(0.0, 1.0);
+            let mut col = pick(&iron, l);
+            if nz.fbm(x as f32 * 0.4, y as f32 * 0.4, 2) > 0.3 {
+                col = mix(col, rust, 0.45);
+            }
+            c.put(x, y, col, t * 3.0);
+            if l > 0.75 {
+                c.spec(x, y, 150);
+            }
+        }
+    }
+    c
+}

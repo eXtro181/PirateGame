@@ -374,7 +374,7 @@ impl Game {
         self.boss = Some(i);
         self.boss_ghost = self.bosses[i].hp;
         let n = self.bosses[i].name.clone();
-        let sub = if self.bosses[i].mega { "Herr des Fliegenden Holländers" } else if self.bosses[i].key == "spider" { "Wächterin des Wrackzwingers" } else { "Geisterkönig" };
+        let sub = if self.bosses[i].mega { "Der den Mond stahl" } else if self.bosses[i].key == "spider" { "Wächterin des Wrackzwingers" } else { "Geisterkönig" };
         self.ui.banner(&n, sub, "boss", 3.0);
         // Auftritt: Kinobalken, die Kamera rückt heran, Druckwelle beim Erscheinen
         self.boss_intro_t = 2.6;
@@ -480,28 +480,38 @@ impl Game {
                 return;
             }
             BS::Transform if b.mega => {
-                // Malakor fällt um; aus seinem Leib bricht der Skelettkraken hervor
+                // Malakor flieht in den Spiegelmond: er schwebt zu ihm hinauf und verschmilzt mit
+                // ihm, der Mond verdunkelt sich, aus dem Grund brechen Knochenarme – der Mondfresser
                 if b.human {
-                    b.a.anim = "dead";
-                    b.a.frame = 0.0;
-                    if rnd() < 0.5 {
-                        self.fx.rise("bone", b.a.x + rr(-30.0, 30.0), b.a.y, 2, 30.0, None);
+                    let (mx, my) = (b.home.0, b.home.1 - 20.0);
+                    let k = (dt * 2.2).min(1.0);
+                    b.a.x += (mx - b.a.x) * k;
+                    b.a.y += (my - b.a.y) * k;
+                    b.a.anim = "cast";
+                    b.a.frame = (b.st_t * 6.0) % 3.0;
+                    b.a.face(0.0, 1.0);
+                    if rnd() < 0.7 {
+                        self.fx.rise("soulLight", b.a.x + rr(-24.0, 24.0), b.a.y, 2, 30.0, None);
                     }
                     if b.st_t > 2.2 {
+                        b.a.x = mx;
+                        b.a.y = my;
                         b.set_body(false);
                         b.name = MEGA_NAME2.into();
                         b.el = "bone";
                         b.max_hp = MEGA_HP2 * ng_hp(&self.save);
                         b.hp = b.max_hp;
                         self.boss_ghost = b.hp;
-                        self.flash([0.6, 1.0, 0.8], 0.9);
+                        self.flash([1.0, 0.45, 0.5], 0.9);
                         self.shake(22.0);
                         self.sfx("roar");
+                        self.sfx("bell");
                         self.fx.burst("bone", b.a.x, b.a.y - 60.0, 50, BurstOpt { speed: Some(340.0), ..Default::default() });
-                        self.fx.px.play(Px::Slam, b.a.x, b.a.y).scale(2.4).tint([200, 255, 225, 255]);
+                        self.fx.px.play(Px::Slam, b.a.x, b.a.y).scale(2.8).tint([255, 190, 200, 255]);
                         self.fx.px.play(Px::Shatter, b.a.x, b.a.y).scale(2.2);
-                        self.fx.px.play(Px::Soul, b.a.x, b.a.y).scale(2.0);
-                        self.ui.banner(MEGA_NAME2, "Was von Malakor bleibt, erhebt sich", "boss", 3.4);
+                        self.fx.burst("dust", b.a.x, b.a.y, 60, BurstOpt { speed: Some(260.0), up: Some(160.0), col: Some([0.42, 0.4, 0.33, 0.9]), ..Default::default() });
+                        self.shockwave(b.a.x, b.a.y - 60.0, 1.6);
+                        self.ui.banner(MEGA_NAME2, "Der Spiegelmond gehorcht ihm", "boss", 3.4);
                     }
                 } else if b.st_t > 4.0 {
                     Self::boss_idle(b);
@@ -1075,7 +1085,7 @@ impl Game {
             b.state = BS::Transform;
             b.st_t = 0.0;
             b.atk = None;
-            self.ui.banner("MALAKOR FÄLLT", "", "big", 2.0);
+            self.ui.banner("MALAKOR FLIEHT IN DEN MOND", "", "big", 2.2);
             self.sfx("death");
             self.shake(12.0);
             self.impact_frame(0.07);
@@ -1149,20 +1159,18 @@ impl Game {
             return;
         }
         let pearls = if mega { MEGA_PEARLS } else { king(key).pearls } * (1.0 + 0.25 * self.save.ng as f32);
-        if mega {
-            self.ui.banner("DER ERTRUNKENE KÖNIG IST BESIEGT", "Am Grund erscheint ein Säbelfeuer", "big", 5.0);
-        } else {
+        if !mega {
             let n = king(key).name.split(',').next().unwrap_or("").to_string();
             self.ui.banner("SEELE ERBEUTET", &n, "big", 5.0);
         }
         self.gain_pearls(pearls as i64, Some((x, y)));
         if mega {
-            self.save.end_won = true;
-            self.save.end_naval = true;
-            self.end.state = crate::game::endboss::EP::Done;
-            // erst jetzt erscheint am Grund das Säbelfeuer (noch zu entzünden)
-            self.world.show_end_fire();
-            self.timers.push((6.0, Timed::Banner("Die Laternenmagd".into(), "In der Glutwacht wartet eine neue Fahrt".into())));
+            // der Mondfresser zerfällt nicht hier: die Sieg-Sequenz „Die Letzte Flut“ übernimmt
+            // (Ketten reißen, der Mond steigt auf, die Spinne, das Meer kehrt zurück)
+            self.bosses[i].hidden = true;
+            self.boss = None;
+            self.start_tide(x, y);
+            return;
         } else {
             self.save.kings.insert(key.into(), true);
             self.save.figureheads.insert(key.into(), true);

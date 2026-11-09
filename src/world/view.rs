@@ -96,10 +96,15 @@ impl WorldView {
     /// Weltrand am Ende der Welt: das Meer stürzt im Süden und Osten über die Kante ins Nichts.
     fn draw_world_edge(&self, w: &World, frame: &mut Frame, t: f32) {
         let (x0, y0, x1, y1) = w.end_rect;
-        // leergelaufen: kein Wasser stürzt mehr über den Rand
-        if x1 <= x0 || w.drained {
+        // leergelaufen: kein Wasser stürzt mehr über den Rand; bei der Letzten Flut strömt es
+        // aus dem Abgrund herauf (negative Strömung), beim Leerlaufen gewaltiger als sonst
+        let flow = w.edge_flow;
+        if x1 <= x0 || flow.abs() < 0.01 {
             return;
         }
+        let dir = flow.signum();
+        let big = flow.abs().clamp(0.3, 3.0);
+        let t = t * dir * (0.7 + 0.3 * big);
         let (vx, vy, vw, vh) = frame.view();
         let ts = TS as f32;
         let edge = 6;
@@ -116,8 +121,8 @@ impl WorldView {
                     let y = lip_y - 4.0 + seg as f32 * 34.0 + ph * 34.0;
                     let fade = 1.0 - seg as f32 / 6.0;
                     let bright = if k % 3 == 0 { 255.0 } else { 190.0 };
-                    let col = [(bright * 0.75 * fade) as u8, (bright * 0.95 * fade) as u8, (bright * fade) as u8, (220.0 * fade) as u8];
-                    frame.over(Frame::quad_rect(x, y, 3.0, 26.0 + seg as f32 * 2.0, col, modes::SOLID, 0), false);
+                    let col = [(bright * 0.75 * fade) as u8, (bright * 0.95 * fade) as u8, (bright * fade) as u8, ((220.0 * fade) * big.min(1.0)) as u8];
+                    frame.over(Frame::quad_rect(x, y, 3.0 + (big - 1.0).max(0.0), 26.0 + seg as f32 * 2.0, col, modes::SOLID, 0), false);
                 }
                 x += 4.0;
             }
@@ -125,8 +130,8 @@ impl WorldView {
             let mut x = (vx.max(ax) / 24.0).floor() * 24.0;
             while x < (vx + vw).min(lip_x) {
                 let a = t * 2.2 + x * 0.05;
-                frame.glow(x + a.sin() * 6.0, lip_y - 2.0 + (a * 1.3).cos() * 3.0, 16.0, [220, 250, 255, 110]);
-                frame.glow(x + 12.0, lip_y + 150.0 + (a * 0.7).sin() * 20.0, 30.0, [120, 160, 180, 40]);
+                frame.glow(x + a.sin() * 6.0, lip_y - 2.0 + (a * 1.3).cos() * 3.0, 16.0 * big.sqrt(), [220, 250, 255, (110.0 * big.min(1.6)) as u8]);
+                frame.glow(x + 12.0, lip_y + 150.0 + (a * 0.7).sin() * 20.0, 30.0 * big, [120, 160, 180, (40.0 * big.min(2.0)) as u8]);
                 x += 24.0;
             }
         }
@@ -478,6 +483,9 @@ impl WorldView {
                     if d.x < vx - 40.0 || d.x > vx + vw + 40.0 || d.y < vy - 20.0 || d.y > vy + vh + 60.0 {
                         continue;
                     }
+                    if w.tide.is_some() && w.tide_wet(d.x, d.y) {
+                        continue;
+                    }
                     let s = *self.deco_spr.entry(d.k).or_insert_with(|| art.map.get(&format!("d:{}", d.k)).copied());
                     if let Some(s) = s.as_ref() {
                         let lvl = 0.0;
@@ -663,6 +671,10 @@ impl WorldView {
     fn draw_prop(&self, w: &World, art: &Art, frame: &mut Frame, pi: usize, focus: (f32, f32), hover: bool, t: f32) {
         let p = &w.props[pi];
         if p.hidden {
+            return;
+        }
+        // Meeresgrund: solange dort noch (bzw. schon wieder) Wasser steht, liegt er verborgen
+        if w.tide.is_some() && w.tide_wet(p.x, p.y) && w.seabed_props.contains(&pi) {
             return;
         }
         let mut kind = p.kind.as_str();

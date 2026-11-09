@@ -119,3 +119,15 @@ olivem Laub), `plLeafBlood` (Laubbaum mit blutrotem Laub), `plTreeDark` und `plP
 (nachtgrün, dunkler und kühler), `plGhostTree` (Totbaum knochenbleich), `plRimeTree` (Totbaum mit
 Raureif), `plGrassDead` (verwelktes Gras), `plFernDark` (dunkler Farn), `plFlowersBlood`
 (blutrote Blüten), `plFlowersGhost` (fahl geisterblaue Blüten mit schwachem Licht).
+
+## Der Fliegende Holländer (9.11., tägliche Bonus-Generierungen)
+
+| Datei | Größe | Beschreibung | Objekt |
+|---|---|---|---|
+| `dutchman.png` | 115×127 (aus 128×128) | the legendary Flying Dutchman ghost ship, enormous three-masted galleon, side view with the bow facing right, rotten black hull with barnacles and long seaweed hanging down, glowing sickly green lanterns and gun ports, huge tattered sails ripped to shreds with a faint pale green ghostly glow, tall ornate stern castle, skeleton figurehead, rusty chains hanging from the bow, dark fantasy pirate ship, transparent background (`create_map_object`, „side“, 128×128) | `779f7927-bebd-4061-8fac-03d181864f68` |
+
+Vier Entwürfe wurden erzeugt (A–D, je eine Generierung); genommen wurde C. Das mitgemalte Wasser
+unter dem Rumpf ist entfernt (ab Zeile 116 alles, in Zeile 115 die blauen Pixel), darunter ein
+schlichter, sich verjüngender Kiel aus den Farben der untersten Rumpfzeile ergänzt (für den
+Durchbruch beim Auftauchen), auf die deckenden Pixel zugeschnitten. Im Spiel: einmal Scale2x, dann
+×3 (`pixellab::dutchman`), Wasserlinie bei Zeile 116.

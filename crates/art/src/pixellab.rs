@@ -404,3 +404,169 @@ pub fn prop_arts() -> Vec<PropArt> {
         })
         .collect()
 }
+
+// ------------------------------------------------------------ Der Fliegende Holländer
+// PixelLab „side“, 128 px (Objekt 779f7927-…, Nutzerwunsch 9.11.): Seitenansicht, Bug rechts. Im
+// PNG ist das gemalte Wasser entfernt und unter der Wasserlinie ein schlichter Kiel ergänzt (für
+// den Durchbruch beim Auftauchen).
+static DUTCHMAN: &[u8] = include_bytes!("../assets/pixellab/dutchman.png");
+/// Vergrößerung (einmal Scale2x, dann pixelgenau ×3)
+pub const DUTCH_K: i32 = 6;
+/// Wasserlinie im Originalbild (Zeile); darunter liegt nur der ergänzte Kiel
+pub const DUTCH_WL: i32 = 116;
+/// Oberkante des Rumpfs (Reling) im Original
+const DUTCH_RAIL: i32 = 84;
+
+/// Scale2x (EPX): verdoppelt ein Bild; Treppenkanten werden zu feineren Treppen, Farben bleiben
+/// rein (keine Mischfarben) – Pixelkunst in höherer Auflösung.
+fn scale2x(src: &[Rgba], w: i32, h: i32) -> Vec<Rgba> {
+    let at = |x: i32, y: i32| -> Rgba {
+        if x < 0 || y < 0 || x >= w || y >= h {
+            return [0, 0, 0, 0];
+        }
+        let p = src[(y * w + x) as usize];
+        if p[3] < 100 {
+            [0, 0, 0, 0]
+        } else {
+            p
+        }
+    };
+    let w2 = (w * 2) as usize;
+    let mut out = vec![[0u8; 4]; w2 * (h * 2) as usize];
+    for y in 0..h {
+        for x in 0..w {
+            let p = at(x, y);
+            let (a, b, c, d) = (at(x, y - 1), at(x + 1, y), at(x - 1, y), at(x, y + 1));
+            let (mut e0, mut e1, mut e2, mut e3) = (p, p, p, p);
+            if c == a && c != d && a != b {
+                e0 = a;
+            }
+            if a == b && a != c && b != d {
+                e1 = b;
+            }
+            if d == c && d != b && c != a {
+                e2 = c;
+            }
+            if b == d && b != a && d != c {
+                e3 = d;
+            }
+            let o = (y * 2) as usize * w2 + (x * 2) as usize;
+            out[o] = e0;
+            out[o + 1] = e1;
+            out[o + w2] = e2;
+            out[o + w2 + 1] = e3;
+        }
+    }
+    out
+}
+
+/// Der Fliegende Holländer: Leinwand (×6) und Fußpunkt (Mitte des Rumpfs auf der Wasserlinie).
+/// Das Relief für das Licht entsteht im Original (geglättete Helligkeit, feine Abweichungen, eine
+/// Wölbung von Bug bis Heck und quer über die Bordwand) und wird weich hochgerechnet; die grün
+/// glühenden Stückpforten, Heckfenster und Segellöcher leuchten selbst, die nasse Bordwand glänzt.
+pub fn dutchman() -> (Canvas, i32, i32) {
+    let img = decode(DUTCHMAN);
+    let (w, h) = (img.w, img.h);
+    let opaque = |x: i32, y: i32| img.at(x, y)[3] >= 100;
+    let lum = |x: i32, y: i32| -> f32 {
+        let p = img.at(x, y);
+        (p[0] as f32 * 0.3 + p[1] as f32 * 0.59 + p[2] as f32 * 0.11) / 255.0
+    };
+    // Rumpf: Ausdehnung je Zeile (für die Wölbung von Bug bis Heck)
+    let mut span = vec![(w, -1); h as usize];
+    for y in 0..h {
+        for x in 0..w {
+            if opaque(x, y) {
+                let s = &mut span[y as usize];
+                s.0 = s.0.min(x);
+                s.1 = s.1.max(x);
+            }
+        }
+    }
+    let mut rel0 = vec![0f32; (w * h) as usize];
+    for y in 0..h {
+        for x in 0..w {
+            if !opaque(x, y) {
+                continue;
+            }
+            let l0 = lum(x, y);
+            let (mut sum, mut k) = (0.0, 0.0);
+            for (dx, dy) in [(0, 0), (1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (-1, -1), (1, -1), (-1, 1)] {
+                if opaque(x + dx, y + dy) {
+                    sum += lum(x + dx, y + dy);
+                    k += 1.0;
+                }
+            }
+            let l_avg = sum / k;
+            let (a, b) = span[y as usize];
+            let hw = ((b - a) as f32 * 0.5).max(1.0);
+            let u = ((x as f32 - (a + b) as f32 * 0.5) / hw).clamp(-1.0, 1.0);
+            let dome = (1.0 - u * u).max(0.0).sqrt();
+            // Bordwand: oben zur Reling hin aufgerichtet, unten zum Wasser hin eingezogen
+            let hull = if y >= DUTCH_RAIL {
+                let v = ((y - DUTCH_RAIL) as f32 / (DUTCH_WL - DUTCH_RAIL) as f32).clamp(0.0, 1.2);
+                (1.0 - (v - 0.35).powi(2) * 2.2).max(0.0) * 2.4
+            } else {
+                0.0
+            };
+            rel0[(y * w + x) as usize] = (l_avg - 0.38) * 3.0 + (l0 - l_avg) * 4.4 + dome * 3.4 + hull;
+        }
+    }
+    // einmal Scale2x (glättet die gröbsten Treppen), dann pixelgenau ×3: klare Pixelkunst
+    let mut px = scale2x(&img.px, w, h);
+    let (mut sw, mut sh) = (w * 2, h * 2);
+    let rep = DUTCH_K / 2;
+    let mut big = vec![[0u8; 4]; (sw * rep * sh * rep) as usize];
+    for y in 0..sh * rep {
+        for x in 0..sw * rep {
+            big[(y * sw * rep + x) as usize] = px[((y / rep) * sw + x / rep) as usize];
+        }
+    }
+    px = big;
+    sw *= rep;
+    sh *= rep;
+    let k = DUTCH_K as f32;
+    let mut c = Canvas::new(sw, sh);
+    let rel_at = |sx: f32, sy: f32| -> f32 {
+        // bilinear über die deckenden Pixel des Originals
+        let (x0, y0) = (sx.floor() as i32, sy.floor() as i32);
+        let (fx, fy) = (sx - x0 as f32, sy - y0 as f32);
+        let (mut s, mut wsum) = (0.0, 0.0);
+        for (dx, dy, wt) in [(0, 0, (1.0 - fx) * (1.0 - fy)), (1, 0, fx * (1.0 - fy)), (0, 1, (1.0 - fx) * fy), (1, 1, fx * fy)] {
+            let (xx, yy) = (x0 + dx, y0 + dy);
+            if opaque(xx, yy) && wt > 0.0 {
+                s += rel0[(yy * w + xx) as usize] * wt;
+                wsum += wt;
+            }
+        }
+        if wsum > 0.0 {
+            s / wsum
+        } else {
+            let (xx, yy) = ((sx.round() as i32).clamp(0, w - 1), (sy.round() as i32).clamp(0, h - 1));
+            rel0[(yy * w + xx) as usize]
+        }
+    };
+    for y in 0..sh {
+        for x in 0..sw {
+            let p = px[(y * sw + x) as usize];
+            if p[3] < 100 {
+                continue;
+            }
+            let (sx, sy) = ((x as f32 + 0.5) / k - 0.5, (y as f32 + 0.5) / k - 0.5);
+            let col = [p[0], p[1], p[2], 255];
+            c.put(x, y, col, rel_at(sx, sy) * k * 0.4);
+            let l = (p[0] as f32 * 0.3 + p[1] as f32 * 0.59 + p[2] as f32 * 0.11) / 255.0;
+            if p[1] > 130 && p[1] as i32 > p[0] as i32 + 50 && p[1] as i32 > p[2] as i32 + 20 {
+                // grünes Geisterlicht: Pforten, Fenster, Löcher in den Segeln, Tang am Bug
+                c.glow(x, y, col, (0.45 + (l - 0.45) * 1.6).clamp(0.4, 0.95));
+            } else if (sy as i32) >= DUTCH_RAIL - 4 && l < 0.22 {
+                // nasse, schwarze Bordwand
+                c.spec(x, y, 46);
+            }
+        }
+    }
+    // Fußpunkt: Mitte des Rumpfs knapp über der Wasserlinie
+    let (a, b) = span[(DUTCH_WL - 3) as usize];
+    let ax = ((a + b) as f32 * 0.5 * k) as i32;
+    (c, ax, DUTCH_WL * DUTCH_K)
+}

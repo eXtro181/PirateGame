@@ -481,6 +481,16 @@ pub struct World {
     pub end_props: Vec<usize>,
     /// das Meer am Ende der Welt ist leergelaufen (Meeresgrund)
     pub drained: bool,
+    /// Gezeiten am Ende der Welt (Leerlaufen und Rückkehr des Meeres): Lage der Wasserkante auf
+    /// der Achse Nordwest (0) → Südost (1); None = aus. Liest der Shader (`fx8`) und das Zeichnen
+    /// der Requisiten (unter Wasser verborgen).
+    pub tide: Option<f32>,
+    /// Weltrand: 1 = das Meer stürzt hinab, mehr = gewaltiger, 0 = trocken, < 0 = es strömt
+    /// aus dem Abgrund zurück herauf (Letzte Flut)
+    pub edge_flow: f32,
+    /// Requisiten und Boden-Deko des Meeresgrunds (von `drain_end` gesetzt)
+    pub seabed_props: Vec<usize>,
+    pub seabed_deco: (usize, usize),
     pub crew_spots: Vec<(f32, f32)>,
     pub grid: HashMap<i32, Vec<Collider>>,
     pub dyn_blockers: Vec<(f32, f32, f32, f32, bool)>,
@@ -586,6 +596,10 @@ impl World {
             end_rect: (0, 0, 0, 0),
             end_props: vec![],
             drained: false,
+            tide: None,
+            edge_flow: 1.0,
+            seabed_props: vec![],
+            seabed_deco: (0, 0),
             crew_spots: vec![],
             grid: HashMap::new(),
             dyn_blockers: vec![],
@@ -3658,8 +3672,10 @@ impl World {
             let flip = rng.chance(0.5);
             let (x, y) = tpos(tx, ty);
             self.prop_x(&kind, x, y, |p| p.flip = flip);
+            self.seabed_props.push(self.props.len() - 1);
             placed += 1;
         }
+        let d0 = self.deco.len();
         for _ in 0..500 {
             let (tx, ty) = (rng.int(x0 + 5, x1 - edge - 1), rng.int(y0 + 5, y1 - edge - 1));
             if self.ground[idx(tx, ty)] == Mat::Water {
@@ -3668,8 +3684,105 @@ impl World {
             let k = *rng.pick(&["shell", "shell", "pebbles", "bones", "skull", "tuftDark"]);
             self.deco.push(Deco { k, x: (tx * TS) as f32 + rng.int(2, 30) as f32, y: (ty * TS) as f32 + rng.int(4, 30) as f32, flip: rng.chance(0.5) });
         }
+        self.seabed_deco = (d0, self.deco.len());
+        self.edge_flow = 0.0;
         self.compute_field();
         self.compute_shore();
+    }
+
+    /// Die Letzte Flut (nach dem Sieg über Malakor): das Meer kehrt an das Ende der Welt zurück.
+    /// Der Meeresgrund wird wieder Wasser, seine Requisiten und Deko verschwinden, Wasser stürzt
+    /// wieder über den Rand. Der Mondfels in der Mitte kommt mit `raise_end_isle`.
+    pub fn flood_end(&mut self) {
+        if !self.drained {
+            return;
+        }
+        self.drained = false;
+        let (x0, y0, x1, y1) = self.end_rect;
+        let edge = 6;
+        for y in y0 + 4..=y1 - edge {
+            for x in x0 + 4..=x1 - edge {
+                let i = idx(x, y);
+                if matches!(self.ground[i], Mat::Sand | Mat::Moss) && self.zone[i] == Some(Zone::Ende) {
+                    self.ground[i] = Mat::Water;
+                    self.biome[i] = Biome::End;
+                    self.level[i] = 0;
+                }
+            }
+        }
+        for &pi in &self.seabed_props {
+            if let Some(p) = self.props.get_mut(pi) {
+                p.hidden = true;
+            }
+        }
+        self.seabed_props.clear();
+        let (a, b) = self.seabed_deco;
+        if b > a && b <= self.deco.len() {
+            self.deco.drain(a..b);
+        }
+        self.seabed_deco = (0, 0);
+        self.edge_flow = 1.0;
+        self.compute_field();
+        self.compute_shore();
+    }
+
+    /// Nach der Letzten Flut ragt dort, wo der Spiegelmond gefesselt lag, ein Felsen aus dem Meer:
+    /// der Mondfels mit dem Säbelfeuer „Ende der Welt“, dem Laternenring und einem Anleger.
+    pub fn raise_end_isle(&mut self) {
+        let (cx, cy) = (END_X0 + 82, END_Y0 + 60);
+        let (rx, ry) = (17.5f32, 11.5f32);
+        for y in cy - 14..=cy + 14 {
+            for x in cx - 21..=cx + 21 {
+                if !inb(x, y) {
+                    continue;
+                }
+                let n = self.nz.fbm(x as f32 * 0.21, y as f32 * 0.21 + 5.0, 2) * 0.12;
+                let d = ((x - cx) as f32 / rx).hypot((y - cy) as f32 / ry) + n;
+                if d > 1.0 {
+                    continue;
+                }
+                let i = idx(x, y);
+                self.ground[i] = if d > 0.84 {
+                    Mat::Rock
+                } else if self.nz.fbm(x as f32 * 0.15 + 9.0, y as f32 * 0.15, 2) > 0.18 {
+                    Mat::Moss
+                } else {
+                    Mat::Sand
+                };
+                self.biome[i] = Biome::Coast;
+                self.level[i] = 0;
+                self.path[i] = false;
+                self.zone[i] = Some(Zone::Ende);
+            }
+        }
+        if !self.docks.iter().any(|d| d.key == "ende") {
+            let _ = self.dock_k(Zone::Ende, "ende".into(), cx - 14, cy + 1, -1, 0);
+        }
+        self.compute_field();
+        self.compute_shore();
+    }
+
+    /// Inneres Rechteck des Meeres am Ende der Welt (px): ohne das Basaltriff im Westen und
+    /// Norden und ohne den Abgrund am Rand – hier läuft das Wasser ab bzw. kehrt zurück.
+    pub fn tide_rect(&self) -> (f32, f32, f32, f32) {
+        let (x0, y0, x1, y1) = self.end_rect;
+        (((x0 + 4) * TS) as f32, ((y0 + 4) * TS) as f32, ((x1 - 5) * TS) as f32, ((y1 - 5) * TS) as f32)
+    }
+    /// Lage auf der Gezeitenachse (0 Nordwest … 1 Südost am Weltrand); None außerhalb
+    pub fn tide_u(&self, x: f32, y: f32) -> Option<f32> {
+        let (x0, y0, x1, y1) = self.tide_rect();
+        if x < x0 || y < y0 || x > x1 || y > y1 || x1 <= x0 {
+            return None;
+        }
+        Some(((x - x0) / (x1 - x0) + (y - y0) / (y1 - y0)) * 0.5)
+    }
+    /// Steht hier gerade Wasser über dem Meeresgrund (Leerlaufen bzw. Letzte Flut)? Mit etwas
+    /// Abstand zur gezeichneten Kante, die im Shader ausfranst.
+    pub fn tide_wet(&self, x: f32, y: f32) -> bool {
+        match (self.tide, self.tide_u(x, y)) {
+            (Some(l), Some(u)) => u > l - 0.04,
+            _ => false,
+        }
     }
     /// Nach dem Sieg über Malakor: Säbelfeuer und Laternen am Grund erscheinen.
     pub fn show_end_fire(&mut self) {

@@ -17,7 +17,7 @@ Stand: 1. November 2026 (Version 0.6, Zweig `perf`). Technische Kurzreferenz fü
 | **Technik** | Rust + Bevy 0.16 mit eigenem wgpu-Renderer, kompiliert nach WebAssembly |
 | **Besonderheit** | Keine einzige Bild- oder Audiodatei: Grafik, Welt, Musik und Klänge entstehen beim Start aus Code |
 
-**Kurzbeschreibung.** Du bist ein Ertrunkener, den die See zurückgegeben hat. Du erwachst in einem Sarg auf einem Piratenfriedhof, findest eine Festung voller Feuer und zerbrochener Throne und erfährst, dass vier Geisterkönige und vier Ungeheuer der See die Welt zwischen sich aufgeteilt haben. Hinter allem steht Malakor, der Ertrunkene König, der am Ende der Welt auf seinem Fliegenden Holländer wartet.
+**Kurzbeschreibung.** Du bist ein Ertrunkener, den die See zurückgegeben hat. Du erwachst in einem Sarg auf einem Piratenfriedhof, findest eine Festung voller Feuer und zerbrochener Throne und erfährst, dass vier Geisterkönige und vier Ungeheuer der See die Welt zwischen sich aufgeteilt haben. Hinter allem steht Malakor, der Ertrunkene König, der am Ende der Welt auf seinem Fliegenden Holländer wartet. Er hat das Spiegelbild des Mondes gestohlen – seitdem steht die See still, und die Letzte Flut, die die Ertrunkenen heimträgt, kommt nie.
 
 **Säulen des Spiels**
 1. **Dark Fantasy**: gedämpftes Licht, Lichtinseln aus Feuern und Laternen, Nebel, Stimmung je Gebiet.
@@ -37,8 +37,11 @@ Stand: 1. November 2026 (Version 0.6, Zweig `perf`). Technische Kurzreferenz fü
 5. **Crew**: In jedem Königsgebiet wartet jemand, der an Bord kommt (vier Crewmitglieder mit eigenem Lied und eigenem Geschütz).
 6. **Der Strudel**: Sitzen alle vier Galionsfiguren auf den Thronen und sind alle vier Ungeheuer versenkt, öffnet sich im See der Glutwacht ein Strudel. Acht Krakenarme wiegen sich darum. Kommt das Schiff nahe, packen sie es und ziehen es hinab.
 7. **Ende der Welt**: ein Meer in der Südost-Ecke der Karte, im Süden und Osten stürzt es als Wasserfall ins Nichts.
-8. **Endkampf gegen Malakor** (siehe 5.4): Fliegender Holländer, roter Kraken, das Meer läuft leer, Malakor zu Fuß am Meeresgrund, zuletzt sein Gebein als Knochenkraken.
-9. **Nach dem Sieg**: Am Grund erscheint das Säbelfeuer „Ende der Welt“. Die Laternenmagd bietet die **neue Fahrt** an (Neues Spiel+).
+8. **Endkampf gegen Malakor** (siehe 5.4): Der Fliegende Holländer steigt aus der toten See, die Seeschlacht mit dem roten Kraken, der Holländer zerbricht, der gestohlene Mond taucht zum Grund und das Meer läuft über den Rand der Welt leer, am Meeresgrund Malakor zu Fuß vor dem gefesselten Mond, zuletzt Malakor im Mond – der Mondfresser.
+9. **Die Letzte Flut** (Sieg-Sequenz, siehe 5.5): Die Ketten reißen, die Meeresspinne vom Anfang hängt den Mond zurück an den Himmel, das Meer kehrt zurück und trägt die Ertrunkenen heim.
+10. **Nach dem Sieg**: Wo der Mond gefesselt lag, ragt der Mondfels aus dem Meer, darauf das Säbelfeuer „Ende der Welt“. Die Laternenmagd bietet die **neue Fahrt** an (Neues Spiel+).
+
+**Der Mondraub (die Geschichte hinter allem).** An seinem Spiegelbild zieht der Mond die Gezeiten. Als Malakor ertrank, wollte er nicht hinüber: Er fischte das Spiegelbild des Mondes aus der See und kettete es in den Bauch seines Fliegenden Holländers. Seitdem steht das Meer still – keine Ebbe, keine Flut. Früher kam in jeder hundertsten Nacht die **Letzte Flut** und trug die Ertrunkenen hinüber; seit dem Mondraub kommt sie nie. Darum spuckt die See ihre Toten immer wieder aus: den Spieler, die Leute von Stillwasser, die nicht wissen, dass sie tot sind, die Kapitäne der Glutwacht, die am Säbelfeuer zurückkehren. Davon erzählen der Galionsschnitzer, die Laternenmagd („Über die Letzte Flut“), Wirt Klaas in der Kneipe „Zur Letzten Flut“ („Die Flut kommt nie – also schenkt er ewig“) und der Geisterkapitän. Wer Malakor besiegt, gibt der See ihren Mond zurück.
 
 ---
 
@@ -169,15 +172,23 @@ Der Kampf beginnt hinter einem goldgelben **Nebeltor**. Angriffe mit Bodenmarkie
 ### 5.3 Die vier Seeungeheuer
 Phase 1: das Ungeheuer (Seitenansicht, sehr groß). Bei 50 % Phase 2: ein eigenes Piratenschiff mit eigenem Entwurf. Einschläge (`Slam`) mit Vorwarnung. Wer das Gebiet verlässt, setzt den Kampf zurück. Belohnung: 5000 Perlen, das brennende Wrack in der Glutwacht.
 
-### 5.4 Endkampf: Malakor, der Ertrunkene König
-1. **Annäherung**: mit dem Schiff am Ende der Welt. Nach einigen Sekunden: „Unter dir bewegt sich etwas Großes …“
-2. **Aufstieg** (Zwischensequenz): der Fliegende Holländer steigt aus dem Wasser.
-3. **Seeschlacht**, Breitseite an Breitseite: XXL-Feuer aus dem Galion, XXL-Breitseiten, Donnermörser mit Blitz. Unter 60 % taucht der **rote Kraken** auf. Solange er lebt, treffen Schüsse nur ihn.
-4. **Das Meer läuft leer**: Das Wasser stürzt über den Rand, das Ende der Welt wird zum Meeresgrund mit Sand, Seegras, Haiskeletten, Wracks und Korallen.
-5. **Malakor zu Fuß** (2400 Leben): vier Schwerter und Tentakelbart. Angriffe: Viererkombo, Wirbel, Peitsche (der Bart zieht heran), Sprung, Geysire.
-6. **Malakors Gebein, der Knochenkraken** (2800 Leben): Schädelmantel und acht Wirbelarme. Stacheln, Schwung, Splitter rundum, Sprung.
-7. **Ende**: Das Säbelfeuer „Ende der Welt“ erscheint.
+### 5.4 Endkampf: Malakor, der Ertrunkene König (neu 9.11.)
+1. **Die tote See**: Am Ende der Welt ist das Meer spiegelglatt, kein Wind, und im Wasser fehlt das Spiegelbild des Mondes („… kein Wind. Keine Welle. Und kein Mond im Wasser …“, „… die See atmet nicht …“). Dann grünes Licht unter dem Schiff: „Unter dir bewegt sich etwas Großes …“
+2. **Aufstieg** (11 s): Ein Strudel aus Gischt dreht sich um ein grünes Leuchten in der Tiefe, Seelenlichter steigen im Ring auf, Blitze. Zuerst durchstoßen die Mastspitzen und zerfetzten Segel die Oberfläche, Wasser stürzt von den Segeln; dann bricht der Rumpf mit einer Reihe von Fontänen hervor, springt über die Wasserlinie und kracht zurück. Zwei Wellenringe laufen über das Meer und werfen das eigene Schiff zurück. Wasser läuft aus den Pforten, die grünen Pforten entzünden sich eine nach der anderen von Heck bis Bug, die Segellöcher glühen, und Malakor tritt in grünem Feuer aufs Achterdeck: **„Der Fliegende Holländer – Malakor, der Ertrunkene König“**.
+3. **Seeschlacht**: Der Holländer (PixelLab-Grafik, Seitenansicht, schwarzer Rumpf mit grün glühenden Pforten und zerfetzten, grün leuchtenden Segeln) schwimmt auf dem Wasser – Wasserlinie, Gischtsaum, Bugwelle, Spiegelung, sachtes Schaukeln. XXL-Feuer aus dem Galion, Breitseiten aus allen zehn Pforten, Donnermörser mit Blitz. Unter 60 % taucht der **rote Kraken** auf; solange er lebt, treffen Schüsse nur ihn. Besiegt versinkt er in einem Strudel aus Blasen.
+4. **Der Holländer zerbricht – das Meer läuft leer** (15 s): Grünes Feuer bricht aus dem Rumpf, silbernes Licht dringt durch die Planken, dann birst der Rumpf: der gestohlene Mond fliegt in einem Lichtbogen heraus und taucht zum Grund, Malakor springt ihm nach, der Holländer sinkt mit Schlagseite. **„Der Bann bricht – das Meer stürzt über den Rand der Welt.“** Die Wasserkante weicht sichtbar über den Meeresgrund zurück, dahinter nasser, glänzender Sand, Pfützen, Haiskelette, Wracks und Korallen tauchen auf, Fische zappeln im Schlick, Strömungsschlieren ziehen zum Rand, der Weltrand donnert. Die Strömung reißt das eigene Schiff mit, bis es aufläuft; man springt in den Schlick.
+5. **Meeresgrund**: In der Mitte schwebt der **Spiegelmond**, an vier riesigen Ankern mit Ketten gefesselt, ein Lichtschein steigt von ihm in den Himmel. Darunter kniet Malakor betend. **Malakor zu Fuß** (2400 Leben, „Der den Mond stahl“): vier Schwerter und Tentakelbart; Viererkombo, Wirbel, Peitsche, Sprung, Geysire.
+6. **Malakor flieht in den Mond – der Mondfresser** (2800 Leben): Bei 0 Leben schwebt er zum Mond hinauf und verschmilzt mit ihm. Der Mond verdunkelt sich blutrot, Malakors Schatten mit glühenden Augen steht darin, acht Knochenarme brechen aus dem Schlick. Stacheln, Feger, Knochensplitter rundum; beim Sprung steigt der Mond hoch auf und stürzt herab.
+7. **Sieg**: Der Mondfresser bleibt nicht liegen – die Sieg-Sequenz beginnt.
 
+### 5.5 Die Letzte Flut (Sieg-Sequenz, ca. 65 s)
+1. **Zerfall**: Die Knochenarme zerbröckeln und versinken im Schlick, Malakor stürzt aus dem Mond, kniet und zerfließt zu schwarzem Wasser: „Ohne den Mond … holt mich die Flut …“
+2. **Die Ketten reißen**, eine nach der anderen, mit Funken; zuletzt blendet der Mond silbern auf: „Der Spiegelmond ist frei“.
+3. **Die Spinne vom Wrackzwinger**: „… Schritte. Viele Beine. Ganz nah …“ – die Riesige Meeresspinne aus dem Prolog krabbelt heran (wer sie verschont hat, sieht sie selbst; wer sie erschlagen hat, ihren bleichen Geist: „Sie trägt dir nichts nach“). Sie schießt Fäden in den Himmel, spinnt ein Netz um den Mond und klettert an ihrem Faden hinauf, den Mond im Netz unter sich; Tautropfen fliegen als Sterne davon. „Der Mond kehrt zurück – an seinem Spiegelbild zieht er die Gezeiten.“
+4. **Die Flut**: Die Wasserfälle am Rand der Welt laufen rückwärts, die Wasserkante rollt vom Rand über den Meeresgrund zurück, Quellen springen auf, Wracks versinken, Seelenlichter steigen überall auf.
+5. **Die Ertrunkenen ziehen heim**: Im steigenden Wasser stehen Wirt Klaas („Auf die Letzte Flut, Fremder! Die Runde geht auf mich.“), Leute aus Stillwasser, der Geisterkapitän („Mein Schiff … ich sehe es wieder.“) und die vier Geisterkönige („Endlich … ist es still.“), nicken und lösen sich in Licht auf.
+6. **Das Wasser trägt dich**, das eigene Schiff steigt unter dir aus der Tiefe und nimmt dich an Bord; **Morgengrauen** über dem Ende der Welt: „Die Letzte Flut – die Ertrunkenen sind heimgekehrt“.
+7. **Epilog** über dem Schwarz: „In dieser Nacht kam die Flut, auf die Stillwasser hundert Jahre gewartet hatte.“ – „Sie trug die Ertrunkenen hinüber: Klaas und seine Zecher, die Könige der See, den Kapitän ohne Schiff. In der Kneipe »Zur Letzten Flut« stehen die Krüge leer – diesmal mit Grund.“ – „Nur einer blieb zurück. Die See hatte noch nicht genug von dir.“ Danach liegt das Schiff vor dem **Mondfels**, auf dem das Säbelfeuer „Ende der Welt“ brennt; das Meer am Ende der Welt atmet wieder, silbern unter dem Mond.
 ---
 
 ## 6. Spielsysteme

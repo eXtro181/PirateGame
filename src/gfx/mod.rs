@@ -69,8 +69,12 @@ pub struct Globals {
     pub fx4: [f32; 4],
     /// Spieler (Weltort) für Pflanzen, die sich wegbiegen; Windrichtung
     pub fx5: [f32; 4],
-    /// Wolken: Bedeckung (0..1), frei, frei, frei
+    /// Wolken: Bedeckung (0..1), Titelbild an (0/1), Titelzeit, frei
     pub fx6: [f32; 4],
+    /// Gezeiten am Ende der Welt: Rechteck des Meeresgrunds x0, y0, x1, y1 (Welt-px)
+    pub fx7: [f32; 4],
+    /// Gezeiten: Lage der Wasserkante auf der Achse Nordwest (0) → Südost (1), an (0/1), frei, frei
+    pub fx8: [f32; 4],
     /// Farbtrennung: Faktoren für Schatten und Lichter (1 = neutral)
     pub tone_lo: [f32; 4],
     pub tone_hi: [f32; 4],
@@ -103,6 +107,8 @@ impl Default for Globals {
             fx4: [0.2, 0.6, 0.8, 1.0],
             fx5: [0.0, 0.0, 1.0, 0.0],
             fx6: [0.35, 0.0, 0.0, 0.0],
+            fx7: [0.0; 4],
+            fx8: [0.0; 4],
             tone_lo: [1.0, 1.0, 1.0, 0.0],
             tone_hi: [1.0, 1.0, 1.0, 0.0],
             lights: [GLight::default(); MAX_LIGHTS],

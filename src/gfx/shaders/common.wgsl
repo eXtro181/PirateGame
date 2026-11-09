@@ -27,7 +27,9 @@ struct Globals {
     fx3: vec4<f32>,       // Hitzeflimmern, Nacht, Zoom, Sterne
     fx4: vec4<f32>,       // Rückstrahlung, leuchtende Flächen, Randlicht der Lichter, Lesbarkeit
     fx5: vec4<f32>,       // Spieler xy (Pflanzen biegen sich weg), Windrichtung xy
-    fx6: vec4<f32>,       // Wolkenbedeckung, frei, frei, frei
+    fx6: vec4<f32>,       // Wolkenbedeckung, Titelbild, Titelzeit, frei
+    fx7: vec4<f32>,       // Gezeiten am Ende der Welt: Rechteck x0, y0, x1, y1 (px)
+    fx8: vec4<f32>,       // Gezeiten: Wasserkante (0 Nordwest … 1 Südost), an, frei, frei
     tone_lo: vec4<f32>,   // Farbtrennung: Faktor Schatten
     tone_hi: vec4<f32>,   // Farbtrennung: Faktor Lichter
     lights: array<Light, 48>,

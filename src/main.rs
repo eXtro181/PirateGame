@@ -404,6 +404,14 @@ fn setup(world: &mut bevy::ecs::world::World) {
             if let Some(n) = app.params.get("endphase").and_then(|v| v.parse::<u32>().ok()) {
                 if let Scene::Play(g) = &mut app.scene {
                     g.debug_end_phase(n);
+                    // Sieg-Sequenz ab Sekunde s
+                    if let Some(s) = app.params.get("tide").and_then(|v| v.parse::<f32>().ok()) {
+                        g.debug_tide_at(s);
+                    }
+                    // Meeresgrund: die Wasserkante steht genau am Spieler (Bildprüfung des Shaders)
+                    if app.params.contains_key("tidefront") {
+                        g.world.tide = g.world.tide_u(g.player.a.x, g.player.a.y);
+                    }
                 }
             } else if app.params.contains_key("endsea") {
                 if let Scene::Play(g) = &mut app.scene {
@@ -498,7 +506,10 @@ fn tick(
     win: Query<&Window, With<PrimaryWindow>>,
 ) {
     let raw_dt = time.delta_secs();
-    let dt = raw_dt.min(0.05);
+    // Testlauf `&tscale=<k>`: größere Zeitschritte erlauben (Swiftshader zeichnet nur ~1 Bild je
+    // Sekunde – lange Zwischensequenzen laufen so k-mal schneller ab)
+    let tscale = app.params.get("tscale").and_then(|v| v.parse::<f32>().ok()).unwrap_or(1.0).clamp(1.0, 12.0);
+    let dt = raw_dt.min(0.05 * tscale);
     let app = &mut *app;
     let f = &mut *f;
     // dynamische Auflösung: dauerhaft langsame Bilder (über 30 ms) schalten FullHD auf die
