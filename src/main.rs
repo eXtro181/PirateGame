@@ -372,6 +372,12 @@ fn setup(world: &mut bevy::ecs::world::World) {
                     g.hostile_dirty = true;
                 }
             }
+            if app.params.contains_key("eyes") {
+                // Testlauf: die Krakenaugen im Becken der Glutwacht gleich zeigen
+                if let Scene::Play(g) = &mut app.scene {
+                    g.debug_kraken_eyes();
+                }
+            }
             if app.params.contains_key("webs") {
                 // Testlauf: Netze der Meeresspinne – zwei kleben schon am Boden, drei fliegen heran
                 if let Scene::Play(g) = &mut app.scene {

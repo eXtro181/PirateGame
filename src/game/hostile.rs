@@ -92,13 +92,14 @@ impl Game {
         self.town_hostile(self.walker_town(i))
     }
 
-    /// Friedliche Figuren in Reichweite, die Hiebe und Geschosse des Spielers treffen können
-    /// (nicht beim Anvisieren: das bleibt bei echten Gegnern).
-    pub fn npc_targets(&self) -> Vec<Target> {
+    /// Friedliche Figuren um (px, py), die Hiebe und Geschosse des Spielers treffen können (nicht
+    /// beim Anvisieren: das bleibt bei echten Gegnern). Der Ort kommt vom Angreifer bzw. Geschoss –
+    /// während des Spielerzugs steht in `self.player` nur ein Platzhalter (`update_player`), daran
+    /// gemessen traf man früher nie eine Figur.
+    pub fn npc_targets(&self, px: f32, py: f32) -> Vec<Target> {
         if self.sailing {
             return vec![];
         }
-        let (px, py) = (self.player.a.x, self.player.a.y);
         let near = |x: f32, y: f32| (x - px).abs() < 240.0 && (y - py).abs() < 200.0;
         let mut out = vec![];
         for (i, n) in self.npcs.iter().enumerate() {
@@ -135,6 +136,7 @@ impl Game {
         };
         self.fx.px.play(Px::Hit, x, y - 14.0).scale(0.6);
         self.sfx("hurt");
+        bevy::log::info!("Figur getroffen: {name} ({})", town.unwrap_or("-"));
         let Some(k) = town else {
             self.ui.toast(&format!("{name}: „Lass das, Ertrunkener!“"));
             return;

@@ -1857,11 +1857,10 @@ impl World {
         self.pier_end = (hx, hy - 12.0 * TS as f32 + 8.0);
         self.bridge = Some(HubBridge { x0: hx - BRIDGE_HALF, x1: hx + BRIDGE_HALF, y: hy, hw: BRIDGE_HW, h: BRIDGE_H });
         self.prop_x("hubBridge", hx, hy + BRIDGE_HW, |p| p.no_collide = true);
-        // ---- Kai (Ebene 0): Liegeplatz und Schiffsmeister im Osten, Werft auf dem Südostplatz
+        // ---- Kai (Ebene 0): Liegeplatz im Norden, Werft mit dem Schiffsmeister auf dem Südostplatz
         // der Anleger liegt am Nordkai (Mitte oben) und führt auf die große Treppe zum unteren Ring;
         // Schiffe kommen durchs Seetor herein und fahren unter der Brücke hindurch
         self.dock(Zone::Hain, cx, cy - 24, 0, 1);
-        self.npc("shipmaster", cx + 24, cy - 3, "shipmaster", "Schiffsmeister Brack", "shipmaster", false, None);
         for y in cy + 9..=cy + 24 {
             for x in cx + 8..=cx + 30 {
                 if inb(x, y) && self.level[idx(x, y)] == 0 && self.ground[idx(x, y)] == Mat::Cobble && matches!(hub_cell((x - cx) as f32, (y - cy) as f32), HubCell::Level(0)) {
@@ -1869,19 +1868,23 @@ impl World {
                 }
             }
         }
+        // die Werft: Helling mit Rumpf, Kran an der Kaikante (der Ausleger ragt übers Becken),
+        // Holzstapel, Taue, Kisten; alles auf den Planken – das Becken reicht bis 20 Kacheln
         self.prop_t("slipway", cx + 19, cy + 18);
-        self.prop_t("crane", cx + 10, cy + 15);
+        self.prop_t("crane", cx + 14, cy + 16);
         self.prop_t("logPile", cx + 26, cy + 12);
         self.prop_t("ropeCoil", cx + 13, cy + 20);
         self.prop_t("ropeCoil", cx + 24, cy + 21);
         self.prop_t("crates", cx + 28, cy + 16);
         self.prop_t("barrels", cx + 9, cy + 22);
-        self.prop_t("anchorDeco", cx + 15, cy + 10);
+        self.prop_t("anchorDeco", cx + 18, cy + 12);
         self.prop_t("flagPole", cx + 29, cy + 9);
-        self.prop_t("lamppost", cx + 12, cy + 10);
-        self.prop_t("lamppost", cx + 26, cy + 23);
+        self.prop_t("lamppost", cx + 17, cy + 14);
+        self.prop_t("lamppost", cx + 25, cy + 15);
         self.prop_t("signpost", cx + 25, cy + 3);
-        self.prop_t("chainPost", cx + 7, cy + 12);
+        self.prop_t("chainPost", cx + 13, cy + 18);
+        // Schiffsmeister Brack steht in seiner Werft neben dem Rumpf auf der Helling
+        self.npc("shipmaster", cx + 23, cy + 16, "shipmaster", "Schiffsmeister Brack", "shipmaster", false, None);
         // Crew-Tafel auf dem Südwestplatz, Feuerbecken und Fässer
         let (tx, ty) = (cx - 17, cy + 14);
         self.prop_t("table", tx, ty);
