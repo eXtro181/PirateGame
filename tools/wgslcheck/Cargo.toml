@@ -1,0 +1,12 @@
+# Prüft die Shader ohne Browser: WGSL lesen, validieren und nach GLSL ES 3.00 (WebGL2) übersetzen.
+# Eigener Arbeitsbereich, damit das Spiel nicht mitgebaut wird. Aufruf: tools/dev/wgsl
+[package]
+name = "wgslcheck"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+naga = { version = "=24.0.0", features = ["wgsl-in", "glsl-out"] }
+
+[workspace]

@@ -1,0 +1,12 @@
+# Von der Suche (ripgrep, Grep-Werkzeug) ausgenommen: groß, erzeugt oder ohne Nutzen beim Suchen.
+# Wer hier doch suchen will: rg --no-ignore <muster> <datei>
+web/pfx.js
+Cargo.lock
+tools/wgslcheck/Cargo.lock
+docs/GRAFIK_SHADER.md
+crates/art/assets/
+public/
+dist/
+target/
+target-art/
+.shots/

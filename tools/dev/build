@@ -1,0 +1,19 @@
+#!/bin/sh
+# Baut das Spiel nach dist/ und sorgt dafür, dass der Testserver läuft – mit knapper Ausgabe.
+#   build            Profil fast (für Tests)
+#   build release    wie die Veröffentlichung (langsam)
+# Meldungen des Compilers wie bei tools/dev/check; neue Warnungen brechen nicht ab, werden aber gezeigt.
+cd "$(dirname "$0")/../.." || exit 1
+profile=${1:-fast}
+python3 tools/dev/check --build "$profile"
+rc=$?
+[ $rc -eq 1 ] && exit 1
+wb=$(tools/dev/setup --wasm-bindgen) || exit 1
+if ! PROFILE=$profile WASM_BINDGEN=$wb ./build.sh >/tmp/pirat-build.log 2>&1; then
+  tail -n 15 /tmp/pirat-build.log
+  echo "build: FEHLER in build.sh"
+  exit 1
+fi
+tools/dev/serve >/dev/null
+echo "dist: $(du -h dist/schwarzwasser_bg.wasm | cut -f1) wasm · http://localhost:${PORT:-8790}/?debug&start=kueste"
+exit $rc

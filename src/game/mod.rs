@@ -565,6 +565,62 @@ impl Game {
         g
     }
 
+    /// Eine Zeile Spielzustand für Testläufe (`&state`, einmal je Sekunde in die Konsole, siehe
+    /// `main.rs`): Ort, Leben, Zwischensequenz, Boss, Endkampf. Ersetzt in vielen Prüfungen ein
+    /// Bildschirmfoto (`tools/dev/shot -q -s`).
+    pub fn state_line(&self) -> String {
+        let p = &self.player;
+        let cut = match self.cutscene {
+            None => "-".to_string(),
+            Some(c) => {
+                let (n, t) = match c {
+                    Cut::Travel { t, .. } => ("Travel", t),
+                    Cut::Whirl { t, .. } => ("Whirl", t),
+                    Cut::Door { t, .. } => ("Door", t),
+                    Cut::Wake { t } => ("Wake", t),
+                    Cut::Washed { t } => ("Washed", t),
+                    Cut::Coffin { t, defeat, .. } => (if defeat { "Coffin-Niederlage" } else { "Coffin" }, t),
+                    Cut::Summon { t, .. } => ("Summon", t),
+                    Cut::Gallows { t, .. } => ("Gallows", t),
+                    Cut::Tide { t } => ("Tide", t),
+                };
+                format!("{n}@{t:.1}")
+            }
+        };
+        let near = self.enemies.iter().filter(|e| e.hp > 0.0 && self.near(e.a.x, e.a.y)).count();
+        let mut s = format!(
+            "STATE t={:.1} ort={} zone={:?} pos={:.0},{:.0} hp={:.0}/{:.0} zustand={:?} cut={cut} licht={} gegner={near}",
+            self.t,
+            self.place_name(),
+            self.zone_key,
+            p.a.x,
+            p.a.y,
+            p.hp,
+            p.d.max_hp,
+            p.state,
+            self.env_key()
+        );
+        if self.sailing {
+            s += &format!(" schiff={:.0}/{:.0} segel={}", self.ship.hp, self.ship.max_hp, self.ship.sail);
+        }
+        if let Some(b) = self.boss.and_then(|i| self.bosses.get(i)) {
+            s += &format!(" boss={}:{:.0}/{:.0} phase={} {:?}", b.name, b.hp, b.max_hp, b.phase, b.state);
+        }
+        if let Some(b) = self.sea_boss.and_then(|i| self.sea_bosses.get(i)) {
+            s += &format!(" seeboss={:.0}/{:.0} {:?}", b.hp, b.max_hp, b.state);
+        }
+        if self.end.state != EP::Dormant {
+            s += &format!(" ende={:?}:{:.0}/{:.0}", self.end.state, self.end.hp, self.end.max_hp);
+        }
+        if let Some(t) = self.world.tide {
+            s += &format!(" flut={t:.2}");
+        }
+        if self.death_t.is_some() {
+            s += " tot";
+        }
+        s
+    }
+
     /// Name des Ortes, an dem man ist (Gebiet oder wilde Insel)
     pub fn place_name(&self) -> &'static str {
         match (self.zone_key, self.wild_cur) {

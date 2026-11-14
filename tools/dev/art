@@ -1,0 +1,16 @@
+#!/bin/sh
+# Kunst-Vorschau ohne Spiel (natives Vorschau-Programm der Kunst-Crate, schnell, kein Browser):
+#   art <befehl> [argumente]     Bilder nach .shots/art/, ausgegeben werden nur die neuen Dateien mit Größe
+# Befehle: trees props chars humans beasts monsters [key,..] ships shipsize shipfit dutchman dutchpl kraken
+#          malakor grave title throne dfont heads fort ground budget village   (siehe docs/ai/BAUEN.md)
+# Große Bilder vor dem Ansehen verkleinern/ausschneiden: tools/dev/sheet aus.png --crop x,y,w,h --tile 800 bild.png
+cd "$(dirname "$0")/../.." || exit 1
+[ $# -eq 0 ] && { sed -n '2,6p' "$0" | cut -c3-; exit 2; }
+out=${ART_DIR:-.shots/art}
+mkdir -p "$out"
+stamp=$(mktemp)
+CARGO_TARGET_DIR=target-art cargo run -q --release -p sw-art --bin preview -- "$out" "$@" 2>&1 | tail -n "${ART_LINES:-12}"
+find "$out" -name '*.png' -newer "$stamp" | sort | while read -r f; do
+  python3 -c "import struct,sys; w,h=struct.unpack('>II',open(sys.argv[1],'rb').read(24)[16:24]); print(f'{sys.argv[1]} ({w}×{h})')" "$f"
+done
+rm -f "$stamp"

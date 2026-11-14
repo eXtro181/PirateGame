@@ -1,0 +1,36 @@
+#!/usr/bin/env python3
+"""Erzeugt docs/GRAFIK_SHADER.md (Anhang der Grafik-Anleitung: die Shader im Wortlaut) aus src/gfx/shaders/.
+
+  docsync           Datei neu schreiben (nach jeder Shader-Änderung)
+  docsync --check   nur prüfen, ob sie aktuell ist (Code 1, wenn nicht)
+
+Die Datei ist von der Suche ausgenommen (.ignore) – zum Arbeiten immer die .wgsl-Dateien nehmen.
+"""
+import os
+import sys
+
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+OUT = os.path.join(ROOT, 'docs/GRAFIK_SHADER.md')
+FILES = ['common.wgsl', 'scene.wgsl', 'post.wgsl']
+
+
+def build():
+    out = ['# Grafik-Anleitung, Anhang: Shader im Wortlaut', '',
+           'Erzeugt von `tools/dev/docsync` aus `src/gfx/shaders/` – nicht von Hand ändern, sondern die Shader ändern und',
+           '`tools/dev/docsync` aufrufen. Gehört zu [GRAFIK_ANLEITUNG.md](GRAFIK_ANLEITUNG.md) (Kapitel 22).', '',
+           '`common.wgsl` wird vor `scene.wgsl` bzw. `post.wgsl` gesetzt (eine Quelle je Pipeline-Gruppe).', '']
+    for f in FILES:
+        src = open(os.path.join(ROOT, 'src/gfx/shaders', f), encoding='utf-8').read().rstrip('\n')
+        out += [f'## `{f}`', '', '```wgsl', src, '```', '']
+    return '\n'.join(out)
+
+
+if __name__ == '__main__':
+    new = build()
+    old = open(OUT, encoding='utf-8').read() if os.path.exists(OUT) else ''
+    if '--check' in sys.argv:
+        print('docsync: aktuell' if new == old else 'docsync: docs/GRAFIK_SHADER.md ist veraltet – tools/dev/docsync aufrufen')
+        sys.exit(0 if new == old else 1)
+    if new != old:
+        open(OUT, 'w', encoding='utf-8').write(new)
+    print(f'docs/GRAFIK_SHADER.md: {len(new.splitlines())} Zeilen' + ('' if new != old else ' (unverändert)'))

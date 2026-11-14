@@ -1,0 +1,10 @@
+#!/bin/sh
+# Shader prüfen ohne Browser (naga wie im Spiel): lesen, validieren, nach GLSL ES 3.00 übersetzen.
+# Baut das Prüfprogramm beim ersten Aufruf (etwa eine Minute), danach sofort.
+cd "$(dirname "$0")/../.." || exit 1
+bin=tools/wgslcheck/target/release/wgslcheck
+if [ ! -x "$bin" ] || [ tools/wgslcheck/src/main.rs -nt "$bin" ]; then
+  (cd tools/wgslcheck && cargo build -q --release 2>&1 | tail -n 12) || exit 1
+fi
+[ -x "$bin" ] || { echo "wgsl: Prüfprogramm ließ sich nicht bauen"; exit 1; }
+exec "$bin" src/gfx/shaders

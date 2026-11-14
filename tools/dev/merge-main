@@ -1,0 +1,24 @@
+#!/bin/sh
+# Führt den Arbeitszweig nach main zusammen und schiebt main hoch – das löst die Veröffentlichung aus.
+# NUR nach ausdrücklicher Zustimmung des Nutzers für genau diesen Stand:
+#   merge-main --freigabe "<Nachricht des Merge-Commits samt Attributionszeilen>"
+# Arbeitet in einem eigenen Arbeitsbaum, der eigene Zweig bleibt ausgecheckt.
+cd "$(dirname "$0")/../.." || exit 1
+[ "$1" = "--freigabe" ] && [ -n "$2" ] || { sed -n '2,5p' "$0" | cut -c3-; exit 2; }
+br=$(git branch --show-current)
+[ "$br" != "main" ] || { echo "merge-main: steht schon auf main"; exit 1; }
+[ -z "$(git status --porcelain)" ] || { echo "merge-main: Arbeitsbaum nicht sauber – erst committen"; exit 1; }
+git push -q -u origin "$br" || exit 1
+git fetch -q origin main || exit 1
+wt=$(mktemp -d)/main
+git worktree add -q "$wt" origin/main || exit 1
+(cd "$wt" && git checkout -q -B main origin/main && git merge --no-ff -q "$br" -m "$2" && git push -q origin main)
+rc=$?
+git worktree remove --force "$wt"
+git fetch -q origin main
+if [ $rc -eq 0 ]; then
+  echo "main: $(git log -1 --format='%h %s' origin/main | cut -c1-100) – Veröffentlichung läuft (tools/dev/live zeigt den Stand)"
+else
+  echo "merge-main: FEHLER (Konflikt oder Push abgelehnt) – main ist unverändert"
+fi
+exit $rc

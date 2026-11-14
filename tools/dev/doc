@@ -1,0 +1,308 @@
+#!/usr/bin/env python3
+"""Sparsame Doku-Auskunft – statt ganze Markdown-Dateien zu lesen.
+
+  doc                       Übersicht: Dateien mit Größe und Überschriften (-3 auch dritte Ebene)
+  doc <muster> [datei…]     Volltextsuche (Regex, ohne Groß/Klein): Trefferzeilen mit ihrem Abschnitt
+  doc -s <muster> [datei…]  ganze Abschnitte ausgeben, deren Überschrift passt (--all ohne Zeilengrenze)
+  doc --check               Pflegeprüfung: Größe der CLAUDE.md, überlange Zeilen, tote Dateiverweise
+  doc --reflow <datei…>     überlange Zeilen verlustfrei umbrechen (ein Satz je Zeile; nur Leerraum ändert sich)
+
+Dateien: CLAUDE.md, README.md, docs/**, READMEs unter crates/ und tools/; „datei“ ist ein Teil des Pfads.
+"""
+import os
+import re
+import sys
+
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+MAXW = 160          # Zielbreite beim Umbrechen
+LONG = 240          # ab hier meldet --check eine Zeile
+CLAUDE_MAX = 12000  # Zeichen; die CLAUDE.md wird in jeder Sitzung ganz geladen
+SKIP = ('docs/GRAFIK_SHADER.md',)  # erzeugt (tools/dev/docsync)
+ABBR = {'bzw', 'ca', 'Nr', 'usw', 'etc', 'ggf', 'evtl', 'max', 'min', 'inkl', 'vgl', 'sog', 'St', 'zzgl', 'Abs', 'Kap', 'Abb'}
+
+
+def short(s, n):
+    s = ' '.join(s.split())
+    return s if len(s) <= n else s[:n - 1] + '…'
+
+
+def doc_files(filt=()):
+    out = []
+    for top in ('CLAUDE.md', 'README.md', 'docs', 'crates', 'tools'):
+        ap = os.path.join(ROOT, top)
+        if os.path.isfile(ap):
+            out.append(top)
+        for d, ds, fs in os.walk(ap):
+            ds[:] = sorted(x for x in ds if x not in ('target', 'node_modules', '.git', 'vendor'))
+            out += [os.path.relpath(os.path.join(d, f), ROOT) for f in sorted(fs) if f.endswith('.md')]
+    out = [f for f in out if f not in SKIP]
+    if filt:
+        out = [f for f in out if any(x.lower() in f.lower() for x in filt)]
+    return out
+
+
+def read(f):
+    return open(os.path.join(ROOT, f), encoding='utf-8').read().split('\n')
+
+
+def headings(lines):
+    """[(zeile, ebene, text)] – Überschriften außerhalb von Codeblöcken."""
+    out, fence = [], False
+    for i, ln in enumerate(lines):
+        if ln.lstrip().startswith(('```', '~~~')):
+            fence = not fence
+        elif not fence:
+            m = re.match(r'(#{1,6})\s+(.*)', ln)
+            if m:
+                out.append((i, len(m.group(1)), m.group(2).strip()))
+    return out
+
+
+def cmd_overview(deep):
+    for f in doc_files():
+        lines = read(f)
+        size = sum(len(x) + 1 for x in lines)
+        print(f'{f} · {len(lines)} Zeilen · {size / 1000:.0f} kB')
+        hs = [h for h in headings(lines) if h[1] <= (3 if deep else 2) and h[1] > 1]
+        for i, lv, t in hs[:80]:
+            print(f'{i + 1:6} {"  " * (lv - 2)}{short(t, 100)}')
+
+
+def cmd_search(pat, filt):
+    rx = re.compile(pat, re.I)
+    n, shown = 0, 0
+    for f in doc_files(filt):
+        lines = read(f)
+        hs = headings(lines)
+        last = None
+        for i, ln in enumerate(lines):
+            if not rx.search(ln):
+                continue
+            n += 1
+            if shown >= 40:
+                continue
+            sec = next((t for (j, lv, t) in reversed(hs) if j <= i), '')
+            key = (f, sec)
+            if key != last:
+                print(f'{f} › {short(sec, 80)}')
+                last = key
+            print(f'{i + 1:6}: {short(ln, 200)}')
+            shown += 1
+    if n == 0:
+        print('kein Treffer')
+    elif n > shown:
+        print(f'… {n} Treffer, {shown} gezeigt (Muster enger fassen oder Datei angeben)')
+
+
+def cmd_section(pat, filt, everything):
+    rx = re.compile(pat, re.I)
+    found = []
+    for f in doc_files(filt):
+        lines = read(f)
+        hs = headings(lines)
+        for k, (i, lv, t) in enumerate(hs):
+            if rx.search(t):
+                end = next((j for (j, l2, _) in hs[k + 1:] if l2 <= lv), len(lines))
+                while end > i + 1 and not lines[end - 1].strip():
+                    end -= 1
+                found.append((f, i, end, t, lines))
+    if not found:
+        print('keine Überschrift passt (doc <muster> sucht im Text)')
+        return
+    total = sum(e - i for _, i, e, _, _ in found)
+    if len(found) > 1 and total > 120 and not everything:
+        print(f'{len(found)} Abschnitte – genauer angeben:')
+        for f, i, e, t, _ in found[:40]:
+            print(f'{f}:{i + 1} ({e - i} Zeilen) {short(t, 90)}')
+        return
+    for f, i, e, t, lines in found:
+        cap = e if everything else min(e, i + 150)
+        print(f'── {f}:{i + 1}-{e}')
+        print('\n'.join(lines[i:cap]))
+        if cap < e:
+            print(f'… +{e - cap} Zeilen (--all oder Read offset={cap + 1})')
+
+
+# ---------------------------------------------------------------- Umbrechen
+
+def break_points(s):
+    """Mögliche Umbruchstellen (Index eines Leerzeichens) mit Rang: 3 Satzende, 2 Strichpunkt/Doppelpunkt,
+    1 Gedankenstrich/Komma, 0 sonst. Nie in `Code`, in [Verweisen](…) oder vor Zeichen, die Markdown als
+    neuen Block läse."""
+    out, i, n, par, brk = [], 0, len(s), 0, 0
+    while i < n:
+        c = s[i]
+        if c == '`':
+            m = re.match(r'`+', s[i:])
+            j = s.find(m.group(0), i + len(m.group(0)))
+            i = (j + len(m.group(0))) if j >= 0 else n
+            continue
+        if c == '(':
+            par += 1
+        elif c == ')':
+            par = max(0, par - 1)
+        elif c == '[':
+            brk += 1
+        elif c == ']':
+            brk = max(0, brk - 1)
+            if s[i + 1:i + 2] == '(':  # Verweisziel überspringen
+                j = s.find(')', i)
+                i = j if j >= 0 else n
+                continue
+        elif c == ' ' and brk == 0 and 0 < i < n - 1 and s[i + 1] != ' ':
+            nxt = s[i + 1:]
+            if not re.match(r'([-+*>#|=]|\d+[.)])(\s|$)|```|~~~', nxt):
+                before = s[:i]
+                rank = 0
+                m = re.search(r'(\w+)?[)“"*`\]]*[.!?][)“"*]*$', before)
+                if m and re.match(r'[A-ZÄÖÜ`„(\[*]', nxt):
+                    w = re.search(r'([^\W\d_]+)[)“"*`\]]*[.!?][)“"*]*$', before)
+                    tail = before.rstrip(')“"*')
+                    if tail.endswith(('!', '?')) or (w and len(w.group(1)) > 1 and w.group(1) not in ABBR) \
+                            or re.search(r'[)`“"\]*][.][)“"*]*$', before):
+                        rank = 3
+                if rank == 0 and before.endswith((';', ':')):
+                    rank = 2
+                if rank == 0 and (before.endswith(',') or nxt.startswith(('– ', '— ', '→ ', '· '))):
+                    rank = 1
+                out.append((i, rank, par))
+        i += 1
+    return out
+
+
+def wrap(s, width):
+    """Zerlegt eine lange Zeile an sinnvollen Stellen; nur Leerzeichen werden zu Umbrüchen."""
+    pts = break_points(s)
+    out, start = [], 0
+    while len(s) - start > width:
+        win = [p for p in pts if start + 12 < p[0] <= start + width]
+        cut = None
+        top = [p for p in win if p[1] == 3 and p[2] == 0]
+        if top:
+            cut = top[0][0]  # erster Satz auf oberster Ebene: ein Satz je Zeile
+        else:
+            for rank, lo in ((3, 0.0), (2, 0.3), (1, 0.5), (0, 0.5)):
+                c = [p for p in win if p[1] == rank and p[0] - start >= width * lo]
+                if c:
+                    cut = c[-1][0]
+                    break
+            if cut is None:
+                c = [p for p in win] or [p for p in pts if p[0] > start + width]
+                cut = (c[-1][0] if win else c[0][0]) if c else None
+        if cut is None:
+            break
+        out.append(s[start:cut])
+        start = cut + 1
+    out.append(s[start:])
+    # auch kurze Reste: am Satzende auf oberster Ebene trennen
+    fin = []
+    for part in out:
+        base = 0
+        for p in [q for q in break_points(part) if q[1] == 3 and q[2] == 0]:
+            if p[0] - base > 40 and len(part) - p[0] > 40:
+                fin.append(part[base:p[0]])
+                base = p[0] + 1
+        fin.append(part[base:])
+    return fin
+
+
+def reflow_text(text, width=MAXW):
+    out, fence = [], False
+    for ln in text.split('\n'):
+        st = ln.lstrip()
+        if st.startswith(('```', '~~~')):
+            fence = not fence
+            out.append(ln)
+            continue
+        if fence or len(ln) <= width or st.startswith(('|', '#', '<', '![')) or not st:
+            out.append(ln)
+            continue
+        m = re.match(r'(\s*)((?:[-*+]|\d+[.)])\s+)?(>\s?)?', ln)
+        lead, mark, quote = m.group(1), m.group(2) or '', m.group(3) or ''
+        body = ln[m.end():]
+        if len(lead) >= 4 and not mark and not out[-1:] == [] and not out[-1].strip():
+            out.append(ln)  # eingerückter Codeblock nach Leerzeile: nicht anfassen
+            continue
+        first = lead + mark + quote
+        cont = lead + ' ' * len(mark) + quote
+        parts = wrap(body, width - len(cont))
+        out.append(first + parts[0])
+        out += [cont + p for p in parts[1:]]
+    return '\n'.join(out)
+
+
+def norm(t):
+    return ' '.join(t.split())
+
+
+def cmd_reflow(files):
+    for f in files:
+        p = f if os.path.isabs(f) else os.path.join(ROOT, f)
+        old = open(p, encoding='utf-8').read()
+        new = reflow_text(old)
+        if norm(old) != norm(new):
+            print(f'{f}: ABBRUCH – Inhalt hätte sich geändert')
+            continue
+        if new != old:
+            open(p, 'w', encoding='utf-8').write(new)
+        o, n = old.split('\n'), new.split('\n')
+        print(f'{f}: {len(o)} → {len(n)} Zeilen, längste {max(map(len, o))} → {max(map(len, n))} Zeichen')
+
+
+def cmd_check():
+    bad = 0
+    cm = open(os.path.join(ROOT, 'CLAUDE.md'), encoding='utf-8').read()
+    if len(cm) > CLAUDE_MAX:
+        bad += 1
+        print(f'CLAUDE.md: {len(cm)} Zeichen (Ziel ≤ {CLAUDE_MAX}) – Einzelheiten nach docs/ai/ auslagern')
+    names = set()
+    for d, ds, fs in os.walk(ROOT):
+        ds[:] = [x for x in ds if x not in ('target', 'target-art', 'node_modules', '.git', 'dist', '.shots')]
+        for f in fs:
+            names.add(f)
+            names.add(os.path.relpath(os.path.join(d, f), ROOT))
+    for f in doc_files():
+        lines = read(f)
+        fence, long = False, []
+        for i, ln in enumerate(lines):
+            if ln.lstrip().startswith(('```', '~~~')):
+                fence = not fence
+            elif not fence and len(ln) > LONG and not ln.lstrip().startswith('|'):
+                long.append(i + 1)
+        if long:
+            bad += 1
+            print(f'{f}: {len(long)} überlange Zeilen (z. B. {", ".join(map(str, long[:4]))}) – tools/dev/doc --reflow {f}')
+        if f == 'CLAUDE.md' or f.startswith('docs/ai/'):
+            miss = sorted({m for m in re.findall(r'`((?:src|crates|tools|docs)/[\w./-]+\.\w+)`', '\n'.join(lines)) if m not in names})
+            if miss:
+                bad += 1
+                print(f'{f}: verweist auf fehlende Dateien: {", ".join(miss[:8])}')
+    print('doc: ok' if not bad else f'doc: {bad} Befunde')
+    return 1 if bad else 0
+
+
+def main():
+    a = sys.argv[1:]
+    if not a or a == ['-3']:
+        return cmd_overview(bool(a))
+    if a[0] in ('-h', '--help'):
+        print(__doc__.strip())
+        return 0
+    if a[0] == '--check':
+        return cmd_check()
+    if a[0] == '--reflow':
+        return cmd_reflow(a[1:])
+    everything = '--all' in a
+    a = [x for x in a if x != '--all']
+    if a[0] == '-s':
+        if len(a) < 2:
+            sys.exit('Aufruf: doc -s <überschrift> [datei…]')
+        return cmd_section(a[1], a[2:], everything)
+    return cmd_search(a[0], a[1:])
+
+
+if __name__ == '__main__':
+    try:
+        sys.exit(main())
+    except BrokenPipeError:
+        pass

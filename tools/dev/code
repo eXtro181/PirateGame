@@ -1,0 +1,424 @@
+#!/usr/bin/env python3
+"""Sparsame Code-Auskunft (Rust + WGSL) – statt ganze Dateien zu lesen.
+
+  code map [pfad…]              Dateien mit Zeilenzahl und Kopfzeile (//!)
+  code ol <datei> [muster]      Gliederung: Zeilenbereiche und Signaturen (-a auch Konstanten einzeln)
+  code fn <name> [pfad…]        genau ein Element ausgeben (fn/struct/enum/const …); auch Typ::name
+                                -s nur Signatur · -n Zeilennummern · -g <regex> nur Trefferzeilen ±2
+                                --all ohne Zeilengrenze (sonst 220 Zeilen)
+  code sym <regex> [pfad…]      wo ist etwas definiert? (-i ohne Groß/Klein)
+  code refs <name> [pfad…]      wer benutzt den Namen? (mit umgebender Funktion)
+  code big [n] [pfad…]          die längsten Funktionen
+
+Pfade: Datei, Ordner oder Teil eines Pfads („endboss“); ohne Angabe src und crates/art/src.
+"""
+import bisect
+import os
+import re
+import sys
+
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+DEFAULT = ['src', 'crates/art/src']
+EXT = ('.rs', '.wgsl')
+CAP = 220
+
+RUST_TOK = re.compile(r'''
+    //[^\n]*
+  | /\*.*?\*/
+  | b?r(\#*)".*?"\1
+  | b?"(?:\\.|[^"\\])*"
+  | b?'(?:\\(?:[^u]|u\{[0-9a-fA-F_]+\})|[^'\\\n])'
+''', re.X | re.S)
+WGSL_TOK = re.compile(r'//[^\n]*|/\*.*?\*/', re.S)
+RUST_ITEM = re.compile(
+    r'^([ \t]*)((?:pub(?:\([^)\n]*\))?[ \t]+)?(?:(?:default|const|async|unsafe|extern)[ \t]+)*)'
+    r'(fn|struct|enum|union|trait|impl|mod|const|static|type|macro_rules!)(?!\w)', re.M)
+WGSL_ITEM = re.compile(r'^([ \t]*)((?:@\w+(?:\([^)\n]*\))?[ \t]*)*)(fn|struct|const|var|alias|override)(?!\w)', re.M)
+WHOLE = ('const', 'static', 'type', 'var', 'alias', 'override')
+BOX = ('impl', 'trait', 'mod')
+
+
+def blank(m):
+    return re.sub(r'[^\n]', ' ', m.group(0))
+
+
+def short(s, n):
+    s = ' '.join(s.split())
+    return s if len(s) <= n else s[:n - 1] + '…'
+
+
+def all_files(paths):
+    out = []
+    for p in paths or DEFAULT:
+        ap = p if os.path.isabs(p) else os.path.join(ROOT, p)
+        if os.path.isfile(ap):
+            out.append(os.path.relpath(ap, ROOT))
+        elif os.path.isdir(ap):
+            for d, ds, fs in os.walk(ap):
+                ds[:] = sorted(x for x in ds if x not in ('target', 'node_modules', '.git'))
+                out += [os.path.relpath(os.path.join(d, f), ROOT) for f in sorted(fs) if f.endswith(EXT)]
+        else:
+            hits = [f for f in all_files(None) if p in f]
+            if not hits:
+                sys.exit(f'kein Pfad passt auf „{p}“')
+            out += hits
+    seen = set()
+    return [f for f in out if not (f in seen or seen.add(f))]
+
+
+class Item:
+    __slots__ = ('kind', 'name', 'qual', 'off', 'end', 'l0', 'l1', 'doc', 'sig', 'depth', 'parent', 'level')
+
+
+class Src:
+    """Eine eingelesene Datei: Zeilen, Elemente mit Bereichen."""
+
+    def __init__(self, path):
+        self.path = path
+        self.text = open(os.path.join(ROOT, path), encoding='utf-8', errors='replace').read()
+        self.lines = self.text.split('\n')
+        wgsl = path.endswith('.wgsl')
+        self.masked = (WGSL_TOK if wgsl else RUST_TOK).sub(blank, self.text)
+        self.nl = [m.start() for m in re.finditer('\n', self.text)]
+        toks = [(m.start(), m.group()) for m in re.finditer(r'[{}()\[\];]', self.masked)]
+        self.toks = toks
+        self.pos = [t[0] for t in toks]
+        self.mate = {}
+        self.depth = []
+        st, d = [], 0
+        for i, (_, c) in enumerate(toks):
+            self.depth.append(d)
+            if c == '{':
+                st.append(i)
+                d += 1
+            elif c == '}':
+                d = max(0, d - 1)
+                if st:
+                    self.mate[st.pop()] = i
+        self.items = []
+        for m in (WGSL_ITEM if wgsl else RUST_ITEM).finditer(self.masked):
+            it = Item()
+            it.kind = m.group(3).rstrip('!')
+            it.off = m.start()
+            body, it.end = self.extent(m.end(), it.kind)
+            head = self.text[m.end():body]
+            if it.kind == 'impl':
+                it.name = short(head.split(' where ')[0], 90)
+            else:
+                nm = re.match(r'\s*(?:<[^>]*>\s*)?(?:mut\s+)?(\w+)', head)
+                if not nm:
+                    continue
+                it.name = nm.group(1)
+            it.qual = it.name
+            it.l0 = self.line(it.off)
+            it.l1 = self.line(it.end - 1)
+            it.doc = self.doc_start(it.l0)
+            sig = self.text[m.start():body]
+            sig = re.sub(r'^\s*pub(\([^)]*\))?\s+', '', sig)
+            it.sig = short(sig, 150)
+            i = bisect.bisect_left(self.pos, it.off)
+            it.depth = self.depth[i] if i < len(self.depth) else 0
+            it.parent = None
+            it.level = 0
+            self.items.append(it)
+        boxes = []
+        for it in self.items:
+            while boxes and boxes[-1].end <= it.off:
+                boxes.pop()
+            if boxes:
+                b = boxes[-1]
+                it.parent = b
+                if it.depth == b.depth + 1:
+                    it.level = b.level + 1
+                    if b.kind != 'mod':
+                        it.qual = f'{self_type(b)}::{it.name}'
+                else:
+                    it.level = -1  # in einem Funktionsrumpf
+            elif it.depth > 0:
+                it.level = -1
+            if it.kind in BOX and it.level >= 0:
+                boxes.append(it)
+
+    def line(self, off):
+        return bisect.bisect_left(self.nl, off) + 1
+
+    def extent(self, off, kind):
+        """(Beginn des Rumpfs, Ende des Elements) ab der Stelle hinter dem Schlüsselwort."""
+        i = bisect.bisect_left(self.pos, off)
+        par, body = 0, None
+        while i < len(self.toks):
+            o, c = self.toks[i]
+            if c in '([':
+                par += 1
+            elif c in ')]':
+                par -= 1
+            elif c == '{':
+                j = self.mate.get(i)
+                if j is None:
+                    return (body or o), len(self.text)
+                if par == 0 and body is None:
+                    body = o
+                    if kind not in WHOLE:
+                        return body, self.toks[j][0] + 1
+                i = j
+            elif c == ';' and par <= 0:
+                return (body if body is not None else o), o + 1
+            i += 1
+        return (body or len(self.text)), len(self.text)
+
+    def doc_start(self, l0):
+        k = l0 - 1  # Index der Zeile über dem Element
+        while k > 0:
+            s = self.lines[k - 1].strip()
+            if s.startswith(('///', '#[', '@')) or (s.startswith('//') and not s.startswith('//!')):
+                k -= 1
+            else:
+                break
+        return k + 1
+
+    def header(self):
+        out = []
+        for ln in self.lines[:6]:
+            if ln.startswith('//!'):
+                out.append(ln[3:].strip())
+            elif ln.startswith('//') and self.path.endswith('.wgsl'):
+                out.append(ln[2:].strip())
+            else:
+                break
+        return ' '.join(out)
+
+    def enclosing(self, lno):
+        best = None
+        for it in self.items:
+            if it.kind == 'fn' and it.l0 <= lno <= it.l1:
+                best = it
+        return best
+
+
+def self_type(box):
+    h = box.name
+    if h.startswith('<'):
+        d = 0
+        for i, c in enumerate(h):
+            d += c == '<'
+            d -= c == '>'
+            if d == 0:
+                h = h[i + 1:]
+                break
+    if ' for ' in h:
+        h = h.split(' for ')[-1]
+    m = re.match(r'\s*(?:&\s*)?(?:dyn\s+)?([\w:]+)', h)
+    return m.group(1).split('::')[-1] if m else h.strip()
+
+
+def args_flags(argv, with_val=()):
+    flags, rest, i = {}, [], 0
+    while i < len(argv):
+        a = argv[i]
+        if a in with_val and i + 1 < len(argv):
+            flags[a] = argv[i + 1]
+            i += 2
+            continue
+        if a.startswith('-') and len(a) > 1 and not a[1:].isdigit():
+            flags[a] = True
+        else:
+            rest.append(a)
+        i += 1
+    return flags, rest
+
+
+def cmd_map(argv):
+    _, rest = args_flags(argv)
+    total, cur = 0, None
+    for f in all_files(rest):
+        s = Src.__new__(Src)
+        s.path = f
+        s.text = open(os.path.join(ROOT, f), encoding='utf-8', errors='replace').read()
+        s.lines = s.text.split('\n')
+        n = len(s.lines) - (1 if s.text.endswith('\n') else 0)
+        total += n
+        d = os.path.dirname(f)
+        if d != cur:
+            cur = d
+            print(f'{d}/')
+        print(f'{n:5} {os.path.basename(f)} – {short(s.header(), 105)}')
+    print(f'{total} Zeilen gesamt')
+
+
+def cmd_ol(argv):
+    flags, rest = args_flags(argv)
+    if not rest:
+        sys.exit('Aufruf: code ol <datei> [muster]')
+    fs = all_files(rest[:1])
+    pat = re.compile(rest[1], re.I) if len(rest) > 1 else None
+    for f in fs:
+        s = Src(f)
+        print(f'{f} · {len(s.nl)} Zeilen · {short(s.header(), 110)}')
+        pend = []
+
+        def flush():
+            if pend:
+                ind = '  ' * pend[0].level
+                names = ' '.join(x.name for x in pend)
+                print(f'{pend[0].l0:5}-{pend[-1].l1:<5}{ind}{pend[0].kind}: {short(names, 400)}')
+                pend.clear()
+
+        for it in s.items:
+            if it.level < 0:
+                continue
+            if pat and not (pat.search(it.qual) or it.kind in BOX):
+                continue
+            if it.kind in WHOLE and '-a' not in flags:
+                if pend and (pend[0].parent is not it.parent or pend[0].kind != it.kind or it.l0 - pend[-1].l1 > 6):
+                    flush()
+                pend.append(it)
+                continue
+            flush()
+            ind = '  ' * it.level
+            sig = it.sig if it.kind in ('fn', 'impl') or '-a' in flags else f'{it.kind} {it.name}'
+            rng = f'{it.l0:5}-{it.l1:<5}' if it.l1 > it.l0 else f'{it.l0:5}      '
+            print(f'{rng}{ind}{short(sig, 118)}')
+        flush()
+
+
+def find(name, paths, kinds=None):
+    """Elemente mit diesem Namen (auch Typ::name); schnell über eine Textsuche vorgefiltert."""
+    tail = name.split('::')[-1]
+    word = re.compile(r'\b' + re.escape(tail) + r'\b')
+    out = []
+    for f in all_files(paths):
+        raw = open(os.path.join(ROOT, f), encoding='utf-8', errors='replace').read()
+        if not word.search(raw):
+            continue
+        s = Src(f)
+        for it in s.items:
+            if (kinds and it.kind not in kinds) or it.kind == 'impl':
+                continue
+            if it.name == name or it.qual == name:
+                out.append((s, it))
+    return out
+
+
+def cmd_fn(argv):
+    flags, rest = args_flags(argv, with_val=('-g',))
+    if not rest:
+        sys.exit('Aufruf: code fn <name> [pfad…] [-s] [-n] [-g regex] [--all]')
+    name, paths = rest[0], rest[1:]
+    hits = find(name, paths, ('fn',)) or find(name, paths)
+    if not hits:
+        sys.exit(f'„{name}“ nicht gefunden (code sym {name.split("::")[-1]} zeigt ähnliche Namen)')
+    total = sum(it.l1 - it.doc + 1 for _, it in hits)
+    if len(hits) > 1 and '-s' not in flags and '-g' not in flags and (len(hits) > 3 or total > 150) and '--all' not in flags:
+        print(f'{len(hits)} Treffer – genauer angeben (Typ::name oder Pfad):')
+        for s, it in hits[:30]:
+            print(f'{s.path}:{it.l0}-{it.l1} {it.kind} {it.qual} · {short(it.sig, 90)}')
+        return
+    grep = re.compile(flags['-g']) if '-g' in flags else None
+    for s, it in hits:
+        n = it.l1 - it.doc + 1
+        print(f'── {s.path}:{it.doc}-{it.l1} {it.kind} {it.qual} ({n} Zeilen)')
+        if '-s' in flags:
+            for k in range(it.doc, it.l0):
+                print(s.lines[k - 1])
+            print(it.sig)
+            continue
+        if grep:
+            show = set()
+            for k in range(it.doc, it.l1 + 1):
+                if grep.search(s.lines[k - 1]):
+                    show.update(range(max(it.doc, k - 2), min(it.l1, k + 2) + 1))
+            last = None
+            for k in sorted(show):
+                if last is not None and k != last + 1:
+                    print('  ⋮')
+                print(f'{k:5} {s.lines[k - 1]}')
+                last = k
+            if not show:
+                print('  (kein Treffer)')
+            continue
+        end = it.l1 if '--all' in flags else min(it.l1, it.doc + CAP - 1)
+        for k in range(it.doc, end + 1):
+            print(f'{k:5} {s.lines[k - 1]}' if '-n' in flags else s.lines[k - 1])
+        if end < it.l1:
+            print(f'… +{it.l1 - end} Zeilen bis {it.l1} (--all, -g <regex> oder Read offset={end + 1})')
+
+
+def cmd_sym(argv):
+    flags, rest = args_flags(argv)
+    if not rest:
+        sys.exit('Aufruf: code sym <regex> [pfad…] [-i]')
+    pat = re.compile(rest[0], re.I if '-i' in flags else 0)
+    out = []
+    for f in all_files(rest[1:]):
+        raw = open(os.path.join(ROOT, f), encoding='utf-8', errors='replace').read()
+        if not pat.search(raw):
+            continue
+        s = Src(f)
+        for it in s.items:
+            if it.kind != 'impl' and pat.search(it.name):
+                out.append((0 if pat.fullmatch(it.name) else 1, f, it))
+    out.sort(key=lambda x: (x[0], x[1], x[2].l0))
+    for _, f, it in out[:40]:
+        q = f' ({it.qual})' if it.qual != it.name else ''
+        print(f'{f}:{it.l0}-{it.l1} {short(it.sig, 110)}{q}')
+    if len(out) > 40:
+        print(f'… {len(out)} Treffer, 40 gezeigt – Muster enger fassen')
+    if not out:
+        print('nichts definiert, das passt')
+
+
+def cmd_refs(argv):
+    flags, rest = args_flags(argv)
+    if not rest:
+        sys.exit('Aufruf: code refs <name> [pfad…]')
+    word = re.compile(r'\b' + re.escape(rest[0]) + r'\b')
+    n = 0
+    for f in all_files(rest[1:]):
+        raw = open(os.path.join(ROOT, f), encoding='utf-8', errors='replace').read()
+        if not word.search(raw):
+            continue
+        s = Src(f)
+        shown = False
+        for m in word.finditer(s.masked):
+            lno = s.line(m.start())
+            enc = s.enclosing(lno)
+            if enc and enc.name == rest[0] and lno == enc.l0:
+                where = 'Definition'
+            else:
+                where = enc.qual if enc else '–'
+            if not shown:
+                print(f)
+                shown = True
+            n += 1
+            if n <= 60:
+                print(f'{lno:5} {where}: {short(s.lines[lno - 1], 120)}')
+    if n > 60:
+        print(f'… {n} Stellen, 60 gezeigt')
+    if n == 0:
+        print('keine Stelle gefunden')
+
+
+def cmd_big(argv):
+    _, rest = args_flags(argv)
+    top = 25
+    if rest and rest[0].isdigit():
+        top = int(rest.pop(0))
+    out = []
+    for f in all_files(rest):
+        s = Src(f)
+        out += [(it.l1 - it.l0 + 1, f, it) for it in s.items if it.kind == 'fn' and it.level >= 0]
+    out.sort(key=lambda x: -x[0])
+    for n, f, it in out[:top]:
+        print(f'{n:5} {f}:{it.l0} {it.qual}')
+
+
+CMDS = {'map': cmd_map, 'ol': cmd_ol, 'fn': cmd_fn, 'sym': cmd_sym, 'refs': cmd_refs, 'big': cmd_big}
+
+if __name__ == '__main__':
+    if len(sys.argv) < 2 or sys.argv[1] not in CMDS:
+        print(__doc__.strip())
+        sys.exit(0 if len(sys.argv) > 1 and sys.argv[1] in ('-h', '--help') else 2)
+    try:
+        CMDS[sys.argv[1]](sys.argv[2:])
+    except BrokenPipeError:
+        pass
