@@ -1,18 +1,31 @@
 # Throne of the Drowned
 
-Ein düsteres Soulslike-Piratenspiel im Browser in **HD-Pixelart** mit HD-2D-Look (Diorama-Kippung, Tiefenschärfe, Punktlichter, Nebel). Geschrieben in **Rust mit Bevy 0.16** und eigenem wgpu-Renderer (WebGL2). Alle Grafiken, Musik und Klänge entstehen beim Start aus Code – es gibt keine Bild- oder Audiodateien.
+Ein düsteres Soulslike-Piratenspiel im Browser in **HD-Pixelart** mit HD-2D-Look (Diorama-Kippung, Tiefenschärfe, Punktlichter, Nebel).
+Geschrieben in **Rust mit Bevy 0.16** und eigenem wgpu-Renderer (WebGL2).
+Alle Grafiken, Musik und Klänge entstehen beim Start aus Code – es gibt keine Bild- oder Audiodateien.
 
 Live: https://extro181.github.io/PirateGame/
 
 ## Das Spiel
 
-- Alles beginnt im **Wrackzwinger**, einer ummauerten Insel voller Schiffswracks über einem bodenlos tiefen Wasserfall, wo die **Riesige Meeresspinne** lauert. Ob du sie besiegst und dich selbst in den Sarg am Wasserfall legst oder ob sie deinen Leichnam einspinnt und hineinlegt – zwei riesige Arme ziehen den Sarg in die schwarze Tiefe, und du erwachst in einem Sarg auf dem **Galgenstrand**, einem Piratenfriedhof. Von der kreisrunden Festung **Glutwacht** in der Mitte der Welt aus segelst du zu vier Inseln mit je einem Geisterkönig (zwei Gestalten) und weit hinaus in vier elementare Seegebiete mit je einem Seeboss, der bei halber Kraft zum Piratenschiff wird.
-- Ein riesiger Ozean (zehnmal die frühere Fläche), strahlenförmig um die Glutwacht angelegt, mit 64 großen wilden Inseln – Piratenlager, Ruinen, Friedhöfe, Wrackstrände, wilde Haine, Schatzinseln – und über 400 Seeungeheuern in zehn Arten. Die Seekarte deckt sich beim Erkunden auf.
-- Galionsfiguren der Könige auf die Throne, alle Seeungeheuer versenkt – dann öffnet sich der **Strudel**, Krakenarme ziehen dein Schiff hinab ans **Ende der Welt**: Seeschlacht gegen den Fliegenden Holländer und seinen roten Kraken, das Meer läuft über den Rand, und am Grund wartet **Malakor, der Ertrunkene König**. Danach Neues Spiel+.
+- Alles beginnt im **Wrackzwinger**, einer ummauerten Insel voller Schiffswracks über einem bodenlos tiefen Wasserfall, wo die **Riesige Meeresspinne** lauert.
+  Ob du sie besiegst und dich selbst in den Sarg am Wasserfall legst oder ob sie deinen Leichnam einspinnt und hineinlegt
+  – zwei riesige Arme ziehen den Sarg in die schwarze Tiefe, und du erwachst in einem Sarg auf dem **Galgenstrand**, einem Piratenfriedhof.
+  Von der kreisrunden Festung **Glutwacht** in der Mitte der Welt aus segelst du zu vier Inseln mit je einem Geisterkönig (zwei Gestalten) und weit hinaus in
+  vier elementare Seegebiete mit je einem Seeboss, der bei halber Kraft zum Piratenschiff wird.
+- Ein riesiger Ozean (zehnmal die frühere Fläche), strahlenförmig um die Glutwacht angelegt, mit 64 großen wilden Inseln – Piratenlager, Ruinen, Friedhöfe,
+  Wrackstrände, wilde Haine, Schatzinseln – und über 400 Seeungeheuern in zehn Arten.
+  Die Seekarte deckt sich beim Erkunden auf.
+- Galionsfiguren der Könige auf die Throne, alle Seeungeheuer versenkt – dann öffnet sich der **Strudel**,
+  Krakenarme ziehen dein Schiff hinab ans **Ende der Welt**:
+  Seeschlacht gegen den Fliegenden Holländer und seinen roten Kraken, das Meer läuft über den Rand, und am Grund wartet **Malakor, der Ertrunkene König**.
+  Danach Neues Spiel+.
 - Kampf-, Zauber- und Umgebungseffekte aus [PixelFX](https://github.com/patch-gg/pixelfx) (MIT), beim Start Bild für Bild gezeichnet.
-- Siedlungen mit begehbaren Läden, Crew mit eigenen Geschützen, Schiffsausbauten, Höhenebenen mit sanften Hängen und Naturwegen, Profile ohne Passwort (Spielstände im Browser).
+- Siedlungen mit begehbaren Läden, Crew mit eigenen Geschützen, Schiffsausbauten, Höhenebenen mit sanften Hängen und Naturwegen,
+  Profile ohne Passwort (Spielstände im Browser).
 
-Das vollständige Spielkonzept (Idee, Welt, Systeme, Grafik, Klang, Technik) steht in [`docs/SPIELKONZEPT.md`](docs/SPIELKONZEPT.md), die Grafik bis ins Detail mit Nachbau-Anleitung in [`docs/GRAFIK_ANLEITUNG.md`](docs/GRAFIK_ANLEITUNG.md).
+Das vollständige Spielkonzept (Idee, Welt, Systeme, Grafik, Klang, Technik) steht in [`docs/SPIELKONZEPT.md`](docs/SPIELKONZEPT.md),
+die Grafik bis ins Detail mit Nachbau-Anleitung in [`docs/GRAFIK_ANLEITUNG.md`](docs/GRAFIK_ANLEITUNG.md).
 
 ## Steuerung
 
@@ -36,9 +49,11 @@ iPhone: Touch-Steuerung (Stick links, Knöpfe rechts).
 ## Bauen
 
 ```bash
-cargo build --target wasm32-unknown-unknown --profile fast
-PROFILE=fast WASM_BINDGEN=/pfad/zu/wasm-bindgen ./build.sh   # erzeugt dist/
-cd dist && python3 -m http.server 8790
+tools/dev/build      # baut (Profil fast) nach dist/ und startet den Testserver auf Port 8790
+tools/dev/smoke      # Startprobe ohne Bild: Spiel und Titel laden, Fehler melden
 ```
 
-`wasm-bindgen` in der Version aus `Cargo.lock`. Testspiele ohne Profil: `?debug&start=hain` (weitere Parameter in `CLAUDE.md`).
+Von Hand: `cargo build --target wasm32-unknown-unknown --profile fast`, dann `PROFILE=fast WASM_BINDGEN=/pfad/zu/wasm-bindgen ./build.sh`
+(`wasm-bindgen` in der Version aus `Cargo.lock`) und `cd dist && python3 -m http.server 8790`.
+Testspiele ohne Profil: `?debug&start=hain` (alle Parameter in `docs/ai/DEBUG.md`).
+Die Werkzeuge unter `tools/dev/` beschreibt `docs/ai/BAUEN.md`; `CLAUDE.md` ist die Kurzfassung für die Arbeit mit Claude.

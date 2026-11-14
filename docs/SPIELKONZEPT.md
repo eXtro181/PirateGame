@@ -17,7 +17,12 @@ Stand: 1. November 2026 (Version 0.6, Zweig `perf`). Technische Kurzreferenz fü
 | **Technik** | Rust + Bevy 0.16 mit eigenem wgpu-Renderer, kompiliert nach WebAssembly |
 | **Besonderheit** | Keine einzige Bild- oder Audiodatei: Grafik, Welt, Musik und Klänge entstehen beim Start aus Code |
 
-**Kurzbeschreibung.** Du bist ein Ertrunkener, den die See zurückgegeben hat. Du erwachst in einem Sarg auf einem Piratenfriedhof, findest eine Festung voller Feuer und zerbrochener Throne und erfährst, dass vier Geisterkönige und vier Ungeheuer der See die Welt zwischen sich aufgeteilt haben. Hinter allem steht Malakor, der Ertrunkene König, der am Ende der Welt auf seinem Fliegenden Holländer wartet. Er hat das Spiegelbild des Mondes gestohlen – seitdem steht die See still, und die Letzte Flut, die die Ertrunkenen heimträgt, kommt nie.
+**Kurzbeschreibung.**
+Du bist ein Ertrunkener, den die See zurückgegeben hat.
+Du erwachst in einem Sarg auf einem Piratenfriedhof, findest eine Festung voller Feuer und zerbrochener Throne und erfährst,
+dass vier Geisterkönige und vier Ungeheuer der See die Welt zwischen sich aufgeteilt haben.
+Hinter allem steht Malakor, der Ertrunkene König, der am Ende der Welt auf seinem Fliegenden Holländer wartet.
+Er hat das Spiegelbild des Mondes gestohlen – seitdem steht die See still, und die Letzte Flut, die die Ertrunkenen heimträgt, kommt nie.
 
 **Säulen des Spiels**
 1. **Dark Fantasy**: gedämpftes Licht, Lichtinseln aus Feuern und Laternen, Nebel, Stimmung je Gebiet.
@@ -29,32 +34,108 @@ Stand: 1. November 2026 (Version 0.6, Zweig `perf`). Technische Kurzreferenz fü
 
 ## 2. Geschichte und Spielablauf
 
-0. **Prolog – Stillwasser und der Spinnenschlund** (neu gestaltet 8.11.): Das Spiel beginnt auf einer abgelegenen, von extrem hohen Mauern umschlossenen Felsinsel in der Nordwest-Ecke, mit PixelLab gestaltet. Man erwacht **am Tresen der Kneipe „Zur Letzten Flut“**: Gläserklirren im Dunkeln, dann blendet die warme Schankstube auf – eingerichtet wie eine echte Hafenkneipe: ein langer Schanktresen mit Messingleiste, Zapfhähnen, Krügen und Kerzen, Barhocker davor, hinter dem kahlen, bärtigen Wirt Klaas ein Fassgestell und zwei Regale voller Flaschen, ein Kamin mit prasselndem Feuer und Teppich davor, ein Aushangbrett mit Steckbriefen, runde Tische mit Stühlen und Kerzen, ein langer Tisch mit Bank, zwei Tragpfosten mit Laternen, ein Kronleuchter über dem Gang, Kisten, Fässer, eine Kanone, Anker, Netze und die Piratenflagge. An den Tischen sitzen Zecher (einer schläft über seinem Glas, einer würfelt seit hundert Jahren nur Sechsen), einer steht am Tresen. „Na, endlich wach?“ Draußen liegt **Stillwasser**, ein helles Dorf im Morgenlicht voller freundlicher **Ertrunkener** (fahle, meergrüne Haut, nasses Haar, Tang an der Kleidung, schwach leuchtende Augen), die nicht wissen, dass sie tot sind: ein Dorfplatz mit Brunnen und Marktständen, Fachwerkhäuser, die Ecke der Fischer mit Netzen und Booten, Obstwiesen jenseits einer Brücke über den Bach. Es ist immer Morgen, das Bier schmeckt nach Salz, die Netze sind immer leer, und alle raten: Geh nicht nach Süden. Am Dorfrand warnt Matrose Jesko. Man kann die Ertrunkenen angreifen – aber dann **erhebt sich ganz Stillwasser**: Alle Dorfbewohner werden zu einer zornigen, meergrünen Meute, die viel zu stark ist. Erschlagen sie einen, wird es schwarz, und man hängt am ersten Galgen des Galgenwegs, darunter steht stumm die Menge mit Fackeln („Stillwasser vergibt nicht.“). Dann sinkt die Nacht herab, die Menge wendet sich ab und verliert sich im Nebel, und aus dem Süden kommt die Riesige Meeresspinne herauf – Schritte, viele Beine –, beißt den Strick durch, spinnt den Leichnam in einen Kokon und schleift ihn durch die Nacht bis zum Sarg am Wasserfall; von da an wie bei der Niederlage gegen sie. Ist die Spinne schon tot, verblasst die Galgennacht einfach, und man erwacht am Galgenstrand. Wer weitergeht, kommt auf den **Galgenweg**: es dämmert, Bannpfähle mit Schädeln, Galgen mit Gehängten, Käfige, ein Gräberfeld, tote und bleiche Bäume. Dann Gebein – Schädelhaufen, sitzende Tote, Knochen – und der **Spinnenschlund**, eine dunkle Schlucht aus Felsblöcken, Netze auf Pfählen und über dem Boden, Kokons, Eier, nur Leuchtpilze geben Licht; im Westen ein Wrackfriedhof mit drei Schiffen im Morast. Licht, Nebel und Musik folgen dem Weg: im Dorf ein Shanty, im Dunkeln die Tiefe, zuletzt Stille. Je näher man der Spinne kommt, desto lauter hört man ihre Schritte – erst ein Rascheln, dann das Klicken vieler Beine auf Fels –, und drei Vorahnungen ziehen durch den Kopf: „… ein leises Rascheln …“, „… was bewegt sich da …?“, „… Schritte. Viele Beine. Ganz nah …“. Im Süden bricht die Insel an einer Klippe ab, über die ein extrem tiefer Wasserfall stürzt; das Meer an seinem Fuß ist völlig schwarz. Hier lauert die **Riesige Meeresspinne**, der erste Boss – nicht schwer, besiegbar, aber nicht zwingend; andere Gegner gibt es dort nicht. Sie hängt von Anfang an in der Klippenwand westlich des Wasserfalls, nur ihre Augen und Beine ragen über die Kante; nähert man sich dem Wasserfall, krabbelt sie die Wand herauf und springt mit einem Aufschlag auf die Platte – der Kampf beginnt. Ist der Kampf entschieden, steigt neben dem großen Wasserfall an der Abbruchkante Nebel auf, und ein offener **Sarg** erscheint, der Deckel lehnt daneben; links und rechts entzündet sich je eine sehr helle Piratenfackel (Eisenkorb auf einem Pfahl mit Schädel). Vorher ist dort nichts als nackter Fels. Wer die Spinne besiegt, steigt hinein, legt sich hin und zieht den Deckel zu. Wer fällt, stirbt nicht einfach: die Spinne wickelt den Leichnam in einen weißen Kokon, zieht ihn an einem Faden hinter sich her bis zum Sarg, hebt ihn mit ihren Beinen hinein, schiebt den Deckel zu und krabbelt dann selbst kopfüber die Klippe hinab, bis die Tiefe sie verschluckt. In beiden Fällen schlängeln sich erst dann langsam zwei riesige Arme aus der schwarzen Tiefe die Klippe herauf, umschlingen den Sarg und ziehen ihn hinab ins Dunkel – und man erwacht im ursprünglichen Sarg am Galgenstrand; das reguläre Spiel beginnt.
-1. **Erwachen** (Galgenstrand): Klopfen im Dunkeln, der Sargdeckel ruckelt und wird weggeschoben, der Ertrunkene steigt heraus. Um ihn herum Galgen mit schwingenden Gehängten, Käfige, offene Gräber und über 70 Tote. Der Alte Galionsschnitzer erklärt die Lage.
-2. **Glutwacht**: Die Festung in der Mitte der Welt ist der Knotenpunkt. Hier brennt das Säbelfeuer, hier stehen vier leere Throne, hier arbeiten Schmied, Händlerin, Laternenmagd und Schiffsmeister.
+0. **Prolog – Stillwasser und der Spinnenschlund** (neu gestaltet 8.11.):
+   Das Spiel beginnt auf einer abgelegenen, von extrem hohen Mauern umschlossenen Felsinsel in der Nordwest-Ecke, mit PixelLab gestaltet.
+   Man erwacht **am Tresen der Kneipe „Zur Letzten Flut“**:
+   Gläserklirren im Dunkeln, dann blendet die warme Schankstube auf – eingerichtet wie eine echte Hafenkneipe:
+   ein langer Schanktresen mit Messingleiste, Zapfhähnen, Krügen und Kerzen, Barhocker davor, hinter dem kahlen,
+   bärtigen Wirt Klaas ein Fassgestell und zwei Regale voller Flaschen, ein Kamin mit prasselndem Feuer und Teppich davor, ein Aushangbrett mit Steckbriefen,
+   runde Tische mit Stühlen und Kerzen, ein langer Tisch mit Bank, zwei Tragpfosten mit Laternen, ein Kronleuchter über dem Gang, Kisten, Fässer, eine Kanone,
+   Anker, Netze und die Piratenflagge.
+   An den Tischen sitzen Zecher (einer schläft über seinem Glas, einer würfelt seit hundert Jahren nur Sechsen), einer steht am Tresen.
+   „Na, endlich wach?“
+   Draußen liegt **Stillwasser**, ein helles Dorf im Morgenlicht voller freundlicher **Ertrunkener** (fahle, meergrüne Haut, nasses Haar, Tang an der Kleidung,
+   schwach leuchtende Augen), die nicht wissen, dass sie tot sind:
+   ein Dorfplatz mit Brunnen und Marktständen, Fachwerkhäuser, die Ecke der Fischer mit Netzen und Booten, Obstwiesen jenseits einer Brücke über den Bach.
+   Es ist immer Morgen, das Bier schmeckt nach Salz, die Netze sind immer leer, und alle raten: Geh nicht nach Süden.
+   Am Dorfrand warnt Matrose Jesko.
+   Man kann die Ertrunkenen angreifen – aber dann **erhebt sich ganz Stillwasser**:
+   Alle Dorfbewohner werden zu einer zornigen, meergrünen Meute, die viel zu stark ist.
+   Erschlagen sie einen, wird es schwarz, und man hängt am ersten Galgen des Galgenwegs,
+   darunter steht stumm die Menge mit Fackeln („Stillwasser vergibt nicht.“).
+   Dann sinkt die Nacht herab, die Menge wendet sich ab und verliert sich im Nebel, und aus dem Süden kommt die Riesige Meeresspinne herauf – Schritte,
+   viele Beine –, beißt den Strick durch, spinnt den Leichnam in einen Kokon und schleift ihn durch die Nacht bis zum Sarg am Wasserfall;
+   von da an wie bei der Niederlage gegen sie.
+   Ist die Spinne schon tot, verblasst die Galgennacht einfach, und man erwacht am Galgenstrand.
+   Wer weitergeht, kommt auf den **Galgenweg**: es dämmert, Bannpfähle mit Schädeln, Galgen mit Gehängten, Käfige, ein Gräberfeld, tote und bleiche Bäume.
+   Dann Gebein – Schädelhaufen, sitzende Tote, Knochen – und der **Spinnenschlund**, eine dunkle Schlucht aus Felsblöcken, Netze auf Pfählen und über dem Boden,
+   Kokons, Eier, nur Leuchtpilze geben Licht; im Westen ein Wrackfriedhof mit drei Schiffen im Morast.
+   Licht, Nebel und Musik folgen dem Weg: im Dorf ein Shanty, im Dunkeln die Tiefe, zuletzt Stille.
+   Je näher man der Spinne kommt, desto lauter hört man ihre Schritte – erst ein Rascheln, dann das Klicken vieler Beine auf Fels –,
+   und drei Vorahnungen ziehen durch den Kopf: „… ein leises Rascheln …“, „… was bewegt sich da …?“, „… Schritte.
+   Viele Beine. Ganz nah …“.
+   Im Süden bricht die Insel an einer Klippe ab, über die ein extrem tiefer Wasserfall stürzt; das Meer an seinem Fuß ist völlig schwarz.
+   Hier lauert die **Riesige Meeresspinne**, der erste Boss – nicht schwer, besiegbar, aber nicht zwingend; andere Gegner gibt es dort nicht.
+   Sie hängt von Anfang an in der Klippenwand westlich des Wasserfalls, nur ihre Augen und Beine ragen über die Kante;
+   nähert man sich dem Wasserfall, krabbelt sie die Wand herauf und springt mit einem Aufschlag auf die Platte – der Kampf beginnt.
+   Ist der Kampf entschieden, steigt neben dem großen Wasserfall an der Abbruchkante Nebel auf, und ein offener **Sarg** erscheint, der Deckel lehnt daneben;
+   links und rechts entzündet sich je eine sehr helle Piratenfackel (Eisenkorb auf einem Pfahl mit Schädel).
+   Vorher ist dort nichts als nackter Fels.
+   Wer die Spinne besiegt, steigt hinein, legt sich hin und zieht den Deckel zu.
+   Wer fällt, stirbt nicht einfach: die Spinne wickelt den Leichnam in einen weißen Kokon, zieht ihn an einem Faden hinter sich her bis zum Sarg,
+   hebt ihn mit ihren Beinen hinein, schiebt den Deckel zu und krabbelt dann selbst kopfüber die Klippe hinab, bis die Tiefe sie verschluckt.
+   In beiden Fällen schlängeln sich erst dann langsam zwei riesige Arme aus der schwarzen Tiefe die Klippe herauf,
+   umschlingen den Sarg und ziehen ihn hinab ins Dunkel – und man erwacht im ursprünglichen Sarg am Galgenstrand; das reguläre Spiel beginnt.
+1. **Erwachen** (Galgenstrand): Klopfen im Dunkeln, der Sargdeckel ruckelt und wird weggeschoben, der Ertrunkene steigt heraus.
+   Um ihn herum Galgen mit schwingenden Gehängten, Käfige, offene Gräber und über 70 Tote.
+   Der Alte Galionsschnitzer erklärt die Lage.
+2. **Glutwacht**: Die Festung in der Mitte der Welt ist der Knotenpunkt.
+   Hier brennt das Säbelfeuer, hier stehen vier leere Throne, hier arbeiten Schmied, Händlerin, Laternenmagd und Schiffsmeister.
 3. **Vier Könige** auf vier Inseln. Jeder hat zwei Gestalten. Besiegt hinterlässt er seine **Galionsfigur**, die auf seinen Thron in der Glutwacht gesetzt wird.
-4. **Vier Seeungeheuer** in vier Seegebieten. Jedes verwandelt sich bei halber Kraft in ein Piratenschiff. Das versenkte Schiff brennt danach in Originalgröße im Ring um den See der Glutwacht.
+4. **Vier Seeungeheuer** in vier Seegebieten.
+   Jedes verwandelt sich bei halber Kraft in ein Piratenschiff.
+   Das versenkte Schiff brennt danach in Originalgröße im Ring um den See der Glutwacht.
 5. **Crew**: In jedem Königsgebiet wartet jemand, der an Bord kommt (vier Crewmitglieder mit eigenem Lied und eigenem Geschütz).
-6. **Der Strudel**: Sitzen alle vier Galionsfiguren auf den Thronen und sind alle vier Ungeheuer versenkt, öffnet sich im See der Glutwacht ein Strudel. Acht Krakenarme wiegen sich darum. Kommt das Schiff nahe, packen sie es und ziehen es hinab.
+6. **Der Strudel**: Sitzen alle vier Galionsfiguren auf den Thronen und sind alle vier Ungeheuer versenkt, öffnet sich im See der Glutwacht ein Strudel.
+   Acht Krakenarme wiegen sich darum. Kommt das Schiff nahe, packen sie es und ziehen es hinab.
 7. **Ende der Welt**: ein Meer in der Südost-Ecke der Karte, im Süden und Osten stürzt es als Wasserfall ins Nichts.
-8. **Endkampf gegen Malakor** (siehe 5.4): Der Fliegende Holländer steigt aus der toten See, die Seeschlacht mit dem roten Kraken, der Holländer zerbricht, der gestohlene Mond taucht zum Grund und das Meer läuft über den Rand der Welt leer, am Meeresgrund Malakor zu Fuß vor dem gefesselten Mond, zuletzt Malakor im Mond – der Mondfresser.
-9. **Die Letzte Flut** (Sieg-Sequenz, siehe 5.5): Die Ketten reißen, die Meeresspinne vom Anfang hängt den Mond zurück an den Himmel, das Meer kehrt zurück und trägt die Ertrunkenen heim.
-10. **Nach dem Sieg**: Wo der Mond gefesselt lag, ragt der Mondfels aus dem Meer, darauf das Säbelfeuer „Ende der Welt“. Die Laternenmagd bietet die **neue Fahrt** an (Neues Spiel+).
+8. **Endkampf gegen Malakor** (siehe 5.4): Der Fliegende Holländer steigt aus der toten See, die Seeschlacht mit dem roten Kraken, der Holländer zerbricht,
+   der gestohlene Mond taucht zum Grund und das Meer läuft über den Rand der Welt leer, am Meeresgrund Malakor zu Fuß vor dem gefesselten Mond,
+   zuletzt Malakor im Mond – der Mondfresser.
+9. **Die Letzte Flut** (Sieg-Sequenz, siehe 5.5): Die Ketten reißen, die Meeresspinne vom Anfang hängt den Mond zurück an den Himmel,
+   das Meer kehrt zurück und trägt die Ertrunkenen heim.
+10. **Nach dem Sieg**: Wo der Mond gefesselt lag, ragt der Mondfels aus dem Meer, darauf das Säbelfeuer „Ende der Welt“.
+    Die Laternenmagd bietet die **neue Fahrt** an (Neues Spiel+).
 
-**Der Mondraub (die Geschichte hinter allem).** An seinem Spiegelbild zieht der Mond die Gezeiten. Als Malakor ertrank, wollte er nicht hinüber: Er fischte das Spiegelbild des Mondes aus der See und kettete es in den Bauch seines Fliegenden Holländers. Seitdem steht das Meer still – keine Ebbe, keine Flut. Früher kam in jeder hundertsten Nacht die **Letzte Flut** und trug die Ertrunkenen hinüber; seit dem Mondraub kommt sie nie. Darum spuckt die See ihre Toten immer wieder aus: den Spieler, die Leute von Stillwasser, die nicht wissen, dass sie tot sind, die Kapitäne der Glutwacht, die am Säbelfeuer zurückkehren. Davon erzählen der Galionsschnitzer, die Laternenmagd („Über die Letzte Flut“), Wirt Klaas in der Kneipe „Zur Letzten Flut“ („Die Flut kommt nie – also schenkt er ewig“) und der Geisterkapitän. Wer Malakor besiegt, gibt der See ihren Mond zurück.
+**Der Mondraub (die Geschichte hinter allem).**
+An seinem Spiegelbild zieht der Mond die Gezeiten.
+Als Malakor ertrank, wollte er nicht hinüber: Er fischte das Spiegelbild des Mondes aus der See und kettete es in den Bauch seines Fliegenden Holländers.
+Seitdem steht das Meer still – keine Ebbe, keine Flut.
+Früher kam in jeder hundertsten Nacht die **Letzte Flut** und trug die Ertrunkenen hinüber; seit dem Mondraub kommt sie nie.
+Darum spuckt die See ihre Toten immer wieder aus:
+den Spieler, die Leute von Stillwasser, die nicht wissen, dass sie tot sind, die Kapitäne der Glutwacht, die am Säbelfeuer zurückkehren.
+Davon erzählen der Galionsschnitzer, die Laternenmagd („Über die Letzte Flut“), Wirt Klaas in der Kneipe „Zur Letzten Flut“ („Die Flut kommt nie
+– also schenkt er ewig“) und der Geisterkapitän.
+Wer Malakor besiegt, gibt der See ihren Mond zurück.
 
 ---
 
 ## 3. Die Welt
 
 ### 3.1 Karte
-- 1776 × 1328 Kacheln à 32 Pixel (56 832 × 42 496 Weltpixel) – zehnmal die Fläche der ersten Karte. **Strahlenförmig und ausgewogen**: die Glutwacht in der Mitte, der Galgenstrand gleich südlich davon, die vier Königsinseln in den vier Diagonalen (Frostgrotte im Nordwesten, Aschebucht im Nordosten, Rabenwacht im Südwesten, Fluchmangroven im Südosten), die vier Seegebiete weit draußen in den Himmelsrichtungen, dazwischen 64 große wilde Inseln. Das Ende der Welt liegt in der Südost-Ecke, die Prolog-Insel abseits in der Nordwest-Ecke.
-- Jede Insel hat Höhenstufen – wie in A Link to the Past (8.11.): wenige große, klar umrissene Plateaus statt verstreuter Hügel (wilde Inseln höchstens zwei Stufen, Königsinseln drei), Strände flach. Jede Fläche ist vom Ufer aus über Treppen erreichbar; wo ein Aufgang fehlt, wird einer in die Felswand gehauen.
-- Außerhalb der Festung sind Ebenenkanten **Erd- und Felswände** (nach Süden 96 px hoch, seitlich 22 px schmale Felswände mit Graskante, oben eine dünne Kante mit Lichtsaum): oben eine überhängende Graslippe mit Lichtkante und tiefem Unterschnitt, ein kurzer bewachsener Hang, darunter unregelmäßige Felsbrocken mit dunklen Fugen, Regenspuren, Moos (im Frost Eiszapfen, in der Aschebucht Glut in den Fugen), nach unten immer dunkler, am Fuß Geröll; die Wand wirft einen Schlagschatten auf die tiefere Ebene. So liest man jede Höhenstufe sofort als Kante (Nutzerwunsch 7.11.: der 3D-Effekt war zu schwach).
-- **Treppen** (in der Natur Steinstufen in der Wand) gibt es nur dort, wo man wirklich hinauf oder hinunter will: Aufgänge ohne Ziel (zu leeren Plateaus) wurden entfernt, winzige Hochland-Inseln eingeebnet. In der Natur führen Wege im Gebietsstil über die Hänge (Schneepfad, Bohlen im Moor, Holz- und Steinstufen im Hang). Höhenunterschiede sind klar abgesetzt: helle Oberkanten, Schwellen und Stufennasen, Schlagschatten am Fuß der Hänge und Mauern.
+- 1776 × 1328 Kacheln à 32 Pixel (56 832 × 42 496 Weltpixel) – zehnmal die Fläche der ersten Karte.
+  **Strahlenförmig und ausgewogen**: die Glutwacht in der Mitte, der Galgenstrand gleich südlich davon,
+  die vier Königsinseln in den vier Diagonalen (Frostgrotte im Nordwesten, Aschebucht im Nordosten, Rabenwacht im Südwesten, Fluchmangroven im Südosten),
+  die vier Seegebiete weit draußen in den Himmelsrichtungen, dazwischen 64 große wilde Inseln.
+  Das Ende der Welt liegt in der Südost-Ecke, die Prolog-Insel abseits in der Nordwest-Ecke.
+- Jede Insel hat Höhenstufen – wie in A Link to the Past (8.11.):
+  wenige große, klar umrissene Plateaus statt verstreuter Hügel (wilde Inseln höchstens zwei Stufen, Königsinseln drei), Strände flach.
+  Jede Fläche ist vom Ufer aus über Treppen erreichbar; wo ein Aufgang fehlt, wird einer in die Felswand gehauen.
+- Außerhalb der Festung sind Ebenenkanten **Erd- und Felswände** (nach Süden 96 px hoch, seitlich 22 px schmale Felswände mit Graskante,
+  oben eine dünne Kante mit Lichtsaum): oben eine überhängende Graslippe mit Lichtkante und tiefem Unterschnitt, ein kurzer bewachsener Hang,
+  darunter unregelmäßige Felsbrocken mit dunklen Fugen, Regenspuren, Moos (im Frost Eiszapfen, in der Aschebucht Glut in den Fugen), nach unten immer dunkler,
+  am Fuß Geröll; die Wand wirft einen Schlagschatten auf die tiefere Ebene.
+  So liest man jede Höhenstufe sofort als Kante (Nutzerwunsch 7.11.: der 3D-Effekt war zu schwach).
+- **Treppen** (in der Natur Steinstufen in der Wand) gibt es nur dort, wo man wirklich hinauf oder hinunter will:
+  Aufgänge ohne Ziel (zu leeren Plateaus) wurden entfernt, winzige Hochland-Inseln eingeebnet.
+  In der Natur führen Wege im Gebietsstil über die Hänge (Schneepfad, Bohlen im Moor, Holz- und Steinstufen im Hang).
+  Höhenunterschiede sind klar abgesetzt: helle Oberkanten, Schwellen und Stufennasen, Schlagschatten am Fuß der Hänge und Mauern.
 - Herunterspringen geht genau eine Ebene tief.
-- **Wasserfälle** sitzen an echten Hangkanten mit genug ebenem Land darüber: Ein Bach entspringt einem kleinen Quellteich mit Felsrand und Schilf, schlängelt sich zur Kante und stürzt erst dort als Kaskade mit Schaumstufen den Hang hinab; unten ein Becken mit Gischt.
-- **Kollision**: Durch Büsche, Stauden, Farne und Schilf läuft man hindurch, über Kokons, sitzende Tote, Schädelhaufen und Knochensärge hinweg. Bäume halten nur ihren Stamm.
+- **Wasserfälle** sitzen an echten Hangkanten mit genug ebenem Land darüber:
+  Ein Bach entspringt einem kleinen Quellteich mit Felsrand und Schilf, schlängelt sich zur Kante und stürzt erst dort als Kaskade mit Schaumstufen den Hang
+  hinab; unten ein Becken mit Gischt.
+- **Kollision**: Durch Büsche, Stauden, Farne und Schilf läuft man hindurch, über Kokons, sitzende Tote, Schädelhaufen und Knochensärge hinweg.
+  Bäume halten nur ihren Stamm.
 
 ### 3.2 Inseln
 
@@ -69,9 +150,16 @@ Stand: 1. November 2026 (Version 0.6, Zweig `perf`). Technische Kurzreferenz fü
 | **Ende der Welt** (`ende`) | Ende | Gewitter, tote See | – | Malakor |
 | **Wrackzwinger** (`prolog`) | Prolog | helles Dorf Stillwasser, Galgenweg, Spinnenschlund, schwarzer Abgrund | – | Riesige Meeresspinne |
 
-Jede Siedlung hat Dorfbewohner, Hühner und Katzen, Rauch aus den Schornsteinen und einen Laden mit **begehbarem Innenraum**. Die Häuser stehen ganz auf einer Ebene mit ebenem Vorplatz (keine Stützmauer läuft mehr durch ein Haus oder über den Markt) und haben plastische Walmdächer: Vorder- und Rückseite geneigt, seitliche Walmflächen mit Licht- und Schattenseite, helle Grate, Lichtsaum am First und der Schatten des Dachüberstands auf der Fassade. Gegner halten sich von Siedlungen fern.
+Jede Siedlung hat Dorfbewohner, Hühner und Katzen, Rauch aus den Schornsteinen und einen Laden mit **begehbarem Innenraum**.
+Die Häuser stehen ganz auf einer Ebene mit ebenem Vorplatz (keine Stützmauer läuft mehr durch ein Haus oder über den Markt) und haben plastische Walmdächer:
+Vorder- und Rückseite geneigt, seitliche Walmflächen mit Licht- und Schattenseite, helle Grate,
+Lichtsaum am First und der Schatten des Dachüberstands auf der Fassade. Gegner halten sich von Siedlungen fern.
 
-**Wilde Inseln**: 64 große Eilande (mittel, groß und einige sehr große; zu kleine gibt es nicht mehr), gleichmäßig zwischen Glutwacht, Königsinseln und Seegebieten verteilt, mit Namen wie „Reifholm“, „Glutzahn“, „Moderwerder“, „Sturmklippe“ oder „Schädelriff“. Ihr Biom richtet sich nach der nächsten Königsinsel bzw. dem nächsten Seegebiet. Jede hat einen Anleger zur Kartenmitte, einen Landeplatz und ein Herzstück:
+**Wilde Inseln**: 64 große Eilande (mittel, groß und einige sehr große;
+zu kleine gibt es nicht mehr), gleichmäßig zwischen Glutwacht, Königsinseln und Seegebieten verteilt, mit Namen wie „Reifholm“, „Glutzahn“, „Moderwerder“,
+„Sturmklippe“ oder „Schädelriff“.
+Ihr Biom richtet sich nach der nächsten Königsinsel bzw. dem nächsten Seegebiet.
+Jede hat einen Anleger zur Kartenmitte, einen Landeplatz und ein Herzstück:
 - **Piratenlager**: Zelte, Tafel, Kanonen, Fässer, Flagge, Truhe.
 - **Ruine**: Marmorplatz, Säulenring, Bogen, Wächterstatue, Kerzen, Schwertgrab, Truhe.
 - **Friedhof**: Galgen, Gräberreihen, Särge, Käfig, Fackeln, manchmal eine lebende Truhe.
@@ -79,14 +167,39 @@ Jede Siedlung hat Dorfbewohner, Hühner und Katzen, Rauch aus den Schornsteinen 
 - **Wilder Hain**: dichter Wald, Leuchtblumen bzw. Kristalle, Seelenblume.
 - **Schatzinsel**: zwei Truhen (Rumflasche, Seelenphiole oder Gezeitensplitter) mit starkem Wächter.
 
-Je weiter draußen, desto höher die **Gefahrenstufe** (0–3): Gegner haben mehr Leben (+35 % je Stufe), mehr Schaden (+12 %) und geben mehr Perlen (+40 %). Auf jeder vierten Insel brennt ein Säbelfeuer (Schnellreise).
+Je weiter draußen, desto höher die **Gefahrenstufe** (0–3): Gegner haben mehr Leben (+35 % je Stufe), mehr Schaden (+12 %) und geben mehr Perlen (+40 %).
+Auf jeder vierten Insel brennt ein Säbelfeuer (Schnellreise).
 
-**Schädelhorn, die PixelLab-Insel**: eine der wilden Inseln (Nr. 25, Gefahrenstufe 0, mit Säbelfeuer, zwischen Galgenstrand und Glutwacht) ist mit Grafik aus PixelLab neu gebaut – ein Versuch, wie sich KI-Pixelkunst ins Spiel fügt. Sie ist flach, ihr Boden besteht aus fertigen Kacheln (grauer, nasser Kiesstrand am Ufer, dunkles Moosgras, im Inneren Waldboden mit Wurzeln und Laub), dazu Zypressen, tote Bäume, Palmen am Strandsaum, Farne, Dornbüsche mit roten Beeren, Findlinge, ein Wrackbug und ein Ruderboot am Strand, Fässer und Kisten am Landeplatz und im Herzen ein überwucherter Ruinenbogen mit glimmender Feuerstelle, Truhe und Schädelpfählen mit roten Kopftüchern.
+**Schädelhorn, die PixelLab-Insel**: eine der wilden Inseln (Nr. 25, Gefahrenstufe 0, mit Säbelfeuer,
+zwischen Galgenstrand und Glutwacht) ist mit Grafik aus PixelLab neu gebaut – ein Versuch, wie sich KI-Pixelkunst ins Spiel fügt.
+Sie ist flach, ihr Boden besteht aus fertigen Kacheln (grauer, nasser Kiesstrand am Ufer, dunkles Moosgras, im Inneren Waldboden mit Wurzeln und Laub),
+dazu Zypressen, tote Bäume, Palmen am Strandsaum, Farne, Dornbüsche mit roten Beeren, Findlinge, ein Wrackbug und ein Ruderboot am Strand,
+Fässer und Kisten am Landeplatz und im Herzen ein überwucherter Ruinenbogen mit glimmender Feuerstelle, Truhe und Schädelpfählen mit roten Kopftüchern.
 
 ### 3.3 Glutwacht im Detail
-Eine **kreisrunde Hafenfestung** nach dem Vorbild des Feuerband-Schreins, ganz im düsteren Piraten-Stil: extrem hohe Ringmauern mit einer Zinnenbrüstung, die lückenlos dem Kreis folgt (jedes Segment im echten Winkel, Pfeiler an den Stößen, Türme darauf), Fackeln und Bannern umschließen mehrere Ringterrassen, die übereinander liegen und durch Treppen verbunden sind. In der Mitte ein See, über den sich eine **hohe, stützenlose Steinbrücke** in einem einzigen Bogen von West nach Ost spannt – 150 px über dem Strudel, mit Brüstungen, Laternen, hängenden Ketten und Ranken, an beiden Enden Brückenköpfe mit Feuerschalen; Schiffe fahren darunter durch, Strudel und Krakenarme liegen darunter. Darum der Ring der brennenden Bossschiffe. Am Nordkai kniet die Sündenstatue. Darüber die Feuerterrasse mit Säbelfeuer, vier Thronen, Schmied und Händlerin, höher der Schrein mit Bergfried und Wachgängen auf den Mauern. Im Süden schneidet der Seetor-Kanal durch die Ringmauer; das **Seetor** steht in der Ebene der äußeren Mauerfront auf zwei Pfeilern im Wasser und reicht bis zur Mauerkrone, ein Spitzbogen über die ganze Einfahrt mit hochgezogenem Fallgitter, Zinnen, Bannern und Fackeln. Der Anleger liegt am Nordkai. Auf dem Südostplatz liegt die **Werft**: Plankenkai, Helling mit Rumpf, Kran an der Kaikante (der Ausleger ragt übers Becken), Holzstapel, Taue, Fässer, Kisten, Anker, Laternen, Flagge – und mittendrin, neben dem Rumpf auf der Helling, steht Schiffsmeister Brack. Die Mauern bestehen aus Quadern, Ebenen sind hier echte Mauern mit Treppen.
+Eine **kreisrunde Hafenfestung** nach dem Vorbild des Feuerband-Schreins, ganz im düsteren Piraten-Stil:
+extrem hohe Ringmauern mit einer Zinnenbrüstung, die lückenlos dem Kreis folgt (jedes Segment im echten Winkel, Pfeiler an den Stößen, Türme darauf),
+Fackeln und Bannern umschließen mehrere Ringterrassen, die übereinander liegen und durch Treppen verbunden sind.
+In der Mitte ein See, über den sich eine **hohe, stützenlose Steinbrücke** in einem einzigen Bogen von West nach Ost spannt – 150 px über dem Strudel,
+mit Brüstungen, Laternen, hängenden Ketten und Ranken, an beiden Enden Brückenköpfe mit Feuerschalen;
+Schiffe fahren darunter durch, Strudel und Krakenarme liegen darunter.
+Darum der Ring der brennenden Bossschiffe.
+Am Nordkai kniet die Sündenstatue.
+Darüber die Feuerterrasse mit Säbelfeuer, vier Thronen, Schmied und Händlerin, höher der Schrein mit Bergfried und Wachgängen auf den Mauern.
+Im Süden schneidet der Seetor-Kanal durch die Ringmauer;
+das **Seetor** steht in der Ebene der äußeren Mauerfront auf zwei Pfeilern im Wasser und reicht bis zur Mauerkrone,
+ein Spitzbogen über die ganze Einfahrt mit hochgezogenem Fallgitter, Zinnen, Bannern und Fackeln.
+Der Anleger liegt am Nordkai.
+Auf dem Südostplatz liegt die **Werft**: Plankenkai, Helling mit Rumpf, Kran an der Kaikante (der Ausleger ragt übers Becken), Holzstapel, Taue, Fässer, Kisten,
+Anker, Laternen, Flagge – und mittendrin, neben dem Rumpf auf der Helling, steht Schiffsmeister Brack.
+Die Mauern bestehen aus Quadern, Ebenen sind hier echte Mauern mit Treppen.
 
-**Leben im Hafenbecken**: Ab und zu blitzen tief unter dem Wasser die riesigen bernsteingelben Augen eines Kraken auf – erst nur ein Glimmen, dann öffnen sich die Lider, die waagrechten Pupillen folgen dem Spieler, die Augen blinzeln und versinken wieder; um sie ahnt man den dunklen Leib und die Arme, Blasen steigen auf. Wer im Prolog die Riesige Meeresspinne verschont hat (also gegen sie verloren hat), findet sie hier wieder: Sie hängt kopfüber unter der hohen Brücke und krabbelt friedlich über dem Wasser hin und her, hält inne, kehrt um; man hört das leise Klicken ihrer Beine. Angreifen kann man sie nicht.
+**Leben im Hafenbecken**: Ab und zu blitzen tief unter dem Wasser die riesigen bernsteingelben Augen eines Kraken auf – erst nur ein Glimmen,
+dann öffnen sich die Lider, die waagrechten Pupillen folgen dem Spieler, die Augen blinzeln und versinken wieder;
+um sie ahnt man den dunklen Leib und die Arme, Blasen steigen auf.
+Wer im Prolog die Riesige Meeresspinne verschont hat (also gegen sie verloren hat), findet sie hier wieder:
+Sie hängt kopfüber unter der hohen Brücke und krabbelt friedlich über dem Wasser hin und her, hält inne, kehrt um; man hört das leise Klicken ihrer Beine.
+Angreifen kann man sie nicht.
 
 ### 3.4 Seegebiete
 | Gebiet | Element | Seeungeheuer → Schiff |
@@ -96,9 +209,13 @@ Eine **kreisrunde Hafenfestung** nach dem Vorbild des Feuerband-Schreins, ganz i
 | Sturmsee | Sturm | Sturmzunge, die Seeschlange → Die Rabenbraut |
 | Tiefengrund | Tiefe | Der Abgrundangler → Die Tiefenlaterne |
 
-Die Seegebiete liegen weit draußen: Eismeer im Norden, Glutsee im Osten, Sturmsee im Westen, Tiefengrund im Süden (Radius 72 Kacheln, das Kampfrevier des Seebosses 40). Jedes hat eigene Stimmung, eigenes Licht und eigene Requisiten: Lavaspitzen und brennende Wracks, Eisberge, Felsnadeln, Korallen und Tang. Auf hoher See springen Fische, Wale tauchen auf, 19 Geisterschiffe patrouillieren, 60 Knochenhaie rammen den Rumpf.
+Die Seegebiete liegen weit draußen: Eismeer im Norden, Glutsee im Osten, Sturmsee im Westen, Tiefengrund im Süden (Radius 72 Kacheln,
+das Kampfrevier des Seebosses 40).
+Jedes hat eigene Stimmung, eigenes Licht und eigene Requisiten: Lavaspitzen und brennende Wracks, Eisberge, Felsnadeln, Korallen und Tang.
+Auf hoher See springen Fische, Wale tauchen auf, 19 Geisterschiffe patrouillieren, 60 Knochenhaie rammen den Rumpf.
 
-**Seeungeheuer** (über 400, je Seegebiet andere Arten): Sie lauern als Schatten unter der Oberfläche, tauchen auf, wenn ein Schiff nahe kommt, und greifen nach ihrer Art an.
+**Seeungeheuer** (über 400, je Seegebiet andere Arten):
+Sie lauern als Schatten unter der Oberfläche, tauchen auf, wenn ein Schiff nahe kommt, und greifen nach ihrer Art an.
 
 | Ungeheuer | Angriff | Häufig im |
 |---|---|---|
@@ -119,8 +236,12 @@ Ungeheuer zeigen eine Lebensleiste, sobald sie verwundet sind; die Crew zielt mi
 
 ## 4. Figuren
 
-- **Spieler**: der Ertrunkene oder die Ertrunkene. Im Editor Geschlecht (Frau/Mann), Statur, Hautton, Haare, Bart (nur Männer), Kopfbedeckung, Mantel, Augenklappe; der Knopf „Zufall“ würfelt Aussehen und einen Namen (Vorname nach Geschlecht, zusammengesetzter Nachname wie „Brida Rosthaken“). Herkunft und Geschenk zu Beginn.
-- **Glutwacht**: Laternenmagd (Stufenaufstieg, Neues Spiel+), Schmied Harrow (Waffen härten und kaufen), Händlerin Sabeth (Waren), Schiffsmeister Brack (Ausbauten), Crew an der Tafel.
+- **Spieler**: der Ertrunkene oder die Ertrunkene.
+  Im Editor Geschlecht (Frau/Mann), Statur, Hautton, Haare, Bart (nur Männer), Kopfbedeckung, Mantel, Augenklappe;
+  der Knopf „Zufall“ würfelt Aussehen und einen Namen (Vorname nach Geschlecht, zusammengesetzter Nachname wie „Brida Rosthaken“).
+  Herkunft und Geschenk zu Beginn.
+- **Glutwacht**: Laternenmagd (Stufenaufstieg, Neues Spiel+), Schmied Harrow (Waffen härten und kaufen), Händlerin Sabeth (Waren),
+  Schiffsmeister Brack (Ausbauten), Crew an der Tafel.
 - **Start**: Alter Galionsschnitzer; auf dem Steg der **Geisterkapitän** mit dem Flaschenschiff.
 - **Crew** (je mit Lied und Geschütz):
 
@@ -140,7 +261,8 @@ Die Geschütze werden nach Anzahl der Crew freigeschaltet (1 Crew Mörser, 2 Ket
 ## 5. Gegner und Bosse
 
 ### 5.1 Gegner
-Alle Gegner haben dieselbe Grafikqualität und dieselben Animationen wie Spieler und NPCs (Stehen, Gehen, Angriff, Treffer, Tod, teils Schießen). Menschenähnliche Gegner zeichnet der Figuren-Maler, Tiere und Monster das 3D-Kreaturen-Rig.
+Alle Gegner haben dieselbe Grafikqualität und dieselben Animationen wie Spieler und NPCs (Stehen, Gehen, Angriff, Treffer, Tod, teils Schießen).
+Menschenähnliche Gegner zeichnet der Figuren-Maler, Tiere und Monster das 3D-Kreaturen-Rig.
 
 | Gegner | Art |
 |---|---|
@@ -157,7 +279,19 @@ Alle Gegner haben dieselbe Grafikqualität und dieselben Animationen wie Spieler
 Gegner können fernkämpfen, Flächenangriffe machen, anstürmen, brennen oder einfrieren. Elite-Varianten sind stärker. Gegner meiden Bossräume und Siedlungen.
 
 ### 5.1b Die Riesige Meeresspinne (Prolog)
-Der erste Boss im Spinnenschlund des Prologs: eine gewaltige (gut 30 % größer als zuerst), rostig gebänderte Meeresspinne mit borstig behaarten Beinen, Stacheln und Tang, einem aufgeblähten Hinterleib voller dunkler Adern, nässender und geplatzter Eiterbeulen, Pilzbefall, sich hineinbohrender Würmer und einem Eiersack, offenen Wunden am Kopfbruststück, einer Traube aus fünfzehn leuchtenden und einem milchig-blinden Auge und Geifer, der von den Klauen tropft (3D-Rig). Sie ist über und über mit Miesmuscheln und Seepocken bewachsen, Tangsträhnen hängen von Leib und Beinen, Moospolster sitzen auf dem Rücken, und zwei ihrer acht Beine sind Holzbeine – Pflöcke aus Schiffsplanken mit Eisenringen und einem eisernen Schuh. Sie lauert in der Klippenwand (eigene Kletterbilder: Rücken zur Kamera, Kopf oben bzw. kopfüber), krabbelt herauf, wenn man sich dem Wasserfall nähert („Eingesponnen“ statt einer Kälte-Anzeige), schleudert **Netze**: Sie bäumt sich auf und speit drei Netzklumpen im hohen Bogen – einen auf den Spieler, zwei daneben –, ein Faden reicht noch zurück zu ihrem Maul, im Flug entfalten sie sich drehend zu runden Netzen, ihr Schatten zeigt, wo sie aufschlagen. Ein Volltreffer spinnt den Spieler ein (festgehalten, Angreifen oder Ausweichen reißt die Fäden), sonst bleibt das Netz einige Sekunden am Boden kleben, verlangsamt jeden, der hindurchgeht, und zerreißt, wenn man hindurchrollt. Dazu lässt sie Säure einschlagen. Nicht schwer und nicht zwingend: Sieg und Niederlage führen beide zum Sarg am Wasserfall (siehe Prolog).
+Der erste Boss im Spinnenschlund des Prologs: eine gewaltige (gut 30 % größer als zuerst), rostig gebänderte Meeresspinne mit borstig behaarten Beinen,
+Stacheln und Tang, einem aufgeblähten Hinterleib voller dunkler Adern, nässender und geplatzter Eiterbeulen, Pilzbefall,
+sich hineinbohrender Würmer und einem Eiersack, offenen Wunden am Kopfbruststück,
+einer Traube aus fünfzehn leuchtenden und einem milchig-blinden Auge und Geifer, der von den Klauen tropft (3D-Rig).
+Sie ist über und über mit Miesmuscheln und Seepocken bewachsen, Tangsträhnen hängen von Leib und Beinen, Moospolster sitzen auf dem Rücken,
+und zwei ihrer acht Beine sind Holzbeine – Pflöcke aus Schiffsplanken mit Eisenringen und einem eisernen Schuh.
+Sie lauert in der Klippenwand (eigene Kletterbilder:
+Rücken zur Kamera, Kopf oben bzw. kopfüber), krabbelt herauf, wenn man sich dem Wasserfall nähert („Eingesponnen“ statt einer Kälte-Anzeige),
+schleudert **Netze**: Sie bäumt sich auf und speit drei Netzklumpen im hohen Bogen – einen auf den Spieler, zwei daneben –,
+ein Faden reicht noch zurück zu ihrem Maul, im Flug entfalten sie sich drehend zu runden Netzen, ihr Schatten zeigt, wo sie aufschlagen.
+Ein Volltreffer spinnt den Spieler ein (festgehalten, Angreifen oder Ausweichen reißt die Fäden), sonst bleibt das Netz einige Sekunden am Boden kleben,
+verlangsamt jeden, der hindurchgeht, und zerreißt, wenn man hindurchrollt.
+Dazu lässt sie Säure einschlagen. Nicht schwer und nicht zwingend: Sieg und Niederlage führen beide zum Sarg am Wasserfall (siehe Prolog).
 
 ### 5.2 Die vier Könige (je zwei Gestalten)
 | König | Insel | Zweite Gestalt | Leben |
@@ -167,28 +301,66 @@ Der erste Boss im Spinnenschlund des Prologs: eine gewaltige (gut 30 % größer 
 | Kapitän Rabensturm, der Sturmkönig | Rabenwacht | Uhrwerk-Sturm-Monster (Uhrwerkflügel) | 1200 |
 | Morgrim Korallenhand, König der Tiefe | Fluchmangroven | Kraken-Basilisk-Chimäre (Rig) | 1450 |
 
-Der Kampf beginnt hinter einem goldgelben **Nebeltor**. Angriffe mit Bodenmarkierungen: Kombo, Schwung, Sturmangriff, Einschlag, Atemkegel, Salve, Regen, Nova, Böe, Stachelreihe, Wirbel. Jeder König lässt 4000 Perlen und seine Galionsfigur fallen.
+Der Kampf beginnt hinter einem goldgelben **Nebeltor**.
+Angriffe mit Bodenmarkierungen: Kombo, Schwung, Sturmangriff, Einschlag, Atemkegel, Salve, Regen, Nova, Böe, Stachelreihe, Wirbel.
+Jeder König lässt 4000 Perlen und seine Galionsfigur fallen.
 
 ### 5.3 Die vier Seeungeheuer
-Phase 1: das Ungeheuer (Seitenansicht, sehr groß). Bei 50 % Phase 2: ein eigenes Piratenschiff mit eigenem Entwurf. Einschläge (`Slam`) mit Vorwarnung. Wer das Gebiet verlässt, setzt den Kampf zurück. Belohnung: 5000 Perlen, das brennende Wrack in der Glutwacht.
+Phase 1: das Ungeheuer (Seitenansicht, sehr groß).
+Bei 50 % Phase 2: ein eigenes Piratenschiff mit eigenem Entwurf.
+Einschläge (`Slam`) mit Vorwarnung. Wer das Gebiet verlässt, setzt den Kampf zurück.
+Belohnung: 5000 Perlen, das brennende Wrack in der Glutwacht.
 
 ### 5.4 Endkampf: Malakor, der Ertrunkene König (neu 9.11.)
-1. **Die tote See**: Am Ende der Welt ist das Meer spiegelglatt, kein Wind, und im Wasser fehlt das Spiegelbild des Mondes („… kein Wind. Keine Welle. Und kein Mond im Wasser …“, „… die See atmet nicht …“). Dann grünes Licht unter dem Schiff: „Unter dir bewegt sich etwas Großes …“
-2. **Aufstieg** (11 s): Ein Strudel aus Gischt dreht sich um ein grünes Leuchten in der Tiefe, Seelenlichter steigen im Ring auf, Blitze. Zuerst durchstoßen die Mastspitzen und zerfetzten Segel die Oberfläche, Wasser stürzt von den Segeln; dann bricht der Rumpf mit einer Reihe von Fontänen hervor, springt über die Wasserlinie und kracht zurück. Zwei Wellenringe laufen über das Meer und werfen das eigene Schiff zurück. Wasser läuft aus den Pforten, die grünen Pforten entzünden sich eine nach der anderen von Heck bis Bug, die Segellöcher glühen, und Malakor tritt in grünem Feuer aufs Achterdeck: **„Der Fliegende Holländer – Malakor, der Ertrunkene König“**.
-3. **Seeschlacht**: Der Holländer (PixelLab-Grafik, Seitenansicht, schwarzer Rumpf mit grün glühenden Pforten und zerfetzten, grün leuchtenden Segeln) schwimmt auf dem Wasser – Wasserlinie, Gischtsaum, Bugwelle, Spiegelung, sachtes Schaukeln. XXL-Feuer aus dem Galion, Breitseiten aus allen zehn Pforten, Donnermörser mit Blitz. Unter 60 % taucht der **rote Kraken** auf; solange er lebt, treffen Schüsse nur ihn. Besiegt versinkt er in einem Strudel aus Blasen.
-4. **Der Holländer zerbricht – das Meer läuft leer** (15 s): Grünes Feuer bricht aus dem Rumpf, silbernes Licht dringt durch die Planken, dann birst der Rumpf: der gestohlene Mond fliegt in einem Lichtbogen heraus und taucht zum Grund, Malakor springt ihm nach, der Holländer sinkt mit Schlagseite. **„Der Bann bricht – das Meer stürzt über den Rand der Welt.“** Die Wasserkante weicht sichtbar über den Meeresgrund zurück, dahinter nasser, glänzender Sand, Pfützen, Haiskelette, Wracks und Korallen tauchen auf, Fische zappeln im Schlick, Strömungsschlieren ziehen zum Rand, der Weltrand donnert. Die Strömung reißt das eigene Schiff mit, bis es aufläuft; man springt in den Schlick.
-5. **Meeresgrund**: In der Mitte schwebt der **Spiegelmond**, an vier riesigen Ankern mit Ketten gefesselt, ein Lichtschein steigt von ihm in den Himmel. Darunter kniet Malakor betend. **Malakor zu Fuß** (2400 Leben, „Der den Mond stahl“): vier Schwerter und Tentakelbart; Viererkombo, Wirbel, Peitsche, Sprung, Geysire.
-6. **Malakor flieht in den Mond – der Mondfresser** (2800 Leben): Bei 0 Leben schwebt er zum Mond hinauf und verschmilzt mit ihm. Der Mond verdunkelt sich blutrot, Malakors Schatten mit glühenden Augen steht darin, acht Knochenarme brechen aus dem Schlick. Stacheln, Feger, Knochensplitter rundum; beim Sprung steigt der Mond hoch auf und stürzt herab.
+1. **Die tote See**: Am Ende der Welt ist das Meer spiegelglatt, kein Wind, und im Wasser fehlt das Spiegelbild des Mondes („… kein Wind. Keine Welle.
+   Und kein Mond im Wasser …“, „… die See atmet nicht …“).
+   Dann grünes Licht unter dem Schiff: „Unter dir bewegt sich etwas Großes …“
+2. **Aufstieg** (11 s): Ein Strudel aus Gischt dreht sich um ein grünes Leuchten in der Tiefe, Seelenlichter steigen im Ring auf, Blitze.
+   Zuerst durchstoßen die Mastspitzen und zerfetzten Segel die Oberfläche, Wasser stürzt von den Segeln;
+   dann bricht der Rumpf mit einer Reihe von Fontänen hervor, springt über die Wasserlinie und kracht zurück.
+   Zwei Wellenringe laufen über das Meer und werfen das eigene Schiff zurück.
+   Wasser läuft aus den Pforten, die grünen Pforten entzünden sich eine nach der anderen von Heck bis Bug, die Segellöcher glühen,
+   und Malakor tritt in grünem Feuer aufs Achterdeck: **„Der Fliegende Holländer – Malakor, der Ertrunkene König“**.
+3. **Seeschlacht**: Der Holländer (PixelLab-Grafik, Seitenansicht, schwarzer Rumpf mit grün glühenden Pforten und zerfetzten,
+   grün leuchtenden Segeln) schwimmt auf dem Wasser – Wasserlinie, Gischtsaum, Bugwelle, Spiegelung, sachtes Schaukeln.
+   XXL-Feuer aus dem Galion, Breitseiten aus allen zehn Pforten, Donnermörser mit Blitz.
+   Unter 60 % taucht der **rote Kraken** auf; solange er lebt, treffen Schüsse nur ihn.
+   Besiegt versinkt er in einem Strudel aus Blasen.
+4. **Der Holländer zerbricht – das Meer läuft leer** (15 s): Grünes Feuer bricht aus dem Rumpf, silbernes Licht dringt durch die Planken, dann birst der Rumpf:
+   der gestohlene Mond fliegt in einem Lichtbogen heraus und taucht zum Grund, Malakor springt ihm nach, der Holländer sinkt mit Schlagseite.
+   **„Der Bann bricht – das Meer stürzt über den Rand der Welt.“**
+   Die Wasserkante weicht sichtbar über den Meeresgrund zurück, dahinter nasser, glänzender Sand, Pfützen, Haiskelette, Wracks und Korallen tauchen auf,
+   Fische zappeln im Schlick, Strömungsschlieren ziehen zum Rand, der Weltrand donnert.
+   Die Strömung reißt das eigene Schiff mit, bis es aufläuft; man springt in den Schlick.
+5. **Meeresgrund**: In der Mitte schwebt der **Spiegelmond**, an vier riesigen Ankern mit Ketten gefesselt, ein Lichtschein steigt von ihm in den Himmel.
+   Darunter kniet Malakor betend.
+   **Malakor zu Fuß** (2400 Leben, „Der den Mond stahl“): vier Schwerter und Tentakelbart; Viererkombo, Wirbel, Peitsche, Sprung, Geysire.
+6. **Malakor flieht in den Mond – der Mondfresser** (2800 Leben): Bei 0 Leben schwebt er zum Mond hinauf und verschmilzt mit ihm.
+   Der Mond verdunkelt sich blutrot, Malakors Schatten mit glühenden Augen steht darin, acht Knochenarme brechen aus dem Schlick.
+   Stacheln, Feger, Knochensplitter rundum; beim Sprung steigt der Mond hoch auf und stürzt herab.
 7. **Sieg**: Der Mondfresser bleibt nicht liegen – die Sieg-Sequenz beginnt.
 
 ### 5.5 Die Letzte Flut (Sieg-Sequenz, ca. 65 s)
-1. **Zerfall**: Die Knochenarme zerbröckeln und versinken im Schlick, Malakor stürzt aus dem Mond, kniet und zerfließt zu schwarzem Wasser: „Ohne den Mond … holt mich die Flut …“
+1. **Zerfall**: Die Knochenarme zerbröckeln und versinken im Schlick, Malakor stürzt aus dem Mond, kniet und zerfließt zu schwarzem Wasser:
+   „Ohne den Mond … holt mich die Flut …“
 2. **Die Ketten reißen**, eine nach der anderen, mit Funken; zuletzt blendet der Mond silbern auf: „Der Spiegelmond ist frei“.
-3. **Die Spinne vom Wrackzwinger**: „… Schritte. Viele Beine. Ganz nah …“ – die Riesige Meeresspinne aus dem Prolog krabbelt heran (wer sie verschont hat, sieht sie selbst; wer sie erschlagen hat, ihren bleichen Geist: „Sie trägt dir nichts nach“). Sie schießt Fäden in den Himmel, spinnt ein Netz um den Mond und klettert an ihrem Faden hinauf, den Mond im Netz unter sich; Tautropfen fliegen als Sterne davon. „Der Mond kehrt zurück – an seinem Spiegelbild zieht er die Gezeiten.“
-4. **Die Flut**: Die Wasserfälle am Rand der Welt laufen rückwärts, die Wasserkante rollt vom Rand über den Meeresgrund zurück, Quellen springen auf, Wracks versinken, Seelenlichter steigen überall auf.
-5. **Die Ertrunkenen ziehen heim**: Im steigenden Wasser stehen Wirt Klaas („Auf die Letzte Flut, Fremder! Die Runde geht auf mich.“), Leute aus Stillwasser, der Geisterkapitän („Mein Schiff … ich sehe es wieder.“) und die vier Geisterkönige („Endlich … ist es still.“), nicken und lösen sich in Licht auf.
-6. **Das Wasser trägt dich**, das eigene Schiff steigt unter dir aus der Tiefe und nimmt dich an Bord; **Morgengrauen** über dem Ende der Welt: „Die Letzte Flut – die Ertrunkenen sind heimgekehrt“.
-7. **Epilog** über dem Schwarz: „In dieser Nacht kam die Flut, auf die Stillwasser hundert Jahre gewartet hatte.“ – „Sie trug die Ertrunkenen hinüber: Klaas und seine Zecher, die Könige der See, den Kapitän ohne Schiff. In der Kneipe »Zur Letzten Flut« stehen die Krüge leer – diesmal mit Grund.“ – „Nur einer blieb zurück. Die See hatte noch nicht genug von dir.“ Danach liegt das Schiff vor dem **Mondfels**, auf dem das Säbelfeuer „Ende der Welt“ brennt; das Meer am Ende der Welt atmet wieder, silbern unter dem Mond.
+3. **Die Spinne vom Wrackzwinger**: „… Schritte.
+   Viele Beine. Ganz nah …“ – die Riesige Meeresspinne aus dem Prolog krabbelt heran (wer sie verschont hat, sieht sie selbst;
+   wer sie erschlagen hat, ihren bleichen Geist: „Sie trägt dir nichts nach“).
+   Sie schießt Fäden in den Himmel, spinnt ein Netz um den Mond und klettert an ihrem Faden hinauf, den Mond im Netz unter sich;
+   Tautropfen fliegen als Sterne davon. „Der Mond kehrt zurück – an seinem Spiegelbild zieht er die Gezeiten.“
+4. **Die Flut**: Die Wasserfälle am Rand der Welt laufen rückwärts, die Wasserkante rollt vom Rand über den Meeresgrund zurück, Quellen springen auf,
+   Wracks versinken, Seelenlichter steigen überall auf.
+5. **Die Ertrunkenen ziehen heim**: Im steigenden Wasser stehen Wirt Klaas („Auf die Letzte Flut, Fremder!
+   Die Runde geht auf mich.“), Leute aus Stillwasser, der Geisterkapitän („Mein Schiff … ich sehe es wieder.“) und die vier Geisterkönige („Endlich … ist es
+   still.“), nicken und lösen sich in Licht auf.
+6. **Das Wasser trägt dich**, das eigene Schiff steigt unter dir aus der Tiefe und nimmt dich an Bord; **Morgengrauen** über dem Ende der Welt:
+   „Die Letzte Flut – die Ertrunkenen sind heimgekehrt“.
+7. **Epilog** über dem Schwarz: „In dieser Nacht kam die Flut, auf die Stillwasser hundert Jahre gewartet hatte.“ – „Sie trug die Ertrunkenen hinüber:
+   Klaas und seine Zecher, die Könige der See, den Kapitän ohne Schiff.
+   In der Kneipe »Zur Letzten Flut« stehen die Krüge leer – diesmal mit Grund.“ – „Nur einer blieb zurück.
+   Die See hatte noch nicht genug von dir.“
+   Danach liegt das Schiff vor dem **Mondfels**, auf dem das Säbelfeuer „Ende der Welt“ brennt; das Meer am Ende der Welt atmet wieder, silbern unter dem Mond.
 ---
 
 ## 6. Spielsysteme
@@ -208,7 +380,8 @@ Phase 1: das Ungeheuer (Seitenansicht, sehr groß). Bei 50 % Phase 2: ein eigene
 **Geschenk**: zusätzliche Rumflasche, Glücksdublone (mehr Perlen), Alte Seekarte (Karte aufgedeckt), Pulverbomben, Schwarze Perle oder nichts.
 
 ### 6.2 Werte und Stufen
-Fünf Werte: **Vitalität** (Leben), **Ausdauer**, **Kraft** (Hammer, Säbel, Knüppel), **Geschick** (Rapier, Dolch, Pistole), **Tiefenglaube** (Geist und Zauber). Stufen kauft man bei der Laternenmagd mit Perlen (Kosten steigen um 10 % je Stufe).
+Fünf Werte: **Vitalität** (Leben), **Ausdauer**, **Kraft** (Hammer, Säbel, Knüppel), **Geschick** (Rapier, Dolch, Pistole), **Tiefenglaube** (Geist und Zauber).
+Stufen kauft man bei der Laternenmagd mit Perlen (Kosten steigen um 10 % je Stufe).
 
 ### 6.3 Kampf
 - **Ausdauer** in vier Segmenten. Leichter und schwerer Hieb mit Kombos, Rolle mit Unverwundbarkeit, Parieren mit Gegenschlag, Zielerfassung.
@@ -228,11 +401,24 @@ Fünf Werte: **Vitalität** (Leben), **Ausdauer**, **Kraft** (Hammer, Säbel, Kn
 
 Der Schmied härtet Waffen mit **Gezeitensplittern** (aus Seelenblumen).
 
-**Kampfgefühl** (Runde 13): Jeder Treffer hat Gewicht – ein kurzer **Trefferstopp** (leicht 45 ms, schwer 85 ms), ein **gerichteter Kamerastoß** in Hiebrichtung, **Rückstoß** (die Gegner gleiten aus), Blutspritzer bzw. Knochenstaub am Boden und **Stofflichkeit** (Knochen splittern, Panzer und Stein sprühen Funken, Geister zerfließen). **Paraden** werfen Funken, frieren das Bild für einen Augenblick ein (Aufprallbild) und gehen in eine kurze **Zeitlupe** über; ein Treffer im ersten Augenblick der Rolle ist ein **perfektes Ausweichen** (Zeitlupe, Nachbilder, Ausdauer zurück). Bosse haben eine **Haltung**, die sich mit Treffern füllt – voll, taumeln sie und der **Gegenstoß** wird zur **Hinrichtung** (Kamera nah heran, Zeitlupe). Eingaben werden kurz **gepuffert**, der Nachschwung eines Hiebs lässt sich mit einer Rolle abbrechen, die Figur läuft mit kurzem **Schwung** an. Gegner kündigen Hiebe mit einem **Ausholglanz** an und werden mit sinkendem Leben sichtbar verwundet. Fässer und Kisten zerbrechen unter Hieben. Bossauftritte und -tode haben Kinobalken, Kamerazoom und einen musikalischen Stinger; in der zweiten Phase verwandelt sich die Arena mit dem Element des Bosses (Hitze und Asche, Schneesturm, Gewitter, Regen). Wenig Leben färbt die Welt grau und lässt den Bildrand im Herzschlag rot pochen; die Laterne der Figur wird mit sinkendem Leben kleiner und rötlicher.
+**Kampfgefühl** (Runde 13): Jeder Treffer hat Gewicht – ein kurzer **Trefferstopp** (leicht 45 ms, schwer 85 ms),
+ein **gerichteter Kamerastoß** in Hiebrichtung, **Rückstoß** (die Gegner gleiten aus),
+Blutspritzer bzw. Knochenstaub am Boden und **Stofflichkeit** (Knochen splittern, Panzer und Stein sprühen Funken, Geister zerfließen).
+**Paraden** werfen Funken, frieren das Bild für einen Augenblick ein (Aufprallbild) und gehen in eine kurze **Zeitlupe** über;
+ein Treffer im ersten Augenblick der Rolle ist ein **perfektes Ausweichen** (Zeitlupe, Nachbilder, Ausdauer zurück).
+Bosse haben eine **Haltung**, die sich mit Treffern füllt – voll, taumeln sie und der **Gegenstoß** wird zur **Hinrichtung** (Kamera nah heran, Zeitlupe).
+Eingaben werden kurz **gepuffert**, der Nachschwung eines Hiebs lässt sich mit einer Rolle abbrechen, die Figur läuft mit kurzem **Schwung** an.
+Gegner kündigen Hiebe mit einem **Ausholglanz** an und werden mit sinkendem Leben sichtbar verwundet.
+Fässer und Kisten zerbrechen unter Hieben.
+Bossauftritte und -tode haben Kinobalken, Kamerazoom und einen musikalischen Stinger;
+in der zweiten Phase verwandelt sich die Arena mit dem Element des Bosses (Hitze und Asche, Schneesturm, Gewitter, Regen).
+Wenig Leben färbt die Welt grau und lässt den Bildrand im Herzschlag rot pochen; die Laterne der Figur wird mit sinkendem Leben kleiner und rötlicher.
 
 ### 6.4 Säbelfeuer, Tod und Perlen
-- **Säbelfeuer** sind die Leuchtfeuer der Welt (11 Stück, zwei je Königsinsel). Entzünden, rasten (heilt, füllt Rum und Phiolen auf, belebt Gegner wieder), zwischen entzündeten Feuern reisen. Automatisches Speichern beim Rasten.
-- **Tod** („DU BIST ERTRUNKEN“): Alle Perlen bleiben als **Perlenfleck** an der letzten sicheren Stelle zurück. Zurückholen geht nur, wenn man dort ankommt, ohne vorher noch einmal zu sterben.
+- **Säbelfeuer** sind die Leuchtfeuer der Welt (11 Stück, zwei je Königsinsel).
+  Entzünden, rasten (heilt, füllt Rum und Phiolen auf, belebt Gegner wieder), zwischen entzündeten Feuern reisen. Automatisches Speichern beim Rasten.
+- **Tod** („DU BIST ERTRUNKEN“): Alle Perlen bleiben als **Perlenfleck** an der letzten sicheren Stelle zurück.
+  Zurückholen geht nur, wenn man dort ankommt, ohne vorher noch einmal zu sterben.
 - **Perlen** sind die einzige Währung: für Stufen, Waffen, Waren und Schiffsausbauten.
 
 ### 6.5 Gegenstände
@@ -260,33 +446,65 @@ Der Schmied härtet Waffen mit **Gezeitensplittern** (aus Seelenblumen).
 Gegenstände am Boden schweben mit einem Schimmer in ihrer Seltenheitsfarbe. Mit Alt erscheinen alle Namen.
 
 ### 6.6 Seefahrt
-- **Das Flaschenschiff**: Am Galgenstrand wartet auf dem Steg ein Geisterkapitän (durchscheinend, schwebend, mit Geisterlaterne). Er übergibt sein Schiff, das er beim Untergang in eine Flasche gebannt hat, und löst sich danach in Nebel auf. Beim ersten Ablegen wirft man die Flasche vom Steg ins Meer: Sie fliegt im Bogen, das Glas zerspringt in einem Lichtblitz mit Scherben und Gischt, das Wasser brodelt, und das Schiff steigt zum ersten Mal vom Grund auf.
-- **Rufe dein Schiff**: Danach ruht das Schiff in der Tiefe und kommt an jedem Steg, wenn man es ruft – als Schauspiel: Das Wasser rumpelt und beginnt zu kreisen, ein dunkler Schatten wächst, grünes Licht glimmt aus der Tiefe, Wellenringe laufen aus. Dann schießt eine Fontäne hoch, die Masten durchstoßen die Oberfläche, das Schiff springt über die Wasserlinie, krängt und kracht zurück ins Meer (Gischt rundum, drei Wellenringe, Gischtnebel, ganze Wasserfälle stürzen von Deck), schaukelt aus, und man geht an Bord. Beim Anlegen (E) ächzt es, legt sich zur Seite, ein Sog mit Licht aus der Tiefe zieht es hinab, und zuletzt schießt über den verschwindenden Mastspitzen eine Fontäne auf.
-- **Das Schiff**: eine schwarze Galeone – schwarzer Lack mit Goldleisten und ochsenblutrotem Band, geflickte, zerfetzte schwarze Segel, rote Wimpel, Totenkopfflagge, Heckgalerie mit leuchtenden Fenstern, Hecklaternen, Wanten mit Webeleinen, Anker, ein geflügelter Totenengel als Galion.
-- **Steuerung**: links/rechts wenden, hoch/runter Segelstufen (je Stufe 74 px/s). J/L feuern Breitseiten nach Backbord bzw. Steuerbord, C setzt das Crew-Geschütz ein, F stimmt das Shanty der Crew an (das Schiff wird schneller).
-- **Seekarte** (M): gezeichnet wie auf vergilbtem Papier, deckt sich beim Erkunden auf (Felder à 16 × 16 Kacheln). Drei Zoomstufen (Ganze Welt, Umgebung, Nah), schieben mit den Richtungstasten. Namen der wilden Inseln erscheinen, sobald man dort war.
-- **Ausbauten** beim Schiffsmeister, je bis Stufe 20: Tempo (bis 10 je +6 % Fahrt, darüber je +3 %), Verteidigung (bis 10 je +24 Rumpf und −4 % Schaden, darüber je +16 und −2 %), Angriff (bis 10 je +12 % Schaden, darüber je +8 %, mehr Kugeln je Breitseite). Kosten bis 10 wie früher (×1,45 je Stufe), darüber ×1,16 je Stufe. Die Stufen sind am Schiff sichtbar: mehr und größere Segel, Leesegel, Bramsegel, Besantoppsegel, weitere Klüver, auf 20 geisterhaft schimmernde Säume; Eisenbänder, Panzerplatten bis zur Wasserlinie, Goldkanten, Rammsporn, Eisenkappe am Bug, Dornen auf der Reling, gepanzertes Heck, Ketten, auf 20 leuchtende Runen; mehr Stückpforten, zweite Batterie, Drehbassen, Mörser, Jagd- und Heckgeschütze, Karronaden, zweiter Mörser, goldbeschlagene Rohre.
+- **Das Flaschenschiff**: Am Galgenstrand wartet auf dem Steg ein Geisterkapitän (durchscheinend, schwebend, mit Geisterlaterne).
+  Er übergibt sein Schiff, das er beim Untergang in eine Flasche gebannt hat, und löst sich danach in Nebel auf.
+  Beim ersten Ablegen wirft man die Flasche vom Steg ins Meer:
+  Sie fliegt im Bogen, das Glas zerspringt in einem Lichtblitz mit Scherben und Gischt, das Wasser brodelt, und das Schiff steigt zum ersten Mal vom Grund auf.
+- **Rufe dein Schiff**: Danach ruht das Schiff in der Tiefe und kommt an jedem Steg, wenn man es ruft – als Schauspiel:
+  Das Wasser rumpelt und beginnt zu kreisen, ein dunkler Schatten wächst, grünes Licht glimmt aus der Tiefe, Wellenringe laufen aus.
+  Dann schießt eine Fontäne hoch, die Masten durchstoßen die Oberfläche, das Schiff springt über die Wasserlinie,
+  krängt und kracht zurück ins Meer (Gischt rundum, drei Wellenringe, Gischtnebel, ganze Wasserfälle stürzen von Deck), schaukelt aus, und man geht an Bord.
+  Beim Anlegen (E) ächzt es, legt sich zur Seite, ein Sog mit Licht aus der Tiefe zieht es hinab,
+  und zuletzt schießt über den verschwindenden Mastspitzen eine Fontäne auf.
+- **Das Schiff**: eine schwarze Galeone – schwarzer Lack mit Goldleisten und ochsenblutrotem Band, geflickte, zerfetzte schwarze Segel, rote Wimpel,
+  Totenkopfflagge, Heckgalerie mit leuchtenden Fenstern, Hecklaternen, Wanten mit Webeleinen, Anker, ein geflügelter Totenengel als Galion.
+- **Steuerung**: links/rechts wenden, hoch/runter Segelstufen (je Stufe 74 px/s).
+  J/L feuern Breitseiten nach Backbord bzw. Steuerbord, C setzt das Crew-Geschütz ein, F stimmt das Shanty der Crew an (das Schiff wird schneller).
+- **Seekarte** (M): gezeichnet wie auf vergilbtem Papier, deckt sich beim Erkunden auf (Felder à 16 × 16 Kacheln).
+  Drei Zoomstufen (Ganze Welt, Umgebung, Nah), schieben mit den Richtungstasten.
+  Namen der wilden Inseln erscheinen, sobald man dort war.
+- **Ausbauten** beim Schiffsmeister, je bis Stufe 20:
+  Tempo (bis 10 je +6 % Fahrt, darüber je +3 %), Verteidigung (bis 10 je +24 Rumpf und −4 % Schaden, darüber je +16 und −2 %), Angriff (bis 10 je +12 % Schaden,
+  darüber je +8 %, mehr Kugeln je Breitseite).
+  Kosten bis 10 wie früher (×1,45 je Stufe), darüber ×1,16 je Stufe.
+  Die Stufen sind am Schiff sichtbar: mehr und größere Segel, Leesegel, Bramsegel, Besantoppsegel, weitere Klüver, auf 20 geisterhaft schimmernde Säume;
+  Eisenbänder, Panzerplatten bis zur Wasserlinie, Goldkanten, Rammsporn, Eisenkappe am Bug, Dornen auf der Reling, gepanzertes Heck, Ketten,
+  auf 20 leuchtende Runen; mehr Stückpforten, zweite Batterie, Drehbassen, Mörser, Jagd- und Heckgeschütze, Karronaden, zweiter Mörser, goldbeschlagene Rohre.
 - Kapitän und Crew stehen an Deck und drehen sich mit dem Kurs.
 
 ### 6.6b Feindschaft und die Sündenstatue
-Alle Figuren lassen sich angreifen, sind aber friedlich. Wer in einer Siedlung (Glutgrund, Reifstein, Rabenwacht, Moorhain – und auch in der Glutwacht) eine Figur schlägt, bringt den ganzen Ort gegen sich auf: Die Dorfbewohner greifen als bewaffneter Mob mit Knüppeln, Mistgabeln und Messern an, Händler, Schmied, Schiffsmeister und Laternenmagd verweigern Gespräch und Handel („Mörder! Mit dir rede ich nicht.“), in der Glutwacht stehen Wachen bei ihnen. Die Feindschaft bleibt gespeichert, der Mob kehrt nach jeder Rast zurück. Außerhalb der Siedlungen zuckt eine geschlagene Figur nur zusammen. Am Nordkai der Glutwacht kniet die **Sündenstatue** – ein riesiger Büßer in Ketten mit glühenden Augen und einer Opferschale voller Glut. Dort kauft man für 1 500 Perlen (× 1,5 je Neues-Spiel+-Fahrt) den Frieden mit einem Ort: Der Mob verschwindet, alle kehren an ihre Plätze zurück.
+Alle Figuren lassen sich angreifen, sind aber friedlich.
+Wer in einer Siedlung (Glutgrund, Reifstein, Rabenwacht, Moorhain – und auch in der Glutwacht) eine Figur schlägt, bringt den ganzen Ort gegen sich auf:
+Die Dorfbewohner greifen als bewaffneter Mob mit Knüppeln, Mistgabeln und Messern an, Händler, Schmied,
+Schiffsmeister und Laternenmagd verweigern Gespräch und Handel („Mörder! Mit dir rede ich nicht.“), in der Glutwacht stehen Wachen bei ihnen.
+Die Feindschaft bleibt gespeichert, der Mob kehrt nach jeder Rast zurück.
+Außerhalb der Siedlungen zuckt eine geschlagene Figur nur zusammen.
+Am Nordkai der Glutwacht kniet die **Sündenstatue** – ein riesiger Büßer in Ketten mit glühenden Augen und einer Opferschale voller Glut.
+Dort kauft man für 1 500 Perlen (× 1,5 je Neues-Spiel+-Fahrt) den Frieden mit einem Ort: Der Mob verschwindet, alle kehren an ihre Plätze zurück.
 
 ### 6.7 Fortschritt, Neues Spiel+, Cheats
 - **Fortschritt** (Taste I): Könige, Seeungeheuer, Crew, Strudel, Endkampf, aktuelle Fahrt.
-- **Neues Spiel+**: Könige, Seeungeheuer, Throne und Endkampf werden zurückgesetzt. Stufe, Ausrüstung, Schiff, Crew, Feuer und Schätze bleiben. Gegner-Leben × (1 + 0,5 · Fahrt), Schaden × (1 + 0,3 · Fahrt), Bossperlen +25 % je Fahrt.
-- **Pause-Menü**: Cheat „Unendlich Perlen“ (umschaltbar, der alte Stand bleibt erhalten). **Debug-Menü**: Trophäen der Könige und Seeungeheuer, ganze Crew, alle Säbelfeuer.
+- **Neues Spiel+**: Könige, Seeungeheuer, Throne und Endkampf werden zurückgesetzt.
+  Stufe, Ausrüstung, Schiff, Crew, Feuer und Schätze bleiben.
+  Gegner-Leben × (1 + 0,5 · Fahrt), Schaden × (1 + 0,3 · Fahrt), Bossperlen +25 % je Fahrt.
+- **Pause-Menü**: Cheat „Unendlich Perlen“ (umschaltbar, der alte Stand bleibt erhalten).
+  **Debug-Menü**: Trophäen der Könige und Seeungeheuer, ganze Crew, alle Säbelfeuer.
 
 ---
 
 ## 7. Grafik
 
-Die vollständige Analyse mit allen Formeln, Farbwerten, Shadern und einer Schritt-für-Schritt-Anleitung zum Nachbau steht in [`GRAFIK_ANLEITUNG.md`](GRAFIK_ANLEITUNG.md).
+Die vollständige Analyse mit allen Formeln, Farbwerten, Shadern und einer Schritt-für-Schritt-Anleitung zum Nachbau steht in
+[`GRAFIK_ANLEITUNG.md`](GRAFIK_ANLEITUNG.md).
 
 ### 7.1 Vorgaben
 - **HD-Pixelart** mit dem Detailgrad der Beispielbilder: Blütenbäume mit Glyzinien, Basaltklippen, türkises Wasser, Fachwerkhäuser, eine Rotnebel-Zone.
-- **PixelLab-Stil überall** (Nutzerwunsch 7.11.): was nicht aus PixelLab stammt, wird nachgebildet – alle Sprites mit gestuften Tönen, geglätteten Pixelinseln und einem Umriss in einer Farbe, die Bodentexturen mit ruhigem Grund und kleiner Tonleiter wie die PixelLab-Kacheln.
+- **PixelLab-Stil überall** (Nutzerwunsch 7.11.): was nicht aus PixelLab stammt, wird nachgebildet – alle Sprites mit gestuften Tönen,
+  geglätteten Pixelinseln und einem Umriss in einer Farbe, die Bodentexturen mit ruhigem Grund und kleiner Tonleiter wie die PixelLab-Kacheln.
 - **Natürliche Vegetation**: Pflanzen wachsen dort, wo sie auch auf der Erde wüchsen – keine bunten Fantasiebäume und keine wahllos verstreute Deko.
-- **Düster und abwechslungsreich** (Nutzerwunsch 7.11.): gedämpftes Nachtgrün, verdorrte und vereinzelt blutrote Kronen, knochenbleiche und bereifte Totbäume, Trauerweiden an stillen Ufern, Leuchtpilze als kalte Lichtinseln im Wald, Blut- und Geisterblumen; Blumen der Boden-Deko in knochenweiß, ocker, violett, geisterblau und blutrot.
+- **Düster und abwechslungsreich** (Nutzerwunsch 7.11.):
+  gedämpftes Nachtgrün, verdorrte und vereinzelt blutrote Kronen, knochenbleiche und bereifte Totbäume, Trauerweiden an stillen Ufern,
+  Leuchtpilze als kalte Lichtinseln im Wald, Blut- und Geisterblumen; Blumen der Boden-Deko in knochenweiß, ocker, violett, geisterblau und blutrot.
 - **Dark Fantasy**: gedämpftes Licht, Lichtinseln, Nebel, eigene Stimmung je Zone.
 - **3D-Wirkung** an Hängen, Abgründen und Küsten (Normalen- und Höhenpuffer).
 - Kürzere Bildseite zeigt 540 Weltpixel. FullHD-Modus verdoppelt die interne Auflösung.
@@ -296,45 +514,112 @@ Die vollständige Analyse mit allen Formeln, Farbwerten, Shadern und einer Schri
 ### 7.2 Stil: HD-2D (wie Final Fantasy Resonance)
 - **Diorama-Kippung**: Das Endbild ist leicht gekippt. Unten ist die Welt näher und größer, oben ferner.
 - **Tilt-Shift-Tiefenschärfe** um den Fuß des Spielers, Bokeh-Staub.
-- **Licht**: 3D-Punktlichter mit Höhe, Schlagschatten der acht nächsten Lichter, Sonnenschatten, Randlicht, Lichtstrahlen je Zone, Umgebungsverdeckung aus dem Höhenpuffer, Bloom, Farbkorrektur, Farbsaum.
-- **Wasser** (Fotolook): Fresnel-Himmelsspiegelung, Wellenkämme, Sonnen- bzw. Mondglanz als wandernder Lichtpfad mit funkelnden Glitzerpunkten (statt flächig weißer See bei Gegenlicht), pixelgenauer Uferschaum, großflächige Tiefen und Strömungsbänder auf hoher See, Spiegelbilder von Schiffen und Figuren.
+- **Licht**: 3D-Punktlichter mit Höhe, Schlagschatten der acht nächsten Lichter, Sonnenschatten, Randlicht, Lichtstrahlen je Zone,
+  Umgebungsverdeckung aus dem Höhenpuffer, Bloom, Farbkorrektur, Farbsaum.
+- **Wasser** (Fotolook): Fresnel-Himmelsspiegelung, Wellenkämme, Sonnen- bzw. Mondglanz als wandernder Lichtpfad mit funkelnden Glitzerpunkten (statt flächig
+  weißer See bei Gegenlicht), pixelgenauer Uferschaum, großflächige Tiefen und Strömungsbänder auf hoher See, Spiegelbilder von Schiffen und Figuren.
 - **Wolkenschatten** ziehen langsam über Land und See.
 - **Nebel** in Bänken, Funken, Glühwürmchen, Asche, Schnee, Regen und Blitze je Gebiet.
-- **Effekte aus PixelFX** (<https://github.com/patch-gg/pixelfx>, MIT): Säbelhiebe in Stahl, Doppelhieb in Messing, Stöße, Klauenhiebe, Trefferfunken, kritische Treffer, Paraden, dumpfe Treffer mit Staub, Landungen, Bodenschläge, Mündungsfeuer, Kugeleinschläge, Explosionen, Flammensäulen, Feuerringe, Frostnovas, Eissplitter, Blitzschläge, Blitztreffer, Erdstacheln, Säure, Platschen, Geysire, Heilung, aufsteigende Seelen in der Gestalt der Figur, zersplitternde Skelette, die Wiedergeburt am Säbelfeuer, Aufsammeln, Beutestrahlen über Fundstücken, Fackel- und Feuerschalenflammen, brennende Wracks und die Geisterflamme der Säbelfeuer. Sie ersetzen die früheren eigenen Hiebbögen, Druckringe und Flammenbilder, werfen Licht und werden von Figuren und Mauern davor verdeckt.
+- **Effekte aus PixelFX** (<https://github.com/patch-gg/pixelfx>, MIT):
+  Säbelhiebe in Stahl, Doppelhieb in Messing, Stöße, Klauenhiebe, Trefferfunken, kritische Treffer, Paraden, dumpfe Treffer mit Staub, Landungen, Bodenschläge,
+  Mündungsfeuer, Kugeleinschläge, Explosionen, Flammensäulen, Feuerringe, Frostnovas, Eissplitter, Blitzschläge, Blitztreffer, Erdstacheln, Säure, Platschen,
+  Geysire, Heilung, aufsteigende Seelen in der Gestalt der Figur, zersplitternde Skelette, die Wiedergeburt am Säbelfeuer, Aufsammeln,
+  Beutestrahlen über Fundstücken, Fackel- und Feuerschalenflammen, brennende Wracks und die Geisterflamme der Säbelfeuer.
+  Sie ersetzen die früheren eigenen Hiebbögen, Druckringe und Flammenbilder, werfen Licht und werden von Figuren und Mauern davor verdeckt.
 - Option „Sparsam“ lässt nur die Kippung an (für schwache Geräte).
 
 ### 7.3 Prozedurale Kunst (alles aus Code)
-Jedes Bild ist eine **Leinwand mit vier Kanälen**: Farbe, Normale, Höhe über Grund und Leuchten/Glanz. So kann der Renderer jedes Pixel beleuchten und Schatten werfen lassen.
+Jedes Bild ist eine **Leinwand mit vier Kanälen**: Farbe, Normale, Höhe über Grund und Leuchten/Glanz.
+So kann der Renderer jedes Pixel beleuchten und Schatten werfen lassen.
 
-- **Figuren-Maler** (`chars.rs`): Figuren 64 × 72 Pixel, drei Richtungen (vorn, Seite gespiegelt, hinten), alle Animationen. Über 40 Vorlagen: Gegner, NPCs, Crew, Dorfbewohner, Könige, Malakor (vier Arme, Tentakelbart, Korallenkrone). Bausteine wie Hüte, Mäntel, Bärte, Flügel, Schlangenhaar, Uhrwerk, Leuchtaugen, Auren. Für alle Menschen gleich: Paspeln an der Mantelöffnung, Saum mit Umschlag, Taschenklappen mit Knopf, Bandelier mit Messingschnalle, Gürteltasche, helle Manschetten, Stiefelstulpen mit Schnalle, Glanz in den Augen; ein Feinschliff je Bild setzt Formlicht an die Kanten, Gewebe- und Faltenstruktur, Haarsträhnen, Metallglanz und Mikrorelief für die Beleuchtung.
-- **Kreaturen-Rig** (`rig.rs`, `beasts.rs`): Wesen bestehen aus Ellipsoiden, Quadern, Röhren, Häuten und Dreiecken im Raum. Ein Strahlenwerfer rendert sie aus der 3/4-Kamera (Neigung 0,55) mit Mustern (Schuppen, Fell, Nieten …), Innenkonturen, Höhlenschatten in Ansätzen und Kehlen, Glanzlichtern auf Metall und Umriss. Er schreibt die Höhe je Pixel, damit Schatten der Grundfläche folgen.
-- **Schiffe** (`ships.rs`): ebenfalls als Rig. 16 Kurse (9 gerendert, der Rest gespiegelt), das eigene Schiff als detailreiche schwarze Galeone im Pixelstil (`build_black`) mit sichtbaren Ausbauten bis Stufe 20, vier Bossschiffe mit eigenem Entwurf und der Fliegende Holländer (Maßstab 6,9).
-- **Gelände** (`terrain.rs`): Der Boden wird in 256-Pixel-Stücken gebacken. Materialien wie Gras, Wiese, Sand, Erde, Pflaster, Marmor, Planken, Basalt, Asche, Schnee, Eis, Schlamm, Fels und Moos haben je Gebiet eigene Paletten. Dazu weiche Materialgrenzen, nasse Uferkanten, Ufersteine, Hänge, Festungsmauern aus Quadern und Naturwege.
-- **Requisiten** (`props.rs`, `flora.rs`, `buildings.rs`, `structures.rs`, `grave.rs`): Bäume mit Kronen, die durchsichtig werden, wenn man dahinter steht (in der Natur die PixelLab-Arten: Eichen, Laubbäume, Kiefern, Schneefichten, Zypressen, tote und verkohlte Bäume, Palmen, dazu Mangroven), Büsche, düstere Fachwerkhäuser (Schieferdächer mit Moos, verrußter Putz, vernagelte Fenster, Schädel über der Tür), Bannpfähle mit Schädeln, Galgen mit Käfig, Festung, Werft, Galgen mit schwingenden Gehängten, Särge, Wracks, Eisberge, Korallen, hohe Mauern mit Zinnen, Spinnennetze und Kokons. Die **Truhe** ist ein 3D-Modell (Plankenkorpus, gewölbter Deckel, Eisenbänder mit Nieten, Eckbeschläge, Messingschloss; offen mit glimmenden Münzen und Edelsteinen).
-- **Atlas**: alles auf Seiten à 2048² (aktuell gut 5) plus eine Effektseite für die PixelFX-Effekte, die beim Start in wenigen Sekunden Bild für Bild gezeichnet werden. Feste Streifen für Spieler, eigenes Schiff und den gerade aktiven Boss werden bei Bedarf neu gezeichnet.
-- **Schrift und UI**: eigene Pixelschrift mit Umlauten und Sonderzeichen für Fließtext, dazu eine **Zierschrift** (Antiqua-Versalien wie gemeißelt, aus Breitfeder-Strichen mit Keilserifen) für Titel, Banner, Ortsnamen, Fenstertitel und Knöpfe. Rahmen, Symbole.
-- **Natürlicher Bewuchs** (`world/nature.rs`): Wald wächst in Flecken und wird zum Rand hin lichter, mit Lichtungen und einzelnen Solitärbäumen im Offenland. Die Arten folgen dem Standort: Nadelbäume auf den Höhen, Auwald und Mangroven am Wasser, Palmen nur am Sandstrand, in der Frostgrotte eine Schneefichten-Taiga, in der Aschebucht verkohlte Bäume mit Glut in den Rissen. Unter den Kronen Farne, Pilze und umgestürzte Stämme, am Waldrand Sträucher, im Offenland Gras in Horsten und Blumenkolonien einer Art auf Wiesenflecken, Schilf am stillen Ufer, Strandgras auf der Düne, Treibholz am Flutsaum, Geröll am Hangfuß.
-- **Boden-Deko** (Gras, Blumen, Klee, Farnsprossen, Steinchen, Zweige, Laub, Tang, Muscheln, Treibholz, Wurzeln, Pilze, Glut, Seerosen, Schilf) entsteht je 256-px-Eimer erst beim Zeichnen, ohne Speicher und Ladezeit – nach denselben Standortregeln: Laub, Zweige und Pilze nur im Schatten der Bäume, Tang und Muscheln am Flutsaum, Seerosen nur in Teichen und im Sumpf, Rumflaschen, Taue und Münzen nur auf Planken und in Siedlungen; keine verstreuten Schädel und Knochen mehr.
+- **Figuren-Maler** (`chars.rs`): Figuren 64 × 72 Pixel, drei Richtungen (vorn, Seite gespiegelt, hinten), alle Animationen.
+  Über 40 Vorlagen: Gegner, NPCs, Crew, Dorfbewohner, Könige, Malakor (vier Arme, Tentakelbart, Korallenkrone).
+  Bausteine wie Hüte, Mäntel, Bärte, Flügel, Schlangenhaar, Uhrwerk, Leuchtaugen, Auren.
+  Für alle Menschen gleich: Paspeln an der Mantelöffnung, Saum mit Umschlag, Taschenklappen mit Knopf, Bandelier mit Messingschnalle, Gürteltasche,
+  helle Manschetten, Stiefelstulpen mit Schnalle, Glanz in den Augen;
+  ein Feinschliff je Bild setzt Formlicht an die Kanten, Gewebe- und Faltenstruktur, Haarsträhnen, Metallglanz und Mikrorelief für die Beleuchtung.
+- **Kreaturen-Rig** (`rig.rs`, `beasts.rs`): Wesen bestehen aus Ellipsoiden, Quadern, Röhren, Häuten und Dreiecken im Raum.
+  Ein Strahlenwerfer rendert sie aus der 3/4-Kamera (Neigung 0,55) mit Mustern (Schuppen, Fell, Nieten …), Innenkonturen, Höhlenschatten in Ansätzen und Kehlen,
+  Glanzlichtern auf Metall und Umriss. Er schreibt die Höhe je Pixel, damit Schatten der Grundfläche folgen.
+- **Schiffe** (`ships.rs`): ebenfalls als Rig. 16 Kurse (9 gerendert, der Rest gespiegelt),
+  das eigene Schiff als detailreiche schwarze Galeone im Pixelstil (`build_black`) mit sichtbaren Ausbauten bis Stufe 20,
+  vier Bossschiffe mit eigenem Entwurf und der Fliegende Holländer (Maßstab 6,9).
+- **Gelände** (`terrain.rs`): Der Boden wird in 256-Pixel-Stücken gebacken.
+  Materialien wie Gras, Wiese, Sand, Erde, Pflaster, Marmor, Planken, Basalt, Asche, Schnee, Eis, Schlamm, Fels und Moos haben je Gebiet eigene Paletten.
+  Dazu weiche Materialgrenzen, nasse Uferkanten, Ufersteine, Hänge, Festungsmauern aus Quadern und Naturwege.
+- **Requisiten** (`props.rs`, `flora.rs`, `buildings.rs`, `structures.rs`, `grave.rs`):
+  Bäume mit Kronen, die durchsichtig werden, wenn man dahinter steht (in der Natur die PixelLab-Arten:
+  Eichen, Laubbäume, Kiefern, Schneefichten, Zypressen, tote und verkohlte Bäume, Palmen, dazu Mangroven), Büsche,
+  düstere Fachwerkhäuser (Schieferdächer mit Moos, verrußter Putz, vernagelte Fenster, Schädel über der Tür), Bannpfähle mit Schädeln, Galgen mit Käfig,
+  Festung, Werft, Galgen mit schwingenden Gehängten, Särge, Wracks, Eisberge, Korallen, hohe Mauern mit Zinnen, Spinnennetze und Kokons.
+  Die **Truhe** ist ein 3D-Modell (Plankenkorpus, gewölbter Deckel, Eisenbänder mit Nieten, Eckbeschläge, Messingschloss;
+  offen mit glimmenden Münzen und Edelsteinen).
+- **Atlas**: alles auf Seiten à 2048² (aktuell gut 5) plus eine Effektseite für die PixelFX-Effekte,
+  die beim Start in wenigen Sekunden Bild für Bild gezeichnet werden.
+  Feste Streifen für Spieler, eigenes Schiff und den gerade aktiven Boss werden bei Bedarf neu gezeichnet.
+- **Schrift und UI**: eigene Pixelschrift mit Umlauten und Sonderzeichen für Fließtext, dazu eine **Zierschrift** (Antiqua-Versalien wie gemeißelt,
+  aus Breitfeder-Strichen mit Keilserifen) für Titel, Banner, Ortsnamen, Fenstertitel und Knöpfe. Rahmen, Symbole.
+- **Natürlicher Bewuchs** (`world/nature.rs`): Wald wächst in Flecken und wird zum Rand hin lichter, mit Lichtungen und einzelnen Solitärbäumen im Offenland.
+  Die Arten folgen dem Standort: Nadelbäume auf den Höhen, Auwald und Mangroven am Wasser, Palmen nur am Sandstrand,
+  in der Frostgrotte eine Schneefichten-Taiga, in der Aschebucht verkohlte Bäume mit Glut in den Rissen.
+  Unter den Kronen Farne, Pilze und umgestürzte Stämme, am Waldrand Sträucher, im Offenland Gras in Horsten und Blumenkolonien einer Art auf Wiesenflecken,
+  Schilf am stillen Ufer, Strandgras auf der Düne, Treibholz am Flutsaum, Geröll am Hangfuß.
+- **Boden-Deko** (Gras, Blumen, Klee, Farnsprossen, Steinchen, Zweige, Laub, Tang, Muscheln, Treibholz, Wurzeln, Pilze, Glut, Seerosen,
+  Schilf) entsteht je 256-px-Eimer erst beim Zeichnen, ohne Speicher und Ladezeit – nach denselben Standortregeln:
+  Laub, Zweige und Pilze nur im Schatten der Bäume, Tang und Muscheln am Flutsaum, Seerosen nur in Teichen und im Sumpf, Rumflaschen,
+  Taue und Münzen nur auf Planken und in Siedlungen; keine verstreuten Schädel und Knochen mehr.
 
 ### 7.4 Zonenstimmung
-Jede Zone hat eine eigene Licht- und Farbstimmung (`env.rs`), die weich eingeblendet wird: Grundlicht, Sonne, Nebelfarbe, Wasserfarben, Belichtung, Lichtstrahlen und ein **Farbskript** (Farbtrennung in Schatten und Lichter, z. B. violette Schatten und Glut-Lichter in der Glutwacht, grüne Schatten und fahles Gelb in den Fluchmangroven). Stimmungen gibt es für Galgenstrand, Glutwacht, Aschebucht, Frostgrotte, Rabenwacht, Fluchmangroven, Ende der Welt, Innenräume, die Stille vor dem Endkampf, das Gewitter beim Holländer, den Meeresgrund und jedes Seegebiet.
+Jede Zone hat eine eigene Licht- und Farbstimmung (`env.rs`), die weich eingeblendet wird:
+Grundlicht, Sonne, Nebelfarbe, Wasserfarben, Belichtung, Lichtstrahlen und ein **Farbskript** (Farbtrennung in Schatten und Lichter,
+z. B. violette Schatten und Glut-Lichter in der Glutwacht, grüne Schatten und fahles Gelb in den Fluchmangroven).
+Stimmungen gibt es für Galgenstrand, Glutwacht, Aschebucht, Frostgrotte, Rabenwacht, Fluchmangroven, Ende der Welt, Innenräume, die Stille vor dem Endkampf,
+das Gewitter beim Holländer, den Meeresgrund und jedes Seegebiet.
 
 ### 7.4b Wetter, Tageszeit und Leben (Runde 13)
-- **Tageszeit**: ein Tag dauert eine halbe Stunde; in der zweiten Hälfte sinkt die **tiefe Nacht** über die Zonenstimmung – Mondlicht, dunklerer Nebel, hellere Laternen, Sterne spiegeln sich in der See. Prolog, Innenräume und der Endkampf behalten ihre feste Stimmung.
-- **Wetterfronten** je Gebiet: Regen (Galgenstrand, Rabenwacht fast immer, Fluchmangroven, wilde Inseln, offene See), Schnee (Frostgrotte, Eismeer), Asche (Aschebucht, Glutwacht, Ende der Welt), dazu Wind. Fronten ziehen in 40–110 s auf und ab; mit ihnen zieht die Wolkendecke zu, Lichtstrahlen fallen nur durch Wolkenlücken. Regen fällt schräg im Wind und spritzt auf, die Welt wird **nass** (dunkler, glänzend, Pfützen mit Regenringen, Ringe auf dem Wasser) und trocknet langsam; Schnee und Asche legen sich auf Dächer, Felsen und Kronen; in der Kälte steht der Atem als Wolke vor dem Mund.
+- **Tageszeit**: ein Tag dauert eine halbe Stunde;
+  in der zweiten Hälfte sinkt die **tiefe Nacht** über die Zonenstimmung – Mondlicht, dunklerer Nebel, hellere Laternen, Sterne spiegeln sich in der See.
+  Prolog, Innenräume und der Endkampf behalten ihre feste Stimmung.
+- **Wetterfronten** je Gebiet: Regen (Galgenstrand, Rabenwacht fast immer, Fluchmangroven, wilde Inseln, offene See), Schnee (Frostgrotte, Eismeer),
+  Asche (Aschebucht, Glutwacht, Ende der Welt), dazu Wind.
+  Fronten ziehen in 40–110 s auf und ab; mit ihnen zieht die Wolkendecke zu, Lichtstrahlen fallen nur durch Wolkenlücken.
+  Regen fällt schräg im Wind und spritzt auf, die Welt wird **nass** (dunkler, glänzend, Pfützen mit Regenringen, Ringe auf dem Wasser) und trocknet langsam;
+  Schnee und Asche legen sich auf Dächer, Felsen und Kronen; in der Kälte steht der Atem als Wolke vor dem Mund.
 - **Wind** bewegt Laub, Halme, Nebel und Teilchen in seiner Richtung; Gras, Farne und Schilf biegen sich vor der Figur weg.
-- **Wellen und Brandung** (Runde 14): Lange Dünungszüge laufen mit dem Wind über die See, mit schmalen hellen Kämmen und dunklen Tälern, bei auffrischendem Wind mit Schaumkronen; vor den Stränden laufen Brecher als helle Schaumlinien aufs Ufer zu. Wo die See gegen Fels, Basalt, Eis, Klippen oder Festungsmauern schlägt, schießt im eigenen Takt jeder Stelle Gischt hoch, ein Schleier verweht mit dem Wind, Schaum breitet sich aus und zerfließt, und aus der Nähe hört man die Brandung donnern.
-- **Wasser**: Wolken spiegeln sich, Laternen werfen zitternde Lichtpfade, das Schiff rollt im Seegang und krängt in Kurven, hinter dem Heck läuft ein Kielwasser auseinander, bei voller Fahrt sprüht Gischt am Bug. Fischschwärme kreisen in Ufernähe und stieben vor dem Schiff auseinander, auf hoher See treibt Wrackgut. Am Fuß der Wasserfälle steht bei Sonne ein Regenbogen im Sprühnebel, der Strudel zieht drei Schaumarme in seinen Schlund.
-- **Feuer**: Säbelfeuer knistern mit aufsteigender Glut und Funkenregen, über Feuer und Lava flimmert die Luft, leuchtende Flächen (Lava, Glut, Leuchtpilze) erhellen ihre Umgebung.
-- **Lesbarkeit**: Die Spielfigur hat im Dunkeln einen kühlen Rand und bleibt hinter Bäumen, Mauern und Dächern als Silhouette sichtbar. Außerhalb von Kämpfen blendet sich die Anzeige nach einigen Sekunden aus; Ortsnamen erscheinen Buchstabe für Buchstabe.
+- **Wellen und Brandung** (Runde 14): Lange Dünungszüge laufen mit dem Wind über die See, mit schmalen hellen Kämmen und dunklen Tälern,
+  bei auffrischendem Wind mit Schaumkronen; vor den Stränden laufen Brecher als helle Schaumlinien aufs Ufer zu.
+  Wo die See gegen Fels, Basalt, Eis, Klippen oder Festungsmauern schlägt, schießt im eigenen Takt jeder Stelle Gischt hoch, ein Schleier verweht mit dem Wind,
+  Schaum breitet sich aus und zerfließt, und aus der Nähe hört man die Brandung donnern.
+- **Wasser**: Wolken spiegeln sich, Laternen werfen zitternde Lichtpfade, das Schiff rollt im Seegang und krängt in Kurven,
+  hinter dem Heck läuft ein Kielwasser auseinander, bei voller Fahrt sprüht Gischt am Bug.
+  Fischschwärme kreisen in Ufernähe und stieben vor dem Schiff auseinander, auf hoher See treibt Wrackgut.
+  Am Fuß der Wasserfälle steht bei Sonne ein Regenbogen im Sprühnebel, der Strudel zieht drei Schaumarme in seinen Schlund.
+- **Feuer**: Säbelfeuer knistern mit aufsteigender Glut und Funkenregen, über Feuer und Lava flimmert die Luft, leuchtende Flächen (Lava, Glut,
+  Leuchtpilze) erhellen ihre Umgebung.
+- **Lesbarkeit**: Die Spielfigur hat im Dunkeln einen kühlen Rand und bleibt hinter Bäumen, Mauern und Dächern als Silhouette sichtbar.
+  Außerhalb von Kämpfen blendet sich die Anzeige nach einigen Sekunden aus; Ortsnamen erscheinen Buchstabe für Buchstabe.
 
 ### 7.5 Titelbild
-**„Sturmnacht“** (Runde 14, völlig neu und ohne Pixelgrafik): Der Titel ist ein animiertes Bild in voller Bildschirmauflösung, ganz aus Formeln im Shader gemalt. Nacht auf hoher See, eine Wolkendecke zieht im Sturm, der Mond steht mit kaltem Hof darüber, alle paar Sekunden zuckt ein Blitz aus den Wolken und taucht Himmel und See in fahles Licht. Die Dünung rollt in mehreren Wellenzügen heran, der Mond legt einen gebrochenen, glitzernden Pfad aufs Wasser, Schaumkronen blitzen auf, am Horizont liegt Dunst. In der Bildmitte rechts schaukelt eine schwarze Galeone mit zerfetzten, geblähten Segeln, Takelage und wehender Flagge, Heckfenster und zwei Laternen glühen warm und spiegeln sich im Wasser. Dahinter hebt sich der Kopf eines Riesenkraken aus dem Dunst, seine zwei bernsteinfarbenen Augen mit waagrechten Pupillen blinzeln; ringsum steigen seine Arme aus dem Meer, eingerollt, nass glänzend, mit Saugnäpfen, steigen und sinken wieder, vor dem Schiff mit Gischt am Austritt. Regen fällt in zwei Lagen, unten rollt ein dunkler Wellenkamm. **Hauptmenü**: links ein weicher dunkler Verlauf, darin oben der goldene Schriftzug „THRONE of the DROWNED“ mit wanderndem Lichtschimmer, goldener Linie und Unterzeile, darunter die Menüpunkte schlicht als Schrift ohne Kästen – der gewählte leuchtet golden mit Marke und Lichtstreif –, unten ein Bedienhinweis und die Fassung.
+**„Sturmnacht“** (Runde 14, völlig neu und ohne Pixelgrafik):
+Der Titel ist ein animiertes Bild in voller Bildschirmauflösung, ganz aus Formeln im Shader gemalt.
+Nacht auf hoher See, eine Wolkendecke zieht im Sturm, der Mond steht mit kaltem Hof darüber,
+alle paar Sekunden zuckt ein Blitz aus den Wolken und taucht Himmel und See in fahles Licht.
+Die Dünung rollt in mehreren Wellenzügen heran, der Mond legt einen gebrochenen, glitzernden Pfad aufs Wasser, Schaumkronen blitzen auf,
+am Horizont liegt Dunst.
+In der Bildmitte rechts schaukelt eine schwarze Galeone mit zerfetzten, geblähten Segeln, Takelage und wehender Flagge,
+Heckfenster und zwei Laternen glühen warm und spiegeln sich im Wasser.
+Dahinter hebt sich der Kopf eines Riesenkraken aus dem Dunst, seine zwei bernsteinfarbenen Augen mit waagrechten Pupillen blinzeln;
+ringsum steigen seine Arme aus dem Meer, eingerollt, nass glänzend, mit Saugnäpfen, steigen und sinken wieder, vor dem Schiff mit Gischt am Austritt.
+Regen fällt in zwei Lagen, unten rollt ein dunkler Wellenkamm.
+**Hauptmenü**: links ein weicher dunkler Verlauf, darin oben der goldene Schriftzug „THRONE of the DROWNED“ mit wanderndem Lichtschimmer,
+goldener Linie und Unterzeile, darunter die Menüpunkte schlicht als Schrift ohne Kästen – der gewählte leuchtet golden mit Marke und Lichtstreif –,
+unten ein Bedienhinweis und die Fassung.
 ---
 
 ## 8. Klang
 
-- **Synthesizer** im Code (`synth.rs`): Lieder werden als PCM gerendert (22 050 Hz, mono). Instrumente: Glocke, Harfe (Karplus-Strong), Cello, Flächenklang, Trommel, Tick und weitere.
+- **Synthesizer** im Code (`synth.rs`): Lieder werden als PCM gerendert (22 050 Hz, mono).
+  Instrumente: Glocke, Harfe (Karplus-Strong), Cello, Flächenklang, Trommel, Tick und weitere.
 - **Musik** (alle in Moll, instrumental, melancholische Seemannsmusik):
 
 | Stück | Wo |
@@ -351,10 +636,14 @@ Jede Zone hat eine eigene Licht- und Farbstimmung (`env.rs`), die weich eingeble
 | „Weltschlund“ | Ende der Welt |
 | Boss | Bosskämpfe |
 
-- **Ambiente**: Wellen, Wind (stärker mit dem Wetter), Regen (eigene Lage, unter Dach gedämpft), Dröhnen (Tod) und eine **dunkle Spannungslage**, die mit Gegnern in der Nähe und im Bosskampf anschwillt, Feuerknistern nahe Feuern.
-- **Bewusste Stille**: beim Bossauftritt schweigt die Musik einen Atemzug lang; im Prolog verstummt sie, sobald man die Spinne hört. **Stinger** beim Sieg über einen Boss, leise Glocken beim ersten Betreten eines Ortes.
-- **Raumklang**: Treffer, Tode und Explosionen erklingen links/rechts nach ihrer Lage zur Kamera und leiser mit der Entfernung. Schwere Hiebe haben eine zweite, dumpfe Klanglage, die Figur stößt beim schweren Hieb einen Kampflaut aus (kein Wort).
-- **Klangeffekte** (über 30): Hiebe, Treffer, Parieren, Rolle, Trinken, Kanonen, Pistole, Gebrüll, Glocke, Ketten, Feuer entzünden, Truhe, Stufenaufstieg und mehr.
+- **Ambiente**: Wellen, Wind (stärker mit dem Wetter), Regen (eigene Lage, unter Dach gedämpft), Dröhnen (Tod) und eine **dunkle Spannungslage**,
+  die mit Gegnern in der Nähe und im Bosskampf anschwillt, Feuerknistern nahe Feuern.
+- **Bewusste Stille**: beim Bossauftritt schweigt die Musik einen Atemzug lang; im Prolog verstummt sie, sobald man die Spinne hört.
+  **Stinger** beim Sieg über einen Boss, leise Glocken beim ersten Betreten eines Ortes.
+- **Raumklang**: Treffer, Tode und Explosionen erklingen links/rechts nach ihrer Lage zur Kamera und leiser mit der Entfernung.
+  Schwere Hiebe haben eine zweite, dumpfe Klanglage, die Figur stößt beim schweren Hieb einen Kampflaut aus (kein Wort).
+- **Klangeffekte** (über 30): Hiebe, Treffer, Parieren, Rolle, Trinken, Kanonen, Pistole, Gebrüll, Glocke, Ketten, Feuer entzünden, Truhe,
+  Stufenaufstieg und mehr.
 - Wiedergabe über WebAudio mit Hall und Kompressor. Der Ton wird beim ersten Tippen oder Klick freigeschaltet.
 
 ---
@@ -363,26 +652,36 @@ Jede Zone hat eine eigene Licht- und Farbstimmung (`env.rs`), die weich eingeble
 
 ### 9.1 Aufbau
 - `crates/art` – Bibliothek für die prozedurale Kunst (Leinwand, Atlas, Gelände, Figuren, Rig, Schiffe, Requisiten, Schrift).
-- `src/gfx` – eigener Renderer: Sofortmodus-Zeichenlisten (Boden, Abziehbilder, y-sortierte Welt, Overlays, UI, Lichter), G-Puffer, Licht-Pass, Bloom, Tiefenschärfe, Endbild mit Kippung.
+- `src/gfx` – eigener Renderer: Sofortmodus-Zeichenlisten (Boden, Abziehbilder, y-sortierte Welt, Overlays, UI, Lichter), G-Puffer, Licht-Pass, Bloom,
+  Tiefenschärfe, Endbild mit Kippung.
 - `src/world` – Weltgenerator (Inseln, Ebenen, Siedlungen, Requisiten, Kollision) und Weltdarstellung (Streaming).
 - `src/game` – Spielablauf, Spieler und Gegner, Bosse, Endkampf, Schiff, Crew, Dialoge, Daten, Stimmung, Effekte.
 - `src/ui` – HUD, Menüs, Titel, Pixelschrift, Touch-Steuerung, iPhone-Tastatur.
 - `src/synth.rs`, `src/audio.rs` – Musik und Klang. `src/save.rs` – Spielstände.
 
 ### 9.2 Ablauf eines Bildes
-Eingabe → Spiel-Update (nur Gegner und NPCs in Kameranähe) → Welt zeichnen (sichtbare Boden-Chunks, Requisiten und Deko aus 256-Pixel-Eimern) → Figuren, Effekte, UI → Packen (Welt nach y sortiert, Lichter nach Nähe) → GPU.
+Eingabe → Spiel-Update (nur Gegner und NPCs in Kameranähe) → Welt zeichnen (sichtbare Boden-Chunks, Requisiten und Deko aus 256-Pixel-Eimern) → Figuren,
+Effekte, UI → Packen (Welt nach y sortiert, Lichter nach Nähe) → GPU.
 
 ### 9.3 Leistung und Laden
-- **Streaming**: Nur Boden-Chunks im Bild und in einem Ring darum liegen auf der GPU (50 Plätze). Fehlende sichtbare Chunks werden sofort gebacken. Der Ring entsteht vorab in kleinen Schritten mit höchstens 5 ms je Bild, damit Laufen und Segeln nicht ruckeln. Offene See braucht keine Pixelarbeit.
+- **Streaming**: Nur Boden-Chunks im Bild und in einem Ring darum liegen auf der GPU (50 Plätze).
+  Fehlende sichtbare Chunks werden sofort gebacken.
+  Der Ring entsteht vorab in kleinen Schritten mit höchstens 5 ms je Bild, damit Laufen und Segeln nicht ruckeln. Offene See braucht keine Pixelarbeit.
 - **Nahbereich**: Gegner, NPCs und Interaktionen werden nur um Kamera bzw. Spieler herum berechnet.
 - **Musik** wird nach Zeitbudget vorberechnet und danach an den Browser übergeben.
 - **Speicher**: Atlasseiten werden beim Start in den Upload verschoben statt kopiert (Wasm-Speicher etwa 270 MB mit der großen Welt).
-- **Große Welt**: Die Wassermaske hat nur eine Kachel je Texel; die feinen Ufer stecken in den Boden-Chunks. Die Boden-Deko entsteht je Eimer beim Zeichnen. Seeungeheuer, Haie und Gegner rechnen nur nahe am Schiff bzw. an der Kamera. Die Welt entsteht in rund 0,65 s.
+- **Große Welt**: Die Wassermaske hat nur eine Kachel je Texel; die feinen Ufer stecken in den Boden-Chunks.
+  Die Boden-Deko entsteht je Eimer beim Zeichnen.
+  Seeungeheuer, Haie und Gegner rechnen nur nahe am Schiff bzw. an der Kamera. Die Welt entsteht in rund 0,65 s.
 - **Messung**: `?debug&start=…&prof` gibt jede Sekunde Bildzeit und Anteile in die Konsole aus.
 - Startzeit: rund 3–4 Sekunden für Grafik und Welt.
 
 ### 9.4 Spielstände
-Profile nur mit Namen (kein Passwort), gespeichert im Browser (localStorage) als JSON. Alte, noch verschlüsselte Profile (PBKDF2-SHA256 + AES-256-GCM) öffnet man ein einziges Mal mit dem früheren Passwort; danach werden sie unverschlüsselt gespeichert. Automatisches Speichern an Feuern. Neue Felder bleiben abwärtskompatibel, alte Spielstände laden weiter: Version 5 verschiebt Perlenfleck und aufgehobene Gegenstände in die große Karte.
+Profile nur mit Namen (kein Passwort), gespeichert im Browser (localStorage) als JSON.
+Alte, noch verschlüsselte Profile (PBKDF2-SHA256 + AES-256-GCM) öffnet man ein einziges Mal mit dem früheren Passwort;
+danach werden sie unverschlüsselt gespeichert.
+Automatisches Speichern an Feuern.
+Neue Felder bleiben abwärtskompatibel, alte Spielstände laden weiter: Version 5 verschiebt Perlenfleck und aufgehobene Gegenstände in die große Karte.
 
 ### 9.5 Steuerung
 | Taste | Aktion |
@@ -405,7 +704,8 @@ iPhone: Touch-Stick links, Knöpfe rechts, hochkant und quer. Am Computer Tastat
 ### 9.6 Bauen und Veröffentlichen
 - Lokal: `cargo build --target wasm32-unknown-unknown --profile fast`, dann `./build.sh` → `dist/`.
 - Veröffentlichen: Push auf `main` → GitHub Actions baut das Release (mit `wasm-opt`) und stellt es auf GitHub Pages (ca. 10–15 Minuten).
-- Testspiele ohne Profil über URL-Parameter, z. B. `?debug&start=hain&sail&crew`, `&boss=fire`, `&seaboss=ice`, `&endphase=4`, `&intro` (alle Parameter in `CLAUDE.md`).
+- Testspiele ohne Profil über URL-Parameter, z. B. `?debug&start=hain&sail&crew`, `&boss=fire`, `&seaboss=ice`, `&endphase=4`,
+  `&intro` (alle Parameter in `CLAUDE.md`).
 
 ### 9.7 Wichtige technische Regeln
 - Texturfelder nie mit einer durch 6 teilbaren Ebenenzahl anlegen. WebGL-wgpu hält sie für Würfel-Felder, dann fehlen Sprites bzw. der Boden ist schwarz.

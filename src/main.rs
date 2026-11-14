@@ -616,6 +616,10 @@ fn tick(
             }
             prof::time(prof::DRAW, || g.draw(art, f, dt));
             prof::time(prof::UI, || g.draw_ui(f, art));
+            // Testlauf `&state`: einmal je Sekunde eine Zeile Spielzustand (Prüfen ohne Bild)
+            if app.params.contains_key("state") && prof::state_due() {
+                info!("{}", g.state_line());
+            }
             app.touch.draw(f, art, g.sailing);
             std::mem::swap(&mut app.input, &mut g.input);
             if menu_open {

@@ -30,6 +30,24 @@ thread_local! {
     static P: RefCell<Prof> = RefCell::new(Prof::default());
 }
 
+thread_local! {
+    static STATE_AT: RefCell<Option<Instant>> = const { RefCell::new(None) };
+}
+
+/// Für `?state`: höchstens einmal je Sekunde wahr (dann schreibt `main.rs` die Zustandszeile).
+pub fn state_due() -> bool {
+    STATE_AT.with(|s| {
+        let mut s = s.borrow_mut();
+        let now = Instant::now();
+        if s.map_or(true, |l| now.duration_since(l).as_secs_f64() >= 1.0) {
+            *s = Some(now);
+            true
+        } else {
+            false
+        }
+    })
+}
+
 pub fn enable() {
     P.with(|p| p.borrow_mut().on = true);
 }

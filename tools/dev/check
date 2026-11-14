@@ -1,0 +1,117 @@
+#!/usr/bin/env python3
+"""cargo check/build mit knapper Ausgabe: je Meldung eine Zeile (Ort, Text, Hinweis), am Ende eine Zeile.
+
+  check            Spiel für wasm prüfen (Profil fast)
+  check art        Kunst-Crate nativ prüfen (samt Vorschau-Programm, target-art)
+  check all        beides
+  check --build [profil]   Spiel für wasm bauen (nutzt tools/dev/build)
+
+Die eine erlaubte Warnung (veraltetes AudioBufferSourceNode::stop) wird nur gezählt.
+Endet mit Code 1 bei Fehlern, 3 bei neuen Warnungen.
+"""
+import json
+import os
+import subprocess
+import sys
+import time
+
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+KNOWN = ('AudioBufferSourceNode::stop',)
+MAX = 30
+
+
+def short(s, n):
+    s = ' '.join(s.split())
+    return s if len(s) <= n else s[:n - 1] + '…'
+
+
+def rel(p):
+    if p.startswith(ROOT + '/'):
+        return p[len(ROOT) + 1:]
+    if '/registry/src/' in p:
+        return '…/' + '/'.join(p.split('/')[-3:])
+    return p
+
+
+def run(name, args, env=None):
+    t0 = time.time()
+    e = dict(os.environ)
+    e.update(env or {})
+    p = subprocess.run(['cargo'] + args + ['--message-format=json'], cwd=ROOT, env=e, capture_output=True, text=True)
+    errs, warns, known, seen, lines = 0, 0, 0, set(), []
+    for ln in p.stdout.splitlines():
+        if not ln.startswith('{'):
+            continue
+        try:
+            j = json.loads(ln)
+        except ValueError:
+            continue
+        if j.get('reason') != 'compiler-message':
+            continue
+        m = j['message']
+        lvl = m.get('level', '')
+        if lvl not in ('error', 'warning') or not m.get('spans'):
+            continue
+        sp = next((s for s in m['spans'] if s.get('is_primary')), m['spans'][0])
+        key = (sp['file_name'], sp['line_start'], sp['column_start'], m['message'])
+        if key in seen:
+            continue
+        seen.add(key)
+        if lvl == 'warning' and any(k in m['message'] for k in KNOWN):
+            known += 1
+            continue
+        if lvl == 'error':
+            errs += 1
+        else:
+            warns += 1
+        code = f" [{m['code']['code']}]" if m.get('code') else ''
+        txt = f"{'F' if lvl == 'error' else 'W'} {rel(sp['file_name'])}:{sp['line_start']}:{sp['column_start']}{code} {short(m['message'], 200)}"
+        if sp.get('label'):
+            txt += f" — {short(sp['label'], 160)}"
+        lines.append(txt)
+        extra = 0
+        for s in m['spans']:
+            if not s.get('is_primary') and s.get('label') and extra < 2:
+                lines.append(f"    {rel(s['file_name'])}:{s['line_start']} {short(s['label'], 160)}")
+                extra += 1
+        for c in m.get('children', [])[:3]:
+            t = short(c.get('message', ''), 200)
+            rep = next((s.get('suggested_replacement') for s in c.get('spans', []) if s.get('suggested_replacement')), None)
+            if rep:
+                t += f' → `{short(rep, 80)}`'
+            if t:
+                lines.append(f"    {c.get('level', 'hinweis')}: {t}")
+    lines.sort(key=lambda s: (s[0] != 'F', 0))  # Fehler zuerst, sonst Reihenfolge behalten
+    for ln in lines[:MAX * 3]:
+        print(ln)
+    if len(lines) > MAX * 3:
+        print(f'… weitere Meldungen gekürzt ({errs} Fehler, {warns} Warnungen insgesamt)')
+    if p.returncode != 0 and errs == 0:
+        tail = [x for x in p.stderr.splitlines() if x.strip()][-12:]
+        print('\n'.join(short(x, 240) for x in tail))
+        errs = 1
+    st = 'FEHLER' if errs else ('Warnungen' if warns else 'ok')
+    kn = f' (+{known} bekannte)' if known else ''
+    print(f'{name}: {st} · {errs} Fehler · {warns} Warnungen{kn} · {time.time() - t0:.0f} s')
+    return 1 if errs else (3 if warns else 0)
+
+
+def main():
+    a = sys.argv[1:]
+    if a and a[0] in ('-h', '--help'):
+        print(__doc__.strip())
+        return 0
+    wasm = ['--target', 'wasm32-unknown-unknown', '--profile']
+    if a and a[0] == '--build':
+        return run('build', ['build'] + wasm + [a[1] if len(a) > 1 else 'fast'])
+    rc = 0
+    what = a[0] if a else 'spiel'
+    if what in ('spiel', 'all'):
+        rc = max(rc, run('check', ['check'] + wasm + ['fast']))
+    if what in ('art', 'all'):
+        rc = max(rc, run('check art', ['check', '-p', 'sw-art', '--all-targets', '--release'], {'CARGO_TARGET_DIR': 'target-art'}))
+    return rc
+
+
+if __name__ == '__main__':
+    sys.exit(main())

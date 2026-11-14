@@ -2,3 +2,5 @@ target/
 target-art/
 dist/
 node_modules/
+.shots/
+__pycache__/

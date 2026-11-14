@@ -1,0 +1,23 @@
+#!/bin/sh
+# Suche mit kurzen Treffern (ripgrep): Pfad je Datei nur einmal, Einrückung weg, lange Zeilen gekürzt,
+# höchstens G_MAX Zeilen (Standard 60).
+#   g <muster> [pfad…] [rg-Optionen]   im Quelltext (src, crates/art/src)
+#   g -d <muster>                      in der Doku (CLAUDE.md, docs/, READMEs)
+#   g -a <muster>                      überall (ohne das, was .ignore ausschließt)
+# Beispiele: g 'fn draw_moon'   ·   g -w tide_wet src/world   ·   g -d Gezeiten   ·   g -l 'Cut::Tide'
+cd "$(dirname "$0")/../.." || exit 1
+where="src crates/art/src"
+case "$1" in
+  -d) where="CLAUDE.md docs README.md crates/art/assets/pixellab/README.md tools"; shift ;;
+  -a) where="."; shift ;;
+esac
+[ $# -eq 0 ] && { sed -n '2,8p' "$0" | cut -c3-; exit 2; }
+pat=$1; shift
+for a in "$@"; do [ -e "$a" ] && where=""; done
+max=${G_MAX:-60}
+out=$(rg -n --heading --trim --color never --sort path -M 180 --max-columns-preview -e "$pat" "$@" $where 2>&1)
+[ -z "$out" ] && { echo "kein Treffer"; exit 1; }
+n=$(printf '%s\n' "$out" | wc -l)
+printf '%s\n' "$out" | head -n "$max"
+[ "$n" -gt "$max" ] && echo "… $n Zeilen, $max gezeigt (Muster enger fassen, Pfad angeben oder G_MAX=200)"
+exit 0

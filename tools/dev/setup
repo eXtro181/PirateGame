@@ -1,0 +1,31 @@
+#!/bin/sh
+# Bauwerkzeuge einrichten (idempotent, still): wasm32-Ziel und wasm-bindgen in der Version aus Cargo.lock.
+#   setup                  alles prüfen/einrichten, eine Zeile Ergebnis
+#   setup --wasm-bindgen   nur den Pfad zu wasm-bindgen ausgeben (richtet es bei Bedarf ein)
+# wasm-bindgen: $WASM_BINDGEN, PATH oder ~/.cache/pirat/wbg-<version>/ (fertiges Programm von der
+# Projektseite bei GitHub, sonst `cargo install`). Wird von tools/dev/build von selbst aufgerufen.
+cd "$(dirname "$0")/../.." || exit 1
+ver=$(awk '/^name = "wasm-bindgen"$/{getline; gsub(/[^0-9.]/,""); print; exit}' Cargo.lock)
+[ -n "$ver" ] || { echo "setup: wasm-bindgen-Version nicht in Cargo.lock gefunden" >&2; exit 1; }
+dir="$HOME/.cache/pirat/wbg-$ver"
+ok() { [ -x "$1" ] && [ "$("$1" --version 2>/dev/null | awk '{print $2}')" = "$ver" ]; }
+wb=""
+for c in "$WASM_BINDGEN" "$(command -v wasm-bindgen 2>/dev/null)" "$dir/wasm-bindgen" /tmp/claude-0/wbg/bin/wasm-bindgen; do
+  [ -n "$c" ] && ok "$c" && { wb=$c; break; }
+done
+if [ -z "$wb" ]; then
+  mkdir -p "$dir"
+  url="https://github.com/rustwasm/wasm-bindgen/releases/download/$ver/wasm-bindgen-$ver-$(uname -m)-unknown-linux-musl.tar.gz"
+  if curl -fsSL -m 120 "$url" 2>/dev/null | tar xz -C "$dir" --strip-components=1 2>/dev/null && ok "$dir/wasm-bindgen"; then
+    wb="$dir/wasm-bindgen"
+  else
+    echo "setup: lade wasm-bindgen $ver nicht fertig – baue es mit cargo (einige Minuten)" >&2
+    cargo install -q wasm-bindgen-cli --version "$ver" --root "$dir/cargo" >&2 && cp "$dir/cargo/bin/wasm-bindgen" "$dir/" && wb="$dir/wasm-bindgen"
+  fi
+fi
+ok "$wb" || { echo "setup: wasm-bindgen $ver ließ sich nicht einrichten" >&2; exit 1; }
+[ "$1" = "--wasm-bindgen" ] && { echo "$wb"; exit 0; }
+rustup target list --installed 2>/dev/null | grep -q wasm32-unknown-unknown || rustup target add wasm32-unknown-unknown >/dev/null 2>&1
+rustup target list --installed 2>/dev/null | grep -q wasm32-unknown-unknown || { echo "setup: wasm32-Ziel fehlt (rustup target add wasm32-unknown-unknown)" >&2; exit 1; }
+node -e "require('playwright')" 2>/dev/null && pw=ja || pw=fehlt
+echo "setup: ok · wasm-bindgen $ver ($wb) · wasm32-Ziel · Playwright $pw"
