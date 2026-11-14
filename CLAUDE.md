@@ -25,6 +25,7 @@ nie auf Verdacht ganze Dateien lesen. Diese Datei wird in jeder Sitzung ganz gel
 ## Sparsam arbeiten (Tokens)
 1. Nachschlagen statt lesen: `tools/dev/doc <stichwort>` (Doku), `tools/dev/code sym|ol|fn|refs` (Quelltext), `tools/dev/g <muster>` (Suche).
 2. Keine Datei über ~300 Zeilen ganz lesen. Read nur mit `offset`/`limit` auf den Bereich, den `code ol` nennt.
+   Ein Wächter lehnt Read ohne `limit` bei Dateien über 600 Zeilen bzw. 40 kB ab (`tools/dev/hooks/read_guard.py`).
 3. Vor dem Ändern genau ein Element holen (`code fn <name>`, bei langen mit `-g <regex>`), dann gezielt per Edit ändern – große Dateien nie neu schreiben.
    Verlangt Edit ein vorheriges Read, genügt ein Read mit `limit` auf den Bereich.
 4. Prüfen billig zuerst: `check` → `wgsl` → `build` + `smoke` → `shot -q -s` (Zustandszeile statt Bild) → erst dann Bilder, und dann das Kontaktblatt.

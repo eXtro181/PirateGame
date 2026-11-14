@@ -33,13 +33,15 @@ Stand 14.11.2026. Die Regeln selbst stehen kurz in der `CLAUDE.md` (Abschnitt �
 - `skillOverrides` „name-only“ für Unity, Unreal, PlayCanvas und mojulo (47 Einträge): diese Fähigkeiten stehen nur noch mit Namen in der Liste.
   Sie bleiben aufrufbar; rückgängig: die Zeilen löschen.
 
-## Bewusst nicht eingetragen (Entscheidung des Nutzers)
+- Lese-Wächter (`hooks.PreToolUse` für `Read` → `tools/dev/hooks/read_guard.py`, vom Nutzer am 14.11. freigegeben):
+  lehnt das Lesen von Textdateien über 600 Zeilen bzw. 40 kB ohne `limit` ab und nennt den billigeren Weg.
+  Mit `limit` bleibt alles lesbar; Bilder und PDFs sind ausgenommen; bei einem Fehler im Wächter wird gelesen.
 
-- `autoCompactWindow` (z. B. 200000): das Gespräch wird früher verdichtet, jeder Schritt liest dann weniger Verlauf mit.
-  Spart in langen Sitzungen am meisten, kostet aber öfter eine Verdichtung (Einzelheiten gehen eher verloren).
-- Lese-Wächter `tools/dev/hooks/read_guard.py` als `PreToolUse`-Hook für `Read`: lehnt das Lesen großer Dateien ohne `limit` ab und nennt die billigeren Wege.
-  Eintrag dafür: `"hooks": {"PreToolUse": [{"matcher": "Read", "hooks": [{"type": "command", "command": "python3 \"${CLAUDE_PROJECT_DIR:-.}/tools/dev/hooks/read_guard.py\"", "timeout": 5}]}]}`.
-- Freigaberegeln (`permissions.allow`) für die lesenden Werkzeuge.
+## Bewusst nicht eingetragen
+
+- `autoCompactWindow` (z. B. 200000): das Gespräch würde früher verdichtet, jeder Schritt läse weniger Verlauf mit.
+  Spart in langen Sitzungen am meisten, kostet aber öfter eine Verdichtung (Einzelheiten gehen eher verloren). Am 14.11. vom Nutzer nicht gewählt.
+- Freigaberegeln (`permissions.allow`) für die Werkzeuge: Sache des Nutzers, nicht des Projekts.
 
 ## Was nur der Nutzer einstellen kann
 

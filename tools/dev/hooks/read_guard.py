@@ -30,9 +30,15 @@ def main():
     if (rest <= MAX_LINES and size <= MAX_BYTES) or (ti.get('offset') and rest <= MAX_LINES):
         return
     rel = os.path.relpath(p, os.environ.get('CLAUDE_PROJECT_DIR') or os.getcwd())
-    why = (f'Große Datei ({lines} Zeilen, {size // 1000} kB) – nicht ganz lesen. Billiger: '
-           f'`tools/dev/code ol {rel}` (Gliederung), `tools/dev/code fn <name>` (ein Element), '
-           f'`tools/dev/g <muster>` (Suche), `tools/dev/doc -s <abschnitt>` (Doku) '
+    if rel.startswith('..'):
+        rel = p
+    if p.endswith(('.rs', '.wgsl')):
+        tip = f'`tools/dev/code ol {rel}` (Gliederung), `tools/dev/code fn <name>` (ein Element), `tools/dev/g <muster>` (Suche)'
+    elif p.endswith('.md'):
+        tip = '`tools/dev/doc <stichwort>` (Suche mit Abschnitt), `tools/dev/doc -s <überschrift>` (ein Abschnitt)'
+    else:
+        tip = f'`rg -n -M 180 <muster> {rel}` (Suche)'
+    why = (f'Große Datei ({lines} Zeilen, {size // 1000} kB) – nicht ganz lesen. Billiger: {tip} '
            f'oder Read mit offset und limit. Wer wirklich alles braucht, gibt limit an.')
     print(json.dumps({'hookSpecificOutput': {'hookEventName': 'PreToolUse', 'permissionDecision': 'deny',
                                              'permissionDecisionReason': why}}, ensure_ascii=False))
