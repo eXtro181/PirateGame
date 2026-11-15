@@ -98,7 +98,8 @@ fn fs_light(f: FOut) -> @location(0) vec4<f32> {
     let kind = emt.a;
     let wet = abs(kind - 0.5) < 0.2;
     let hero = abs(kind - 0.96) < 0.009;
-    let nxy = nr.rg * 2.0 - 1.0;
+    // Relief betonen: Bodenstruktur und die Formen der Sprites fangen das Licht deutlicher (mehr Plastizität)
+    let nxy = clamp((nr.rg * 2.0 - 1.0) * select(1.3, 1.0, wet), vec2<f32>(-0.98), vec2<f32>(0.98));
     let n = vec3<f32>(nxy, sqrt(max(0.0, 1.0 - dot(nxy, nxy))));
     let elev = nr.b * 510.0;
     var spec_k = nr.a;
@@ -157,7 +158,7 @@ fn fs_light(f: FOut) -> @location(0) vec4<f32> {
             }
         }
         let n_crevice = (1.0 - n.z) * 0.14;
-        ao = 1.0 - clamp((occ / 12.0 * 1.65 * flat) + n_crevice, 0.0, 0.65) * G.hd2.x;
+        ao = 1.0 - clamp((occ / 12.0 * 1.9 * flat) + n_crevice, 0.0, 0.7) * G.hd2.x;
     }
 
     // Rückstrahlung (farbiges Streulicht der Umgebung) und leuchtende Flächen (Lava, Glut, Pilze,
@@ -196,7 +197,7 @@ fn fs_light(f: FOut) -> @location(0) vec4<f32> {
         cloud = 1.0 - smoothstep(0.62 - cov * 0.3, 0.86 - cov * 0.3, c1 * 0.72 + c2 * 0.34) * (0.28 + cov * 0.3);
     }
     // Umgebung: Himmel von oben, warmer Bodenrückwurf von unten
-    let hemi = mix(0.72, 1.04, n.z * G.ambient.w + (1.0 - G.ambient.w));
+    let hemi = mix(0.64, 1.07, n.z * G.ambient.w + (1.0 - G.ambient.w));
     var li = G.ambient.rgb * hemi * ao * mix(1.0, cloud, 0.35);
     li += bounce * (G.ambient.rgb * 0.55 + G.sun_col.rgb * 0.3 * cloud) * G.fx4.x * ao;
     li += emis * G.fx4.y;
@@ -288,6 +289,7 @@ fn fs_light(f: FOut) -> @location(0) vec4<f32> {
     var shadows = 0;
     var halo = vec3<f32>(0.0);
     var rim_l = vec3<f32>(0.0);
+    var pl = vec3<f32>(0.0);
     for (var i = 0; i < nl; i = i + 1) {
         let L = G.lights[i];
         let fi = f32(i);
@@ -304,7 +306,10 @@ fn fs_light(f: FOut) -> @location(0) vec4<f32> {
                 // Lichtkegel im Dunst: Strahlen, die vom Licht ausgehen
                 let ang = atan2(dp2.y, dp2.x) * 0.15915;
                 let ray = textureSampleLevel(t_d, s_lin, fract(vec2<f32>(ang + fi * 0.37, fi * 0.13 + t * 0.004)), 0.0).r;
-                halo += L.col.rgb * exp(-sqrt(dd2) * 5.0) * fl2 * (0.7 + 0.7 * smoothstep(0.48, 0.74, ray));
+                // Farbton halten: sehr helle Lichter werden gestaucht statt weiß auszubrennen; enger Hof,
+                // die Strahlen im Dunst nur als feine Zeichnung (kein fleckiger Schleier)
+                let lc = L.col.rgb / (1.0 + 0.5 * max(L.col.r, max(L.col.g, L.col.b)));
+                halo += lc * exp(-sqrt(dd2) * 6.5) * fl2 * (0.85 + 0.3 * smoothstep(0.48, 0.74, ray));
             }
         }
         let d3 = lpos - p3;
@@ -359,7 +364,7 @@ fn fs_light(f: FOut) -> @location(0) vec4<f32> {
             let streak = exp(-dx * dx / 40.0) * exp(-dy * dy * 2.2) * (0.6 + 0.4 * sin(sp.y * 0.9 + t * 4.0 + n.y * 6.0));
             spec += L.col.rgb * streak * 0.55 * fl;
         }
-        li += L.col.rgb * ndl * att * fl * (0.58 + 0.42 * ao) * lsh;
+        pl += L.col.rgb * ndl * att * fl * (0.58 + 0.42 * ao) * lsh;
         if (hd) {
             spec += L.col.rgb * ggx_spec(n, view_dir, ld, spec_k) * att * fl * lsh * 0.65;
         } else {
@@ -367,6 +372,9 @@ fn fs_light(f: FOut) -> @location(0) vec4<f32> {
             spec += L.col.rgb * pow(max(dot(n, h2), 0.0), 24.0) * spec_k * att * lsh;
         }
     }
+    // Lichtinseln ohne Ausbrennen: sehr helles Punktlicht wird gestaucht und behält seinen Farbton
+    // (ein Säbelfeuer auf Schnee leuchtet türkis statt als weißer Fleck)
+    li += pl * 1.12 / (1.0 + 0.3 * max(pl.r, max(pl.g, pl.b)));
     li += rim_l * G.fx4.z;
     // Lesbarkeit: die Spielfigur behält im Dunkeln eine Mindesthelligkeit und einen kühlen Rand
     if (hero) {
@@ -381,7 +389,7 @@ fn fs_light(f: FOut) -> @location(0) vec4<f32> {
     }
     var c = alb * li + spec + em;
     if (hd) {
-        c += halo * (0.045 + G.fog.w * 0.32) * (1.0 + G.fx3.y * 0.7);
+        c += halo * (0.05 + G.fog.w * 0.3) * (1.0 + G.fx3.y * 0.7);
     }
     // Pfützen: spiegeln den Himmel, Regenringe darauf
     if (puddle > 0.0) {
@@ -404,7 +412,9 @@ fn fs_light(f: FOut) -> @location(0) vec4<f32> {
         c += alb * G.counts.y * vec3<f32>(0.8, 0.85, 1.0) * ndl2 * (1.0 - occ2 * 0.88) * 1.6;
     }
     // Tiefennebel nach Bodenzeile (fern = oben), Ferne zusätzlich in Nebelfarbe getaucht
-    let fogk = G.fog.w * (1.0 - ground * 0.6) + G.hd.y * 0.03 * (1.0 - smoothstep(0.0, 0.4, ground));
+    // Bodennebel: was aufragt (Bäume, Mauern, Figuren), steht mit dem Fuß im Dunst und ragt oben heraus
+    let rise = mix(1.0, 0.4, smoothstep(6.0, 70.0, elev));
+    let fogk = (G.fog.w * (1.0 - ground * 0.6) + G.hd.y * 0.03 * (1.0 - smoothstep(0.0, 0.4, ground))) * rise;
     c = mix(c, G.fog.rgb, clamp(fogk, 0.0, 0.85));
     // Alpha trägt die Bodenzeile für die Tiefenschärfe im Endbild
     return vec4<f32>(c * G.misc.w, clamp(ground * 0.5, 0.0, 1.0));
@@ -415,7 +425,8 @@ fn fs_light(f: FOut) -> @location(0) vec4<f32> {
 fn fs_bright(f: FOut) -> @location(0) vec4<f32> {
     let c = textureSampleLevel(t_a, s_lin, f.uv, 0.0).rgb;
     let l = max(c.r, max(c.g, c.b));
-    let k = smoothstep(0.64, 1.5, l);
+    // nur wirklich Helles blüht (Lichter, Glut, Glanz) – beleuchteter Boden bleibt klar
+    let k = smoothstep(0.8, 1.7, l);
     return vec4<f32>(c * k, 1.0);
 }
 
@@ -474,14 +485,22 @@ fn fs_dof_v(f: FOut) -> @location(0) vec4<f32> {
 
 // ---------------------------------------------------------------- Endbild
 // t_a = beleuchtete Szene (Low-Res, Alpha = Bodenzeile), t_b = Bloom, t_c = Unschärfe, t_d = Rauschen
-fn tonemap(c: vec3<f32>) -> vec3<f32> {
-    // ACES-Kurve mit sanfter Entsättigung in den Spitzenlichtern (AgX-inspiriert)
-    let lum = luma(c);
-    let desat = smoothstep(0.85, 3.2, lum) * 0.42;
-    let x = mix(c, vec3<f32>(lum), desat);
+fn aces(x: vec3<f32>) -> vec3<f32> {
     let a = x * (2.51 * x + 0.03);
     let b = x * (2.43 * x + 0.59) + 0.14;
     return clamp(a / b, vec3<f32>(0.0), vec3<f32>(1.0));
+}
+fn tonemap(c: vec3<f32>) -> vec3<f32> {
+    // ACES-Kurve mit sanfter Entsättigung in den Spitzenlichtern (AgX-inspiriert)
+    let lum = luma(c);
+    let desat = smoothstep(0.9, 3.4, lum) * 0.3;
+    let x = mix(c, vec3<f32>(lum), desat);
+    // Je Kanal angewandt, quadriert der Fuß der Kurve im Dunkeln jeden Farbstich (aus leicht rötlichem
+    // Licht wird ein einfarbig rotes Bild). Deshalb überwiegend über die Helligkeit abbilden: die
+    // Verhältnisse der Kanäle bleiben erhalten, Materialien behalten auch im Dunkeln ihre Farben.
+    let l2 = max(luma(x), 0.0001);
+    let keep = x * (aces(vec3<f32>(l2)).x / l2);
+    return clamp(mix(aces(x), keep, 0.62), vec3<f32>(0.0), vec3<f32>(1.0));
 }
 
 // Lichtstrahlen durch Dunst: Bänder in Richtung der Sonne, an der Welt verankert (Stärke 0..1)
@@ -906,13 +925,17 @@ fn fs_final(f: FOut) -> @location(0) vec4<f32> {
     // Tiefenschärfe (Tilt-Shift): nach Bodenzeile, Ferne früher unscharf als die Nähe
     if (G.hd.y > 0.0) {
         let fd = s0.a * 2.0 - G.hd.z;
-        let coc = select(smoothstep(0.22, 0.5, fd), smoothstep(0.2, 0.55, -fd), fd < 0.0) * G.hd.y;
+        let coc = select(smoothstep(0.26, 0.6, fd), smoothstep(0.24, 0.62, -fd), fd < 0.0) * G.hd.y;
+        let bl = textureSampleLevel(t_c, s_lin, suv, 0.0).rgb;
+        // Klarheit: örtlicher Kontrast gegen das weichgezeichnete Bild – nur im Scharfen und begrenzt,
+        // damit um Lichter keine Säume entstehen. Zeichnung und Kanten der Pixelkunst treten hervor.
+        let det = clamp(c - bl, vec3<f32>(-0.16), vec3<f32>(0.16));
+        c += det * 0.45 * (1.0 - coc);
         if (coc > 0.001) {
-            let bl = textureSampleLevel(t_c, s_lin, suv, 0.0).rgb;
-            c = mix(c, bl, coc * 0.8);
+            c = mix(c, bl, coc * 0.62);
             // Diorama: unscharfe Ränder etwas dunkler und blasser, der Blick bleibt in der Fokuszone
-            c *= 1.0 - coc * 0.16;
-            c = mix(vec3<f32>(luma(c)), c, 1.0 - coc * 0.22);
+            c *= 1.0 - coc * 0.1;
+            c = mix(vec3<f32>(luma(c)), c, 1.0 - coc * 0.12);
         }
     }
     if (G.hd.w > 0.0) {
@@ -937,7 +960,9 @@ fn fs_final(f: FOut) -> @location(0) vec4<f32> {
     let l0 = clamp(luma(c), 0.0, 1.0);
     c *= mix(G.tone_hi.rgb, G.tone_lo.rgb, pow(1.0 - l0, 1.6));
     let l = luma(c);
-    c = mix(vec3<f32>(l), c, G.gain.w);
+    // Lebendigkeit: matte Farben gewinnen mehr als satte – Materialien bleiben unterscheidbar, nichts übersteuert
+    let chroma = max(c.r, max(c.g, c.b)) - min(c.r, min(c.g, c.b));
+    c = mix(vec3<f32>(l), c, G.gain.w * (1.0 + 0.3 * (1.0 - smoothstep(0.0, 0.5, chroma))));
     // wenig Leben: die Welt verliert Farbe, am Rand pocht es rot im Herzschlag
     if (G.fx0.y > 0.001) {
         let lh = G.fx0.y;

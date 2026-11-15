@@ -212,7 +212,8 @@ fn make_biome_pal(b: Biome) -> BiomePal {
             crack_glow: None,
         },
         Biome::Fire => BiomePal {
-            grass: pal(&[0x2E1820, 0x44222A, 0x5C3036, 0x764242, 0x905650, 0xAA6E62]),
+            // verbrannte Erde unter Asche: warmes Graubraun statt Rot – das Rot kommt aus Glut, Licht und Moos
+            grass: pal(&[0x241A1E, 0x342628, 0x483634, 0x5E4642, 0x765A52, 0x907266]),
             flowers: pal(&[0xF05A4A, 0xF4A060]),
             path: pal(&[0x4E4242, 0x6A5A58, 0x86746E, 0xA08C84, 0xB8A49A, 0xCCBAAE]),
             sand: pal(&[0x54464A, 0x6E5E5E, 0x887674, 0xA28E8A, 0xBAA6A0, 0xCEBCB4]),

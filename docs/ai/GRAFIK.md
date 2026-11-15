@@ -86,3 +86,16 @@ Endbild mit Zoom, Druckwelle, Hitzeflimmern, Strahlen durch Wolkenlücken, weich
 Tinten-Übergang, Kinobalken, Dither; zwei Nebellagen mit Parallaxe; Silhouette hinter Verdeckern; Pflanzen weichen der Figur aus.
 Alles in Kapitel 19a der Grafik-Anleitung (mit Stilrichtlinie und Farbskript).
 Werkzeug für automatische Bildvergleiche: `tools/shots/shots.js` (Referenzen mit `--ref`, Bilder außerhalb des Repos).
+
+## Bildlook 14.11. (Nebel als Tiefe, Klarheit, farbtreues Licht)
+
+Nur Shader und Stimmungswerte, keine neue Grafik; alle Formeln in Kapitel 19d der Grafik-Anleitung.
+- Nebellagen (`fs_overlay` Modus 5): um die Spielfigur licht, zur Ferne und zu den Rändern dicht; Farbe folgt dem Licht der Zone.
+- Bodennebel (`fs_light`): Hohes ragt aus dem Dunst (`rise` nach Höhe).
+- Lichter: Höfe und Punktlichter farbtreu gestaucht (`pl`, `lc`) – kein weißes Ausbrennen.
+- Form: Normalen ×1,3 (außer Wasser), kräftigere Verdeckung und Himmelslicht-Schattierung.
+- Endbild (`fs_final`): Klarheit (örtlicher Kontrast gegen das Unschärfe-Bild), schwächere Tiefenschärfe, Bloom erst ab 0,8, Lebendigkeit.
+- Tonkurve (`tonemap`): überwiegend über die Helligkeit (`keep`), sonst färbt der Kurvenfuß dunkle Szenen einfarbig.
+- Helligkeit: `env::apply` hebt dunkle Stimmungen an (`up`), helle bleiben; Kontrast und Sättigung leicht höher.
+- Fallstrick: Farben in `env.rs` stehen als Hex in sRGB und werden linear – ein „gedämpftes“ Rot ist im Licht-Pass sehr satt.
+- Fallstrick: wirkt eine Zone einfarbig, zuerst Nebellage (`draw.rs`), Sonnenfarbe und Tonkurve prüfen, nicht die Bodenpalette.
