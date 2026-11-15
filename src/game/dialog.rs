@@ -223,7 +223,16 @@ pub fn dialog_for(g: &mut Game, ni: usize) -> Script {
             } else {
                 pages(&["Nimm das Schiff. Mich hält hier nichts mehr außer ihm.", "Wirf die Flasche vom Steg ins Meer, wenn du ablegen willst."])
             },
-            choices: vec![ch("Das Flaschenschiff annehmen", Cmd::TakeBottle), bye],
+            choices: vec![
+                ch("Das Flaschenschiff annehmen", Cmd::TakeBottle),
+                // die Weberin: die Meeresspinne des Prologs war die Fährfrau der Letzten Flut
+                ch("Über die Spinne", Cmd::TalkPages(pages(&[
+                    "Die Spinne aus dem Wrackzwinger? Sie ist keine Bestie. Sie war die Fährfrau der Flut – wir nannten sie die Weberin.",
+                    "Sie wickelt die Toten ein, damit die Letzte Flut sie sanft hinübertragen kann. Seit die Flut ausbleibt, weiß sie nicht wohin mit ihnen. Also legt sie sie in Särge und wartet.",
+                    if s.spider { "Du hast sie erschlagen? Dann trägt niemand mehr die Toten. Hoffentlich findet ihr Geist den Weg zurück zum Wasser." } else { "Du hast sie verschont? Gut. Wenn der Mond zurückkehrt, wird sie gebraucht." },
+                ]))),
+                bye,
+            ],
         },
         "herald" => {
             if first {
@@ -277,6 +286,16 @@ pub fn dialog_for(g: &mut Game, ni: usize) -> Script {
             choices: [
                 vec![ch("Stufe aufsteigen", Cmd::LevelMenu)],
                 if s.end_won { vec![ch(&crate::game::ng_label(s.ng + 1), Cmd::NewGamePlus)] } else { vec![] },
+                // wer sie ist, verrät sie nach und nach (Malakors ertrunkene Tochter)
+                vec![ch("Über dich", Cmd::TalkPages(pages(if s.end_won {
+                    &["Er wollte mich halten. Du hast mich gehen lassen.", "Doch ich bleibe beim Feuer, bis der letzte Ertrunkene heimgekehrt ist. Das bin ich ihm schuldig – und dir."]
+                } else if missing == 0 {
+                    &["Du hast es erraten, nicht wahr? Malakor ist mein Vater.", "Als die Letzte Flut kam, um mich zu holen, fischte er das Spiegelbild des Mondes aus dem Wasser. Kein Mond, keine Flut – kein Abschied.", "Er hat die ganze See angehalten, damit ich bleibe. Fahr zu ihm. Sag ihm, dass ich keine Angst mehr habe."]
+                } else if missing <= 2 {
+                    &["Als ich ertrank, sang mir mein Vater ein Lied. Ich höre es manchmal, wenn der Strudel unruhig ist.", "Er war Kapitän. Sein Schiff war schwarz, und es flog über das Wasser, als hätte es Angst, es zu berühren."]
+                } else {
+                    &["Ich? Ich hüte das Feuer. Länger, als die Festung steht.", "Mein Vater sagte immer: Wer das Licht hält, muss nie hinüber. Er hat sich geirrt."]
+                })))],
                 vec![ch("Über das Säbelfeuer", Cmd::TalkPages(pages(&["Das Feuer brennt auf den Klingen aller Kapitäne, die hier fielen. Es verlöscht nie ganz.", "Solange es brennt, kehrst du zurück. Wie wir alle. Das ist der Fluch der Glutwacht – und ihr Trost."]))),
                     ch("Über die Letzte Flut", Cmd::TalkPages(pages(&["Früher kam sie in jeder hundertsten Nacht: die Letzte Flut. Sie stieg leise, trug die Ertrunkenen hinüber und sank wieder.", "Dann stahl Malakor das Spiegelbild des Mondes, und die See hielt den Atem an. Keine Ebbe, keine Flut. Seitdem kehren wir zurück, immer wieder – weil uns nichts mehr fortträgt."]))),
                 bye],
@@ -407,7 +426,7 @@ pub fn weapon_entries(s: &Save) -> Vec<Entry> {
             entry(
                 &format!("{}{}", w.name, if s.weapon == w.key { " (geführt)" } else { "" }),
                 &if own { "besessen".to_string() } else { format!("{} Perlen", w.price) },
-                &format!("Schaden {} · skaliert mit {sc}", w.dmg),
+                &format!("Schaden {} · skaliert mit {sc}. {}", w.dmg, w.lore),
                 !own && (w.price == 0 || s.pearls < w.price as i64),
                 Cmd::BuyWeapon(i),
             )

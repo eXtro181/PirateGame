@@ -93,6 +93,8 @@ pub struct Focus {
 
 pub enum Timed {
     Banner(String, String),
+    /// leiser Gedanke (`Ui::whisper`), z. B. die Überlieferung eines eben gefundenen Gegenstands
+    Whisper(String),
     Whirl,
 }
 
@@ -278,6 +280,8 @@ pub struct Game {
     pub hover: Hover,
     pub stain_t: f32,
     pub death_t: Option<f32>,
+    /// wartender leiser Gedanke: erscheint, sobald kein Menü und kein Dialog offen ist
+    pub voice_q: Option<String>,
     last_safe: (f32, f32),
     pub cutscene: Option<Cut>,
     pub timers: Vec<(f32, Timed)>,
@@ -417,6 +421,7 @@ impl Game {
             hover: Hover::None,
             stain_t: 0.0,
             death_t: None,
+            voice_q: None,
             last_safe: (0.0, 0.0),
             cutscene: None,
             timers: vec![],
@@ -841,6 +846,11 @@ impl Game {
     pub fn spawn_all(&mut self, art: &Art) {
         let spawns = self.world.spawns.clone();
         self.enemies = spawns.iter().map(|s| self.make_enemy(s, art)).collect();
+        if let Some(r) = self.save.revenant.clone().filter(|_| !self.save.prolog) {
+            let sp = Spawn { kind: "revenant", x: r.x, y: r.y, elite: false, lvl: 0 };
+            let e = self.make_enemy(&sp, art);
+            self.enemies.push(e);
+        }
         // feindliche Siedlungen: der Mob kehrt mit allen Gegnern zurück
         self.sync_hostile(art);
         self.spawn_sea();
@@ -964,9 +974,14 @@ impl Game {
                 i += 1;
             }
         }
+        if self.voice_q.is_some() && self.ui.list.is_none() && self.ui.dialog.is_none() {
+            let v = self.voice_q.take().unwrap_or_default();
+            self.ui.whisper(&v);
+        }
         for t in fired {
             match t {
                 Timed::Banner(a, b) => self.ui.banner(&a, &b, "big", 3.5),
+                Timed::Whisper(s) => self.ui.whisper(&s),
                 Timed::Whirl => {
                     self.ui.banner("DER STRUDEL ÖFFNET SICH", "Fahr mit dem Schiff in den Krakenstrudel der Glutwacht", "boss", 4.0);
                     self.sfx("rise");
@@ -1490,7 +1505,21 @@ impl Game {
                 e
             }
         } else {
-            env::env(self.env_key(), self.sailing && !on_island)
+            let key = self.env_key();
+            let mut e = env::env(key, self.sailing && !on_island);
+            // Welt nach jedem König: ist der König der Insel besiegt, klart ihr Himmel auf
+            if let Some(k) = KINGS.iter().find(|k| k.zone == key).filter(|_| !(self.sailing && !on_island)) {
+                if self.save.kings.get(k.key).copied().unwrap_or(false) {
+                    e.rain *= 0.35;
+                    e.snow *= 0.6;
+                    e.ash *= 0.5;
+                    e.fog_k *= 0.7;
+                    e.rays *= 1.3;
+                    e.sat *= 1.05;
+                    e.ambient = e.ambient.map(|v| v * 1.08);
+                }
+            }
+            e
         };
         // elementare Seegebiete: Stimmung zum Rand hin weich einblenden
         let mut sea = (0.0f32, "");
@@ -1816,10 +1845,17 @@ impl Game {
             self.coffin_due = true;
             return;
         }
-        self.ui.banner("DU BIST ERTRUNKEN", "", "death", 3.4);
+        // Versalzung: jeder Tod lagert Salz in den Adern ein
+        self.save.salt = (self.save.salt + 1).min(5);
+        let sub = format!("Salz in den Adern · −{} % Leben", self.save.salt * 5);
+        self.ui.banner("DU BIST ERTRUNKEN", &sub, "death", 3.4);
         let (x, y) = (self.player.a.x, self.player.a.y);
         let safe = if !self.world.blocked(x, y, 4.0, false, None) && self.world.g((x / TS as f32) as i32, (y / TS as f32) as i32) != Mat::Abyss { (x, y) } else { self.last_safe };
         if self.save.inf_pearls.is_none() && !self.save.prolog {
+            // der alte Fleck war noch nicht geholt: der alte Leichnam steht als Wiedergänger auf
+            if let Some(old) = self.save.stain.take().filter(|o| o.pearls > 0) {
+                self.save.revenant = Some(old);
+            }
             self.save.stain = if self.save.pearls > 0 { Some(Stain { x: safe.0, y: safe.1, pearls: self.save.pearls }) } else { None };
             self.save.pearls = 0;
             self.pearl_shown = 0.0;
@@ -1973,6 +2009,45 @@ impl Game {
         self.ship.hp = self.ship.max_hp;
         self.persist(true);
         self.rest_menu(i);
+        // die Stimme im Wasser: das eigene Spiegelbild spricht am Feuer (sobald das Rastmenü zu ist)
+        self.voice_q = Some(self.fire_voice());
+    }
+
+    /// Was das Spiegelbild am Feuer flüstert: es kennt Tode, Taten und Verschonte (wechselt je Rast)
+    fn fire_voice(&self) -> String {
+        let s = &self.save;
+        let kings = s.figureheads.values().filter(|v| **v).count();
+        let mut v: Vec<String> = Vec::new();
+        if s.end_won {
+            v.push("… der Mond liegt wieder im Wasser. Hörst du die Gezeiten …?".into());
+        } else if kings >= 4 {
+            v.push("… die Throne sind besetzt. Der Strudel wartet auf dich …".into());
+        } else if kings > 0 {
+            v.push(format!("… noch {} Könige. Ihre Eide wiegen schwerer als ihre Kronen …", 4 - kings));
+        } else {
+            v.push("… vier Könige halten fest, was nicht ihnen gehört …".into());
+        }
+        if s.deaths >= 10 {
+            v.push("… so oft schon zurückgekehrt. Die See wird müde, dich herzugeben …".into());
+        } else if s.deaths > 0 {
+            v.push("… das Wasser in deiner Lunge erinnert sich an jeden Tod …".into());
+        }
+        if s.salt > 0 {
+            v.push("… Salz in deinen Adern. Erst das Blut eines Königs wäscht es fort …".into());
+        }
+        if s.spider {
+            v.push("… die Weberin ist tot. Wer trägt die Ertrunkenen jetzt heim …?".into());
+        } else {
+            v.push("… irgendwo spinnt die Weberin. Sie hat dich nicht vergessen …".into());
+        }
+        if !s.hostile.is_empty() {
+            v.push("… Blut an der Klinge. Auch die Lebenden zählen, die dich nicht kennen …".into());
+        }
+        if s.ng > 0 {
+            v.push("… schon wieder hier. Die Flut kennt deinen Namen …".into());
+        }
+        let k = (s.lit_fires.len() + s.deaths as usize + (self.t * 0.37) as usize) % v.len();
+        v.swap_remove(k)
     }
     fn rest_menu(&mut self, i: usize) {
         let name = self.world.fires[i].name;
@@ -2266,7 +2341,7 @@ impl Game {
                     _ => it.name.to_string(),
                 };
                 let sold = once && owned(k) || (k == "phial" && s.phials_max >= 4);
-                entry(&label, &if sold { "ausverkauft".to_string() } else { p.to_string() }, it.desc, sold || s.pearls < p, Cmd::Buy(k, p))
+                entry(&label, &if sold { "ausverkauft".to_string() } else { p.to_string() }, &format!("{} {}", it.desc, it.lore), sold || s.pearls < p, Cmd::Buy(k, p))
             })
             .collect();
         let t = format!("{} · {} · {} Perlen", d.name, d.town, pearl_str(s));
@@ -2328,6 +2403,8 @@ impl Game {
         }
         self.refresh = Some(false);
         self.ui.banner(it.name, it.desc, "big", 3.0);
+        // danach die Überlieferung als leiser Gedanke
+        self.timers.push((2.6, Timed::Whisper(it.lore.to_string())));
     }
     fn open_chest(&mut self, ci: usize, art: &Art) {
         let (x, y, id, loot, mimic) = {
@@ -2360,6 +2437,15 @@ impl Game {
             self.world.props[sl.prop].kind = format!("figurehead_{}", sl.el);
         }
     }
+    /// Ein besiegter König oder Seeboss spült das Salz aus den Adern (Versalzung, siehe `Save::salt`)
+    pub fn cleanse_salt(&mut self) {
+        if self.save.salt > 0 {
+            self.save.salt = 0;
+            self.refresh = Some(false);
+            self.timers.push((3.6, Timed::Whisper("… das Salz weicht aus deinen Adern. Du atmest wieder ganz …".into())));
+        }
+    }
+
     fn use_slot(&mut self, si: usize) {
         let sl = self.world.slots[si].clone();
         if !self.save.figureheads.get(sl.el).copied().unwrap_or(false) {
@@ -2367,6 +2453,7 @@ impl Game {
             self.ui.toast(&format!("Hier fehlt die Galionsfigur {}.", if n == "Tiefe" { "der Tiefe".to_string() } else { format!("des {n}s") }));
             return;
         }
+        let first = !self.save.mounted.get(sl.el).copied().unwrap_or(false);
         self.save.mounted.insert(sl.el.into(), true);
         self.apply_slot(si);
         self.fx.rise("soul", sl.x, sl.y, 20, 40.0, None);
@@ -2375,6 +2462,14 @@ impl Game {
         self.flash([0.4, 1.0, 0.85], 0.4);
         let n = ["fire", "ice", "wind", "earth"].iter().filter(|e| self.save.mounted.get(**e).copied().unwrap_or(false)).count();
         self.ui.banner("Galionsfigur angebracht", &format!("{n} von 4"), "big", 3.0);
+        if first {
+            // Die Galionsfigur erinnert sich an den Eid ihres Königs (die vier Eide)
+            let mut pages: Vec<String> = oath_pages(sl.el).iter().map(|s| s.to_string()).collect();
+            if n == 4 {
+                pages.push("Vier Eide, eine Stimme. Wer bot den Königen das Nicht-Ertrinken an? Einer, der selbst nicht hinüber wollte …".into());
+            }
+            self.ui.open_dialog("Erinnerung der Galionsfigur", pages, vec![ch("Schweigen", Cmd::EndTalk)]);
+        }
         self.check_whirl();
         self.persist(true);
     }
@@ -2865,5 +2960,31 @@ impl Game {
         }
         self.save_t = 1.0;
         self.persist_req = true;
+    }
+}
+
+/// Die vier Eide: was jeder König gab, um nicht zu ertrinken (Erinnerung beim ersten Einsetzen seiner Galionsfigur)
+fn oath_pages(el: &str) -> [&'static str; 3] {
+    match el {
+        "fire" => [
+            "Ein Deck aus Feuer. Admiral Brandvogt steht am Steuer, während seine Flotte um ihn her versinkt.",
+            "Eine Stimme aus dem Wasser bietet ihm einen Handel: Er wird nie ertrinken – wenn er die Flotte hergibt.",
+            "Er nickt. Hundert Schiffe brennen bis auf den Kiel. Seitdem friert er nie. Seitdem schläft er nie.",
+        ],
+        "ice" => [
+            "Ein Eisbrecher im Packeis. Königin Ysra hält ein Kind im Arm, das nicht mehr atmet.",
+            "Die Stimme verspricht: Sie wird nicht ertrinken, wenn sie ihr Herz ins Eis legt.",
+            "Sie legt es hinein. Seitdem ist ihr nie mehr kalt. Seitdem fühlt sie gar nichts mehr.",
+        ],
+        "wind" => [
+            "Ein Sturm, der drei Tage dauert. Kapitän Rabensturm hat sich an den Mast gebunden.",
+            "Die Stimme will seinen Namen. Nur den Namen – das Leben darf er behalten.",
+            "Seitdem rufen ihn die Raben. Und er weiß nicht mehr, wen sie meinen.",
+        ],
+        _ => [
+            "Ein Riff in der Tiefe. Morgrims Hand steckt zwischen Korallen fest, das Wasser steigt.",
+            "Die Stimme bietet ihm eine neue Hand. Die alte muss er dem Riff lassen.",
+            "Die Korallenhand wuchs. Sie gehorcht ihm – meistens. Nachts greift sie nach dem Mond.",
+        ],
     }
 }

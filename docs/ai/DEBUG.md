@@ -53,3 +53,4 @@ Feuer-IDs: `kueste hain asche asche2 frost frost2 raben raben2 mangroven mangrov
 - `&state` einmal je Sekunde eine Zeile `STATE …` in die Konsole (Ort, Leben, Zwischensequenz, Boss, Endkampf, Flut) – Prüfen ohne Bild:
   `tools/dev/shot -q -s "<parameter>"` (Aufbau der Zeile in `docs/ai/BAUEN.md`, Abschnitt Zustandszeile)
 - `&prof` Leistungsmessung je Sekunde (siehe `docs/ai/BAUEN.md`)
+- `&revenant` der eigene Wiedergänger steht 90 px östlich (hält 1234 Perlen; erschlagen gibt sie zurück)

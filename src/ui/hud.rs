@@ -297,9 +297,14 @@ impl Ui {
             // blendet langsam auf, steht, verklingt; fahle Schrift auf einem Hauch von Schatten
             let a = ((WHISPER - self.whisper_t) / 0.8).min(self.whisper_t / 1.3).clamp(0.0, 1.0);
             let y = h * 0.64;
-            let tw = text::width(art, &self.whisper_text) + 28.0;
-            Self::rect(f, w / 2.0 - tw / 2.0, y - 5.0, tw, 15.0, [4, 6, 10, (120.0 * a) as u8]);
-            text::tc(f, art, &self.whisper_text, w / 2.0, y, text::a([200, 212, 216, 255], a));
+            // lange Gedanken (Überlieferungen) brechen in höchstens zwei Zeilen um
+            let lines = text::wrap(art, &self.whisper_text, (w * 0.86).min(520.0));
+            let tw = lines.iter().map(|l| text::width(art, l)).fold(0.0f32, f32::max) + 28.0;
+            let n = lines.len().min(2);
+            Self::rect(f, w / 2.0 - tw / 2.0, y - 5.0, tw, 5.0 + 10.0 * n as f32, [4, 6, 10, (120.0 * a) as u8]);
+            for (i, l) in lines.iter().take(2).enumerate() {
+                text::tc(f, art, l, w / 2.0, y + i as f32 * 10.0, text::a([200, 212, 216, 255], a));
+            }
         }
         if self.toast_t > 0.0 {
             let a = (self.toast_t * 2.0).min(1.0);
@@ -361,7 +366,7 @@ impl Ui {
         let lw = (w - 16.0).min(if l.wide { 400.0 } else { 300.0 });
         let ih = 14.0;
         // lange Listen (z. B. die Feuer der großen Welt) rollen mit der Auswahl mit
-        let extra = 32.0 + if l.desc { 24.0 } else { 0.0 };
+        let extra = 32.0 + if l.desc { 34.0 } else { 0.0 };
         let rows = (((h - 24.0 - extra) / ih).floor() as usize).max(3).min(l.items.len().max(1));
         let first = l.sel.saturating_sub(rows / 2).min(l.items.len().saturating_sub(rows));
         let lh = rows as f32 * ih + extra;
@@ -399,8 +404,8 @@ impl Ui {
         }
         if l.desc {
             if let Some(cur) = l.items.get(l.sel) {
-                for (i, s) in text::wrap(art, &cur.desc, lw - 16.0).iter().take(2).enumerate() {
-                    text::t(f, art, s, lx + 8.0, ly + lh - 24.0 + i as f32 * 10.0, col::MIST);
+                for (i, s) in text::wrap(art, &cur.desc, lw - 16.0).iter().take(3).enumerate() {
+                    text::t(f, art, s, lx + 8.0, ly + lh - 34.0 + i as f32 * 10.0, col::MIST);
                 }
             }
         }
@@ -641,10 +646,21 @@ impl Game {
         if let Some(fr) = art.map.get("ui:hp") {
             f.ui_spr(fr, -2.0, 2.0, SprOpt::default());
         }
-        let hpw = (140.0 * p.hp.max(0.0) / p.d.max_hp).round();
+        // Versalzung: der verlorene Teil der Leiste ist mit Salz verkrustet
+        let bw = (140.0 * salt_k(s)).round();
+        let hpw = (bw * p.hp.max(0.0) / p.d.max_hp).round();
         Ui::rect(f, 16.0, 7.0, 140.0, 8.0, [15, 10, 12, 230]);
+        if bw < 140.0 {
+            Ui::rect(f, 16.0 + bw, 7.0, 140.0 - bw, 8.0, [168, 174, 170, 215]);
+            let mut x = 16.0 + bw + 1.0;
+            while x < 155.0 {
+                let hgt = 2.0 + ((x * 7.3).sin() * 0.5 + 0.5) * 4.0;
+                Ui::rect(f, x, 8.0 + (6.0 - hgt), 1.0, hgt, [222, 228, 224, 230]);
+                x += 3.0;
+            }
+        }
         if self.hp_ghost > p.hp {
-            Ui::rect(f, 16.0, 7.0, (140.0 * self.hp_ghost / p.d.max_hp).round(), 8.0, [190, 150, 115, 200]);
+            Ui::rect(f, 16.0, 7.0, (bw * self.hp_ghost / p.d.max_hp).round(), 8.0, [190, 150, 115, 200]);
         }
         Ui::rect(f, 16.0, 7.0, hpw, 8.0, col::BLOOD);
         Ui::rect(f, 16.0, 7.0, hpw, 2.0, col::BLOOD_L);

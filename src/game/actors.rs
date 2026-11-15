@@ -118,6 +118,10 @@ pub struct Player {
     pub buf: Option<(u8, f32)>,
     /// wie lange schon gegen eine Kante gelaufen wird
     pub edge_t: f32,
+    /// Sturzangriff: im Sprung angegriffen, schlägt bei der Landung ein
+    pub plunge: bool,
+    /// Restzeit der Landestauchung (s)
+    pub land_t: f32,
 }
 
 #[derive(Clone, Copy, PartialEq, Debug, Default)]
@@ -157,6 +161,8 @@ pub struct Enemy {
     pub folk: Option<&'static str>,
     /// Rückstoß nach einem Treffer (px/s, klingt rasch ab)
     pub kb: (f32, f32),
+    /// Art des letzten Treffers (`HurtOpt::kind`): bestimmt, wie der Gegner stirbt
+    pub last_kind: u8,
 }
 
 pub struct Npc {
@@ -250,10 +256,12 @@ pub struct HurtOpt {
     pub poise: Option<f32>,
     pub heavy: bool,
     pub unparryable: bool,
+    /// Schadensart für den Tod der Gegner: 0 Hieb, 1 Feuer, 2 Frost/Blitz, 3 Wucht (Sturz, schwerer Hammer)
+    pub kind: u8,
 }
 impl Default for HurtOpt {
     fn default() -> Self {
-        HurtOpt { push: (0.0, 0.0), poise: None, heavy: false, unparryable: false }
+        HurtOpt { push: (0.0, 0.0), poise: None, heavy: false, unparryable: false, kind: 0 }
     }
 }
 
@@ -294,6 +302,8 @@ impl Player {
             edge_t: 0.0,
             mv: (0.0, 0.0),
             buf: None,
+            plunge: false,
+            land_t: 0.0,
         }
     }
     pub fn use_st(&mut self, n: f32) -> bool {
@@ -316,6 +326,8 @@ impl Game {
             let w: &'static str = weapon(&s.weapon).key;
             let l = sw_art::chars::player_look(&s.look.arr(), w);
             crate::art::build_player(art, frame, &l);
+            // der Wiedergänger trägt dasselbe Gesicht
+            art.chars.insert("revenant".into(), art.player.clone());
             self.player.look_key = key;
         }
         let p = &mut self.player;
@@ -437,18 +449,35 @@ impl Game {
         if p.state == PS::Dead || p.state == PS::Ship {
             return;
         }
-        // Sprung eine Ebene tiefer läuft ohne Steuerung ab
+        p.land_t = (p.land_t - dt).max(0.0);
+        // Sprung eine Ebene tiefer läuft ohne Steuerung ab; wer im Sprung angreift, stürzt mit
+        // der Klinge voran hinab (Sturzangriff, schlägt bei der Landung ein)
         if let Some((x0, y0, x1, y1, t)) = p.jump {
-            let t = (t + dt / 0.42).min(1.0);
+            if !p.plunge && t < 0.85 && (self.input.pressed(Act::Attack) || self.input.pressed(Act::Heavy)) && p.st > 0.0 {
+                p.use_st(weapon(&self.save.weapon).stam * 1.2);
+                p.plunge = true;
+                self.sfx("swing");
+            }
+            let t = (t + dt / if p.plunge { 0.36 } else { 0.42 }).min(1.0);
             p.a.x = x0 + (x1 - x0) * t;
             p.a.y = y0 + (y1 - y0) * t;
-            p.a.anim = "walk";
-            p.a.frame = 2.0;
+            if p.plunge {
+                p.a.anim = "atk";
+                p.a.frame = (0.4 + t * 2.4).min(2.8);
+            } else {
+                p.a.anim = "walk";
+                p.a.frame = 2.0;
+            }
             if t >= 1.0 {
                 p.jump = None;
-                self.fx.px.play(Px::Land, p.a.x, p.a.y).scale(0.8);
-                self.sfx("roll");
-                self.shake(2.0);
+                p.land_t = 0.22;
+                if std::mem::take(&mut p.plunge) {
+                    self.plunge_strike(p);
+                } else {
+                    self.fx.px.play(Px::Land, p.a.x, p.a.y).scale(0.8);
+                    self.sfx("roll");
+                    self.shake(2.0);
+                }
             } else {
                 p.jump = Some((x0, y0, x1, y1, t));
             }
@@ -848,7 +877,7 @@ impl Game {
                 _ => false,
             };
             let push = if p.heavy { 22.0 } else { 12.0 };
-            self.hurt_target(t, d, Target::Player, HurtOpt { push: (p.a.fx * push, p.a.fy * push), poise: Some(if p.heavy { dmg * 2.0 } else { dmg }), heavy: p.heavy, ..Default::default() });
+            self.hurt_target(t, d, Target::Player, HurtOpt { push: (p.a.fx * push, p.a.fy * push), poise: Some(if p.heavy { dmg * 2.0 } else { dmg }), heavy: p.heavy, kind: if p.heavy && blunt { 3 } else { 0 }, ..Default::default() });
             if let Target::Boss(i) = t {
                 self.boss_posture(i, if p.heavy { d * 1.7 } else { d });
             }
@@ -921,7 +950,7 @@ impl Game {
                 hit.push(c);
                 let Some((cx, cy, _, by)) = self.target_pos(c) else { break };
                 pts.push((cx, cy - by));
-                self.hurt_target(c, (dmg * k).round(), Target::Player, HurtOpt { poise: Some(dmg), ..Default::default() });
+                self.hurt_target(c, (dmg * k).round(), Target::Player, HurtOpt { poise: Some(dmg), kind: 2, ..Default::default() });
                 self.fx.px.play(Px::Zap, cx, cy).z(by).tint([170, 255, 235, 255]).dir((cy - p.a.y).atan2(cx - p.a.x));
                 k *= 0.8;
                 let mut nx = None;
@@ -949,6 +978,52 @@ impl Game {
         }
     }
 
+    /// Sturzangriff (Landung nach einem Sprung mit gezogener Klinge): schwerer Schlag rundum mit
+    /// Druckwelle; Gegner, die einen noch nicht bemerkt haben, nehmen doppelten Schaden (Hinterhalt)
+    fn plunge_strike(&mut self, p: &Player) {
+        let w = weapon(&self.save.weapon);
+        let dmg = p.d.dmg * w.heavy_mul * 1.5;
+        let (x, y) = (p.a.x, p.a.y);
+        let r = 52.0;
+        self.fx.px.play(Px::Land, x, y).scale(1.5).gain(1.3);
+        self.shockwave(x, y - 6.0, 0.8);
+        self.fx.burst("dust", x, y, 14, BurstOpt { speed: Some(120.0), up: Some(40.0), g: Some(90.0), life: Some(0.7), ..Default::default() });
+        self.fx.scorch(x, y, 14.0);
+        self.shake(9.0);
+        self.hit_stop(0.1);
+        self.impact_frame(0.05);
+        self.sfx("thud");
+        self.sfx("roll");
+        let mut hit = false;
+        let mut ambush = false;
+        for t in self.hittables() {
+            let Some((tx, ty, thr, by)) = self.target_pos(t) else { continue };
+            let dd = (tx - x).hypot((ty - y) * 1.25);
+            if dd > r + thr {
+                continue;
+            }
+            let unaware = matches!(t, Target::Enemy(i) if matches!(self.enemies[i].state, ES::Idle | ES::Lurk));
+            ambush |= unaware;
+            let d = (dmg * if unaware { 2.0 } else { 1.0 } * (0.9 + rnd() * 0.2)).round();
+            let k = 26.0 / dd.max(1.0);
+            self.hurt_target(t, d, Target::Player, HurtOpt { push: ((tx - x) * k, (ty - y) * k), poise: Some(dmg * 2.5), heavy: true, kind: 3, ..Default::default() });
+            if let Target::Boss(i) = t {
+                self.boss_posture(i, d * 2.0);
+            }
+            let ang = (ty - y).atan2(tx - x);
+            self.fx.px.play(Px::Crit, tx, ty).z(by).dir(ang).scale(0.9).front(2.0);
+            self.material_hit(t, tx, ty - by, ang);
+            hit = true;
+        }
+        self.smash_props(x, y, p.a.fx, p.a.fy, r);
+        if hit {
+            self.look.zoom_in(1.08, 0.3);
+            self.slow_mo(0.22, 0.4);
+        }
+        if ambush {
+            self.ui.toast("Hinterhalt!");
+        }
+    }
     pub fn explode(&mut self, x: f32, y: f32, r: f32, dmg: f32) {
         self.fx.px.play(Px::Boom, x, y).scale((r / 80.0).clamp(0.45, 1.6)).gain(1.2);
         self.shake(6.0);
@@ -962,7 +1037,7 @@ impl Game {
         for t in self.hittables() {
             if let Some((tx, ty, thr, _)) = self.target_pos(t) {
                 if (tx - x).hypot((ty - y) * 1.2) < r + thr {
-                    self.hurt_target(t, dmg, Target::Player, HurtOpt { poise: Some(dmg), ..Default::default() });
+                    self.hurt_target(t, dmg, Target::Player, HurtOpt { poise: Some(dmg), kind: 1, ..Default::default() });
                 }
             }
         }
@@ -1114,6 +1189,7 @@ impl Game {
             valid: true,
             folk: None,
             kb: (0.0, 0.0),
+            last_kind: 0,
         }
     }
 
@@ -1340,6 +1416,7 @@ impl Game {
     }
 
     pub fn hurt_enemy(&mut self, i: usize, dmg: f32, o: &HurtOpt) {
+        self.enemies[i].last_kind = o.kind;
         let (dead, crit, x, y, skel, poise_def) = {
             let e = &self.enemies[i];
             let d = &self.edefs[e.def];
@@ -1399,13 +1476,35 @@ impl Game {
         self.hit_stop(0.07);
         // PixelFX: Skelette zersplittern in ihrer Gestalt, Figuren geben ihre Seele frei, Bestien verpuffen
         let beast = matches!(self.edefs[self.enemies[i].def].body, Body::Beast(_));
-        if skel {
+        let kind = self.enemies[i].last_kind;
+        if kind == 1 {
+            // verbrannt: eine Stichflamme, Glut steigt auf, zurück bleibt ein verkohlter Leib
+            self.fx.px.play(Px::FireRing, x, y).scale(0.55).front(1.0);
+            self.fx.burst("ember", x, y - 10.0, 12, BurstOpt { speed: Some(40.0), up: Some(90.0), g: Some(-30.0), life: Some(1.4), ..Default::default() });
+            self.fx.px.play(Px::Soul, x, y).scale(0.7).gain(0.8);
+        } else if kind == 2 && !beast {
+            // gefroren und zersprungen: nichts bleibt liegen
+            self.fx.px.play(Px::IceShatter, x, y).scale(0.9).front(1.0);
+            self.fx.burst("ice", x, y - 12.0, 10, BurstOpt { speed: Some(110.0), up: Some(70.0), life: Some(0.8), ..Default::default() });
+        } else if kind == 3 && !skel {
+            // zerschmettert: der Boden bebt, Staub stiebt
+            self.fx.px.play(Px::Slam, x, y).scale(0.7);
+            self.fx.burst("dust", x, y, 10, BurstOpt { speed: Some(90.0), up: Some(30.0), g: Some(90.0), life: Some(0.8), ..Default::default() });
+            self.fx.px.play(Px::Soul, x, y).front(1.0);
+        } else if skel {
             self.fx.px.play(Px::Shatter, x, y).front(1.0);
         } else if beast {
             self.fx.px.play(Px::Poof, x, y + 1.0).scale(1.1);
             self.fx.px.play(Px::Soul, x, y).scale(0.8).gain(0.9);
         } else {
             self.fx.px.play(Px::Soul, x, y).front(1.0);
+        }
+        if self.edefs[self.enemies[i].def].key == "revenant" {
+            if let Some(r) = self.save.revenant.take() {
+                self.gain_pearls(r.pearls, Some((x, y)));
+                self.ui.banner("WIEDERGÄNGER ERLÖST", &format!("{} Perlen kehren zurück", r.pearls), "big", 3.0);
+                self.timers.push((3.2, super::Timed::Whisper("… du hast dich selbst erschlagen. Die See lacht leise …".into())));
+            }
         }
         let k = if self.save.origin == "schmuggler" { 1.2 } else { 1.0 } * if self.save.gift == "coin" { 1.15 } else { 1.0 };
         let charm = if self.save.items.contains_key("driftCharm") { 1.15 } else { 1.0 };
@@ -1508,7 +1607,8 @@ impl Game {
                     match s.on_hit {
                         OnHit::Explode => self.explode(s.x, s.y, 52.0, s.dmg),
                         _ => {
-                            let o = HurtOpt { push: (s.vx * 0.05, s.vy * 0.05), unparryable: s.owner == Owner::Enemy, ..Default::default() };
+                            let kind = match s.kind { "fireball" => 1, "shard" => 2, _ => 0 };
+                            let o = HurtOpt { push: (s.vx * 0.05, s.vy * 0.05), unparryable: s.owner == Owner::Enemy, kind, ..Default::default() };
                             if t == Target::Player {
                                 self.hurt_player(s.dmg, Target::Player, o);
                                 if s.on_hit == OnHit::Shard {

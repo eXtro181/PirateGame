@@ -532,6 +532,7 @@ impl Game {
             self.fx.px.play(Px::Geyser, x, y + 2.0).scale(1.8);
             self.gain_pearls(d.pearls, Some((x, y)));
             self.save.sea_kings.insert(d.el.into(), true);
+            self.cleanse_salt();
             self.ui.banner(&format!("{} ERBEUTET", d.wreck.to_uppercase()), "Es brennt nun im See der Glutwacht", "big", 4.0);
             self.check_whirl();
             if self.sea_boss == Some(i) {

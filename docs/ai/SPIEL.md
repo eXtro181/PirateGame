@@ -133,6 +133,10 @@ ist sie während ihres Zugs per `mem::replace` aus `bosses` genommen (`update_bo
 
 `game/actors.rs` (Spieler, Gegner-KI mit Gefahrenstufe `lvl`: Leben ×(1+0,35·lvl), Schaden ×(1+0,12·lvl), Perlen ×(1+0,4·lvl);
 NPCs, Wanderer, Geschosse, Schaden; Hiebe, Treffer, Paraden, Schüsse und Tode lösen PixelFX-Effekte aus)
+- Sturzangriff (15.11.): `Player.plunge` (im Sprung angegriffen, `t < 0,85`), `plunge_strike` bei der Landung: Radius 52, Schaden
+  `dmg · heavy_mul · 1,5`, ×2 gegen `ES::Idle`/`ES::Lurk` („Hinterhalt!“), Druckwelle, Trefferstopp; `Player.land_t` = Landestauchung.
+- Tode nach Schadensart: `HurtOpt.kind` (0 Hieb, 1 Feuer, 2 Frost/Blitz, 3 Wucht) → `Enemy.last_kind` → `enemy_die` (Effekte) und
+  `draw.rs` (verkohlt getönt bzw. kein Leichnam bei Frost). Feuer: `explode`, Feuerball; Frost/Blitz: Eissplitter, Blitzkette; Wucht: Sturz, schwerer Hammer/Knüppel.
 
 ## game/boss.rs – Könige, Malakor zu Fuß, Meeresspinne
 
@@ -196,3 +200,19 @@ Seekarte `CHART_*`/`chart_*`)
 ## game/input.rs – Eingabe
 
 `input.rs`.
+
+## Versalzung, Stimme im Wasser, Überlieferung, Eide (15.11.)
+
+- Versalzung: `Save.salt` (0..5, `serde(default)`), `data::salt_k` multipliziert `max_hp`; +1 je Tod in `player_died` (nicht im Prolog),
+  `Game::cleanse_salt` nach Königs- (`boss.rs`) und Seeboss-Sieg (`seaboss.rs`); HUD-Kruste in `hud.rs` (`bw`).
+- Stimme im Wasser: `Game::fire_voice` wählt je Rast einen Gedanken; `Game.voice_q` wartet, bis kein Menü/Dialog offen ist.
+- `Timed::Whisper` zeigt einen Gedanken zeitversetzt; `Ui::whisper` bricht lange Gedanken in zwei Zeilen um.
+- Überlieferung: `Item.lore`, `Weapon.lore` (`data.rs`); Läden zeigen Wirkung + Überlieferung (Listen jetzt mit drei Beschreibungszeilen).
+- Die vier Eide: `oath_pages(el)` am Ende von `game/mod.rs`, Dialog beim ersten Einsetzen in `use_slot`; vierte Figur: Seite über die Stimme.
+- Wiedergänger: `Save.revenant` (alter Perlenfleck beim zweiten Tod, `player_died`), Gegner `revenant` (`data::enemies`, Bogen = Kopie von
+  `art.player`, eingetragen in `refresh_player`), erscheint in `spawn_all`; erschlagen → Perlen zurück (`enemy_die`). Test: `&revenant`.
+- Laternenmagd „Über dich“ (`dialog.rs`, `maid`): vier Stufen nach `missing` und `end_won`.
+- Logbuch: Gegenstände `log1..log8` (`ITEMS`), auf wilden Inseln mit `k % 8 == 3` (`layout_wild`); Text in `lore` (Gedanke nach dem Fund).
+- Regenspritzer: `update_feel` (feel.rs) setzt bei Regen PixelFX-Platscher um die Kamera, nicht auf Wasser, nicht drinnen.
+- Welt nach jedem König: in der Ziel-Lichtstimmung (`game/mod.rs`, nach `env::env(self.env_key(), …)`) bei besiegtem König der Insel
+  Regen ×0,35, Schnee ×0,6, Asche ×0,5, Nebel ×0,7, Strahlen ×1,3, Umgebung ×1,08. Weberin: Thema beim Geisterkapitän (`dialog.rs`).

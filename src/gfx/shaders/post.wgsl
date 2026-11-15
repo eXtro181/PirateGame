@@ -252,6 +252,12 @@ fn fs_light(f: FOut) -> @location(0) vec4<f32> {
     // Warme Streuung an der Licht-Schatten-Grenze (Subsurface-Terminator für Laub, Segel, Haut)
     let term = select(0.0, smoothstep(0.0, 0.32, nd) * (1.0 - smoothstep(0.15, 0.65, max(raw_nd, 0.0))) * 0.14, hd && !wet);
     li += (G.sun_col.rgb * nd + G.sun_col.rgb * vec3<f32>(1.15, 0.85, 0.65) * term) * sh * (0.48 + 0.52 * ao) * cloud;
+    // Farbige Schatten: wo die Sonne verdeckt ist, leuchtet nur der Himmel – die Schatten nehmen
+    // dessen Farbton an (unter warmem Licht kühl), Farbtiefe ohne zusätzliche Helligkeit
+    if (hd && !wet) {
+        let skyc = G.ambient.rgb / max(luma(G.ambient.rgb), 0.001);
+        li *= mix(vec3<f32>(1.0), clamp(skyc, vec3<f32>(0.6), vec3<f32>(1.6)), (1.0 - sh) * smoothstep(0.0, 0.3, nd) * 0.4);
+    }
     let hv = normalize(sd + view_dir);
     // Glanz: glatte Flächen (Wasser, Metall, nasser Fels) mit physikalisch motivierten Spitzlichtern
     let sexp = 40.0;
@@ -523,7 +529,15 @@ fn light_rays(suv: vec2<f32>, sy: f32) -> f32 {
     let c2 = textureSampleLevel(t_d, s_lin, fract(wq * 2.7 + vec2<f32>(0.37, 0.11)), 0.0).b;
     let cov = G.fx6.x;
     let gap = 1.0 - smoothstep(0.62 - cov * 0.3, 0.86 - cov * 0.3, c1 * 0.72 + c2 * 0.34);
-    return beam * top * G.hd.w * (0.4 + 0.95 * gap) * (1.15 - cov * 0.6);
+    // Verdeckung: ein Strahl steht nur, wo das Licht auf dem Weg von der Sonne durchkommt – dunkle
+    // Kronen und Dächer in Sonnenrichtung werfen Schattenbahnen in den Dunst (Lichtschächte)
+    var lit = 0.0;
+    let stepv = dir / G.view.zw * 14.0;
+    for (var k = 1; k <= 6; k = k + 1) {
+        lit += luma(textureSampleLevel(t_a, s_lin, suv + stepv * f32(k), 0.0).rgb);
+    }
+    let occ = smoothstep(0.04, 0.3, lit / 6.0);
+    return beam * top * G.hd.w * (0.4 + 0.95 * gap) * (1.15 - cov * 0.6) * (0.25 + 0.9 * occ);
 }
 
 // schwebender Staub im Vordergrund als unscharfe Bokeh-Scheiben (außerhalb der Fokuszone)

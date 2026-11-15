@@ -93,6 +93,19 @@ impl Game {
 
     /// Haltung erholt sich, Nachbilder verblassen, Anzeige blendet sich aus
     pub fn update_feel(&mut self, dt: f32) {
+        // Regen: Tropfen platschen um die Kamera herum auf den Boden (Pfützen, Planken, Gras)
+        if self.look.rain > 0.25 && !self.look.is_indoor() && !self.sailing && self.opt.fx_high {
+            let n = self.look.rain * 14.0 * dt;
+            let k = n.floor() as i32 + if rnd() < n.fract() { 1 } else { 0 };
+            for _ in 0..k {
+                let x = self.cam.0 + rr(-560.0, 560.0);
+                let y = self.cam.1 + rr(-300.0, 320.0);
+                if self.world.g((x / TS as f32) as i32, (y / TS as f32) as i32) == sw_art::terrain::Mat::Water {
+                    continue;
+                }
+                self.fx.px.play(Px::Splash, x, y).scale(0.22).gain(0.7);
+            }
+        }
         for b in self.bosses.iter_mut() {
             b.posture_t += dt;
             if b.posture_t > 2.2 {
