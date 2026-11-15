@@ -67,7 +67,7 @@ nie auf Verdacht ganze Dateien lesen. Diese Datei wird in jeder Sitzung ganz gel
 | Ideenvorrat (Grafik, Animation, Mechanik, Geschichte) | `Fable52.md` im Wurzelordner | |
 
 ## Harte Fallstricke
-- **Atlas**: 5,95 von 6 Seiten belegt – neue große Teile vorher messen (`tools/dev/art budget`, danach `smoke`).
+- **Atlas**: 6,13 von 7 Seiten belegt, wächst bei Bedarf (laut Nutzer kein Grenzproblem) – nach großen neuen Teilen `smoke` prüfen.
 - **Texturfelder nie mit einer durch 6 teilbaren Ebenenzahl** (WebGL hält sie für Würfel-Felder: Sprites fehlen, Boden schwarz).
 - **Boss-Bereich** fasst nur eine Atlasseite: Holländer (`build_malakor`) und Meeresspinne (`build_seabed`) nie zusammen laden
   („Bereich zu klein“ = Sprites unsichtbar). Die Streifen `PLAYER_STRIP` + `SHIP_STRIP` + `BOSS_STRIP` müssen zusammen genau eine Seite ergeben.

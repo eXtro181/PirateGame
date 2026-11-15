@@ -213,7 +213,8 @@ pub fn dialog_for(g: &mut Game, ni: usize) -> Script {
         "ghostCaptain" => Script {
             pages: if first {
                 pages(&[
-                    "Noch einer, den die See nicht behalten wollte … Komm näher. Ich beiße nicht mehr. Dafür fehlt mir seit hundert Jahren das Fleisch.",
+                    "Du hast mich zerschlagen … danke. Hundert Jahre hielt Malakors Fluch mich in diesen Knochen: Kapitän Kielholer, Wächter seiner Särge.",
+                    "Jeden Ertrunkenen, den die Arme brachten, ließ ich auf den Haufen werfen. Du bist der Erste, der sich herausgekämpft hat. Komm näher – ich beiße nicht mehr.",
                     "Ich war Kapitän, wie du einer werden wirst. Mein Schiff schläft dort unten auf dem Grund, schwarz wie die Nacht, in der es sank.",
                     "Ich habe es in eine Flasche gebannt, als die Wellen über uns zusammenschlugen. Hier – nimm es.",
                     "Wenn du zum ersten Mal in See stechen willst, wirf die Flasche vom Steg ins Meer. Das Glas wird brechen, und dein Schiff steigt aus der Tiefe.",

@@ -260,6 +260,10 @@ fn setup(world: &mut bevy::ecs::world::World) {
             if let Some(k) = app.params.get("boss").cloned() {
                 if let Scene::Play(g) = &mut app.scene {
                     g.debug_boss(&k, app.params.contains_key("phase2"));
+                    if app.params.contains_key("slay") {
+                        // Testlauf: den Boss gleich besiegen (Erlösung, Belohnung, Tore)
+                        g.debug_slay(&k);
+                    }
                 }
             }
             if let Some(pos) = app.params.get("pos").cloned() {
@@ -392,6 +396,12 @@ fn setup(world: &mut bevy::ecs::world::World) {
                 // Testlauf: Netze der Meeresspinne – zwei kleben schon am Boden, drei fliegen heran
                 if let Scene::Play(g) = &mut app.scene {
                     g.debug_webs();
+                }
+            }
+            if app.params.contains_key("ferry") {
+                // Testlauf: Überfahrt der Särge zur Galgenfeste (wie nach dem Ende des Prologs)
+                if let Scene::Play(g) = &mut app.scene {
+                    g.end_prolog();
                 }
             }
             if app.params.contains_key("revenant") {

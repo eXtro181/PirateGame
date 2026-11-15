@@ -43,7 +43,7 @@ Brüstung der Ringmauer `ring_wall_seg` (im echten Winkel gerendert) und `ring_p
 **Netze der Meeresspinne** `web_ball`/`web_net`/`web_ground` (Geschoss und Bodennetz, ohne Pixelstil),
 **Seetor** `sea_gate` (Pfeiler im Wasser bis zur Mauerkrone, Spitzbogen über die 288 px breite Einfahrt),
 **hohe Brücke** `hub_bridge` mit Höhenprofil `bridge_z` (Glocke), **Sündenstatue** `sin_statue` (kniender Büßer in Ketten, Opferschale, ×1,5),
-**Truhe als 3D-Modell** `chest_rig`), `grave.rs` (Piratenfriedhof der Startinsel), `creatures.rs` (Strudel), `throne.rs` (früheres Titelmotiv:
+**Truhe als 3D-Modell** `chest_rig`), `grave.rs` (Särge, Gräber, Galgen), `creatures.rs` (Strudel), `throne.rs` (früheres Titelmotiv:
 Thron, Säulen, Krone, Kettenglieder – nur noch für die Vorschau; im Spiel genutzt wird der Schriftzug `title_logo`; `downscale` = Kastenfilter).
 In `buildings.rs` macht **`roof_3d`** (Runde 14, „mehr 3D-Look der Häuser“) die Dächer von Stadthäusern, Taverne und Schmiede plastisch:
 echte Neigung im Relief (Rückseite steigt zum First und blickt nach Norden, `up` 0;
@@ -77,7 +77,7 @@ Antiqua-Versalien aus Strichen (Breitfeder um −20° gekippt, Keilserifen, Fase
 `chars.rs`: Figuren 64×72 mit allen Animationen, `Look` (`weapon_scale`: die Spielfigur führt eine 1,45-mal so große Klinge, der Bildrahmen wächst mit;
 `female`: Frauenfigur – schmalere Schultern, Taille, Mieder mit Schnürung, längerer ausgestellter Mantel, Wimpern und Lippen, Bob bzw. lange Strähnen,
 kein Bart; `LOOK_OPTS` mit „Geschlecht“ als neunter Option, `player_look` nimmt 9 Werte), `preset`/`PRESET_NAMES` (Gegner, NPCs, Crew,
-Dorfbewohner in gedeckten Farben, aufgebrachter Mob `mobA/B/C`, Könige, Malakor, Geisterkapitän `ghostCaptain`,
+Dorfbewohner in gedeckten Farben, aufgebrachter Mob `mobA/B/C`, Könige, Malakor, Geisterkapitän `ghostCaptain`, Skelettkapitän `skelCaptain` (zwei Säbel: `Look.dual`),
 die freundlichen Ertrunkenen von Stillwasser `drownA..D` und der Wirt `drownKeeper` – Rolle NPC, fahle meergrüne Haut, Tang, schwach leuchtende Augen),
 `wants_anim` je Rolle.
 Kleidungsdetails für alle Menschen (Paspeln, Saum, Taschenklappen, Bandelier mit Schnalle, Gürteltasche, Manschetten, Stiefelstulpen,

@@ -76,8 +76,9 @@ Er hat das Spiegelbild des Mondes gestohlen – seitdem steht die See still, und
    hebt ihn mit ihren Beinen hinein, schiebt den Deckel zu und krabbelt dann selbst kopfüber die Klippe hinab, bis die Tiefe sie verschluckt.
    In beiden Fällen schlängeln sich erst dann langsam zwei riesige Arme aus der schwarzen Tiefe die Klippe herauf,
    umschlingen den Sarg und ziehen ihn hinab ins Dunkel – und man erwacht im ursprünglichen Sarg am Galgenstrand; das reguläre Spiel beginnt.
-1. **Erwachen** (Galgenstrand): Klopfen im Dunkeln, der Sargdeckel ruckelt und wird weggeschoben, der Ertrunkene steigt heraus.
-   Um ihn herum Galgen mit schwingenden Gehängten, Käfige, offene Gräber und über 70 Tote.
+1. **Überfahrt und Erwachen** (Galgenfeste): Tentakel ziehen den Sarg mit vielen anderen durch dunkles Regenwasser zur alten Piratenfestung;
+   Skelette tragen ihn hinein und werfen ihn auf den Sarghaufen. Der Deckel bricht auf, der Ertrunkene kämpft sich durch die Festung
+   (Wachstube, Zellen, Hallen) bis zu **Kapitän Kielholer**, einem Skelettkapitän mit zwei Säbeln.
    Der Alte Galionsschnitzer erklärt die Lage.
 2. **Glutwacht**: Die Festung in der Mitte der Welt ist der Knotenpunkt.
    Hier brennt das Säbelfeuer, hier stehen vier leere Throne, hier arbeiten Schmied, Händlerin, Laternenmagd und Schiffsmeister.
@@ -242,7 +243,7 @@ Ungeheuer zeigen eine Lebensleiste, sobald sie verwundet sind; die Crew zielt mi
   Herkunft und Geschenk zu Beginn.
 - **Glutwacht**: Laternenmagd (Stufenaufstieg, Neues Spiel+), Schmied Harrow (Waffen härten und kaufen), Händlerin Sabeth (Waren),
   Schiffsmeister Brack (Ausbauten), Crew an der Tafel.
-- **Start**: Alter Galionsschnitzer; auf dem Steg der **Geisterkapitän** mit dem Flaschenschiff.
+- **Start (Galgenfeste)**: Alter Galionsschnitzer im Burghof; nach dem Boss gibt Kielholers Geist das Flaschenschiff, erst dann öffnet das Tor zum Steg.
 - **Crew** (je mit Lied und Geschütz):
 
 | Crew | Element | Lied | Geschütz |
@@ -476,7 +477,7 @@ dünnerer Nebel, mehr Licht.
 Tochter, Krankheit, Tod, der Sprung mit dem Netz nach dem Mond, die Handel mit den Königen – und das Flaschenschiff, das er mitnahm.
 
 ### 6.6 Seefahrt
-- **Das Flaschenschiff**: Am Galgenstrand wartet auf dem Steg ein Geisterkapitän (durchscheinend, schwebend, mit Geisterlaterne).
+- **Das Flaschenschiff**: Der besiegte Kapitän Kielholer zerfällt zu seinem Geist (durchscheinend, schwebend, mit Geisterlaterne).
   Er übergibt sein Schiff, das er beim Untergang in eine Flasche gebannt hat, und löst sich danach in Nebel auf.
   Beim ersten Ablegen wirft man die Flasche vom Steg ins Meer:
   Sie fliegt im Bogen, das Glas zerspringt in einem Lichtblitz mit Scherben und Gischt, das Wasser brodelt, und das Schiff steigt zum ersten Mal vom Grund auf.

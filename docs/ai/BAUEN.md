@@ -69,7 +69,7 @@ Kunst-Code lässt sich nativ mit `valgrind --tool=callgrind` profilieren (kleine
 ## Atlas-Budget
 
 Möglichst ≤ 5 Seiten à 2048² (Speicher: je Seite 32 MB beim Start).
-Stand 8.11.: 5,95 Seiten belegt (6 Seiten, sehr knapp – neue große Teile vorher messen; mit Pixelstil-Umriss;
+Stand 15.11.: 6,13 von 7 Seiten belegt (wächst bei Bedarf; mit Pixelstil-Umriss;
 die PixelLab-Requisiten samt Abwandlungen kosten zusammen ~0,45, der Geisterkapitän ~0,05, die hohe Brücke der Glutwacht ~0,11, das Seetor ~0,04,
 die drei Mob-Bögen ~0,1, die fünf Ertrunkenen von Stillwasser ~0,06, die Kneipenmöbel `tv*` ~0,02) plus eine **Effektseite** für PixelFX (79 % belegt) = 7
 Ebenen (Zierschrift ~0,03, Seeungeheuer-Teile ~0,01 Seiten dazu); das Titelmotiv liegt im Boss-Bereich, nicht im festen Atlas.

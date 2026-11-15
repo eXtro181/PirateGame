@@ -8,6 +8,7 @@
 //! Höhenebenen: Plateaus sind begehbar, ihre unteren zwei Reihen sind Basaltwände, Wege über
 //! Wände werden Treppen. Die Erzeugung ist deterministisch; Positionen sind Welt-Pixel.
 
+mod fortress;
 mod nature;
 mod plisle;
 mod prolog;
@@ -80,7 +81,7 @@ impl Zone {
     }
 }
 pub static ZONE_DEFS: [ZoneDef; 9] = [
-    ZoneDef { key: "kueste", name: "Galgenstrand", biome: Biome::Coast, music: "salz", cx: HUB.0 - 38, cy: HUB.1 + 172, rx: 46, ry: 26, seed: 1 },
+    ZoneDef { key: "kueste", name: "Galgenfeste", biome: Biome::Coast, music: "salz", cx: HUB.0 - 38, cy: HUB.1 + 172, rx: 46, ry: 26, seed: 1 },
     ZoneDef { key: "hain", name: "Glutwacht", biome: Biome::Hub, music: "hain", cx: HUB.0, cy: HUB.1, rx: 62, ry: 62, seed: 2 },
     ZoneDef { key: "asche", name: "Aschebucht", biome: Biome::Fire, music: "glut", cx: HUB.0 + 418, cy: HUB.1 - 290, rx: 42, ry: 30, seed: 3 },
     ZoneDef { key: "frost", name: "Frostgrotte", biome: Biome::Frost, music: "frost", cx: HUB.0 - 418, cy: HUB.1 - 290, rx: 44, ry: 32, seed: 4 },
@@ -183,7 +184,7 @@ impl Region {
 
 pub fn fire_name(id: &str) -> &'static str {
     match id {
-        "kueste" => "Galgenstrand · Sarg des Ertrunkenen",
+        "kueste" => "Galgenfeste · Burghof",
         "hain" => "Glutwacht · Säbelfeuer",
         "asche" => "Aschebucht · Landung",
         "asche2" => "Vor dem Glutthron",
@@ -494,6 +495,10 @@ pub struct World {
     pub crew_spots: Vec<(f32, f32)>,
     pub grid: HashMap<i32, Vec<Collider>>,
     pub dyn_blockers: Vec<(f32, f32, f32, f32, bool)>,
+    /// Galgenfeste: Strand, an dem die Särge landen, und Südtor (für die Überfahrt, `game/ferry.rs`)
+    pub ferry_pts: ((f32, f32), (f32, f32)),
+    /// Galgenfeste: Nebel im Hafentor (Requisit, Ort), vergeht erst mit dem Skelettkapitän
+    pub exit_gate: Option<(usize, f32, f32)>,
     /// geglättetes Höhenfeld je Kachel (Ebene + 0,5, weichgezeichnet) für runde und schräge Kanten
     pub hb: Vec<f32>,
     /// Rauschen für die Kantenführung
@@ -603,6 +608,8 @@ impl World {
             crew_spots: vec![],
             grid: HashMap::new(),
             dyn_blockers: vec![],
+            ferry_pts: ((0.0, 0.0), (0.0, 0.0)),
+            exit_gate: None,
             hb: vec![0.5; n],
             en: EdgeNoise::new(),
             flat_areas: vec![],
@@ -794,7 +801,7 @@ impl World {
             self.cur_biome = z.def().biome;
             let mut rng = Rng::new(z.def().seed as u64 * 977);
             match z {
-                Zone::Kueste => self.layout_coast(&mut rng),
+                Zone::Kueste => self.layout_fortress(&mut rng),
                 Zone::Hain => self.layout_hub(&mut rng),
                 Zone::Asche => self.layout_fire(&mut rng),
                 Zone::Frost => self.layout_ice(&mut rng),
@@ -813,7 +820,8 @@ impl World {
             self.layout_wild(k);
         }
         lap("Gebiete", &mut t);
-        for z in [Zone::Kueste, Zone::Asche, Zone::Frost, Zone::Raben, Zone::Mangroven] {
+        // die Galgenfeste hat ihre eigenen Mauern (keine Hochebenen)
+        for z in [Zone::Asche, Zone::Frost, Zone::Raben, Zone::Mangroven] {
             self.highlands(z.region());
         }
         for k in 0..self.wild.len() {
@@ -1630,137 +1638,6 @@ impl World {
 
     /// Startinsel: Piratenfriedhof. Galgenallee, Gräberfeld, Käfige an der Küste, ein Massengrab
     /// beim Wrack und der Sarg, aus dem der Ertrunkene beim ersten Start steigt. Keine Siedlung.
-    fn layout_coast(&mut self, rng: &mut Rng) {
-        let d = self.cur.def();
-        let (cx, cy) = (d.cx, d.cy);
-        self.plateau(cx - 40, cy - 22, 16, 12, 1);
-        self.plateau(cx - 36, cy - 22, 8, 6, 2);
-        self.plateau(cx + 18, cy - 24, 22, 12, 1);
-        self.plateau(cx + 26, cy - 24, 10, 6, 2);
-        self.plaza(cx - 10, cy + 4, 5, 3, Mat::Dirt, Some(0));
-        self.fire("kueste", cx - 10, cy + 3);
-        self.road(&[(cx - 10, cy + 4), (cx - 2, cy), (cx + 12, cy - 4), (cx + 26, cy - 2), (cx + 34, cy + 4)], Mat::Dirt, 1);
-        self.road(&[(cx - 2, cy), (cx, cy - 12), (cx, cy - 22)], Mat::Dirt, 1);
-        self.road(&[(cx + 26, cy - 2), (cx + 28, cy - 14), (cx + 30, cy - 18)], Mat::Dirt, 1);
-        self.road(&[(cx - 10, cy + 4), (cx - 26, cy + 2), (cx - 32, cy - 6), (cx - 32, cy - 14)], Mat::Dirt, 1);
-        self.road(&[(cx - 4, cy + 2), (cx + 4, cy + 8), (cx + 22, cy + 9)], Mat::Dirt, 1);
-        let (wx, wy) = self.dock_k(Zone::Kueste, "kueste".into(), cx, cy - 22, 0, -1);
-        // auf dem Steg wartet der Geisterkapitän mit dem Flaschenschiff
-        self.npc("ghostCaptain", wx + 1, wy - 2, "ghostCaptain", "Der Geisterkapitän", "ghostCaptain", false, None);
-        // ebene Flächen: Gräberfeld, Massengrab, Galgenallee
-        self.flat_areas.push((cx + 13, cy + 9, 12, 6));
-        self.flat_areas.push((cx - 24, cy + 12, 8, 5));
-        self.flat_areas.push((cx + 12, cy - 3, 14, 4));
-        // der Sarg des Ertrunkenen neben dem Feuer: beide auf ebenem Strand (nicht im Hang der
-        // Anhöhe dahinter, deren Böschung sonst genau über Sarg und Rastplatz liefe)
-        self.prop_t("coffinEmpty", cx - 13, cy + 5);
-        self.wake_coffin = tpos(cx - 13, cy + 5);
-        self.flat_areas.push((cx - 13, cy + 5, 3, 3));
-        self.low_areas.push((cx - 11, cy + 4, 10, 7));
-        let ok = |w: &World, tx: i32, ty: i32| inb(tx, ty) && !matches!(w.ground[idx(tx, ty)], Mat::Water | Mat::Abyss | Mat::Plank) && !w.path[idx(tx, ty)];
-        // Galgenallee entlang des Weges nach Nordosten und zum Anleger
-        let mut gk = 0;
-        for &(tx, ty, flip) in &[
-            (cx + 1, cy + 3, false), (cx + 6, cy - 6, true), (cx + 12, cy - 1, false), (cx + 17, cy - 8, true), (cx + 22, cy + 1, false),
-            (cx + 30, cy - 7, true), (cx + 3, cy - 11, false), (cx - 4, cy - 16, true), (cx + 36, cy, false), (cx - 6, cy - 6, false),
-        ] {
-            if ok(self, tx, ty) {
-                self.prop_tf(&format!("gallows{}", gk % 4), tx, ty, flip);
-                gk += 1;
-            }
-        }
-        // Käfige an Klippen und Strand
-        for (k, &(tx, ty)) in [(cx - 20, cy - 4), (cx + 40, cy - 10), (cx - 38, cy + 4), (cx + 14, cy + 18), (cx - 8, cy + 16), (cx + 32, cy + 12)].iter().enumerate() {
-            if ok(self, tx, ty) {
-                self.prop_tf(&format!("gibbet{}", k % 2), tx, ty, k % 2 == 1);
-            }
-        }
-        // Gräberfeld östlich des Feuers: Reihen aus Kreuzen, Steinen, Särgen und Toten
-        let mut n = 0;
-        for row in 0..4 {
-            for col in 0..8 {
-                let (tx, ty) = (cx + 4 + col * 3 + row % 2, cy + 4 + row * 3);
-                if !ok(self, tx, ty) {
-                    continue;
-                }
-                let pick = (row * 8 + col * 5 + rng.int(0, 6)) % 9;
-                let kind = match pick {
-                    0 | 1 => format!("grave{}", (col + row) % 2),
-                    2 | 3 => format!("buried{}", (col + row * 2) % 3),
-                    4 => format!("coffinBones{}", col % 2),
-                    5 => format!("coffin{}", row % 2),
-                    6 => format!("sitDead{}", col % 2),
-                    7 => format!("graveOpen{}", row % 2),
-                    _ => format!("coffinLid{}", col % 2),
-                };
-                let flip = rng.chance(0.5);
-                let (x, y) = tpos(tx, ty);
-                self.prop_x(&kind, x + rng.int(-5, 5) as f32, y + rng.int(-3, 3) as f32, |p| p.flip = flip);
-                n += 1;
-            }
-        }
-        let _ = n;
-        // Massengrab beim Wrack: halb begrabene Tote, offene Gräber, Schädelhaufen
-        self.prop_tf("wreck", cx - 26, cy + 14, true);
-        for k in 0..16 {
-            let a = k as f32 * 2.399;
-            let r = 2.0 + (k as f32).sqrt() * 1.6;
-            let (tx, ty) = (cx - 24 + (a.cos() * r * 1.4) as i32, cy + 11 + (a.sin() * r * 0.8) as i32);
-            if ok(self, tx, ty) {
-                let kind = if k % 5 == 4 { format!("graveOpen{}", k % 2) } else if k % 7 == 3 { "skullpile".to_string() } else { format!("buried{}", k % 3) };
-                self.prop_tf(&kind, tx, ty, k % 2 == 0);
-            }
-        }
-        // verstreute Tote und Gräber über die Insel
-        let mut placed = 0;
-        for _ in 0..200 {
-            if placed >= 26 {
-                break;
-            }
-            let (tx, ty) = (cx + rng.int(-40, 40), cy + rng.int(-20, 20));
-            if !ok(self, tx, ty) || self.zone[idx(tx, ty)] != Some(Zone::Kueste) || !self.free_t(tx, ty, 1) {
-                continue;
-            }
-            let kind = match rng.int(0, 6) {
-                0 => format!("buried{}", rng.int(0, 2)),
-                1 => format!("grave{}", rng.int(0, 1)),
-                2 => format!("coffinBones{}", rng.int(0, 1)),
-                3 => format!("sitDead{}", rng.int(0, 1)),
-                4 => "skullpile".to_string(),
-                5 => format!("buried{}", rng.int(0, 2)),
-                _ => format!("coffin{}", rng.int(0, 1)),
-            };
-            let flip = rng.chance(0.5);
-            let (x, y) = tpos(tx, ty);
-            self.prop_x(&kind, x, y, |p| p.flip = flip);
-            placed += 1;
-        }
-        self.prop_t("torch", cx - 7, cy + 2);
-        self.prop_t("torch", cx - 13, cy + 2);
-        self.prop_t("torch", cx + 3, cy + 6);
-        self.prop_t("torch", cx + 25, cy + 7);
-        self.prop_t("signpost", cx - 4, cy + 2);
-        self.prop_t("anchorDeco", cx - 18, cy + 9);
-        self.prop_t("logPile", cx - 14, cy - 3);
-        for (x, y) in [(-30, 6), (24, 8), (38, -6), (-38, -2), (10, -14), (-14, -14), (30, 16), (-20, 18)] {
-            self.grove(cx + x, cy + y, 4.0, rng, 3, None);
-        }
-        self.spawn("skeleton", cx + 8, cy - 2, false);
-        self.spawn("crab", cx - 18, cy + 10, false);
-        self.spawn("crab", cx + 22, cy + 8, false);
-        self.spawn("skeleton", cx + 18, cy - 4, false);
-        self.spawn("skelGunner", cx + 24, cy - 8, false);
-        self.spawn("crab", cx - 2, cy - 9, false);
-        self.spawn("skelBrute", cx + 32, cy + 2, false);
-        self.spawn("livingChest", cx - 36, cy - 18, false);
-        self.spawn("skelkraken", cx + 30, cy - 18, true);
-        self.chest("k1", cx + 34, cy - 20, "rum", None);
-        self.chest("k2", cx - 36, cy - 16, "bombs", None);
-        self.item("pearls", cx - 22, cy + 6);
-        self.item("bullets", cx + 12, cy + 4);
-        self.item("pearls", cx + 28, cy - 20);
-        self.npc("herald", cx - 6, cy + 6, "carver", "Alter Galionsschnitzer", "herald", true, None);
-    }
     /// Glutwacht: kreisrunde Hafenfestung im Geist eines verfallenen Feuerschreins, düster und
     /// piratisch (siehe `hubgeo`). Mitte: Hafenbecken mit Strudel, Ring der brennenden Bossschiffe
     /// und Steg; im Süden das Seetor fürs Schiff. Ringsum steigen Kai (Werft, Liegeplatz, Crew-Tafel),

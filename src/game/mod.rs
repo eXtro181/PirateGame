@@ -25,6 +25,7 @@ pub mod gallows;
 pub mod hub;
 pub mod surf;
 pub mod tide;
+pub mod ferry;
 
 pub use crate::art::{anim_index, Art, CharSheet};
 pub use crate::gfx::{flags, modes, Frame, LightDef, SprOpt};
@@ -130,6 +131,9 @@ pub enum Cut {
     /// Sieg über Malakor: die Letzte Flut (`tide.rs`) – Ketten reißen, die Spinne hängt den Mond
     /// zurück an den Himmel, das Meer kehrt zurück, die Ertrunkenen ziehen heim
     Tide { t: f32 },
+    /// nach dem Prolog: der Sarg treibt mit anderen Särgen durch die Regennacht zur Galgenfeste,
+    /// Skelette werfen ihn auf den Sarghaufen (`ferry.rs`), dann folgt das Erwachen
+    Ferry { t: f32 },
 }
 
 /// Zeitplan des Erwachens (s): Dunkel mit Klopfen, Aufblenden, Deckel ruckelt, rutscht weg,
@@ -395,7 +399,7 @@ impl Game {
             zone_key: Zone::Kueste,
             zone_t: 0.0,
             wild_cur: None,
-            zone_name: "Galgenstrand",
+            zone_name: "Galgenfeste",
             chart_ver: 1,
             step_t: 0.0,
             last_pos: (0.0, 0.0),
@@ -474,6 +478,14 @@ impl Game {
         g.bosses.push(sb);
         // Sarg und Fackeln am Wasserfall gibt es erst, wenn der Kampf entschieden ist
         g.prolog_coffin_props(g.save.prolog && !g.save.spider);
+        // Galgenfeste: der Skelettkapitän
+        let ar = g.world.arenas.get("kueste").cloned().unwrap_or(crate::world::Arena { x: 0.0, y: 0.0, r: 100.0, ry: 80.0 });
+        let mut cb = Boss::new("captain", &ar);
+        if g.save.kings.get("captain").copied().unwrap_or(false) {
+            cb.state = BS::Dead;
+            cb.hidden = true;
+        }
+        g.bosses.push(cb);
         let ar = g.world.arenas.get("ende").cloned().unwrap_or(crate::world::Arena { x: 0.0, y: 0.0, r: 100.0, ry: 80.0 });
         let mut mb = Boss::new("mega", &ar);
         if g.save.end_won {
@@ -490,6 +502,7 @@ impl Game {
                 g.world.props[p].hidden = true;
             }
         }
+        g.sync_exit_gate();
         for si in 0..g.world.slots.len() {
             g.apply_slot(si);
         }
@@ -588,6 +601,7 @@ impl Game {
                     Cut::Summon { t, .. } => ("Summon", t),
                     Cut::Gallows { t, .. } => ("Gallows", t),
                     Cut::Tide { t } => ("Tide", t),
+                    Cut::Ferry { t } => ("Ferry", t),
                 };
                 format!("{n}@{t:.1}")
             }
@@ -1322,6 +1336,10 @@ impl Game {
                     }
                 }
             }
+            Cut::Ferry { t } => {
+                let t1 = t + dt;
+                self.cutscene = Some(if self.update_ferry(t, t1) { Cut::Wake { t: 0.0 } } else { Cut::Ferry { t: t1 } });
+            }
             Cut::Wake { t } => {
                 let t0 = t;
                 let t = t + dt;
@@ -1479,6 +1497,9 @@ impl Game {
         let mut target = if inside {
             // die Kneipe des Prologs ist hell und warm, die Läden kerzenbeleuchtet
             env::env(if z == Zone::Prolog { "kneipe" } else { "innen" }, false)
+        } else if let Some(Cut::Ferry { .. }) = self.cutscene {
+            // Überfahrt der Särge: Regennacht auf See vor der Galgenfeste
+            env::night(&env::env("kueste", true), 1.0)
         } else if let Some(Cut::Tide { t }) = self.cutscene {
             // die Letzte Flut: Zwielicht am Grund, Silber des befreiten Mondes, Morgengrauen
             tide::tide_env(t)
@@ -1572,7 +1593,7 @@ impl Game {
         }
         self.env_cur = env::mix(&self.env_cur, &target, (dt * 1.5).min(1.0));
         // Kinobalken in erzählten Zwischensequenzen (nicht beim Reisen und an Türen)
-        let story = matches!(self.cutscene, Some(Cut::Wake { .. } | Cut::Washed { .. } | Cut::Coffin { .. } | Cut::Summon { .. } | Cut::Whirl { .. } | Cut::Gallows { .. } | Cut::Tide { .. }));
+        let story = matches!(self.cutscene, Some(Cut::Wake { .. } | Cut::Washed { .. } | Cut::Coffin { .. } | Cut::Summon { .. } | Cut::Whirl { .. } | Cut::Gallows { .. } | Cut::Tide { .. } | Cut::Ferry { .. }));
         let intro = self.boss_intro_t > 0.0;
         self.look.base_zoom = if self.opt.near && !self.sailing && self.cutscene.is_none() { 1.22 } else { 1.0 };
         self.look.update(self.real_dt, &self.env_cur, inside, story, intro);
@@ -1909,7 +1930,7 @@ impl Game {
         self.zone_name = self.place_name();
         self.env_cur = env::env("kueste", false);
         self.fx.clear();
-        self.cutscene = Some(Cut::Wake { t: 0.0 });
+        self.start_ferry();
         self.persist(true);
     }
     pub fn ship_sunk(&mut self) {
@@ -1944,6 +1965,7 @@ impl Game {
         for b in self.world.dyn_blockers.iter_mut() {
             b.4 = false;
         }
+        self.sync_exit_gate();
         self.spawn_all(art);
         self.ship.hp = self.ship.max_hp;
         if let Some(d) = self.world.docks.iter().find(|d| d.key == self.save.ship_dock).or(self.world.docks.first()).cloned() {
@@ -2557,6 +2579,16 @@ impl Game {
             }
         }
     }
+    /// Galgenfeste: der Nebel im Hafentor sperrt, bis der Skelettkapitän erlöst ist
+    pub fn sync_exit_gate(&mut self) {
+        let Some((p, x, y)) = self.world.exit_gate else { return };
+        // alte Spielstände mit Flaschenschiff nie einsperren
+        let open = self.save.bottle || self.save.ship_raised || self.save.kings.get("captain").copied().unwrap_or(false);
+        self.world.props[p].hidden = open;
+        let n = self.world.gates.len();
+        self.world.dyn_blockers.truncate(n);
+        self.world.dyn_blockers.push((x - 52.0, y - 30.0, x + 52.0, y + 34.0, !open));
+    }
     pub(crate) fn check_whirl(&mut self) {
         if !self.whirlpool_open && self.whirl_ready() {
             self.whirlpool_open = true;
@@ -2572,7 +2604,7 @@ impl Game {
             b.4 = true;
         }
         let k = king_for_zone(g.key);
-        let bi = KINGS.iter().position(|x| x.key == k).unwrap_or(0);
+        let bi = self.bosses.iter().position(|b| b.key == k).unwrap_or(0);
         self.sfx("fog");
         self.boss_activate(bi);
     }
@@ -2605,6 +2637,15 @@ impl Game {
         self.ship.hull.h = std::f32::consts::FRAC_PI_2;
         self.cam_f = (ex, ey);
     }
+    /// Testlauf `&slay`: den eben gerufenen Boss sofort besiegen.
+    pub fn debug_slay(&mut self, key: &str) {
+        if let Some(i) = self.bosses.iter().position(|b| b.key == key) {
+            self.bosses[i].state = BS::Idle;
+            let hp = self.bosses[i].hp;
+            self.hurt_boss(i, hp + 1.0);
+        }
+    }
+
     pub fn debug_boss(&mut self, key: &str, phase2: bool) {
         if key == "mega" {
             self.save.end_naval = true;
@@ -2613,8 +2654,8 @@ impl Game {
             self.world_dirty = true;
             self.end.state = EP::Seabed;
         }
-        let bi = if key == "mega" { self.bosses.len() - 1 } else { KINGS.iter().position(|k| k.key == key).unwrap_or(0) };
-        let zone = if key == "mega" { "ende" } else { KINGS[bi].zone };
+        let bi = if key == "mega" { self.bosses.len() - 1 } else { self.bosses.iter().position(|b| b.key == key).unwrap_or(0) };
+        let zone = if key == "mega" { "ende" } else if key == "captain" { "kueste" } else { KINGS[bi.min(3)].zone };
         if let Some(a) = self.world.arenas.get(zone).cloned() {
             self.player.a.x = a.x - 120.0;
             self.player.a.y = a.y + 40.0;

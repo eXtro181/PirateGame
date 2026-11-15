@@ -150,6 +150,7 @@ impl Game {
         // Glutwacht: Krakenaugen unter Wasser, die Spinne unter der Brücke
         self.draw_hub_life(art, f);
         self.draw_wake(art, f);
+        self.draw_ferry(art, f);
         self.draw_prolog_coffin(art, f);
         // Prolog: der Gehängte am Galgenweg und die stumme Menge
         self.draw_gallows(art, f);
@@ -671,6 +672,9 @@ impl Game {
             return;
         }
         let Some(lid) = art.map.get("x:lid") else { return };
+        if matches!(self.cutscene, Some(Cut::Ferry { t }) if t < super::ferry::F_LAND) {
+            return;
+        }
         let t = match self.cutscene {
             Some(Cut::Wake { t }) => t,
             _ => 99.0,
