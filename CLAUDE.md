@@ -64,6 +64,7 @@ nie auf Verdacht ganze Dateien lesen. Diese Datei wird in jeder Sitzung ganz gel
 | Grafik kurz (lang: `docs/GRAFIK_ANLEITUNG.md`) | `GRAFIK.md` | `src/gfx/shaders/` |
 | Vorgaben ausführlich, Veröffentlichung | `PROJEKT.md` | `.github/workflows/deploy.yml` |
 | Offene Punkte · Token-Sparregeln und Einstellungen | `OFFEN.md` · `SPAREN.md` | `.claude/settings.json` |
+| Ideenvorrat (Grafik, Animation, Mechanik, Geschichte) | `Fable52.md` im Wurzelordner | |
 
 ## Harte Fallstricke
 - **Atlas**: 5,95 von 6 Seiten belegt – neue große Teile vorher messen (`tools/dev/art budget`, danach `smoke`).

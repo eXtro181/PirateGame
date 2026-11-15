@@ -28,7 +28,8 @@ def short(s, n):
 
 def doc_files(filt=()):
     out = []
-    for top in ('CLAUDE.md', 'README.md', 'docs', 'crates', 'tools'):
+    roots = sorted(f for f in os.listdir(ROOT) if f.endswith('.md'))  # CLAUDE.md, README.md, Fable52.md …
+    for top in roots + ['docs', 'crates', 'tools']:
         ap = os.path.join(ROOT, top)
         if os.path.isfile(ap):
             out.append(top)

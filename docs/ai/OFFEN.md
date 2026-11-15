@@ -9,3 +9,4 @@
   WebGPU, Licht-Kacheln, Zwischenbilder, mehr Atlasfläche, vorgebackene Grafik (Gründe im Bericht der Runde;
   Atlas 5,93/6 Seiten, keine Bild-/Audiodateien, WebGL2).
 - Alte JS-Profile (IndexedDB) werden nicht übernommen; die alte JS-Version und die Monster-Vorlage wurden am 27.10. gelöscht (in der Git-Historie vorhanden).
+- Ideenvorrat für die nächsten Sitzungen (Grafik, Animation, Mechanik, Geschichte, nach Aufwand und Reihenfolge): `Fable52.md` im Wurzelordner.
