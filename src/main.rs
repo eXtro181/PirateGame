@@ -401,7 +401,11 @@ fn setup(world: &mut bevy::ecs::world::World) {
             if app.params.contains_key("weaver") {
                 // Testlauf: der Geist der Weberin erscheint wie nach dem Sieg über die Spinne
                 if let Scene::Play(g) = &mut app.scene {
-                    g.weaver = Some((g.player.a.x + 70.0, g.player.a.y - 20.0, 0.0));
+                    g.debug_weaver();
+                    if app.params.get("weaver").is_some_and(|v| v == "1") {
+                        // &weaver=1: gleich nach ihren Worten (Dialog übersprungen)
+                        g.weaver = g.weaver.map(|(x, y, _)| (x, y, 3.8));
+                    }
                 }
             }
             if app.params.contains_key("ferry") {

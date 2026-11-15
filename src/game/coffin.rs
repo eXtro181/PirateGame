@@ -703,6 +703,11 @@ impl Game {
     /// Zeichnet Sarg (sobald er sich bewegt), Deckel, Spieler bzw. Kokon, Spinnfäden und die Arme.
     /// Der Geist der Weberin nach dem Sieg über die Spinne: steigt aus dem Leib, erzählt, dann erst
     /// erscheint der Sarg (Nutzerwunsch 15.11.).
+    /// Testlauf `&weaver`: wie nach dem Sieg über die Spinne (Sarg noch verborgen)
+    pub fn debug_weaver(&mut self) {
+        self.weaver = Some((self.player.a.x + 70.0, self.player.a.y - 20.0, 0.0));
+        self.prolog_coffin_props(true);
+    }
     pub(super) fn update_weaver(&mut self, dt: f32) {
         let Some((x, y, t0)) = self.weaver else { return };
         let mut t = t0 + dt;
@@ -714,9 +719,17 @@ impl Game {
         if t0 < WEAVER_TALK && t >= WEAVER_TALK {
             self.ui.open_dialog("Die Weberin", WEAVER_PAGES.iter().map(|s| s.to_string()).collect(), vec![]);
         }
-        if t > WEAVER_TALK + 0.1 && t < WEAVER_GO && self.ui.dialog.is_none() {
+        if t0 >= WEAVER_TALK && t0 < WEAVER_GO {
+            // die Welt läuft weiter, während man liest: warten, bis man ihr zugehört hat
+            if self.ui.dialog.is_some() {
+                t = t.min(WEAVER_TALK + 0.5);
+            } else {
+                t = WEAVER_GO;
+            }
+        }
+        if t >= WEAVER_GO && self.cutscene.is_none() {
+            // erst nach ihren Worten erscheint der Sarg (kehrt sofort zurück, wenn er schon da ist)
             self.reveal_prolog_coffin(0.6);
-            t = WEAVER_GO;
         }
         self.weaver = Some((x, y, t));
     }
