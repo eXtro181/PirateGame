@@ -302,6 +302,8 @@ pub struct Game {
     pub sfx_q: Vec<&'static str>,
     pub mood: &'static str,
     pub song_req: Option<(&'static str, f32)>,
+    /// Geist der Weberin nach dem Sieg über die Spinne: (Ort x, y, Zeit)
+    pub weaver: Option<(f32, f32, f32)>,
     pub persist_req: bool,
     pub to_title: bool,
     /// geöffneter Siedlungsladen (None = Sabeth in der Glutwacht)
@@ -441,6 +443,7 @@ impl Game {
             sfx_q: vec![],
             mood: "title",
             song_req: None,
+            weaver: None,
             persist_req: false,
             to_title: false,
             shop_id: None,
@@ -1022,6 +1025,7 @@ impl Game {
             }
         }
         self.update_coffin_reveal(dt);
+        self.update_weaver(dt);
         self.update_ghost(dt);
         if self.cutscene.is_some() {
             // der Treffer-Blitz läuft auch in Zwischensequenzen aus (sonst bliebe die Figur weiß)
@@ -1891,6 +1895,7 @@ impl Game {
     /// Spiel beginnt.
     pub fn end_prolog(&mut self) {
         self.save.prolog = false;
+        self.weaver = None;
         // Stillwasser liegt hinter einem: Feindschaft, Galgen und Galgennacht vergessen
         self.save.hostile.retain(|h| h != gallows::TOWN);
         self.world.hang_free = None;

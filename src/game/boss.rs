@@ -1171,12 +1171,12 @@ impl Game {
         self.boss_intro_t = self.boss_intro_t.max(2.4);
         if key == "spider" {
             // Prolog: Beute, dann führt der Weg hinaus über den Sarg am Wasserfall
-            self.ui.banner("DIE MEERESSPINNE IST ERSCHLAGEN", "Am Wasserfall wartet ein Sarg", "big", 5.0);
+            self.ui.banner("DIE MEERESSPINNE IST ERSCHLAGEN", "Ein Geist löst sich aus ihrem Leib", "big", 3.4);
             self.gain_pearls(SPIDER_PEARLS as i64, Some((x, y)));
             self.save.spider = true;
             self.save.shards += 1;
-            // erst jetzt erscheinen Sarg und Fackeln am Wasserfall
-            self.reveal_prolog_coffin(1.4);
+            // aus dem Leib steigt der Geist der Weberin; erst nach ihren Worten erscheint der Sarg
+            self.weaver = Some((x, y, 0.0));
             self.boss = None;
             self.persist(true);
             return;

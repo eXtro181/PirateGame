@@ -3895,6 +3895,9 @@ impl TerrainMap for World {
             return None;
         }
         let i = idx(tx, ty);
+        if self.biome[i] == Biome::Hub && self.zone[i] == Some(Zone::Kueste) {
+            return self.fort_px(px, py).map(|(_, m)| m);
+        }
         if self.biome[i] != Biome::Hub || self.zone[i] != Some(Zone::Hain) || self.ground[i] == Mat::Plank {
             return None;
         }
@@ -3958,6 +3961,11 @@ impl TerrainMap for World {
         // Festung: kreisrunde Ringe je Pixel (glatte Mauerbögen); sonst klare Kachelkanten
         if self.biome[i] == Biome::Hub {
             // (Ladenräume sind auch Festungsbiom, gehören aber zu ihrer Insel)
+            if self.cur_hub_round && self.zone[i] == Some(Zone::Kueste) {
+                if let Some((l, _)) = self.fort_px(px, py) {
+                    return l;
+                }
+            }
             if self.cur_hub_round && self.zone[i] == Some(Zone::Hain) {
                 // außerhalb der Mauer liegt alles auf Meereshöhe (auch in Kacheln, deren Mitte
                 // schon zur Mauer gehört: so bleibt der Mauerfuß rund)

@@ -230,7 +230,7 @@ pub fn dialog_for(g: &mut Game, ni: usize) -> Script {
                 ch("Über die Spinne", Cmd::TalkPages(pages(&[
                     "Die Spinne aus dem Wrackzwinger? Sie ist keine Bestie. Sie war die Fährfrau der Flut – wir nannten sie die Weberin.",
                     "Sie wickelt die Toten ein, damit die Letzte Flut sie sanft hinübertragen kann. Seit die Flut ausbleibt, weiß sie nicht wohin mit ihnen. Also legt sie sie in Särge und wartet.",
-                    if s.spider { "Du hast sie erschlagen? Dann trägt niemand mehr die Toten. Hoffentlich findet ihr Geist den Weg zurück zum Wasser." } else { "Du hast sie verschont? Gut. Wenn der Mond zurückkehrt, wird sie gebraucht." },
+                    if s.spider { "Du hast sie erschlagen – und ihr Geist hat dich zugedeckt und zu uns geschickt? Dann ist sie endlich frei. Wer trägt nun die Toten?" } else { "Du hast sie verschont? Gut. Wenn der Mond zurückkehrt, wird sie gebraucht." },
                 ]))),
                 bye,
             ],

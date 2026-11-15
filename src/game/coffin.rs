@@ -1,5 +1,6 @@
-//! Ende des Prologs am großen Wasserfall. Nach dem Sieg über die Riesige Meeresspinne steigt man
-//! selbst in den Sarg an der Abbruchkante und zieht den Deckel zu; nach einer Niederlage wickelt
+//! Ende des Prologs am großen Wasserfall. Nach dem Sieg über die Riesige Meeresspinne erzählt ihr Geist,
+//! die Weberin, ihre Geschichte; dann erscheint der Sarg, man legt sich hinein, sie schiebt den
+//! Deckel zu und ruft die Arme; nach einer Niederlage wickelt
 //! die Spinne den Leichnam in einen weißen Kokon, schleift ihn an einem Faden bis zum Sarg, legt
 //! ihn mit den Beinen hinein, schließt den Deckel und krabbelt selbst kopfüber die Klippe hinab in
 //! die Tiefe. Erst dann schlängeln sich zwei riesige Arme aus der schwarzen Tiefe die Klippe
@@ -10,6 +11,18 @@ use super::fx::*;
 use super::*;
 use std::f32::consts::PI;
 
+/// Geist der Weberin: erscheint, spricht, schwebt zum Sarg (s nach dem Tod der Spinne)
+const WEAVER_RISE: f32 = 1.4;
+const WEAVER_TALK: f32 = 3.6;
+const WEAVER_GO: f32 = 10.0;
+const WEAVER_PAGES: [&str; 6] = [
+    "Halt … es ist vorbei. Du hast den Faden zerrissen, der mich an diesen Leib band.",
+    "Ich bin die Weberin. Einst war ich die Fährfrau der Letzten Flut: Ich hüllte die Ertrunkenen in Seide, und die Flut trug sie sanft hinüber.",
+    "Dann fischte Malakor, der Ertrunkene König, das Spiegelbild des Mondes aus der See und kettete es in den Bauch seines Holländers. Seitdem steht das Meer still.",
+    "Die Letzte Flut kommt nicht mehr. Die See spuckt ihre Toten wieder aus, und ich wurde, was du erschlagen hast: eine Spinne, die Särge füllt und wartet.",
+    "Auch du bist ein Ertrunkener. Hinüber kannst du nicht, solange der Mond gefangen ist – aber du kannst kämpfen. Vier Könige halten Malakors Ketten.",
+    "Leg dich in den Sarg am Abgrund. Ich decke dich zu und rufe die Arme der Tiefe. Sie tragen dich zur Galgenfeste – dort beginnt deine Fahrt.",
+];
 /// Dauer (s): Aufsteigen der Arme, Umschlingen, Hinabziehen
 pub const RISE_DUR: f32 = 4.6;
 pub const GRAB_DUR: f32 = 1.3;
@@ -427,6 +440,9 @@ impl Game {
             self.fx.px.play(Px::Land, cx, cy - 2.0).scale(0.9);
         }
         // ---- die Arme aus der Tiefe
+        if !defeat && crossed(p.quiet) && self.weaver.is_some() {
+            self.ui.whisper("Kommt herauf, ihr Arme der Tiefe. Tragt ihn heim zu den Ertrunkenen.");
+        }
         if crossed(p.quiet + 0.3) {
             self.sfx("rise");
             self.shake(3.0);
@@ -685,6 +701,59 @@ impl Game {
     }
 
     /// Zeichnet Sarg (sobald er sich bewegt), Deckel, Spieler bzw. Kokon, Spinnfäden und die Arme.
+    /// Der Geist der Weberin nach dem Sieg über die Spinne: steigt aus dem Leib, erzählt, dann erst
+    /// erscheint der Sarg (Nutzerwunsch 15.11.).
+    pub(super) fn update_weaver(&mut self, dt: f32) {
+        let Some((x, y, t0)) = self.weaver else { return };
+        let mut t = t0 + dt;
+        if t0 < WEAVER_RISE && t >= WEAVER_RISE {
+            self.sfx("rise");
+            self.fx.rise("soul", x, y - 20.0, 14, 50.0, None);
+            self.fx.px.play(Px::Poof, x, y - 24.0).scale(1.5).tint([190, 220, 255, 255]);
+        }
+        if t0 < WEAVER_TALK && t >= WEAVER_TALK {
+            self.ui.open_dialog("Die Weberin", WEAVER_PAGES.iter().map(|s| s.to_string()).collect(), vec![]);
+        }
+        if t > WEAVER_TALK + 0.1 && t < WEAVER_GO && self.ui.dialog.is_none() {
+            self.reveal_prolog_coffin(0.6);
+            t = WEAVER_GO;
+        }
+        self.weaver = Some((x, y, t));
+    }
+    /// Ort, Blickrichtung, Bewegung, Sichtbarkeit der Weberin
+    fn weaver_pose(&self) -> Option<((f32, f32), (f32, f32), &'static str, f32)> {
+        let (x, y, wt) = self.weaver?;
+        let (cx, cy) = self.world.prolog_coffin;
+        let side = (cx + 50.0, cy + 6.0);
+        if let Some(Cut::Coffin { t, defeat: false, a, c, .. }) = self.cutscene {
+            // schiebt den Deckel von rechts auf den Sarg, ruft dann die Arme und verblasst
+            let p = plan(false, a, c);
+            let push = smooth(part(t, p.lid0, p.lid1));
+            let anim = if t > p.quiet { "cast" } else if t > p.lid0 && t < p.lid1 + 0.3 { "atk" } else { "idle" };
+            let face = if t > p.quiet { (0.0, 1.0) } else { (-1.0, 0.0) };
+            return Some(((side.0 - push * 18.0, side.1), face, anim, 1.0 - smooth(part(t, p.grab, p.pull + 1.0))));
+        }
+        let go = smooth(part(wt, WEAVER_GO, WEAVER_GO + 2.4));
+        let pos = lerp2((x, y - 10.0), side, go);
+        let face = if go > 0.0 && go < 1.0 { (side.0 - x, side.1 - y) } else { (0.0, 1.0) };
+        Some((pos, face, if go > 0.0 && go < 1.0 { "walk" } else { "idle" }, smooth(part(wt, WEAVER_RISE, WEAVER_RISE + 1.2))))
+    }
+    pub(super) fn draw_weaver(&self, art: &Art, f: &mut Frame) {
+        let (Some(((x, y), face, anim, al)), Some(sh)) = (self.weaver_pose(), art.chars.get("weaver")) else { return };
+        if al <= 0.01 {
+            return;
+        }
+        let now = self.t;
+        let mut a = crate::game::actors::Actor::new(x, y);
+        a.anim = anim;
+        a.frame = now * 6.0;
+        a.face(face.0, face.1);
+        let lift = 8.0 + (now * 1.8).sin() * 3.0;
+        draw::draw_char_lift(f, sh, &a, flags::GHOST, [205, 235, 255, (al * 215.0) as u8], lift, y);
+        f.glow(x, y - 26.0 - lift, 30.0, [150, 220, 240, (al * 70.0) as u8]);
+        f.light(LightDef { x, y: y - 10.0, z: 50.0, r: 150.0, col: [0.35 * al, 0.5 * al, 0.58 * al], flicker: 0.04 });
+    }
+
     pub(super) fn draw_prolog_coffin(&self, art: &Art, f: &mut Frame) {
         let (cx0, cy0) = self.world.prolog_coffin;
         if cx0 == 0.0 || self.zone_key != Zone::Prolog {

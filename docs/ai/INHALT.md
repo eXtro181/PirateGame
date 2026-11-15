@@ -36,6 +36,7 @@ vorher nur „Ein leerer Sarg“) – man steigt hinein, legt sich hin, der Deck
 nach einer Niederlage (Tod im Prolog → `start_coffin(true)` statt des normalen Sterbens) wickelt die Spinne den Leichnam in einen weißen Kokon,
 zieht ihn bis zum Sarg, legt ihn mit den Beinen hinein, schließt ihn und krabbelt selbst über die Klippe in die Tiefe.
 In beiden Fällen schlängeln sich danach zwei riesige Arme aus der schwarzen Tiefe die Klippe herauf, umschlingen den Sarg und ziehen ihn langsam hinab
+Sieg über die Spinne: Geist der Weberin (`Game.weaver`, `coffin.rs`) erzählt, dann erst Sarg; sie deckt ihn zu und ruft die Arme.
 → `end_prolog` → `Cut::Ferry` (`game/ferry.rs`): Arme legen den Sarg auf See ab (Krakenaugen der Glutwacht), die Strömung treibt ihn an den Kai,
 Skelette werfen ihn auf den Sarghaufen → `Cut::Wake` ohne Abblende; ab dem Auftauchen der Arme im Prolog läuft das Shanty `shanty` (`song_req`).
 Im Prolog kein Perlenfleck, keine Seekarte.
