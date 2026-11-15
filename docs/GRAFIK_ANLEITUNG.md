@@ -31,6 +31,8 @@ Bezugsdateien im Repo: `crates/art/src/*` (Kunst aus Code), `src/gfx/mod.rs` + `
 19. Pixel-Modus gegen FullHD-Modus
 19a. Ausbau 2026 (Runde 13): Licht, Wetter, Tageszeit, Bildwirkungen, Stilrichtlinie und Farbskript
 19b. Runde 14: Wellen, Brandung, plastische Dächer, Titelbild „Sturmnacht“
+19c. Endkampf neu (9.11.): PixelLab-Holländer, Gezeiten-Shader, Spiegelmond, Letzte Flut
+19d. Bildlook vom 14.11.: Nebel als Tiefe, Klarheit, farbtreues Licht
 20. Schritt-für-Schritt-Plan für das neue Projekt
 21. Fallstricke
 22. Anhang: Shader im Wortlaut
@@ -755,7 +757,7 @@ Pro Pixel aus dem G-Puffer: Albedo, Normale (z rekonstruiert), Höhe `elev = b·
    Beitrag `farbe · ndl · abfall · flackern · (0,6 + 0,4·ao) · schatten`.
 9. Pixel-Modus: Licht in 12 Stufen mit leichtem Dithering (Pixelkunst-Look).
 10. `c = albedo · licht + glanz + leuchten`.
-11. FullHD: **Lichthöfe im Dunst** um jede Lichtquelle (`exp(−5·d)`, × (0,04 + Nebeldichte·0,3)).
+11. FullHD: **Lichthöfe im Dunst** um jede Lichtquelle (`exp(−6,5·d)`, Farbe gestaucht, × (0,05 + Nebeldichte·0,3); siehe Kapitel 19d).
 12. **Blitz**: `+ albedo · blitz · (0,8, 0,85, 1)`.
 13. **Tiefennebel**: `fogk = dichte·(1 − ground·0,6) + Tiefenschärfe·0,03·(1 − smoothstep(0, 0,4, ground))`, `c = mix(c, nebelfarbe, min(fogk, 0,85))`.
 14. Ausgabe `rgb = c · belichtung`, **alpha = ground · 0,5**.
@@ -1129,6 +1131,62 @@ beim Heimziehen 140 px hoch und ausgeblendet.
 Lichtstimmungen `mondnacht` (kühles Silber, Sterne 1, Strahlen 0,18) und `morgenflut` (Sonne von Osten 0xFFD8B4, Strahlen 0,35);
 der Nebel am Ende der Welt richtet sich nach dem Abschnitt (silbern, grünlich-grau, salzig, mondhell, morgenrot – vorher lag dort immer blutroter Nebel,
 Ursache des Rotstichs am Meeresgrund).
+
+## 19d. Bildlook vom 14.11.: Nebel als Tiefe, Klarheit, farbtreues Licht
+
+Anlass: Das Bild wirkte milchig (der Nebel lag als Schleier über allem), Lichter brannten zu weißen Flecken aus,
+und dunkle Gebiete liefen in einen einzigen Farbton (Aschebucht einfarbig rot, Fluchmangroven einfarbig grün).
+Geändert sind nur Shader und Stimmungswerte – keine neue Grafik, der Atlas bleibt bei 5,95 Seiten.
+Die Werte dieses Kapitels ersetzen die älteren Angaben in den Kapiteln 14 bis 18, wo sie sich widersprechen.
+
+**Nebel als Tiefe statt Schleier** (`scene.wgsl`, `fs_overlay`, Modus 5):
+
+- Dichte je Bildort: `dens = mix(0,2, 1, clamp(smoothstep(0,1, 0,62, |dc|)·0,75 + smoothstep(0,7, 0, v)·0,5, 0, 1))`.
+- `dc = (uv − (0,5, 0,54)) · (1, s)` mit `s` = 1,2 oberhalb und 0,6 unterhalb der Bildmitte; `uv` ist der Ort im Bild (0..1).
+- Wirkung: um die Spielfigur lichtet sich der Nebel, zur Ferne (oben) und zu den Rändern wird er dicht, zur Kamera hin bleibt er dünn.
+- Die Farbe folgt dem Licht: `farbe · clamp(luma(Umgebung)·1,15 + luma(Sonne)·0,5, 0,22, 1)` – nachts dunkler, kein heller Film.
+- Deckkraft der Lagen (`draw.rs`): Aschebucht (128, 84, 82) 30, Fluchmangroven (112, 136, 124) 44, Rabenwacht (120, 130, 140) 60.
+
+**Bodennebel im Licht-Pass** (`fs_light`): `fogk · mix(1, 0,4, smoothstep(6, 70, höhe))`.
+Bäume, Mauern und Figuren stehen mit dem Fuß im Dunst und ragen oben heraus.
+
+**Lichthöfe und Lichtinseln** (`fs_light`):
+
+- Hof im Dunst: Farbe gestaucht `L / (1 + 0,5·max(L))`, Abfall `exp(−6,5·d)`, Strahlenzeichnung nur noch ±15 %, Faktor `0,05 + Nebeldichte·0,3`.
+- Punktlichter werden gesammelt und farbtreu gestaucht: `li += pl · 1,12 / (1 + 0,3·max(pl))`.
+- Wirkung: ein Säbelfeuer auf Schnee leuchtet türkis statt als weißer Fleck; schwache Lichter bleiben, wie sie waren.
+
+**Form und Relief** (`fs_light`): Normalen ×1,3 (außer Wasser), Himmelslicht `mix(0,64, 1,07, n.z)`, Verdeckung ×1,9 (höchstens 0,7).
+
+**Endbild** (`fs_final`):
+
+- Klarheit: `c += clamp(c − weich, ±0,16) · 0,45 · (1 − Unschärfe)`; `weich` ist das Bild der Tiefenschärfe (Radius ~12 Texel).
+  Das ist örtlicher Kontrast gegen ein weichgezeichnetes Bild, begrenzt, damit um Lichter keine Säume entstehen.
+- Tiefenschärfe schwächer: Übergänge 0,26–0,6 (fern) und 0,24–0,62 (nah), Mischung 0,62 statt 0,8, Abdunkeln 0,1, Entsättigen 0,12.
+- Bloom erst ab 0,8 (bis 1,7) statt ab 0,64 – beleuchteter Boden blüht nicht mehr, nur Lichter, Glut und Glanz.
+- Tonkurve farbtreu: `mix(aces(x), x · aces(luma)/luma, 0,62)`.
+  Je Kanal angewandt, quadriert der Fuß der Kurve im Dunkeln jeden Farbstich (aus leicht rötlichem Licht wird ein einfarbig rotes Bild).
+- Lebendigkeit: Sättigung × `(1 + 0,3·(1 − smoothstep(0, 0,5, Farbigkeit)))` – matte Farben gewinnen mehr als satte.
+- Spitzlichter entsättigen nur noch bis 0,3 (ab Helligkeit 0,9 bis 3,4).
+
+**Helligkeit aus echtem Licht** (`env::apply`):
+
+- Umgebung × `0,68 + 0,14·up`, Sonne × `0,72 + 0,12·up`, `up = 1 − clamp((luma(Umgebung) − 0,45)/0,6, 0, 1)`.
+- Option „Düster“: `0,5 + 0,08·up` bzw. `0,55 + 0,07·up`.
+- Dunkle Stimmungen werden angehoben, helle (Stillwasser am Morgen) bleiben; Kontrast + 0,09 statt + 0,06, Sättigung × 1,08 („Düster“ × 0,8).
+
+**Wasser** (`water_x`): Wellen plastischer (`0,8 + 0,4·h`, Dünung `0,87 + 0,34·sw`), Himmelsspiegelung `clamp(fresnel·1,85 + 0,05, 0, 0,52)`.
+
+**Stimmungen**:
+
+- Aschebucht: Umgebung 7C7088×0,56, Sonne FFB890×0,36, Nebel 5C363C, Lift (0,022, 0,008, 0,014), Sättigung 0,9, Schatten (0,98, 0,97, 1,04).
+- Aschebucht, Boden: verbrannte Erde graubraun (241A1E 342628 483634 5E4642 765A52 907266) statt rot; das Rot kommt aus Glut, Licht und Moos.
+- Fluchmangroven: Umgebung 6A8474×0,46, Sonne D8D898×0,4, Gain (0,99, 1,02, 0,96), Schatten (0,94, 1,02, 1,02), Lichter (1,05, 1,01, 0,9).
+- Galgenstrand: Sättigung 0,78.
+
+**Prüfen**: `tools/dev/shot` mit den Zonen `start=kueste|hain|raben|frost|asche|mangroven`, dazu `&sail`, `&prolog&pos=dorf`, `&pos=mid12`, `&day=0.5`.
+
+---
 
 ## 20. Schritt-für-Schritt-Plan für das neue Projekt
 

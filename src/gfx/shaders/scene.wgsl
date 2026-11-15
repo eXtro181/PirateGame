@@ -141,13 +141,13 @@ fn water_x(p_in: vec2<f32>, shore_in: f32, depth_in: f32) -> GOut {
     c *= 0.88 + big * 0.20 * dd + (band - 0.5) * 0.09 * dd;
     let h0 = wave_h(p, t);
     // Wellentäler dunkler, Kämme heller und smaragdgrün durchschimmernd (Subsurface Scattering)
-    c *= 0.84 + h0 * 0.32;
+    c *= 0.8 + h0 * 0.4;
     let sss_col = mix(G.water_a.rgb * vec3<f32>(0.78, 1.26, 1.12), G.sun_col.rgb, 0.22);
     c += sss_col * smoothstep(0.52, 0.82, h0) * (0.22 + (1.0 - dd) * 0.15);
     // Dünung: in der Tiefe und bei Wind stärker, zum Ufer hin flacher (dort brechen die Brecher)
     let sw = swell(p, t);
     let swk = (0.3 + 0.7 * dd) * (0.55 + 0.65 * G.fx2.w) * smoothstep(0.0, 0.35, shore);
-    c *= 0.9 + sw.x * 0.26 * swk;
+    c *= 0.87 + sw.x * 0.34 * swk;
     c += sss_col * smoothstep(0.55, 0.95, sw.x) * 0.16 * swk;
     // heller Saum oben auf dem Kamm
     c += vec3<f32>(0.05, 0.07, 0.08) * smoothstep(0.82, 0.97, sw.x) * swk;
@@ -214,7 +214,7 @@ fn water_x(p_in: vec2<f32>, shore_in: f32, depth_in: f32) -> GOut {
         let cov = G.fx6.x;
         sky = mix(sky, G.fog.rgb * 1.4 + G.ambient.rgb * 0.7 + G.sun_col.rgb * 0.1, smoothstep(0.58 - cov * 0.25, 0.85 - cov * 0.25, cl) * 0.55);
         let fres = 0.05 + 0.95 * pow(1.0 - clamp(dot(n, v), 0.0, 1.0), 5.0);
-        em += sky * clamp(fres * 2.35 + 0.07, 0.0, 0.65) * (1.0 - foam * 0.85);
+        em += sky * clamp(fres * 1.85 + 0.05, 0.0, 0.52) * (1.0 - foam * 0.85);
         spec = mix(0.98, 0.22, foam);
     } else {
         // Glitzern (Pixelstil)
@@ -523,7 +523,16 @@ fn fs_overlay(v: VOut) -> @location(0) vec4<f32> {
             let n3 = noise_at(pf * 0.52 + vec2<f32>(-t * v.prm.y * 0.35 + 17.0, t * v.prm.y * 0.45 + 5.0)).b;
             a = smoothstep(0.33, 0.86, n * 0.52 + n2 * 0.42 + n3 * 0.22) * v.col.a * edge * 0.84;
         }
-        return vec4<f32>(v.col.rgb * a, a);
+        // Tiefe statt Schleier: um die Spielfigur (Bildmitte) lichtet sich der Nebel, zur Ferne (oben) und
+        // zu den Rändern verdichtet er sich. Die Farbe folgt dem Licht der Zone (nachts dunkler), so
+        // liegt kein milchiger Film über dunklen Szenen.
+        let suv = (v.world - G.view.xy) / G.view.zw;
+        // nach unten (zur Kamera hin) lichter als zur Ferne
+        let dc = (suv - vec2<f32>(0.5, 0.54)) * vec2<f32>(1.0, select(1.2, 0.6, suv.y > 0.54));
+        let dens = mix(0.2, 1.0, clamp(smoothstep(0.1, 0.62, length(dc)) * 0.75 + smoothstep(0.7, 0.0, suv.y) * 0.5, 0.0, 1.0));
+        a *= dens;
+        let lit = clamp(luma(G.ambient.rgb) * 1.15 + luma(G.sun_col.rgb) * 0.5, 0.22, 1.0);
+        return vec4<f32>(v.col.rgb * lit * a, a);
     }
     if (mode == 6u) {
         let d = length(v.uv * 2.0 - 1.0);

@@ -114,7 +114,7 @@ pub fn env(zone: &str, sailing_open_sea: bool) -> Env {
             lift: [0.02, 0.026, 0.03],
             gain: [0.96, 1.0, 1.02],
             contrast: 1.1,
-            sat: 0.7,
+            sat: 0.78,
             bloom: 0.6,
             water_a: l(0x3A6E74, 1.0),
             water_b: l(0x16384A, 1.0),
@@ -158,21 +158,21 @@ pub fn env(zone: &str, sailing_open_sea: bool) -> Env {
         // Aschebucht: roter Nebel, Glut, kaum Sonne
         "asche" => Env {
             rays: 0.6,
-            ambient: l(0x8C7480, 0.5),
+            ambient: l(0x7C7088, 0.56),
             sky: 0.4,
-            sun: l(0xFF8A6A, 0.3),
+            sun: l(0xFFB890, 0.36),
             shadow: 0.35,
-            fog: l(0x84343E, 1.0),
+            fog: l(0x5C363C, 1.0),
             fog_k: 0.06,
-            lift: [0.03, 0.005, 0.01],
-            gain: [1.04, 0.97, 0.96],
-            sat: 0.8,
+            lift: [0.022, 0.008, 0.014],
+            gain: [1.03, 0.98, 0.97],
+            sat: 0.9,
             bloom: 0.55,
             water_a: l(0x6A3A50, 1.0),
             water_b: l(0x2A1426, 1.0),
             water_c: l(0xE8A0A8, 1.0),
             light_k: 1.2,
-            tone_lo: [1.02, 0.97, 0.99],
+            tone_lo: [0.98, 0.97, 1.04],
             tone_hi: [1.04, 0.99, 0.92],
             heat: 0.35,
             ash: 0.8,
@@ -226,20 +226,20 @@ pub fn env(zone: &str, sailing_open_sea: bool) -> Env {
         // Fluchmangroven: fauliges Grün, Dunkelheit unter den Kronen
         "mangroven" => Env {
             rays: 0.75,
-            ambient: l(0x5A8068, 0.4),
+            ambient: l(0x6A8474, 0.46),
             sky: 0.35,
-            sun: l(0xB8D890, 0.32),
+            sun: l(0xD8D898, 0.4),
             shadow: 0.4,
             fog: l(0x4E6250, 1.0),
             fog_k: 0.12,
             lift: [0.01, 0.03, 0.015],
-            gain: [0.97, 1.03, 0.95],
+            gain: [0.99, 1.02, 0.96],
             water_a: l(0x2E5A4E, 1.0),
             water_b: l(0x12302E, 1.0),
             water_c: l(0x9AC0B0, 1.0),
             light_k: 1.2,
-            tone_lo: [0.93, 1.05, 0.96],
-            tone_hi: [1.03, 1.03, 0.91],
+            tone_lo: [0.94, 1.02, 1.02],
+            tone_hi: [1.05, 1.01, 0.9],
             rain: 0.45,
             wind: 0.15,
             nightk: 0.5,
@@ -713,14 +713,20 @@ pub fn arena(e: &Env, k: f32) -> Env {
 /// In die Shader-Konstanten schreiben. `dark` = Option „Düster“, `exposure` = Helligkeit.
 pub fn apply(e: &Env, g: &mut Globals, dark: bool, exposure: f32, fx_high: bool) {
     // Dark Fantasy: gedämpftes Umgebungslicht, tief stehende Sonne, Lichtinseln durch Laternen
-    let dk = if dark { 0.5 } else { 0.68 };
-    let sk = if dark { 0.55 } else { 0.72 };
+    // seit dem Grafik-Ausbau vom 14.11. heller: der Nebel liegt nicht mehr als Schleier über dem Bild,
+    // die Helligkeit kommt jetzt aus echtem Licht (Formen und Materialien bleiben sichtbar)
+    // Dunkle Stimmungen werden stärker angehoben als ohnehin helle (Stillwasser am Morgen bleibt, wie es ist).
+    let amb = e.ambient[0] * 0.3 + e.ambient[1] * 0.59 + e.ambient[2] * 0.11;
+    let up = 1.0 - ((amb - 0.45) / 0.6).clamp(0.0, 1.0);
+    let dk = if dark { 0.5 + 0.08 * up } else { 0.68 + 0.14 * up };
+    let sk = if dark { 0.55 + 0.07 * up } else { 0.72 + 0.12 * up };
     g.ambient = [e.ambient[0] * dk, e.ambient[1] * dk, e.ambient[2] * dk, e.sky];
     g.sun_dir = [e.sun_dir[0], e.sun_dir[1], e.sun_dir[2], if fx_high { e.shadow + 0.15 } else { 0.0 }];
     g.sun_col = [e.sun[0] * sk, e.sun[1] * sk, e.sun[2] * sk, 0.6];
     g.fog = [e.fog[0], e.fog[1], e.fog[2], e.fog_k];
-    g.lift = [e.lift[0] + 0.004, e.lift[1] + 0.008, e.lift[2] + 0.016, e.contrast + 0.06];
-    g.gain = [e.gain[0], e.gain[1], e.gain[2], e.sat * if dark { 0.75 } else { 1.0 }];
+    // Kontrast und Sättigung leicht angehoben: die farbtreue Tonkurve (post.wgsl) sättigt Dunkles nicht mehr von selbst
+    g.lift = [e.lift[0] + 0.004, e.lift[1] + 0.008, e.lift[2] + 0.016, e.contrast + 0.09];
+    g.gain = [e.gain[0], e.gain[1], e.gain[2], e.sat * if dark { 0.8 } else { 1.08 }];
     // +15 % Helligkeit gegenüber der ursprünglichen Abstimmung (Wunsch: man sieht sonst zu wenig)
     g.misc = [(e.vignette + 0.2).min(1.0), if fx_high { 0.018 } else { 0.0 }, if fx_high { e.bloom } else { 0.2 }, exposure * 1.15];
     g.water_a = [e.water_a[0], e.water_a[1], e.water_a[2], 1.0];

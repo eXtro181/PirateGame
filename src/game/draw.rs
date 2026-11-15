@@ -599,16 +599,16 @@ impl Game {
             self.env_key()
         };
         let (fc, fa, sp) = match z {
-            "asche" => ([200, 70, 80], 42, 14.0),
+            "asche" => ([128, 84, 82], 30, 14.0),
             "ende" => ([140, 20, 40], 60, 10.0),
             "end_stille" => ([120, 135, 165], 34, 4.0),
             "end_sturm" => ([80, 120, 115], 48, 16.0),
             "end_grund" => ([105, 125, 115], 40, 7.0),
             "end_mond" => ([140, 158, 185], 26, 5.0),
             "end_morgen" => ([215, 180, 160], 22, 6.0),
-            "mangroven" => ([90, 130, 90], 70, 6.0),
+            "mangroven" => ([112, 136, 124], 44, 6.0),
             "frost" => ([190, 215, 235], 22, 8.0),
-            "raben" => ([120, 130, 140], 70, 18.0),
+            "raben" => ([120, 130, 140], 60, 18.0),
             "kueste" => ([170, 190, 200], 40, 5.0),
             // Prolog: im Dorf ein heller Morgendunst, zum Spinnenschlund hin dichter, dunkler Nebel
             "prolog" => {
