@@ -7,6 +7,7 @@ Prüfen je Paket: `tools/dev/check`, `wgsl`, `smoke`, `shot -q -s`, dann Kontakt
 - **Erledigt (Opus 5.5, 15.11.)**: B1, B4 (Lichtschächte aus Szenenhelligkeit), B6, B8, B11 (Regen), C1 (Rest), C4, D2, D5
   (Wiedergänger: beim zweiten Tod steht der alte Leichnam auf), E1, E2, E3, E6 (Erzählung), E7, E8 (Wetter), E9 (Logbuch).
   Details: `docs/ai/SPIEL.md` (Abschnitt Versalzung …), `docs/ai/GRAFIK.md`, Grafik-Anleitung Kap. 19d.
+- **Neuer Anfang (Opus 5.5, 15.11.)**: Startinsel ersetzt durch die Galgenfeste (Sarg-Überfahrt, Dungeon, Boss Kielholer) – siehe `docs/ai/INHALT.md`.
 - 14./15.11.: neuer Bildlook (Grafik-Anleitung Kap. 19d): Nebel als Tiefe, Klarheit, farbtreue Tonkurve, Hauptlicht, Lichtinseln, Wind im Gras.
 - Engpass für alles Weitere: Atlas 5,95 von 6 Seiten. Ohne A1 passt keine größere Figur und kein zusätzliches Animationsbild hinein.
 - Ungeprüft: echte GPU, iPhone, Modus „Sparsam“ – alles nur in Swiftshader gesehen. Zuerst dort Helligkeit und Leistung messen (`&prof`).

@@ -183,9 +183,23 @@ pub const SPIDER_DMG: f32 = 13.0;
 pub const SPIDER_PEARLS: f32 = 700.0;
 /// so lange klettert sie aus der Klippenwand herauf (s)
 pub const SPIDER_CLIMB: f32 = 2.2;
+/// Herr der Galgenfeste: Skelettkapitän mit zwei Säbeln (erster Boss nach dem Prolog)
+pub const CAPTAIN_NAME: &str = "Kapitän Kielholer";
+pub const CAPTAIN_HP: f32 = 620.0;
+pub const CAPTAIN_DMG: f32 = 17.0;
+pub const CAPTAIN_PEARLS: f32 = 1200.0;
 fn table(mega: bool, phase: i32, el: &str) -> Vec<(AK, f32, AO)> {
     use AK::*;
     let s = S;
+    if el == "captain" {
+        // zwei Säbel: Vierer-Hiebfolge, Klingenwirbel, Sturmlauf, Sprung mit Einschlag
+        return vec![
+            (Combo, 4.0, AO { n: 4, reach: 40.0 * s, fast: true, ..o() }),
+            (Spin, 2.5, AO { len: 1.4, r: 44.0 * s, ..o() }),
+            (Dash, 2.0, AO { len: 140.0 * s, ..o() }),
+            (Leap, 1.5, AO { r: 48.0 * s, ..o() }),
+        ];
+    }
     if el == "spider" {
         // vorschnellen, mit den Vorderbeinen fegen, Netzklumpen spucken, selten anspringen –
         // langsam ausgeholt, gut zu lesen
@@ -242,6 +256,8 @@ impl Boss {
             (MEGA_NAME.to_string(), MEGA_HP, "sea", "malakor")
         } else if key == "spider" {
             (SPIDER_NAME.to_string(), SPIDER_HP, "spider", "")
+        } else if key == "captain" {
+            (CAPTAIN_NAME.to_string(), CAPTAIN_HP, "captain", "skelCaptain")
         } else {
             let k = king(key);
             (k.name.to_string(), k.hp, k.key, k.sheet)
@@ -308,6 +324,8 @@ impl Boss {
             MEGA_DMG
         } else if self.key == "spider" {
             SPIDER_DMG
+        } else if self.key == "captain" {
+            CAPTAIN_DMG
         } else {
             king(self.key).dmg
         }
@@ -327,6 +345,11 @@ impl Boss {
             self.set_body(false);
             self.hidden = false;
             self.climb = 1.0;
+            return;
+        }
+        if self.key == "captain" {
+            self.atk = None;
+            self.set_body(true);
             return;
         }
         self.el = if self.mega { "sea" } else { king(self.key).key };
@@ -354,7 +377,7 @@ impl Game {
         if b.state != BS::Dormant {
             return;
         }
-        b.max_hp = if b.mega { MEGA_HP } else if b.key == "spider" { SPIDER_HP } else { king(b.key).hp } * k;
+        b.max_hp = if b.mega { MEGA_HP } else if b.key == "spider" { SPIDER_HP } else if b.key == "captain" { CAPTAIN_HP } else { king(b.key).hp } * k;
         b.hp = b.max_hp;
         b.hidden = false;
         b.state = BS::Intro;
@@ -374,7 +397,7 @@ impl Game {
         self.boss = Some(i);
         self.boss_ghost = self.bosses[i].hp;
         let n = self.bosses[i].name.clone();
-        let sub = if self.bosses[i].mega { "Der den Mond stahl" } else if self.bosses[i].key == "spider" { "Wächterin des Wrackzwingers" } else { "Geisterkönig" };
+        let sub = if self.bosses[i].mega { "Der den Mond stahl" } else if self.bosses[i].key == "spider" { "Wächterin des Wrackzwingers" } else if self.bosses[i].key == "captain" { "Herr der Galgenfeste" } else { "Geisterkönig" };
         self.ui.banner(&n, sub, "boss", 3.0);
         // Auftritt: Kinobalken, die Kamera rückt heran, Druckwelle beim Erscheinen
         self.boss_intro_t = 2.6;
@@ -1099,7 +1122,7 @@ impl Game {
             return;
         }
         let b = &mut self.bosses[i];
-        if !b.mega && b.key != "spider" && b.phase == 1 && b.hp <= b.max_hp * 0.5 {
+        if !b.mega && b.key != "spider" && b.key != "captain" && b.phase == 1 && b.hp <= b.max_hp * 0.5 {
             b.phase = 2;
             b.state = BS::Transform;
             b.st_t = 0.0;
@@ -1158,6 +1181,30 @@ impl Game {
             self.persist(true);
             return;
         }
+        if key == "captain" {
+            // der Kapitän zerfällt – aus seinen Knochen steigt sein Geist und bleibt in der Halle stehen
+            self.ui.banner("DER KAPITÄN IST ERLÖST", "Sein Geist bleibt zurück", "big", 5.0);
+            self.gain_pearls(CAPTAIN_PEARLS as i64 * (1 + self.save.ng as i64), Some((x, y)));
+            self.save.kings.insert(key.into(), true);
+            self.save.shards += 1;
+            self.bosses[i].hidden = true;
+            self.fx.px.play(Px::Shatter, x, y).scale(1.4);
+            if let Some(n) = self.npcs.iter_mut().find(|n| n.def.id == "ghostCaptain") {
+                n.a.x = x;
+                n.a.y = y + 8.0;
+            }
+            if let Some(gi) = self.world.gates.iter().position(|g| g.key == "kueste") {
+                let pi = self.world.gates[gi].prop;
+                self.world.props[pi].hidden = true;
+                if let Some(bk) = self.world.dyn_blockers.get_mut(gi) {
+                    bk.4 = false;
+                }
+            }
+            self.sync_exit_gate();
+            self.boss = None;
+            self.persist(true);
+            return;
+        }
         let pearls = if mega { MEGA_PEARLS } else { king(key).pearls } * (1.0 + 0.25 * self.save.ng as f32);
         if !mega {
             let n = king(key).name.split(',').next().unwrap_or("").to_string();
@@ -1191,6 +1238,9 @@ impl Game {
 }
 
 pub fn king_for_zone(z: &str) -> &'static str {
+    if z == "kueste" {
+        return "captain";
+    }
     KINGS.iter().find(|k| k.zone == z).map(|k| k.key).unwrap_or("fire")
 }
 

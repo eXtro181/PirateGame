@@ -428,7 +428,8 @@ impl Game {
 
     /// Ist die Figur fort (der Geisterkapitän nach der Übergabe)?
     pub(super) fn npc_gone(&self, i: usize) -> bool {
-        self.npcs[i].def.id == "ghostCaptain" && (self.save.bottle || self.save.ship_raised)
+        // erst wenn der Skelettkapitän erlöst ist, steht sein Geist in der Halle (bis zur Übergabe)
+        self.npcs[i].def.id == "ghostCaptain" && (self.save.bottle || self.save.ship_raised || !self.save.kings.get("captain").copied().unwrap_or(false))
     }
 
     pub(super) fn update_ghost(&mut self, dt: f32) {

@@ -110,6 +110,8 @@ pub struct Look {
     pub bird_legs: bool,
     /// schwebt über dem Boden (px)
     pub hover: f32,
+    /// zweite Klinge in der anderen Hand (Skelettkapitän mit Doppelschwert)
+    pub dual: bool,
     /// Schlangenleib statt Beinen
     pub snake_tail: Option<u32>,
     /// Schlangen statt Haaren
@@ -162,6 +164,7 @@ impl Default for Look {
             wings: None,
             bird_legs: false,
             hover: 0.0,
+            dual: false,
             snake_tail: None,
             snake_hair: false,
             construct: false,
@@ -982,6 +985,12 @@ fn paint_human(cv: &mut Canvas, dir: &str, p: &Pose, l: &Look, s: f32) {
             }
             cx.c.lit(ex as i32, (hy - 4.0) as i32, mix(cc, hex(0xFFFFFF), 0.6), 1.9);
         }
+        if lantern && l.dual {
+            // zweite Klinge, schräg nach vorn unten gehalten
+            if let Some(w) = l.weapon {
+                draw_weapon(cx.c, ex, hy, 2.25 - swing * 0.05, w, s * l.weapon_scale);
+            }
+        }
         if lantern {
             if let Some(lc) = l.hold_lantern {
                 let ir = pal(&[0x14161C, 0x22262E, 0x343A44, 0x4C545E]);
@@ -1463,7 +1472,7 @@ fn paint_human(cv: &mut Canvas, dir: &str, p: &Pose, l: &Look, s: f32) {
     };
 
     // ---------------- Reihenfolge je Richtung
-    let lantern = l.hold_lantern.is_some();
+    let lantern = l.hold_lantern.is_some() || l.dual;
     if p.drink > 0 {
         // rechte Hand mit Flasche am Mund
         let hx = if side { cx.x(6.0) } else { cx.x(5.0) };
@@ -1774,6 +1783,11 @@ pub fn preset(name: &str) -> (Look, f32) {
     let mut s = 1.0;
     let l = match name {
         "skeleton" => Look { skeleton: true, rags: true, coat: 0x3A2E2A, hat: 2, band_col: 0x4A1A1E, weapon: Some("cutlass"), ..d() },
+        // Kapitän Kielholer, Herr der Galgenfeste: Skelett im blutroten Kapitänsrock, zwei Säbel, grüne Augen
+        "skelCaptain" => {
+            s = 1.3;
+            Look { skeleton: true, coat: 0x4A161C, pants: 0x1A1418, hat: 4, hat_col: 0x141016, band_col: 0xB08A3A, sash: Some(0x8A6A2A), weapon: Some("cutlass"), weapon_scale: 1.2, dual: true, eye_col: 0x5FF2C8, body: 1, ..d() }
+        }
         "skelBrute" => Look { skeleton: true, rags: true, coat: 0x2A2A30, hat: 1, hat_col: 0x1A1A20, weapon: Some("hammer"), body: 1, ..d() },
         "skelGunner" => Look { skeleton: true, rags: true, coat: 0x2E3E52, hat: 0, weapon: Some("dagger"), ..d() },
         "drowned" => Look { drowned: true, skin: 0x5C7454, hair_col: 0x1F4A4C, hair: 2, coat: 0x2E3A36, pants: 0x24302C, weapon: Some("trident"), ..d() },
@@ -1873,7 +1887,7 @@ pub fn preset(name: &str) -> (Look, f32) {
     (l, s)
 }
 
-pub const PRESET_NAMES: [&str; 49] = [
-    "abyssPirate", "voodoo", "orcCaptain", "stormHarpy", "bellConstruct", "gorgonQueen", "clockStorm",
+pub const PRESET_NAMES: [&str; 50] = [
+    "skelCaptain", "abyssPirate", "voodoo", "orcCaptain", "stormHarpy", "bellConstruct", "gorgonQueen", "clockStorm",
     "skeleton", "skelBrute", "skelGunner", "drowned", "drownedIce", "ashSkeleton", "stormSailor", "lanternMaid", "smith", "merchant", "shipmaster", "carver", "crewFire", "crewIce", "crewWind", "crewEarth", "villagerA", "villagerB", "villagerC", "villagerD", "villagerE", "villagerF", "villagerG", "villagerH", "smithIlka", "furWendla", "mapOrrin", "witchMabel", "kingFire", "kingIce", "kingWind", "kingEarth", "malakor", "ghostCaptain", "mobA", "mobB", "mobC", "drownA", "drownB", "drownC", "drownD", "drownKeeper",
 ];

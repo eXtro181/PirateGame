@@ -9,7 +9,8 @@ für Schiffe gesperrt), Titelbild über offenem Meer (`TITLE_T`); `CORE` nur noc
 Das Ende der Welt liegt in der Südost-Ecke (`END_X0`/`END_Y0`, `END_OFF` für alte Spielstände), Ladenräume bei `MW − 84`.
 Zonen (`ZONES`, dazu `Zone::Wild` für alle wilden Inseln), Seegebiete (`SEAS`, weit draußen N/O/W/S, r 72;
 Kampfrevier `SEA_ARENA` 40), `Region` (Inselform/Hochland/Bewuchs für Kern- und wilde Inseln),
-Layouts je Insel (`layout_coast/hub/fire/ice/wind/earth/end/prolog`;
+Layouts je Insel (`layout_fortress/hub/fire/ice/wind/earth/end/prolog`;
+Galgenfeste `fortress.rs`: Mauermasse Ebene 1 (`Biome::Hub`), Räume aus `ROOMS` als Ebene 0 ausgeschnitten, kein Hochland; Nordtor `exit_gate`, Überfahrt-Punkte `ferry_pts`;
 Glutwacht kreisrund aus `hubgeo`/`hub_cell`, Ebenen und Hafenkante pixelgenau bei `cur_hub_round`), Hochland-Ebenen (`highlands`, pixelgenau `TerrainMap::lpx`),
 Siedlungen, Läden mit Innenräumen, Wasserfälle (`place_waterfalls`: nur an Kanten mit 17 ebenen Reihen darüber;
 ein Bach schlängelt sich von einem Quellteich mit Felsrand und Schilf bis an den Hangrand, dort beginnt die Kaskade; im Prolog `prolog_fall`:

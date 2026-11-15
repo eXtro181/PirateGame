@@ -2,9 +2,8 @@
 
 ## Inseln und Zonen
 
-**Inseln/Zonen** (`ZONES`): Galgenstrand `kueste` (Start, Piratenfriedhof mit über 70 Toten, Erwachen im Sarg `Cut::Wake`,
-auf dem Steg der Geisterkapitän mit dem Flaschenschiff;
-Feuer und Sarg liegen auf ebenem Strand – `World.low_areas` senkt den Bereich auf Meereshöhe, sonst lief die Böschung der Anhöhe darüber;
+**Inseln/Zonen** (`ZONES`): Galgenfeste `kueste` (Start: Festungs-Dungeon, Erwachen auf dem Sarghaufen `Cut::Wake`, 18 Räume bis zur Halle mit
+Boss Kapitän Kielholer (Skelett, zwei Säbel); danach sein Geist mit dem Flaschenschiff, Nordtor zum Steg erst nach dem Sieg (`sync_exit_gate`);
 keine Siedlung), Glutwacht `hain` (Festung/Hub), Aschebucht `asche` (Glut, Siedlung Glutgrund), Frostgrotte `frost` (Siedlung Reifstein),
 Hafen Rabenwacht `raben` (Stadt), Fluchmangroven `mangroven` (Pfahldorf Moorhain), Ende der Welt `ende` (Meer in der Südost-Ecke,
 nur per Schiff durch den Strudel), **Wrackzwinger** `prolog` (Zone `Prolog`, Nordwest-Ecke, nur zu Beginn; Ortsnamen nach Bereich:
@@ -37,7 +36,7 @@ vorher nur „Ein leerer Sarg“) – man steigt hinein, legt sich hin, der Deck
 nach einer Niederlage (Tod im Prolog → `start_coffin(true)` statt des normalen Sterbens) wickelt die Spinne den Leichnam in einen weißen Kokon,
 zieht ihn bis zum Sarg, legt ihn mit den Beinen hinein, schließt ihn und krabbelt selbst über die Klippe in die Tiefe.
 In beiden Fällen schlängeln sich danach zwei riesige Arme aus der schwarzen Tiefe die Klippe herauf, umschlingen den Sarg und ziehen ihn langsam hinab
-→ `end_prolog`: Erwachen im ursprünglichen Sarg am Galgenstrand (`Cut::Wake`), das Spiel beginnt.
+→ `end_prolog` → `Cut::Ferry` (`game/ferry.rs`): Tentakel ziehen den Sarg mit anderen durch Regen zur Galgenfeste, Skelette werfen ihn auf den Sarghaufen → `Cut::Wake`.
 Im Prolog kein Perlenfleck, keine Seekarte.
 
 ## Weiter Ozean

@@ -107,7 +107,7 @@ schaukelt aus (`rise_pose`); Wasser läuft herab (Tropfen, Rinnsale, nasse Färb
 beim allerersten Mal vorher Wurf des Flaschenschiffs (`Use::Bottle`, Bogen, Lichtblitz, Glasscherben, Platschen; danach `save.ship_raised`);
 beim Anlegen versinkt es (`Ship.sinking`, `SINK` 3,4 s, `sink_pose`:
 legt sich zur Seite, Sog `draw_ship_vortex` mit Licht aus der Tiefe, platzende Blasen, zuletzt eine Fontäne).
-Der Geisterkapitän auf dem Steg des Galgenstrands gibt das Flaschenschiff (`Cmd::TakeBottle`, `save.bottle`) und löst sich auf (`ghost_fade`, `npc_gone`);
+Kapitän Kielholer (Boss `captain` der Galgenfeste, einphasig, `CAPTAIN_*`) zerfällt zu seinem Geist (`ghostCaptain`); der gibt das Flaschenschiff (`Cmd::TakeBottle`, `save.bottle`) und löst sich auf (`ghost_fade`, `npc_gone`);
 ohne Flasche: „Ein verlassener Steg“)
 
 ## game/coffin.rs – Prolog-Ende am Sarg

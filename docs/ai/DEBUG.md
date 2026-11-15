@@ -14,7 +14,7 @@ Feuer-IDs: `kueste hain asche asche2 frost frost2 raben raben2 mangroven mangrov
 - `&origin=<herkunft>`
 - `&chart` ganze Seekarte aufgedeckt
 - `&zoo` jeder Gegnertyp schlafend um den Spieler (`&sail&zoo`: Haie, Geisterschiffe, Kraken und je ein Seeungeheuer jeder Art)
-- `&boss=<fire|ice|wind|earth|mega>` (+`&phase2`)
+- `&boss=<fire|ice|wind|earth|captain|mega>` (+`&phase2`; `&slay` besiegt ihn sofort: Belohnung, Tore, Geist)
 - `&seaboss=<el>` (+`&phase2`)
 - `&endsea` mit dem Schiff am Ende der Welt
 - `&endphase=1..8` (1 Aufstieg (ab 4,6 s: die Masten durchstoßen die Oberfläche), 2 Seeschlacht, 3 roter Kraken, 4 Malakor am Meeresgrund, 5 Mondfresser,
@@ -54,3 +54,6 @@ Feuer-IDs: `kueste hain asche asche2 frost frost2 raben raben2 mangroven mangrov
   `tools/dev/shot -q -s "<parameter>"` (Aufbau der Zeile in `docs/ai/BAUEN.md`, Abschnitt Zustandszeile)
 - `&prof` Leistungsmessung je Sekunde (siehe `docs/ai/BAUEN.md`)
 - `&revenant` der eigene Wiedergänger steht 90 px östlich (hält 1234 Perlen; erschlagen gibt sie zurück)
+- `&ferry` Überfahrt der Särge zur Galgenfeste (wie nach dem Prolog, danach Erwachen auf dem Sarghaufen)
+- Galgenfeste: `&pos=27216,26224` Sarghaufen · `&pos=27216,25552` Halle des Kapitäns · `&pos=27216,26640` Strand · `&pos=27216,25230` Steg
+
