@@ -414,12 +414,21 @@ Bossauftritte und -tode haben Kinobalken, Kamerazoom und einen musikalischen Sti
 in der zweiten Phase verwandelt sich die Arena mit dem Element des Bosses (Hitze und Asche, Schneesturm, Gewitter, Regen).
 Wenig Leben färbt die Welt grau und lässt den Bildrand im Herzschlag rot pochen; die Laterne der Figur wird mit sinkendem Leben kleiner und rötlicher.
 
+- **Sturzangriff** (15.11.): Wer beim Herabspringen von einer Kante angreift, stürzt mit der Klinge voran hinab –
+  schwerer Schlag rundum mit Druckwelle; Gegner, die einen noch nicht bemerkt haben, nehmen doppelten Schaden („Hinterhalt!“).
+- **Tode nach Schadensart** (15.11.): Feuer verkohlt (Stichflamme, Glut steigt auf), Frost und Blitz lassen Menschen
+  gefroren zerspringen, Wucht (Sturzangriff, schwerer Hammer) zerschmettert mit Staub; sonst wie bisher.
+
 ### 6.4 Säbelfeuer, Tod und Perlen
 - **Säbelfeuer** sind die Leuchtfeuer der Welt (11 Stück, zwei je Königsinsel).
   Entzünden, rasten (heilt, füllt Rum und Phiolen auf, belebt Gegner wieder), zwischen entzündeten Feuern reisen. Automatisches Speichern beim Rasten.
 - **Tod** („DU BIST ERTRUNKEN“): Alle Perlen bleiben als **Perlenfleck** an der letzten sicheren Stelle zurück.
   Zurückholen geht nur, wenn man dort ankommt, ohne vorher noch einmal zu sterben.
 - **Perlen** sind die einzige Währung: für Stufen, Waffen, Waren und Schiffsausbauten.
+- **Versalzung** (15.11.): Jeder Tod lagert Salz in den Adern ein – je −5 % Leben, höchstens −25 %.
+  Die Lebensleiste zeigt den verlorenen Teil als Salzkruste. Erst der Sieg über einen König oder ein Seeungeheuer spült das Salz fort.
+- **Die Stimme im Wasser** (15.11.): Nach jeder Rast flüstert das eigene Spiegelbild einen Gedanken – es kennt Tode, Salz,
+  die Könige, die Weberin (verschont oder erschlagen), Blut an der Klinge und Neue Fahrten.
 
 ### 6.5 Gegenstände
 | Gegenstand | Herkunft | Wirkung |
@@ -444,6 +453,13 @@ Wenig Leben färbt die Welt grau und lässt den Bildrand im Herzschlag rot poche
 | Galionsfiguren (4) | Könige | auf die Throne setzen |
 
 Gegenstände am Boden schweben mit einem Schimmer in ihrer Seltenheitsfarbe. Mit Alt erscheinen alle Namen.
+
+**Überlieferung** (15.11.): Jede Waffe und jeder Gegenstand trägt zwei Zeilen Geschichte (`lore` in `data.rs`).
+Sie stehen in den Läden unter der Wirkung und erscheinen nach dem Fund als leiser Gedanke.
+
+**Die vier Eide** (15.11.): Setzt man eine Galionsfigur zum ersten Mal auf ihren Thron, erinnert sie sich an den Handel ihres Königs:
+Brandvogt gab seine Flotte, Ysra Frostweh ihr Herz, Rabensturm seinen Namen, Morgrim seine Hand – jeweils um nicht zu ertrinken.
+Bei der vierten Figur die Frage nach der Stimme, die die Handel anbot: einer, der selbst nicht hinüber wollte (Malakor).
 
 ### 6.6 Seefahrt
 - **Das Flaschenschiff**: Am Galgenstrand wartet auf dem Steg ein Geisterkapitän (durchscheinend, schwebend, mit Geisterlaterne).

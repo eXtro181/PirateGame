@@ -963,7 +963,7 @@ impl Game {
                     self.fx.px.play(Px::Zap, b.a.x, b.a.y).z(40.0).scale(1.6);
                 }
                 if (px - b.a.x).hypot((py - b.a.y) * 1.3) < a.o.r {
-                    self.hurt_player(Self::boss_dmg(b, 1.0), me, HurtOpt { heavy: true, unparryable: true, push: ((px - b.a.x) * 0.3, (py - b.a.y) * 0.3), poise: None });
+                    self.hurt_player(Self::boss_dmg(b, 1.0), me, HurtOpt { heavy: true, unparryable: true, push: ((px - b.a.x) * 0.3, (py - b.a.y) * 0.3), poise: None, kind: 0 });
                     if a.o.slow {
                         self.slow_t = 3.0;
                     }
@@ -1174,6 +1174,7 @@ impl Game {
         } else {
             self.save.kings.insert(key.into(), true);
             self.save.figureheads.insert(key.into(), true);
+            self.cleanse_salt();
             self.save.shards += 2;
             if let Some(gi) = self.world.gates.iter().position(|g| king_for_zone(g.key) == key) {
                 let pi = self.world.gates[gi].prop;

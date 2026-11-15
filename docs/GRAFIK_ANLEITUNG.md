@@ -1204,6 +1204,18 @@ Helle Bänder ziehen in Windrichtung über grüne Flächen – Bewegung im Bild,
 - Offene See: Umgebung 7898C0×0,6, Sonne C8D8F0×0,5, Wasser 2E8AA0 / 103A5A (dunkler, weniger grell).
 - Mondnacht (nach dem Sieg): Umgebung A4B6C4×0,72, Sonne DCE6F4×0,62.
 
+**Grashalme** (`fs_gbuf`, nur Boden-Chunks, 15.11.): `grün = clamp((g − max(r, b)·0,92) / max(luma, 0,02) · 1,6, 0, 1)`;
+Dichte `grün · (0,22 + 0,58 · smoothstep(0,32, 0,72, rauschen(welt·0,021)))`. Je 3-px-Zelle (3 × 3 Nachbarzellen, die Füße liegen darunter)
+ein Halm mit Fuß `(zelle + (h2, h3))·3`, Länge `2,5 + h1/dichte · 4,5`, Neigung `(h2 − 0,5)·1,1 + wind.x · (band·0,9 + sin·0,12)·1,4`;
+Mitte `x = fuß.x + neigung·länge·k²` (k = 0 Fuß … 1 Spitze), Breite `(FullHD 0,62, sonst 1,05)·(1 − 0,55k)`.
+Farbe `× mix(0,72, 1,34, k)` und zur Spitze gelblicher, Normale `(neigung·0,45, 0,3)`; zwischen den Halmen Boden × `1 − 0,1·dichte`.
+Hash über zurückgefaltete Zellen (`c mod 256`), sonst verliert der Sinus bei großen Weltkoordinaten an Genauigkeit.
+
+**Fließende Glut** (`fs_gbuf`): Leuchten der Boden-Chunks × `0,45 + 1,1·smoothstep(0,2, 0,85, n1·0,7 + n2·0,4)`,
+`n1 = rauschen(welt·0,045 + t·(0,09, −0,06))`, `n2 = rauschen(welt·0,13 − t·(0,21, 0,05))`.
+
+**Farbige Schatten** (`fs_light`, FullHD): `li × mix(1, clamp(Umgebung/luma(Umgebung), 0,6, 1,6), (1 − sh)·smoothstep(0, 0,3, n·l)·0,4)`.
+
 **Prüfen**: `tools/dev/shot` mit den Zonen `start=kueste|hain|raben|frost|asche|mangroven`, dazu `&sail`, `&prolog&pos=dorf`, `&pos=mid12`, `&day=0.5`.
 
 ---

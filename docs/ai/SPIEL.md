@@ -133,6 +133,10 @@ ist sie während ihres Zugs per `mem::replace` aus `bosses` genommen (`update_bo
 
 `game/actors.rs` (Spieler, Gegner-KI mit Gefahrenstufe `lvl`: Leben ×(1+0,35·lvl), Schaden ×(1+0,12·lvl), Perlen ×(1+0,4·lvl);
 NPCs, Wanderer, Geschosse, Schaden; Hiebe, Treffer, Paraden, Schüsse und Tode lösen PixelFX-Effekte aus)
+- Sturzangriff (15.11.): `Player.plunge` (im Sprung angegriffen, `t < 0,85`), `plunge_strike` bei der Landung: Radius 52, Schaden
+  `dmg · heavy_mul · 1,5`, ×2 gegen `ES::Idle`/`ES::Lurk` („Hinterhalt!“), Druckwelle, Trefferstopp; `Player.land_t` = Landestauchung.
+- Tode nach Schadensart: `HurtOpt.kind` (0 Hieb, 1 Feuer, 2 Frost/Blitz, 3 Wucht) → `Enemy.last_kind` → `enemy_die` (Effekte) und
+  `draw.rs` (verkohlt getönt bzw. kein Leichnam bei Frost). Feuer: `explode`, Feuerball; Frost/Blitz: Eissplitter, Blitzkette; Wucht: Sturz, schwerer Hammer/Knüppel.
 
 ## game/boss.rs – Könige, Malakor zu Fuß, Meeresspinne
 
@@ -196,3 +200,13 @@ Seekarte `CHART_*`/`chart_*`)
 ## game/input.rs – Eingabe
 
 `input.rs`.
+
+## Versalzung, Stimme im Wasser, Überlieferung, Eide (15.11.)
+
+- Versalzung: `Save.salt` (0..5, `serde(default)`), `data::salt_k` multipliziert `max_hp`; +1 je Tod in `player_died` (nicht im Prolog),
+  `Game::cleanse_salt` nach Königs- (`boss.rs`) und Seeboss-Sieg (`seaboss.rs`); HUD-Kruste in `hud.rs` (`bw`).
+- Stimme im Wasser: `Game::fire_voice` wählt je Rast einen Gedanken; `Game.voice_q` wartet, bis kein Menü/Dialog offen ist.
+- `Timed::Whisper` zeigt einen Gedanken zeitversetzt; `Ui::whisper` bricht lange Gedanken in zwei Zeilen um.
+- Überlieferung: `Item.lore`, `Weapon.lore` (`data.rs`); Läden zeigen Wirkung + Überlieferung (Listen jetzt mit drei Beschreibungszeilen).
+- Die vier Eide: `oath_pages(el)` am Ende von `game/mod.rs`, Dialog beim ersten Einsetzen in `use_slot`; vierte Figur: Seite über die Stimme.
+

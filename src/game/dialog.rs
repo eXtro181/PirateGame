@@ -407,7 +407,7 @@ pub fn weapon_entries(s: &Save) -> Vec<Entry> {
             entry(
                 &format!("{}{}", w.name, if s.weapon == w.key { " (geführt)" } else { "" }),
                 &if own { "besessen".to_string() } else { format!("{} Perlen", w.price) },
-                &format!("Schaden {} · skaliert mit {sc}", w.dmg),
+                &format!("Schaden {} · skaliert mit {sc}. {}", w.dmg, w.lore),
                 !own && (w.price == 0 || s.pearls < w.price as i64),
                 Cmd::BuyWeapon(i),
             )

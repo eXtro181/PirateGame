@@ -39,11 +39,23 @@ pub fn pose_layer(a: &Actor, h: f32) -> (f32, f32) {
         }
         "hurt" => (0.96, -side * h * 0.06),
         "cast" => (1.0 + (a.frame * 0.8).sin() * 0.02, 0.0),
+        // Schrittwippen: bei jedem Schritt kurz gestaucht, leicht in Laufrichtung gelehnt
+        "walk" => {
+            let ph = a.frame / 6.0 * std::f32::consts::TAU * 2.0;
+            (1.0 - 0.022 * (0.5 + 0.5 * ph.cos()), side * h * 0.012)
+        }
+        // Rolle: in der Mitte zusammengekauert
+        "roll" => (1.0 - (a.frame / 4.0 * std::f32::consts::PI).sin().max(0.0) * 0.1, 0.0),
         _ => (1.0, 0.0),
     }
 }
 
 pub fn draw_char(f: &mut Frame, sh: &CharSheet, a: &Actor, fl: u8, tint: [u8; 4], shadow: f32) {
+    draw_char_pose(f, sh, a, fl, tint, shadow, 1.0);
+}
+
+/// wie `draw_char`, mit zusätzlicher Stauchung `squash_k` (Landung nach einem Sprung, Sturzangriff)
+pub fn draw_char_pose(f: &mut Frame, sh: &CharSheet, a: &Actor, fl: u8, tint: [u8; 4], shadow: f32, squash_k: f32) {
     if sh.f.is_empty() {
         return;
     }
@@ -56,7 +68,7 @@ pub fn draw_char(f: &mut Frame, sh: &CharSheet, a: &Actor, fl: u8, tint: [u8; 4]
         f.shadow(a.x, a.y, sh.shadow, sh.shadow * 0.33, shadow);
     }
     let (squash, skew) = pose_layer(a, s.h as f32 * 0.5);
-    f.sprite(&s, a.x, a.y, SprOpt { flip: a.flip(), flags: fl, tint, squash, skew, ..Default::default() });
+    f.sprite(&s, a.x, a.y, SprOpt { flip: a.flip(), flags: fl, tint, squash: squash * squash_k, skew, ..Default::default() });
 }
 
 /// Silhouette einer Figur hinter Verdeckern (Überlagerung, Modus `SIL`): nur wo etwas Aufrechtes
@@ -181,12 +193,15 @@ impl Game {
                 let mut b = p.a;
                 b.y -= (t * std::f32::consts::PI).sin() * 22.0;
                 f.shadow(p.a.x, p.a.y, 10.0, 3.5, 0.35);
-                draw_char(f, &art.player, &b, fl, [255, 255, 255, a], 0.0);
+                // Sturzangriff: im Fall gestreckt
+                draw_char_pose(f, &art.player, &b, fl, [255, 255, 255, a], 0.0, if p.plunge { 1.08 } else { 1.0 });
             } else if let Some(b) = self.world.bridge.filter(|b| !self.sailing && b.on(p.a.x, p.a.y, 0.0)) {
                 // auf dem Deck der hohen Brücke: so hoch wie das Deck, über der Brücke einsortiert
                 draw_char_lift(f, &art.player, &p.a, fl, [255, 255, 255, a], b.z(p.a.x), b.y + b.hw + 1.0);
             } else {
-                draw_char(f, &art.player, &p.a, fl | flags::HERO, [255, 255, 255, a], 0.45);
+                // nach der Landung kurz gestaucht
+                let land = 1.0 - 0.14 * (p.land_t / 0.22).clamp(0.0, 1.0);
+                draw_char_pose(f, &art.player, &p.a, fl | flags::HERO, [255, 255, 255, a], 0.45, land);
                 // hinter Bäumen, Mauern und Dächern bleibt ihr Umriss sichtbar
                 draw_char_sil(f, &art.player, &p.a, [150, 196, 255, 255]);
             }
@@ -210,13 +225,18 @@ impl Game {
             let fl = if e.a.flash > 0.0 { flags::FLASH } else { 0 } | if hov { flags::OUTLINE } else { 0 };
             let dead_a = if e.state == ES::Dead { (1.0 - (e.dead_t - 1.5).max(0.0) / 1.5).max(0.0) } else { 1.0 };
             // tote Skelette zersplittern (PixelFX zeichnet ihre Gestalt), der Leichnam bleibt nicht liegen
-            if dead_a <= 0.0 || (e.state == ES::Dead && matches!(d.body, Body::Sheet(s) if s.contains("kel"))) {
+            // gefroren zersprungen (Frost, Blitz): auch dann bleibt nichts liegen
+            if dead_a <= 0.0 || (e.state == ES::Dead && (matches!(d.body, Body::Sheet(s) if s.contains("kel")) || (e.last_kind == 2 && matches!(d.body, Body::Sheet(_))))) {
                 continue;
             }
             let mut tint = if e.elite { [255, 214, 200, (255.0 * dead_a) as u8] } else { [255, 255, 255, (255.0 * dead_a) as u8] };
             // der Mob von Stillwasser: fahl meergrün wie die Ertrunkenen
             if e.folk == Some(super::gallows::TOWN) {
                 tint = [150, 208, 192, tint[3]];
+            }
+            // verbrannt: verkohlt
+            if e.state == ES::Dead && e.last_kind == 1 {
+                tint = [62, 44, 40, tint[3]];
             }
             // sichtbare Wunden: je weniger Leben, desto dunkler und blutiger
             if e.state != ES::Dead && e.max_hp > 0.0 {

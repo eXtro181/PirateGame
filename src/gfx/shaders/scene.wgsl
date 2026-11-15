@@ -406,6 +406,13 @@ fn fs_gbuf(v: VOut) -> GOut {
     if (c.a < 0.995) {
         // Alpha 0.5..0.99 kodiert Leuchtstärke
         glow = rgb * (c.a - 0.5) * 4.0;
+        if (chunk) {
+            // Glut in Fugen und Lava lebt: die Helligkeit wandert langsam durch die Risse
+            let tg = G.screen.z;
+            let fl = noise_at(v.world * 0.045 + vec2<f32>(tg * 0.09, -tg * 0.06)).r;
+            let fl2 = noise_at(v.world * 0.13 - vec2<f32>(tg * 0.21, tg * 0.05)).b;
+            glow *= 0.45 + 1.1 * smoothstep(0.2, 0.85, fl * 0.7 + fl2 * 0.4);
+        }
     }
     if ((flags & 1u) != 0u) {
         rgb = mix(rgb, vec3<f32>(1.0, 0.95, 0.9), 0.75);
@@ -430,7 +437,8 @@ fn fs_gbuf(v: VOut) -> GOut {
     if (chunk) {
         // Wind streicht über Gras und Moos: helle Bänder ziehen in Windrichtung über grüne Flächen,
         // in Böenfeldern stärker (Leben im Bild, ohne dass sich ein Sprite bewegt)
-        let green = clamp((rgb.g - max(rgb.r, rgb.b) * 0.92) * 9.0, 0.0, 1.0);
+        // Grünanteil relativ zur Helligkeit (die Textur ist linear: dunkles Gras hätte sonst kaum Grün)
+        let green = clamp((rgb.g - max(rgb.r, rgb.b) * 0.92) / max(luma(rgb), 0.02) * 1.6, 0.0, 1.0);
         if (green > 0.02) {
             var wd = G.fx5.zw;
             if (dot(wd, wd) < 0.01) { wd = vec2<f32>(1.0, 0.25); }
@@ -440,6 +448,49 @@ fn fs_gbuf(v: VOut) -> GOut {
             let ph = dot(v.world, wd) * 0.021 - tw * (0.9 + G.fx2.w * 1.6) + gust * 9.0;
             let band = smoothstep(0.55, 1.0, sin(ph) * 0.5 + 0.5) * smoothstep(0.35, 0.7, gust);
             rgb *= 1.0 + band * 0.24 * green * (0.5 + G.fx2.w);
+            // Grashalme (Grafik-Ausbau 15.11.): je 3-px-Zelle höchstens ein Halm. Der Fuß liegt in der
+            // Zelle, der Halm ragt nach oben (im Bild −y), biegt sich im Wind und läuft spitz zu; in
+            // FullHD feiner als ein Weltpixel, sonst genau ein Pixel breit. Halme weiter unten stehen davor.
+            let hdq = G.hd3.x > 0.5;
+            let clump = smoothstep(0.32, 0.72, noise_at(v.world * 0.021 + vec2<f32>(7.0, 3.0)).r);
+            let dens = green * (0.22 + 0.58 * clump);
+            let sway = band * 0.9 + sin(tw * 1.9 + v.world.x * 0.05) * 0.12;
+            let cell0 = floor(v.world / 3.0);
+            var cov = 0.0;
+            var tip = 0.0;
+            var lean_hit = 0.0;
+            for (var j = 0; j < 3; j = j + 1) {
+                for (var i = -1; i <= 1; i = i + 1) {
+                    let c = cell0 + vec2<f32>(f32(i), f32(j));
+                    // zurückgefaltet: der Sinus im Hash verliert bei großen Weltkoordinaten an Genauigkeit
+                    let cm = c - 256.0 * floor(c / 256.0);
+                    let h1 = hash21(cm + vec2<f32>(0.37, 11.1));
+                    if (h1 > dens) { continue; }
+                    let h2 = hash21(cm * 1.71 + vec2<f32>(5.3, 0.9));
+                    let h3 = hash21(cm * 0.83 + vec2<f32>(2.2, 7.7));
+                    let root = (c + vec2<f32>(h2, h3)) * 3.0;
+                    let len = 2.5 + (h1 / max(dens, 0.001)) * 4.5;
+                    let s = root.y - v.world.y;
+                    if (s < 0.0 || s > len) { continue; }
+                    let k = s / len;
+                    let lean = (h2 - 0.5) * 1.1 + wd.x * sway * 1.4;
+                    let xc = root.x + lean * len * k * k;
+                    let wdt = select(1.05, 0.62, hdq) * (1.0 - k * 0.55);
+                    if (abs(v.world.x - xc) < wdt * 0.5) {
+                        cov = 1.0;
+                        tip = k;
+                        lean_hit = lean;
+                    }
+                }
+            }
+            if (cov > 0.0) {
+                // Halm: Fuß dunkel, Spitze hell und etwas gelblicher; die Normale steht fast aufrecht
+                rgb = rgb * mix(0.72, 1.34, tip) * mix(vec3<f32>(1.0), vec3<f32>(1.06, 1.08, 0.86), tip);
+                n = vec4<f32>(clamp(lean_hit * 0.45, -0.6, 0.6) * 0.5 + 0.5, 0.65, n.b, max(n.a, 0.12));
+            } else {
+                // Boden zwischen den Halmen etwas dunkler (Halmschatten)
+                rgb *= 1.0 - 0.1 * dens;
+            }
         }
     }
     if (chunk && G.fx8.y > 0.5) {

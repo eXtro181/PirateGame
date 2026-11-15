@@ -1,9 +1,11 @@
 # Fable52.md – Ideenvorrat und Übergabe (Stand 15.11.2026)
 
 Telegrammstil, eine Idee je Zeile. Aufwand: S < 1 Std · M halber Tag · L mehrere Tage. Regeln und Werkzeuge: `CLAUDE.md`.
-Nichts davon ist gebaut. Prüfen je Paket: `tools/dev/check`, `wgsl`, `smoke`, `shot -q -s`, dann Kontaktblatt.
+Prüfen je Paket: `tools/dev/check`, `wgsl`, `smoke`, `shot -q -s`, dann Kontaktblatt.
 
 ## 0 Stand
+- **Erledigt (Opus 5.5, 15.11.)**: B1, B6, B8, C1 (Rest: Schritt, Rolle, Landung), C4, D2, D5 (ohne Wiedergänger), E1, E2, E7.
+  Details: `docs/ai/SPIEL.md` (Abschnitt Versalzung …), `docs/ai/GRAFIK.md`, Grafik-Anleitung Kap. 19d.
 - 14./15.11.: neuer Bildlook (Grafik-Anleitung Kap. 19d): Nebel als Tiefe, Klarheit, farbtreue Tonkurve, Hauptlicht, Lichtinseln, Wind im Gras.
 - Engpass für alles Weitere: Atlas 5,95 von 6 Seiten. Ohne A1 passt keine größere Figur und kein zusätzliches Animationsbild hinein.
 - Ungeprüft: echte GPU, iPhone, Modus „Sparsam“ – alles nur in Swiftshader gesehen. Zuerst dort Helligkeit und Leistung messen (`&prof`).
@@ -39,8 +41,7 @@ Grundsatz: Detail im Shader erzeugen (auflösungsunabhängig), Atlasfläche nur 
   farbige Lichtflecken in `fs_light` (wie Wolkenschatten, nur additiv).
 
 ## C Animation
-- C1 S **Stauchen/Strecken überall** (`SprOpt.squash/skew`): Ausholen −6 %, Hieb +8 %, Landung, Zucken in Trefferrichtung, Atmen ±1,5 % –
-  Spieler, Gegner, NPCs in `draw.rs`. Größte Wirkung je Aufwand.
+- C1 ✓ Stauchen/Strecken: `pose_layer` (`draw.rs`) hatte Atmen, Hieb, Treffer schon; ergänzt Schritt, Rolle, Landung (`Player.land_t`).
 - C2 M **Waffe und Umhang als eigene Lage**: Waffe getrennt zeichnen (1–2 Bilder nachziehend, Schweif aus PixelFX), Umhang/Haar verzögert –
   wirkt wie doppelte Bildzahl, braucht kaum Atlas.
 - C3 M **Zwischenbilder nur für den Helden** (nach A1): Lauf 8 → 12, Hieb 5 → 8, Rolle 6 → 8 (`chars.rs`, `wants_anim`).

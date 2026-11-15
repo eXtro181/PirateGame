@@ -16,14 +16,16 @@ pub struct Weapon {
     pub parry: f32,
     pub icon: &'static str,
     pub price: u32,
+    /// Überlieferung (zwei Zeilen, Erzählweg wie in Soulslikes)
+    pub lore: &'static str,
 }
 pub const WEAPONS: [Weapon; 6] = [
-    Weapon { key: "cutlass", name: "Entermesser", dmg: 17.0, scale: "str", speed: 1.0, stam: 14.0, range: 1.6, heavy_mul: 2.0, parry: 1.0, icon: "saber", price: 0 },
-    Weapon { key: "hammer", name: "Ankerhammer", dmg: 30.0, scale: "str", speed: 0.66, stam: 24.0, range: 1.9, heavy_mul: 1.9, parry: 1.0, icon: "hammer", price: 2400 },
-    Weapon { key: "rapier", name: "Rapier", dmg: 13.0, scale: "dex", speed: 1.3, stam: 10.0, range: 1.9, heavy_mul: 1.8, parry: 1.6, icon: "rapier", price: 1800 },
-    Weapon { key: "dagger", name: "Dolch", dmg: 11.0, scale: "dex", speed: 1.45, stam: 9.0, range: 1.3, heavy_mul: 1.7, parry: 1.0, icon: "dagger", price: 900 },
-    Weapon { key: "fetish", name: "Muschelfetisch", dmg: 9.0, scale: "fai", speed: 1.1, stam: 12.0, range: 1.4, heavy_mul: 1.6, parry: 1.0, icon: "fetish", price: 1500 },
-    Weapon { key: "club", name: "Morscher Knüppel", dmg: 10.0, scale: "str", speed: 0.95, stam: 13.0, range: 1.5, heavy_mul: 1.8, parry: 1.0, icon: "club", price: 0 },
+    Weapon { key: "cutlass", name: "Entermesser", dmg: 17.0, scale: "str", speed: 1.0, stam: 14.0, range: 1.6, heavy_mul: 2.0, parry: 1.0, icon: "saber", price: 0, lore: "Die Klinge, mit der du ertrunken bist. Sie hat dich nicht losgelassen – und du sie nicht." },
+    Weapon { key: "hammer", name: "Ankerhammer", dmg: 30.0, scale: "str", speed: 0.66, stam: 24.0, range: 1.9, heavy_mul: 1.9, parry: 1.0, icon: "hammer", price: 2400, lore: "Aus einem Ankerschaft geschmiedet. Wer ihn schwingt, spürt den Zug der Tiefe." },
+    Weapon { key: "rapier", name: "Rapier", dmg: 13.0, scale: "dex", speed: 1.3, stam: 10.0, range: 1.9, heavy_mul: 1.8, parry: 1.6, icon: "rapier", price: 1800, lore: "Ein Offiziersdegen aus Ysras Hof. Schnell, elegant und einst sehr stolz." },
+    Weapon { key: "dagger", name: "Dolch", dmg: 11.0, scale: "dex", speed: 1.45, stam: 9.0, range: 1.3, heavy_mul: 1.7, parry: 1.0, icon: "dagger", price: 900, lore: "Schmugglerklinge. Kurz genug für einen Ärmel, scharf genug für einen Kapitän." },
+    Weapon { key: "fetish", name: "Muschelfetisch", dmg: 9.0, scale: "fai", speed: 1.1, stam: 12.0, range: 1.4, heavy_mul: 1.6, parry: 1.0, icon: "fetish", price: 1500, lore: "Muscheln, Zähne, ein Faden aus Tang. Die Gezeitenpriester beteten damit um Ebbe." },
+    Weapon { key: "club", name: "Morscher Knüppel", dmg: 10.0, scale: "str", speed: 0.95, stam: 13.0, range: 1.5, heavy_mul: 1.8, parry: 1.0, icon: "club", price: 0, lore: "Ein Stück Reling. Es hat schon Bessere als dich überlebt." },
 ];
 pub fn weapon(k: &str) -> &'static Weapon {
     WEAPONS.iter().find(|w| w.key == k).unwrap_or(&WEAPONS[0])
@@ -111,34 +113,36 @@ pub struct Item {
     pub name: &'static str,
     pub rarity: Rarity,
     pub desc: &'static str,
+    /// Überlieferung (zwei Zeilen, Erzählweg wie in Soulslikes)
+    pub lore: &'static str,
 }
 pub const ITEMS: [Item; 25] = [
-    Item { key: "pearls", name: "Perlenbeutel", rarity: Rarity::Common, desc: "Ein nasser Beutel voller Perlen." },
-    Item { key: "rum", name: "Rumflasche", rarity: Rarity::Rare, desc: "Eine Rumflasche mehr an jedem Feuer." },
-    Item { key: "phial", name: "Seelenphiole", rarity: Rarity::Uncommon, desc: "Füllt den Geist. Eine Phiole mehr an jedem Feuer." },
-    Item { key: "bullets", name: "Bleikugeln", rarity: Rarity::Common, desc: "Sechs Kugeln für die Pistole." },
-    Item { key: "bombs", name: "Pulverbomben", rarity: Rarity::Common, desc: "Drei Bomben. Mit 1 werfen." },
-    Item { key: "soulflower", name: "Seelenblume", rarity: Rarity::Uncommon, desc: "Gezeitensplitter für den Schmied." },
-    Item { key: "shard", name: "Gezeitensplitter", rarity: Rarity::Uncommon, desc: "Der Schmied härtet damit deine Waffe." },
-    Item { key: "fireball", name: "Folio der Glut", rarity: Rarity::Unique, desc: "Lehrt den Zauber Feuerball." },
-    Item { key: "bolt", name: "Sturmglas", rarity: Rarity::Rare, desc: "Dein Geist wächst um 20." },
-    Item { key: "ring", name: "Ring der Ertrunkenen", rarity: Rarity::Rare, desc: "Du nimmst 12 % weniger Schaden." },
-    Item { key: "coat", name: "Mantel des Lotsen", rarity: Rarity::Rare, desc: "Ausdauer erholt sich schneller." },
-    Item { key: "figurehead_fire", name: "Galionsfigur der Glut", rarity: Rarity::Unique, desc: "Die Seele des Glutkönigs." },
-    Item { key: "figurehead_ice", name: "Galionsfigur des Frostes", rarity: Rarity::Unique, desc: "Die Seele der Frostkönigin." },
-    Item { key: "figurehead_wind", name: "Galionsfigur des Sturms", rarity: Rarity::Unique, desc: "Die Seele des Sturmkönigs." },
-    Item { key: "figurehead_earth", name: "Galionsfigur der Tiefe", rarity: Rarity::Unique, desc: "Die Seele des Königs der Tiefe." },
+    Item { key: "pearls", name: "Perlenbeutel", rarity: Rarity::Common, desc: "Ein nasser Beutel voller Perlen.", lore: "Perlen wachsen nur um Kummer. Die Ertrunkenen zahlen mit dem, was die See ihnen ließ." },
+    Item { key: "rum", name: "Rumflasche", rarity: Rarity::Rare, desc: "Eine Rumflasche mehr an jedem Feuer.", lore: "Klaas sagt, Rum hält die Kälte draußen. Die Kälte sagt nichts – sie wartet." },
+    Item { key: "phial", name: "Seelenphiole", rarity: Rarity::Uncommon, desc: "Füllt den Geist. Eine Phiole mehr an jedem Feuer.", lore: "Meeresleuchten in Glas. Wer daraus trinkt, hört kurz die Brandung seiner Kindheit." },
+    Item { key: "bullets", name: "Bleikugeln", rarity: Rarity::Common, desc: "Sechs Kugeln für die Pistole.", lore: "Gegossen aus dem Blei gesunkener Kanonen. Jede Kugel lag schon einmal auf dem Grund." },
+    Item { key: "bombs", name: "Pulverbomben", rarity: Rarity::Common, desc: "Drei Bomben. Mit 1 werfen.", lore: "Pulver, das trocken blieb – in dieser See ein kleines Wunder." },
+    Item { key: "soulflower", name: "Seelenblume", rarity: Rarity::Uncommon, desc: "Gezeitensplitter für den Schmied.", lore: "Blüht nur, wo ein Ertrunkener zum letzten Mal an das Ufer dachte." },
+    Item { key: "shard", name: "Gezeitensplitter", rarity: Rarity::Uncommon, desc: "Der Schmied härtet damit deine Waffe.", lore: "Ein Splitter der stillstehenden Gezeit, kalt wie ein angehaltener Atemzug." },
+    Item { key: "fireball", name: "Folio der Glut", rarity: Rarity::Unique, desc: "Lehrt den Zauber Feuerball.", lore: "Brandvogt schrieb es in der Nacht, als seine Flotte brannte. Die Seiten riechen noch nach Teer." },
+    Item { key: "bolt", name: "Sturmglas", rarity: Rarity::Rare, desc: "Dein Geist wächst um 20.", lore: "Ein Glas voll Gewitter. Wer genau hinhört, hört darin ein Schiff um Hilfe rufen." },
+    Item { key: "ring", name: "Ring der Ertrunkenen", rarity: Rarity::Rare, desc: "Du nimmst 12 % weniger Schaden.", lore: "Getragen von denen, die zu lange unten waren. Die Haut darunter ist weiß und gefurcht." },
+    Item { key: "coat", name: "Mantel des Lotsen", rarity: Rarity::Rare, desc: "Ausdauer erholt sich schneller.", lore: "Der Lotse kannte jede Untiefe – bis auf die eine, an der er starb." },
+    Item { key: "figurehead_fire", name: "Galionsfigur der Glut", rarity: Rarity::Unique, desc: "Die Seele des Glutkönigs.", lore: "Brandvogt gab seine Flotte, um nicht zu ertrinken. Nun brennt er mit ihr, für immer." },
+    Item { key: "figurehead_ice", name: "Galionsfigur des Frostes", rarity: Rarity::Unique, desc: "Die Seele der Frostkönigin.", lore: "Ysra Frostweh tauschte ihr Herz gegen das Nicht-Ertrinken. Im Eis schlägt es noch." },
+    Item { key: "figurehead_wind", name: "Galionsfigur des Sturms", rarity: Rarity::Unique, desc: "Die Seele des Sturmkönigs.", lore: "Rabensturm verkaufte seinen Namen. Die Raben rufen ihn noch, doch niemand antwortet." },
+    Item { key: "figurehead_earth", name: "Galionsfigur der Tiefe", rarity: Rarity::Unique, desc: "Die Seele des Königs der Tiefe.", lore: "Morgrim gab seine Hand, die Korallen eine neue. Sie greift noch immer nach dem Mond." },
     // Inselwaren: nur bei den Händlern der Siedlungen zu haben
-    Item { key: "shellHorn", name: "Muschelhorn", rarity: Rarity::Rare, desc: "Rabenwacht. Wer hineinbläst, atmet tiefer: +20 Ausdauer." },
-    Item { key: "driftCharm", name: "Treibholz-Amulett", rarity: Rarity::Uncommon, desc: "Rabenwacht. Die See spült dir mehr zu: +15 % Perlen von Gegnern." },
-    Item { key: "emberHeart", name: "Ascheherz", rarity: Rarity::Rare, desc: "Glutgrund. Ein Klumpen Glut im Griff: +10 % Waffenschaden." },
-    Item { key: "glowRum", name: "Glutrum", rarity: Rarity::Rare, desc: "Glutgrund. Eine Rumflasche mehr an jedem Feuer." },
-    Item { key: "frostMantle", name: "Frostmantel", rarity: Rarity::Rare, desc: "Reifstein. Pelz aus dem Eismeer: +30 Leben." },
-    Item { key: "iceGlass", name: "Eisglas", rarity: Rarity::Rare, desc: "Reifstein. Klarer Geist: +15 Geist, +10 % Zauberkraft." },
-    Item { key: "stormCompass", name: "Sturmkompass", rarity: Rarity::Unique, desc: "Rabenwacht. Zeigt immer in den Wind: Schiff eine Stufe schneller." },
-    Item { key: "ravenFeather", name: "Rabenfeder", rarity: Rarity::Uncommon, desc: "Rabenwacht. Leicht wie der Wind: Ausdauer erholt sich 20 % schneller." },
-    Item { key: "bogTonic", name: "Moortinktur", rarity: Rarity::Rare, desc: "Moorhain. Gerbt die Haut: 8 % weniger Schaden." },
-    Item { key: "voodooDoll", name: "Voodoopuppe", rarity: Rarity::Rare, desc: "Moorhain. Flüstert Zauber: +10 Geist, +10 % Zauberkraft." },
+    Item { key: "shellHorn", name: "Muschelhorn", rarity: Rarity::Rare, desc: "Rabenwacht. Wer hineinbläst, atmet tiefer: +20 Ausdauer.", lore: "Die Kinder von Rabenwacht blasen hinein, wenn ein Schiff nicht heimkehrt. Es antwortet nie." },
+    Item { key: "driftCharm", name: "Treibholz-Amulett", rarity: Rarity::Uncommon, desc: "Rabenwacht. Die See spült dir mehr zu: +15 % Perlen von Gegnern.", lore: "Aus dem Holz eines Wracks geschnitzt. Die See gibt zurück, was einmal ihr gehörte." },
+    Item { key: "emberHeart", name: "Ascheherz", rarity: Rarity::Rare, desc: "Glutgrund. Ein Klumpen Glut im Griff: +10 % Waffenschaden.", lore: "Glutgrund hütet die letzte Glut der Brandvogt-Flotte. Sie wärmt nicht. Sie brennt." },
+    Item { key: "glowRum", name: "Glutrum", rarity: Rarity::Rare, desc: "Glutgrund. Eine Rumflasche mehr an jedem Feuer.", lore: "In Glutgrund gebrannt, über Asche gelagert. Schmeckt nach Rauch und Trotz." },
+    Item { key: "frostMantle", name: "Frostmantel", rarity: Rarity::Rare, desc: "Reifstein. Pelz aus dem Eismeer: +30 Leben.", lore: "Fell der weißen Robben, die Ysras Hof bewachten. Sie trauern noch um ihre Königin." },
+    Item { key: "iceGlass", name: "Eisglas", rarity: Rarity::Rare, desc: "Reifstein. Klarer Geist: +15 Geist, +10 % Zauberkraft.", lore: "In Reifstein geschliffen. Darin sieht man den Atem, den man längst nicht mehr hat." },
+    Item { key: "stormCompass", name: "Sturmkompass", rarity: Rarity::Unique, desc: "Rabenwacht. Zeigt immer in den Wind: Schiff eine Stufe schneller.", lore: "Die Nadel zeigt in den Wind – oder dorthin, wo Rabensturm seinen Namen verlor." },
+    Item { key: "ravenFeather", name: "Rabenfeder", rarity: Rarity::Uncommon, desc: "Rabenwacht. Leicht wie der Wind: Ausdauer erholt sich 20 % schneller.", lore: "Raben folgen den Ertrunkenen. Eine Feder heißt: Einer hat dich schon für tot gehalten." },
+    Item { key: "bogTonic", name: "Moortinktur", rarity: Rarity::Rare, desc: "Moorhain. Gerbt die Haut: 8 % weniger Schaden.", lore: "Mabel braut es aus Moorwasser und Geduld. Frag nicht, was im Bodensatz liegt." },
+    Item { key: "voodooDoll", name: "Voodoopuppe", rarity: Rarity::Rare, desc: "Moorhain. Flüstert Zauber: +10 Geist, +10 % Zauberkraft.", lore: "Die Puppe trägt dein Gesicht, sobald du sie berührst. Moorhain verkauft sie trotzdem." },
 ];
 pub fn item(k: &str) -> &'static Item {
     ITEMS.iter().find(|i| i.key == k).unwrap_or(&ITEMS[0])
@@ -484,6 +488,9 @@ pub struct Save {
     pub chart: Vec<u8>,
     #[serde(default)]
     pub deaths: i32,
+    /// Versalzung: jeder Tod lagert Salz ein (je −5 % Leben, höchstens 5); ein Königs- oder Seeboss-Sieg spült es fort
+    #[serde(default)]
+    pub salt: i32,
     #[serde(default)]
     pub play_time: f64,
     #[serde(default)]
@@ -500,13 +507,18 @@ pub struct Derived {
     pub armor: f32,
     pub st_regen: f32,
 }
+/// Anteil des Lebens, den die Versalzung übrig lässt (1 = kein Salz)
+pub fn salt_k(s: &Save) -> f32 {
+    1.0 - 0.05 * s.salt.clamp(0, 5) as f32
+}
+
 pub fn derived(s: &Save) -> Derived {
     let w = weapon(&s.weapon);
     let sc = s.stats.get(w.scale) as f32;
     let lvl = s.weapon_level as f32;
     let has = |k: &str| s.items.contains_key(k);
     Derived {
-        max_hp: (60.0 + s.stats.vit as f32 * 9.0 + if has("frostMantle") { 30.0 } else { 0.0 }).round(),
+        max_hp: ((60.0 + s.stats.vit as f32 * 9.0 + if has("frostMantle") { 30.0 } else { 0.0 }) * salt_k(s)).round(),
         max_st: (55.0 + s.stats.end as f32 * 7.0 + if has("shellHorn") { 20.0 } else { 0.0 }).round(),
         max_mp: (40.0 + s.stats.fai as f32 * 6.0 + if has("bolt") { 20.0 } else { 0.0 } + if has("iceGlass") { 15.0 } else { 0.0 } + if has("voodooDoll") { 10.0 } else { 0.0 }).round(),
         spell_dmg: ((18.0 + s.stats.fai as f32 * 4.5) * if has("iceGlass") { 1.1 } else { 1.0 } * if has("voodooDoll") { 1.1 } else { 1.0 }).round(),
@@ -637,6 +649,7 @@ pub fn new_save(name: &str, look: LookIdx, origin: &str, gift: &str, now: f64) -
         explored: if gift == "chart" { ["kueste", "hain", "asche", "frost", "raben", "mangroven"].iter().map(|s| s.to_string()).collect() } else { vec!["kueste".into()] },
         chart: vec![],
         deaths: 0,
+        salt: 0,
         play_time: 0.0,
         created_at: now,
     }

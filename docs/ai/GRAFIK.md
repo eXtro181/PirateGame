@@ -103,3 +103,8 @@ Nur Shader und Stimmungswerte, keine neue Grafik; alle Formeln in Kapitel 19d de
 - Wind im Gras: helle Bänder über grünen Bodenflächen (`fs_gbuf`, `green`/`band`); Boden-Deko dichter (`deco_bucket`).
 - Fallstrick: Farben in `env.rs` stehen als Hex in sRGB und werden linear – ein „gedämpftes“ Rot ist im Licht-Pass sehr satt.
 - Fallstrick: wirkt eine Zone einfarbig, zuerst Nebellage (`draw.rs`), Sonnenfarbe und Tonkurve prüfen, nicht die Bodenpalette.
+- Grashalme (`fs_gbuf`, Boden-Chunks): je 3-px-Zelle höchstens ein Halm (Fuß in der Zelle, wächst nach −y, biegt sich mit `band`),
+  Dichte = Grünanteil (relativ zur Helligkeit) × Büschelrauschen; FullHD 0,62 px breit, sonst 1 px. Kostet 9 Zellen je Bodenpixel.
+- Fließende Glut (`fs_gbuf`): Leuchten der Boden-Chunks (Fugenglut, Lava) wandert mit zwei Rauschlagen (×0,45..1,55).
+- Farbige Schatten (`fs_light`, FullHD): wo die Sonne verdeckt ist, nimmt das Licht den Farbton des Himmels an (bis 40 %).
+
