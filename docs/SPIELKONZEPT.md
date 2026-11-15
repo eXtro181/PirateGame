@@ -466,6 +466,12 @@ Bei der vierten Figur die Frage nach der Stimme, die die Handel anbot: einer, de
 **Die Laternenmagd** (15.11.): Im Thema „Über dich“ verrät sie mit jedem eingesetzten Thron mehr – sie ist Malakors ertrunkene Tochter.
 Als die Letzte Flut sie holen wollte, fischte er das Spiegelbild des Mondes aus dem Wasser: kein Mond, keine Flut, kein Abschied.
 
+**Die Weberin** (15.11.): Der Geisterkapitän erzählt („Über die Spinne“), dass die Meeresspinne des Prologs die Fährfrau der Letzten Flut war:
+Sie wickelt die Toten ein, damit die Flut sie hinüberträgt, und legt sie in Särge, seit die Flut ausbleibt.
+
+**Welt nach jedem König** (15.11.): Ist der König einer Insel besiegt, klart ihr Himmel auf – weniger Regen, Schnee und Asche,
+dünnerer Nebel, mehr Licht.
+
 **Logbuch des Geisterkapitäns** (15.11.): acht Seiten auf acht wilden Inseln (jede achte, ab Nr. 3). Der Kapitän war Malakors Maat:
 Tochter, Krankheit, Tod, der Sprung mit dem Netz nach dem Mond, die Handel mit den Königen – und das Flaschenschiff, das er mitnahm.
 

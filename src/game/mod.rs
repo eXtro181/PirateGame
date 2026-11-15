@@ -1505,7 +1505,21 @@ impl Game {
                 e
             }
         } else {
-            env::env(self.env_key(), self.sailing && !on_island)
+            let key = self.env_key();
+            let mut e = env::env(key, self.sailing && !on_island);
+            // Welt nach jedem König: ist der König der Insel besiegt, klart ihr Himmel auf
+            if let Some(k) = KINGS.iter().find(|k| k.zone == key).filter(|_| !(self.sailing && !on_island)) {
+                if self.save.kings.get(k.key).copied().unwrap_or(false) {
+                    e.rain *= 0.35;
+                    e.snow *= 0.6;
+                    e.ash *= 0.5;
+                    e.fog_k *= 0.7;
+                    e.rays *= 1.3;
+                    e.sat *= 1.05;
+                    e.ambient = e.ambient.map(|v| v * 1.08);
+                }
+            }
+            e
         };
         // elementare Seegebiete: Stimmung zum Rand hin weich einblenden
         let mut sea = (0.0f32, "");

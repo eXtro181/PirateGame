@@ -214,4 +214,5 @@ Seekarte `CHART_*`/`chart_*`)
 - Laternenmagd „Über dich“ (`dialog.rs`, `maid`): vier Stufen nach `missing` und `end_won`.
 - Logbuch: Gegenstände `log1..log8` (`ITEMS`), auf wilden Inseln mit `k % 8 == 3` (`layout_wild`); Text in `lore` (Gedanke nach dem Fund).
 - Regenspritzer: `update_feel` (feel.rs) setzt bei Regen PixelFX-Platscher um die Kamera, nicht auf Wasser, nicht drinnen.
-
+- Welt nach jedem König: in der Ziel-Lichtstimmung (`game/mod.rs`, nach `env::env(self.env_key(), …)`) bei besiegtem König der Insel
+  Regen ×0,35, Schnee ×0,6, Asche ×0,5, Nebel ×0,7, Strahlen ×1,3, Umgebung ×1,08. Weberin: Thema beim Geisterkapitän (`dialog.rs`).
