@@ -143,7 +143,9 @@ pub const WAKE_JOLT: f32 = 3.2;
 pub const WAKE_SLIDE: f32 = 4.6;
 pub const WAKE_RISE: f32 = 5.6;
 pub const WAKE_HOP: f32 = 7.0;
-pub const WAKE_END: f32 = 7.8;
+pub const WAKE_END: f32 = 8.3;
+/// so weit vor dem Sarg (px) landet man nach dem Herausklettern: vor dem Sarghaufen
+pub const WAKE_FRONT: f32 = 58.0;
 
 pub struct Options {
     pub dark: bool,
@@ -1338,7 +1340,7 @@ impl Game {
             }
             Cut::Ferry { t } => {
                 let t1 = t + dt;
-                self.cutscene = Some(if self.update_ferry(t, t1) { Cut::Wake { t: 0.0 } } else { Cut::Ferry { t: t1 } });
+                self.cutscene = Some(if self.update_ferry(t, t1) { Cut::Wake { t: WAKE_FADE + 0.9 } } else { Cut::Ferry { t: t1 } });
             }
             Cut::Wake { t } => {
                 let t0 = t;
@@ -1369,14 +1371,14 @@ impl Game {
                     self.fx.burst("dust", x + 30.0, y + 6.0, 8, BurstOpt { speed: Some(70.0), up: Some(40.0), ..Default::default() });
                     self.fx.px.play(Px::Land, x + 30.0, y + 6.0).scale(1.1);
                 }
-                if crossed(WAKE_HOP + 0.7) {
-                    self.fx.burst("dust", x, y + 22.0, 10, BurstOpt { speed: Some(50.0), up: Some(30.0), ..Default::default() });
+                if crossed(WAKE_END - 0.1) {
+                    self.fx.burst("dust", x, y + WAKE_FRONT, 10, BurstOpt { speed: Some(50.0), up: Some(30.0), ..Default::default() });
                 }
                 if t >= WAKE_END {
                     self.cutscene = None;
                     self.player.hidden = false;
                     self.player.a.x = x;
-                    self.player.a.y = y + 22.0;
+                    self.player.a.y = y + WAKE_FRONT;
                     self.save.woke = true;
                     self.ui.banner(Zone::Kueste.def().name, "Die See hat dich zurückgegeben.", "big", 3.5);
                     self.persist(true);

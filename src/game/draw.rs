@@ -677,6 +677,8 @@ impl Game {
         }
         let t = match self.cutscene {
             Some(Cut::Wake { t }) => t,
+            // nach dem Wurf auf den Haufen bleibt der Deckel zu
+            Some(Cut::Ferry { .. }) => 0.0,
             _ => 99.0,
         };
         let rest = (x + 30.0, y + 8.0);
@@ -712,10 +714,11 @@ impl Game {
                 // springt nach vorn heraus
                 let k = ((t - WAKE_HOP) / (WAKE_END - WAKE_HOP)).clamp(0.0, 1.0);
                 let s = sh.get(0, anim_index("walk"), (k * 6.0) as usize);
-                let (px, py) = (x, cy + (y + 22.0 - cy) * k);
-                let zz = (k * std::f32::consts::PI).sin() * 26.0 + (1.0 - k) * 10.0;
+                let (px, py) = (x, cy + (y + WAKE_FRONT - cy) * k);
+                let zz = (k * std::f32::consts::PI).sin() * 34.0 + (1.0 - k) * 10.0;
                 f.shadow(px, py, 10.0, 3.5, 0.3 * k);
-                f.sprite_z(&s, px, py - zz, py + 1.0, SprOpt { ev: zz, ..Default::default() });
+                // klettert nach vorn über den Haufen hinaus: vor allen Särgen zeichnen
+                f.sprite_z(&s, px, py - zz, py.max(y + 46.0) + 1.0, SprOpt { ev: zz, ..Default::default() });
             }
         }
         if t < WAKE_END {

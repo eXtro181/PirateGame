@@ -76,9 +76,10 @@ Er hat das Spiegelbild des Mondes gestohlen – seitdem steht die See still, und
    hebt ihn mit ihren Beinen hinein, schiebt den Deckel zu und krabbelt dann selbst kopfüber die Klippe hinab, bis die Tiefe sie verschluckt.
    In beiden Fällen schlängeln sich erst dann langsam zwei riesige Arme aus der schwarzen Tiefe die Klippe herauf,
    umschlingen den Sarg und ziehen ihn hinab ins Dunkel – und man erwacht im ursprünglichen Sarg am Galgenstrand; das reguläre Spiel beginnt.
-1. **Überfahrt und Erwachen** (Galgenfeste): Tentakel ziehen den Sarg mit vielen anderen durch dunkles Regenwasser zur alten Piratenfestung;
-   Skelette tragen ihn hinein und werfen ihn auf den Sarghaufen. Der Deckel bricht auf, der Ertrunkene kämpft sich durch die Festung
-   (Wachstube, Zellen, Hallen) bis zu **Kapitän Kielholer**, einem Skelettkapitän mit zwei Säbeln.
+1. **Überfahrt und Erwachen** (Galgenfeste): Draußen auf See legen Tentakel den Sarg von oben ins Wasser, die Augen des Kraken tauchen auf;
+   die Strömung treibt ihn mit anderen Särgen an den Kai der alten Piratenfestung. Skelette werfen ihn auf den Sarghaufen, der Ertrunkene
+   klettert nach vorn heraus und kämpft sich über Terrassen, Bastionen und Türme hinauf bis zu **Kapitän Kielholer** (zwei Säbel).
+   Ab dem Auftauchen der Tentakel im Prolog spielt ein episches Shanty.
    Der Alte Galionsschnitzer erklärt die Lage.
 2. **Glutwacht**: Die Festung in der Mitte der Welt ist der Knotenpunkt.
    Hier brennt das Säbelfeuer, hier stehen vier leere Throne, hier arbeiten Schmied, Händlerin, Laternenmagd und Schiffsmeister.
@@ -243,7 +244,7 @@ Ungeheuer zeigen eine Lebensleiste, sobald sie verwundet sind; die Crew zielt mi
   Herkunft und Geschenk zu Beginn.
 - **Glutwacht**: Laternenmagd (Stufenaufstieg, Neues Spiel+), Schmied Harrow (Waffen härten und kaufen), Händlerin Sabeth (Waren),
   Schiffsmeister Brack (Ausbauten), Crew an der Tafel.
-- **Start (Galgenfeste)**: Alter Galionsschnitzer im Burghof; nach dem Boss gibt Kielholers Geist das Flaschenschiff, erst dann öffnet das Tor zum Steg.
+- **Start (Galgenfeste)**: Alter Galionsschnitzer im Sarghof; nach dem Boss gibt Kielholers Geist das Flaschenschiff, erst dann legt man am Steg ab.
 - **Crew** (je mit Lied und Geschütz):
 
 | Crew | Element | Lied | Geschütz |

@@ -402,6 +402,10 @@ fn setup(world: &mut bevy::ecs::world::World) {
                 // Testlauf: Überfahrt der Särge zur Galgenfeste (wie nach dem Ende des Prologs)
                 if let Scene::Play(g) = &mut app.scene {
                     g.end_prolog();
+                    // &ferry=<sekunde>: ab dieser Sekunde der Überfahrt
+                    if let Some(t) = app.params.get("ferry").and_then(|v| v.parse::<f32>().ok()) {
+                        g.cutscene = Some(game::Cut::Ferry { t });
+                    }
                 }
             }
             if app.params.contains_key("revenant") {

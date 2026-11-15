@@ -36,14 +36,14 @@ fn ell(f: &mut Frame, x: f32, y: f32, rx: f32, ry: f32, ang: f32, col: [u8; 4]) 
 
 /// Ein Augenpaar im Becken
 #[derive(Clone, Copy)]
-struct Eyes {
-    x: f32,
-    y: f32,
-    age: f32,
-    dur: f32,
-    tilt: f32,
-    size: f32,
-    seed: f32,
+pub(super) struct Eyes {
+    pub(super) x: f32,
+    pub(super) y: f32,
+    pub(super) age: f32,
+    pub(super) dur: f32,
+    pub(super) tilt: f32,
+    pub(super) size: f32,
+    pub(super) seed: f32,
 }
 
 /// Zustand des Lebens in der Glutwacht
@@ -189,7 +189,7 @@ impl Game {
         }
     }
 
-    fn draw_kraken_eyes(&self, f: &mut Frame, e: &Eyes) {
+    pub(super) fn draw_kraken_eyes(&self, f: &mut Frame, e: &Eyes) {
         let t = e.age;
         let a = smooth(part(t, 0.0, 0.7)) * (1.0 - smooth(part(t, e.dur - 1.0, e.dur)));
         if a <= 0.01 {

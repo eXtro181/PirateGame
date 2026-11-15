@@ -433,6 +433,8 @@ impl Game {
         }
         if crossed(p.rise) {
             self.sfx("tide");
+            // ab hier ein episches Shanty bis zum Erwachen in der Galgenfeste
+            self.song_req = Some(("shanty", 48.0));
         }
         for m in [p.rise + 1.2, p.rise + 3.0, p.pull + 0.2] {
             if crossed(m) {
@@ -503,7 +505,7 @@ impl Game {
         let long = defeat && Drag::new(p0, c0).len() > HOP_LEN;
         let hop_out = if long { smooth(part(t, p.carry + 0.35, p.carry + 0.95)) } else { 0.0 };
         let hop_in = (self.coffin_hop / 0.7).clamp(0.0, 1.0);
-        self.ui.fade = smooth(part(t, p.pull + PULL_DUR - 1.9, p.pull + PULL_DUR)).max(hop_out).max(hop_in);
+        self.ui.fade = (0.8 * smooth(part(t, p.pull + PULL_DUR - 1.9, p.pull + PULL_DUR))).max(hop_out).max(hop_in);
         t >= p.end
     }
 
