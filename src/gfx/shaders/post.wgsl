@@ -198,7 +198,7 @@ fn fs_light(f: FOut) -> @location(0) vec4<f32> {
     }
     // Umgebung: Himmel von oben, warmer Bodenrückwurf von unten
     let hemi = mix(0.64, 1.07, n.z * G.ambient.w + (1.0 - G.ambient.w));
-    var li = G.ambient.rgb * hemi * ao * mix(1.0, cloud, 0.35);
+    var li = G.ambient.rgb * hemi * ao * mix(1.0, cloud, 0.5);
     li += bounce * (G.ambient.rgb * 0.55 + G.sun_col.rgb * 0.3 * cloud) * G.fx4.x * ao;
     li += emis * G.fx4.y;
     // Randlicht: erhöhte Kanten (Figuren, Kronen, Klippenkanten) fangen kühles Himmelslicht von hinten
@@ -221,7 +221,7 @@ fn fs_light(f: FOut) -> @location(0) vec4<f32> {
         // versetzter Start je Pixel (kein Streifenmuster), Schatten nahe am Werfer scharf, fern weicher
         let jit = hash21(vec2<f32>(ip) * 0.73 + vec2<f32>(3.1, 7.7));
         for (var k = 1; k <= 15; k = k + 1) {
-            let tq = (f32(k) - jit) * 4.4;
+            let tq = (f32(k) - jit) * 5.8;
             let q = p3 + sd * tq;
             let sp2 = vec2<f32>(q.x, q.y - q.z);
             let suv = (sp2 - G.view.xy) / G.view.zw;
@@ -925,7 +925,8 @@ fn fs_final(f: FOut) -> @location(0) vec4<f32> {
     // Tiefenschärfe (Tilt-Shift): nach Bodenzeile, Ferne früher unscharf als die Nähe
     if (G.hd.y > 0.0) {
         let fd = s0.a * 2.0 - G.hd.z;
-        let coc = select(smoothstep(0.26, 0.6, fd), smoothstep(0.24, 0.62, -fd), fd < 0.0) * G.hd.y;
+        // die Nähe (unten) bleibt fast scharf: dort stehen Figuren und Gegner
+        let coc = select(smoothstep(0.26, 0.6, fd), smoothstep(0.3, 0.7, -fd) * 0.6, fd < 0.0) * G.hd.y;
         let bl = textureSampleLevel(t_c, s_lin, suv, 0.0).rgb;
         // Klarheit: örtlicher Kontrast gegen das weichgezeichnete Bild – nur im Scharfen und begrenzt,
         // damit um Lichter keine Säume entstehen. Zeichnung und Kanten der Pixelkunst treten hervor.

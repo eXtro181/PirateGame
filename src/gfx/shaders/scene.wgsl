@@ -427,6 +427,21 @@ fn fs_gbuf(v: VOut) -> GOut {
         rgb *= 0.84 + m1 * 0.3 + (m2 - 0.5) * 0.1;
         rgb *= mix(vec3<f32>(1.05, 1.0, 0.93), vec3<f32>(0.95, 1.0, 1.06), smoothstep(0.3, 0.7, m2));
     }
+    if (chunk) {
+        // Wind streicht über Gras und Moos: helle Bänder ziehen in Windrichtung über grüne Flächen,
+        // in Böenfeldern stärker (Leben im Bild, ohne dass sich ein Sprite bewegt)
+        let green = clamp((rgb.g - max(rgb.r, rgb.b) * 0.92) * 9.0, 0.0, 1.0);
+        if (green > 0.02) {
+            var wd = G.fx5.zw;
+            if (dot(wd, wd) < 0.01) { wd = vec2<f32>(1.0, 0.25); }
+            wd = normalize(wd);
+            let tw = G.screen.z;
+            let gust = noise_at(v.world * 0.006 - wd * (tw * 0.05)).b;
+            let ph = dot(v.world, wd) * 0.021 - tw * (0.9 + G.fx2.w * 1.6) + gust * 9.0;
+            let band = smoothstep(0.55, 1.0, sin(ph) * 0.5 + 0.5) * smoothstep(0.35, 0.7, gust);
+            rgb *= 1.0 + band * 0.24 * green * (0.5 + G.fx2.w);
+        }
+    }
     if (chunk && G.fx8.y > 0.5) {
         let td = tide_depth(v.world);
         if (td > -90.0) {

@@ -497,6 +497,21 @@ fn fs_gbuf(v: VOut) -> GOut {
         rgb *= 0.84 + m1 * 0.3 + (m2 - 0.5) * 0.1;
         rgb *= mix(vec3<f32>(1.05, 1.0, 0.93), vec3<f32>(0.95, 1.0, 1.06), smoothstep(0.3, 0.7, m2));
     }
+    if (chunk) {
+        // Wind streicht über Gras und Moos: helle Bänder ziehen in Windrichtung über grüne Flächen,
+        // in Böenfeldern stärker (Leben im Bild, ohne dass sich ein Sprite bewegt)
+        let green = clamp((rgb.g - max(rgb.r, rgb.b) * 0.92) * 9.0, 0.0, 1.0);
+        if (green > 0.02) {
+            var wd = G.fx5.zw;
+            if (dot(wd, wd) < 0.01) { wd = vec2<f32>(1.0, 0.25); }
+            wd = normalize(wd);
+            let tw = G.screen.z;
+            let gust = noise_at(v.world * 0.006 - wd * (tw * 0.05)).b;
+            let ph = dot(v.world, wd) * 0.021 - tw * (0.9 + G.fx2.w * 1.6) + gust * 9.0;
+            let band = smoothstep(0.55, 1.0, sin(ph) * 0.5 + 0.5) * smoothstep(0.35, 0.7, gust);
+            rgb *= 1.0 + band * 0.24 * green * (0.5 + G.fx2.w);
+        }
+    }
     if (chunk && G.fx8.y > 0.5) {
         let td = tide_depth(v.world);
         if (td > -90.0) {
@@ -924,7 +939,7 @@ fn fs_light(f: FOut) -> @location(0) vec4<f32> {
     }
     // Umgebung: Himmel von oben, warmer Bodenrückwurf von unten
     let hemi = mix(0.64, 1.07, n.z * G.ambient.w + (1.0 - G.ambient.w));
-    var li = G.ambient.rgb * hemi * ao * mix(1.0, cloud, 0.35);
+    var li = G.ambient.rgb * hemi * ao * mix(1.0, cloud, 0.5);
     li += bounce * (G.ambient.rgb * 0.55 + G.sun_col.rgb * 0.3 * cloud) * G.fx4.x * ao;
     li += emis * G.fx4.y;
     // Randlicht: erhöhte Kanten (Figuren, Kronen, Klippenkanten) fangen kühles Himmelslicht von hinten
@@ -947,7 +962,7 @@ fn fs_light(f: FOut) -> @location(0) vec4<f32> {
         // versetzter Start je Pixel (kein Streifenmuster), Schatten nahe am Werfer scharf, fern weicher
         let jit = hash21(vec2<f32>(ip) * 0.73 + vec2<f32>(3.1, 7.7));
         for (var k = 1; k <= 15; k = k + 1) {
-            let tq = (f32(k) - jit) * 4.4;
+            let tq = (f32(k) - jit) * 5.8;
             let q = p3 + sd * tq;
             let sp2 = vec2<f32>(q.x, q.y - q.z);
             let suv = (sp2 - G.view.xy) / G.view.zw;
@@ -1651,7 +1666,8 @@ fn fs_final(f: FOut) -> @location(0) vec4<f32> {
     // Tiefenschärfe (Tilt-Shift): nach Bodenzeile, Ferne früher unscharf als die Nähe
     if (G.hd.y > 0.0) {
         let fd = s0.a * 2.0 - G.hd.z;
-        let coc = select(smoothstep(0.26, 0.6, fd), smoothstep(0.24, 0.62, -fd), fd < 0.0) * G.hd.y;
+        // die Nähe (unten) bleibt fast scharf: dort stehen Figuren und Gegner
+        let coc = select(smoothstep(0.26, 0.6, fd), smoothstep(0.3, 0.7, -fd) * 0.6, fd < 0.0) * G.hd.y;
         let bl = textureSampleLevel(t_c, s_lin, suv, 0.0).rgb;
         // Klarheit: örtlicher Kontrast gegen das weichgezeichnete Bild – nur im Scharfen und begrenzt,
         // damit um Lichter keine Säume entstehen. Zeichnung und Kanten der Pixelkunst treten hervor.

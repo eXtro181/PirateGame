@@ -298,6 +298,22 @@ impl Lib {
                 let o = (((y + 1) * pw + 1) * 4) as usize;
                 data[o..o + (bw * 4) as usize].copy_from_slice(&img[s..s + (bw * 4) as usize]);
             }
+            // Der Schein um Flammen füllt bei manchen Effekten das ganze Bild und stünde als eckiger Kasten
+            // um die Flamme: schwach deckende Pixel laufen zum Rand hin rund aus, Deckendes bleibt.
+            for y in 0..bh {
+                for x in 0..bw {
+                    let o = (((y + 1) * pw + 1 + x) * 4 + 3) as usize;
+                    let a = data[o] as f32;
+                    if a > 0.0 && a < 110.0 {
+                        let nx = (x as f32 + 0.5) / bw as f32 * 2.0 - 1.0;
+                        let ny = (y as f32 + 0.5) / bh as f32 * 2.0 - 1.0;
+                        let k = 1.0 - (((nx * nx + ny * ny).sqrt() - 0.42) / 0.5).clamp(0.0, 1.0);
+                        let k = k * k * (3.0 - 2.0 * k);
+                        let solid = ((a - 40.0) / 70.0).clamp(0.0, 1.0);
+                        data[o] = (a * (k + (1.0 - k) * solid)) as u8;
+                    }
+                }
+            }
             f.uploads.push(Upload { tex: Tex::AtlasCol, layer: self.page, x: px as u32, y: py as u32, w: pw as u32, h: ph as u32, data });
             frames[i] = Spr { page: self.page as u16, x: (px + 1) as u16, y: (py + 1) as u16, w: bw as u16, h: bh as u16, ax: (ox - x0) as i16, ay: (oy - y0) as i16 };
             self.used += (pw * ph) as i64;

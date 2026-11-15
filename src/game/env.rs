@@ -83,13 +83,13 @@ pub fn env(zone: &str, sailing_open_sea: bool) -> Env {
     };
     if sailing_open_sea {
         return Env {
-            ambient: l(0x7898C0, 0.75),
-            sun: l(0xC8D8F0, 0.7),
+            ambient: l(0x7898C0, 0.6),
+            sun: l(0xC8D8F0, 0.5),
             sun_dir: n3([0.35, -0.45, 0.6]),
             fog: l(0x3A5468, 1.0),
             fog_k: 0.12,
-            water_a: l(0x3AA4BC, 1.0),
-            water_b: l(0x124A70, 1.0),
+            water_a: l(0x2E8AA0, 1.0),
+            water_b: l(0x103A5A, 1.0),
             water_c: l(0xD8F0F6, 1.0),
             rays: 0.3,
             tone_lo: [0.94, 0.99, 1.07],
@@ -160,7 +160,7 @@ pub fn env(zone: &str, sailing_open_sea: bool) -> Env {
             rays: 0.6,
             ambient: l(0x7C7088, 0.56),
             sky: 0.4,
-            sun: l(0xFFB890, 0.36),
+            sun: l(0xF2C4AC, 0.28),
             shadow: 0.35,
             fog: l(0x5C363C, 1.0),
             fog_k: 0.06,
@@ -462,9 +462,9 @@ pub fn env(zone: &str, sailing_open_sea: bool) -> Env {
         // Die Letzte Flut: der befreite Mond steht am Himmel – kaltes, klares Silberlicht, Sterne
         "mondnacht" => Env {
             rays: 0.18,
-            ambient: l(0xA4B6C4, 0.9),
+            ambient: l(0xA4B6C4, 0.72),
             sky: 0.6,
-            sun: l(0xDCE6F4, 0.8),
+            sun: l(0xDCE6F4, 0.62),
             sun_dir: n3([-0.25, -0.45, 0.85]),
             shadow: 0.55,
             fog: l(0x2E3E4E, 1.0),
@@ -718,17 +718,21 @@ pub fn apply(e: &Env, g: &mut Globals, dark: bool, exposure: f32, fx_high: bool)
     // Dunkle Stimmungen werden stärker angehoben als ohnehin helle (Stillwasser am Morgen bleibt, wie es ist).
     let amb = e.ambient[0] * 0.3 + e.ambient[1] * 0.59 + e.ambient[2] * 0.11;
     let up = 1.0 - ((amb - 0.45) / 0.6).clamp(0.0, 1.0);
-    let dk = if dark { 0.5 + 0.08 * up } else { 0.68 + 0.14 * up };
-    let sk = if dark { 0.55 + 0.07 * up } else { 0.72 + 0.12 * up };
+    // Das Hauptlicht (Sonne/Mond) trägt die Anhebung: beleuchtete Flächen heben sich von Schlagschatten ab,
+    // das Umgebungslicht bleibt gedämpft (Dark Fantasy: Form durch Licht und Schatten statt Grundhelligkeit).
+    let dk = if dark { 0.5 + 0.03 * up } else { 0.68 + 0.05 * up };
+    let sk = if dark { 0.55 + 0.28 * up } else { 0.72 + 0.5 * up };
     g.ambient = [e.ambient[0] * dk, e.ambient[1] * dk, e.ambient[2] * dk, e.sky];
-    g.sun_dir = [e.sun_dir[0], e.sun_dir[1], e.sun_dir[2], if fx_high { e.shadow + 0.15 } else { 0.0 }];
+    // Sonne/Mond etwas tiefer als in den Stimmungen notiert: längere Schlagschatten, Streiflicht auf dem Boden
+    let sd = n3([e.sun_dir[0], e.sun_dir[1], e.sun_dir[2] * 0.78]);
+    g.sun_dir = [sd[0], sd[1], sd[2], if fx_high { e.shadow + 0.15 } else { 0.0 }];
     g.sun_col = [e.sun[0] * sk, e.sun[1] * sk, e.sun[2] * sk, 0.6];
     g.fog = [e.fog[0], e.fog[1], e.fog[2], e.fog_k];
     // Kontrast und Sättigung leicht angehoben: die farbtreue Tonkurve (post.wgsl) sättigt Dunkles nicht mehr von selbst
     g.lift = [e.lift[0] + 0.004, e.lift[1] + 0.008, e.lift[2] + 0.016, e.contrast + 0.09];
     g.gain = [e.gain[0], e.gain[1], e.gain[2], e.sat * if dark { 0.8 } else { 1.08 }];
     // +15 % Helligkeit gegenüber der ursprünglichen Abstimmung (Wunsch: man sieht sonst zu wenig)
-    g.misc = [(e.vignette + 0.2).min(1.0), if fx_high { 0.018 } else { 0.0 }, if fx_high { e.bloom } else { 0.2 }, exposure * 1.15];
+    g.misc = [(e.vignette + 0.05).min(1.0), if fx_high { 0.018 } else { 0.0 }, if fx_high { e.bloom } else { 0.2 }, exposure * (1.15 + 0.24 * up)];
     g.water_a = [e.water_a[0], e.water_a[1], e.water_a[2], 1.0];
     g.water_b = [e.water_b[0], e.water_b[1], e.water_b[2], 1.0];
     g.water_c = [e.water_c[0], e.water_c[1], e.water_c[2], 0.3];
@@ -736,7 +740,7 @@ pub fn apply(e: &Env, g: &mut Globals, dark: bool, exposure: f32, fx_high: bool)
     // HD-2D: Schrägsicht immer, Tiefenschärfe, Verdeckung, Strahlen und Staub nur bei hohen Effekten
     let hk = if fx_high { 1.0 } else { 0.0 };
     g.hd = [crate::gfx::TILT, hk, g.hd[2], e.rays * hk * if dark { 0.7 } else { 1.0 }];
-    g.hd2 = [hk, 0.6 * hk, 0.55, 0.5 * hk];
+    g.hd2 = [hk, 0.6 * hk, 0.8, 0.5 * hk];
     // Grundwerte der Bildwirkungen (das Spiel setzt sie danach über `Look::apply`)
     g.fx0 = [0.0; 4];
     g.fx1 = [0.0; 4];
