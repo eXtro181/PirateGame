@@ -357,6 +357,33 @@ pub fn song(name: &str) -> Option<Song> {
             Song { unit: 60.0 / 60.0 / 2.0, len: 64.0, events: ev, gain: 0.55 }
         }
         // Bosse: drängend, aber düster – e-Phrygisch, Geige, Cello-Ostinato, Trommeln
+        // Shanty (Nutzerwunsch 15.11.): episch und rein instrumental – die Arme holen den Sarg, die
+        // Strömung trägt ihn zur Galgenfeste. d-Moll, Stampftakt, Geige und Blechflöte im Refrain.
+        "shanty" => {
+            let verse = "D4:2 D4:1 F4:1 A4:2 A4:2 | G4:1 F4:1 E4:1 D4:1 C4:2 A3:2 | D4:2 D4:1 F4:1 A4:2 D5:2 | C5:1 A4:1 G4:1 E4:1 D4:4 | F4:2 F4:1 A4:1 C5:2 C5:2 | A#4:1 A4:1 G4:1 F4:1 E4:2 C4:2 | D4:2 F4:1 A4:1 D5:2 C5:1 A4:1 | G4:1 E4:1 C#4:1 E4:1 D4:4";
+            let chorus = "A4:2 D5:2 D5:1 E5:1 F5:2 | E5:1 D5:1 C5:1 A4:1 C5:4 | A#4:2 D5:2 D5:1 E5:1 F5:2 | G5:2 F5:1 E5:1 D5:4 | A4:2 D5:2 D5:1 E5:1 F5:2 | G5:1 F5:1 E5:1 D5:1 C5:2 A4:2 | A#4:1 A4:1 G4:1 F4:1 E4:2 C#5:2 | D5:8";
+            let mut ev = sq(verse, Fiddle, 0.42, 0.0);
+            ev.extend(sq(verse, AccordionSolo, 0.2, 0.0));
+            ev.extend(sq(chorus, Fiddle, 0.5, 64.0));
+            ev.extend(sq(chorus, Whistle, 0.22, 64.0));
+            let chords = [
+                "D2+A2+F3", "C2+G2+E3", "D2+A2+F3", "A1+E2+C3", "F2+A2+C3", "G2+A#2+D3", "D2+A2+F3", "A1+E2+C#3",
+                "D2+A2+F3", "C2+G2+E3", "A#1+F2+D3", "G2+A#2+D3", "D2+A2+F3", "C2+G2+E3", "A1+E2+C#3", "D2+A2+F3",
+            ];
+            for (i, c) in chords.iter().enumerate() {
+                let t = i as f32 * 8.0;
+                let r = first(c);
+                ev.extend(sq(&format!("{r}:8"), Cello, 0.5, t));
+                ev.extend(sq(&format!("{r}:2 R:2 {r}:2 R:2"), Bass, 0.6, t));
+                ev.extend(sq(&format!("R:2 {c}:1 R:3 {c}:1 R:1"), Accordion, 0.14, t));
+                ev.extend([drum(t, 52.0, 0.55), tick(t + 2.0, 0.2), drum(t + 4.0, 50.0, 0.45), tick(t + 6.0, 0.2)]);
+                if i >= 8 {
+                    ev.extend(sq(&format!("{c}:8"), Pad, 0.14, t));
+                    ev.extend([drum(t + 3.0, 56.0, 0.25), drum(t + 7.0, 56.0, 0.32)]);
+                }
+            }
+            Song { unit: 60.0 / 104.0 / 2.0, len: 128.0, events: ev, gain: 0.55 }
+        }
         "boss" => {
             let mel = "E5:1 F5:1 E5:1 G5:1 E5:1 F5:1 E5:2 | D5:1 E5:1 D5:1 C5:1 B4:4 | E5:1 F5:1 E5:1 G5:1 A5:1 G5:1 F5:2 | E5:1 D5:1 C5:1 D5:1 E5:4";
             let mut ev = sq(&format!("{mel} | {mel}"), Fiddle, 0.46, 0.0);
@@ -376,7 +403,7 @@ pub fn song(name: &str) -> Option<Song> {
     };
     Some(s)
 }
-pub const SONGS: [&str; 11] = ["titel", "salz", "hain", "atem", "leine", "glut", "frost", "sturm", "tiefe", "ende", "boss"];
+pub const SONGS: [&str; 12] = ["titel", "salz", "hain", "atem", "leine", "glut", "frost", "sturm", "tiefe", "ende", "boss", "shanty"];
 
 /// Eine Note in den Puffer (zyklisch, damit die Schleife nahtlos ist).
 pub fn render_event(buf: &mut [f32], e: &Ev, start: usize, dur: f32, rng: &mut Rng) {

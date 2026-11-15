@@ -2,8 +2,8 @@
 
 ## Inseln und Zonen
 
-**Inseln/Zonen** (`ZONES`): Galgenfeste `kueste` (Start: Festungs-Dungeon, Erwachen auf dem Sarghaufen `Cut::Wake`, 18 Räume bis zur Halle mit
-Boss Kapitän Kielholer (Skelett, zwei Säbel); danach sein Geist mit dem Flaschenschiff, Nordtor zum Steg erst nach dem Sieg (`sync_exit_gate`);
+**Inseln/Zonen** (`ZONES`): Galgenfeste `kueste` (Start: Festungs-Dungeon wie die Glutwacht, Terrassen 0–3 zur Burg, Bastionen, Türme;
+Erwachen auf dem Sarghaufen `Cut::Wake`; oben Boss Kapitän Kielholer (Skelett, zwei Säbel), danach sein Geist mit dem Flaschenschiff; Steg am Kai;
 keine Siedlung), Glutwacht `hain` (Festung/Hub), Aschebucht `asche` (Glut, Siedlung Glutgrund), Frostgrotte `frost` (Siedlung Reifstein),
 Hafen Rabenwacht `raben` (Stadt), Fluchmangroven `mangroven` (Pfahldorf Moorhain), Ende der Welt `ende` (Meer in der Südost-Ecke,
 nur per Schiff durch den Strudel), **Wrackzwinger** `prolog` (Zone `Prolog`, Nordwest-Ecke, nur zu Beginn; Ortsnamen nach Bereich:
@@ -36,7 +36,8 @@ vorher nur „Ein leerer Sarg“) – man steigt hinein, legt sich hin, der Deck
 nach einer Niederlage (Tod im Prolog → `start_coffin(true)` statt des normalen Sterbens) wickelt die Spinne den Leichnam in einen weißen Kokon,
 zieht ihn bis zum Sarg, legt ihn mit den Beinen hinein, schließt ihn und krabbelt selbst über die Klippe in die Tiefe.
 In beiden Fällen schlängeln sich danach zwei riesige Arme aus der schwarzen Tiefe die Klippe herauf, umschlingen den Sarg und ziehen ihn langsam hinab
-→ `end_prolog` → `Cut::Ferry` (`game/ferry.rs`): Tentakel ziehen den Sarg mit anderen durch Regen zur Galgenfeste, Skelette werfen ihn auf den Sarghaufen → `Cut::Wake`.
+→ `end_prolog` → `Cut::Ferry` (`game/ferry.rs`): Arme legen den Sarg auf See ab (Krakenaugen der Glutwacht), die Strömung treibt ihn an den Kai,
+Skelette werfen ihn auf den Sarghaufen → `Cut::Wake` ohne Abblende; ab dem Auftauchen der Arme im Prolog läuft das Shanty `shanty` (`song_req`).
 Im Prolog kein Perlenfleck, keine Seekarte.
 
 ## Weiter Ozean

@@ -1,110 +1,161 @@
-//! Die Galgenfeste (Nutzerwunsch 15.11.): statt des Galgenstrands eine dunkle alte Piratenfestung als
-//! erster Festungs-Dungeon. Die Särge der Ertrunkenen landen am Strand vor dem Südtor, Skelette werfen
-//! sie drinnen auf den Sarghaufen (`game/ferry.rs`); von dort kämpft man sich durch Wachstube, Zellen,
-//! West- und Osthalle bis zur Halle des Skelettkapitäns, hinter der das Hafentor zum Steg führt.
-//! Bauweise wie in A Link to the Past: die ganze Festung ist Mauermasse (Ebene 1, Mauerwerk der
-//! Glutwacht über `Biome::Hub`), Räume und Gänge sind auf Ebene 0 hineingeschnitten.
+//! Die Galgenfeste (Nutzerwunsch 15.11.): dunkle alte Piratenfestung als erster Festungs-Dungeon,
+//! gebaut wie die Glutwacht. Eine runde Ringmauer umschließt Terrassenhöfe, die nach Norden zur Burg
+//! des Skelettkapitäns ansteigen (Ebene 0 Sarghof, 1 Mittelhof, 2 Oberhof, 3 Bossplateau). Daran
+//! eckige Bastionen (Wachstube unter der Westhalle, Zellen unter der Osthalle, je mit Innentreppe)
+//! und zwei Ecktürme (Kapelle, Schatzkammer). Nur Fels und Mauern, keine Wiese. Die Särge treiben
+//! am Kai vor dem Südtor an (`game/ferry.rs`); dort liegt auch der Steg.
 
 use super::*;
 
-/// Räume (x0, y0, x1, y1) relativ zur Inselmitte, einschließlich; Boden je Raum
-const ROOMS: [(i32, i32, i32, i32, Mat); 18] = [
-    (-1, 11, 1, 14, Mat::Cobble),     // Südtor
-    (-6, 5, 6, 10, Mat::Cobble),      // R1 Sarghaufen
-    (-1, 1, 1, 4, Mat::Cobble),       // Gang R1–R4
-    (-10, -6, 10, 0, Mat::Cobble),    // R4 Hof mit Säbelfeuer
-    (-26, 3, -14, 10, Mat::Plank),    // R2 Wachstube
-    (-13, 7, -7, 8, Mat::Cobble),     // Gang R1–R2
-    (14, 3, 26, 10, Mat::Plank),      // R3 Zellen
-    (7, 7, 13, 8, Mat::Cobble),       // Gang R1–R3
-    (-27, -15, -15, -3, Mat::Marble), // R5 Westhalle
-    (-14, -4, -11, -3, Mat::Cobble),  // Gang R4–R5
-    (-21, -2, -19, 2, Mat::Cobble),   // Gang R2–R5
-    (15, -15, 27, -3, Mat::Marble),   // R6 Osthalle (Schatzkammer)
-    (19, -2, 21, 2, Mat::Cobble),     // Gang R3–R6
-    (11, -4, 14, -3, Mat::Cobble),    // Gang R4–R6
-    (-10, -17, 10, -11, Mat::Hex),    // R7 Halle des Kapitäns
-    (-14, -15, -11, -14, Mat::Cobble), // Gang R5–R7 (Nebeltor)
-    (-1, -18, 1, -18, Mat::Cobble),   // Hafentor (nach dem Kapitän offen)
-    (-1, -20, 1, -19, Mat::Cobble),   // Vorplatz am Hafentor
-];
+/// Ebene der runden Feste an (dx, dy) Kacheln von der Inselmitte; None = außerhalb der Ringmauer,
+/// 4 = Ringmauer. Die Terrassen liegen als Ringe um die Burg im Norden (wie bei `hub_cell`).
+fn ring_level(dx: i32, dy: i32) -> Option<u8> {
+    let (x, y) = (dx as f32, dy as f32);
+    let e = ((x / 32.0).powi(2) + (y / 21.0).powi(2)).sqrt();
+    if e >= 1.0 {
+        return None;
+    }
+    if e >= 0.82 {
+        return Some(4);
+    }
+    let k = ((x / 1.5).powi(2) + (y + 11.0).powi(2)).sqrt();
+    Some(if k < 6.5 {
+        3
+    } else if k < 12.5 {
+        2
+    } else if k < 19.0 {
+        1
+    } else {
+        0
+    })
+}
 
 impl World {
-    pub(super) fn layout_fortress(&mut self, rng: &mut Rng) {
-        let d = self.cur.def();
-        let (cx, cy) = (d.cx, d.cy);
-        // Mauermasse der Festung
-        for y in cy - 18..=cy + 14 {
-            for x in cx - 30..=cx + 30 {
-                if inb(x, y) {
-                    let i = idx(x, y);
-                    self.ground[i] = Mat::Rock;
-                    self.level[i] = 1;
-                    self.biome[i] = Biome::Hub;
-                    self.zone[i] = Some(Zone::Kueste);
+    fn fort_set(&mut self, x: i32, y: i32, l: u8, g: Mat, keep_higher: bool) {
+        if !inb(x, y) {
+            return;
+        }
+        let i = idx(x, y);
+        if keep_higher && self.biome[i] == Biome::Hub && self.level[i] > l {
+            return;
+        }
+        self.ground[i] = g;
+        self.level[i] = l;
+        self.biome[i] = Biome::Hub;
+        self.zone[i] = Some(Zone::Kueste);
+        self.path[i] = false;
+    }
+    fn fort_box(&mut self, x0: i32, y0: i32, x1: i32, y1: i32, l: u8, g: Mat, keep_higher: bool) {
+        let (cx, cy) = (self.cur.def().cx, self.cur.def().cy);
+        for y in y0.min(y1)..=y0.max(y1) {
+            for x in x0.min(x1)..=x0.max(x1) {
+                self.fort_set(cx + x, cy + y, l, g, keep_higher);
+            }
+        }
+    }
+    /// Treppe: Wegkacheln über einer Wandkante werden beim Berechnen der Wände zu Stufen
+    fn fort_stair(&mut self, x0: i32, x1: i32, y0: i32, y1: i32) {
+        let (cx, cy) = (self.cur.def().cx, self.cur.def().cy);
+        for y in y0..=y1 {
+            for x in x0.min(x1)..=x0.max(x1) {
+                if inb(cx + x, cy + y) {
+                    self.path[idx(cx + x, cy + y)] = true;
                 }
             }
         }
-        for &(x0, y0, x1, y1, g) in ROOMS.iter() {
-            for y in cy + y0..=cy + y1 {
-                for x in cx + x0..=cx + x1 {
-                    if inb(x, y) {
-                        let i = idx(x, y);
-                        self.ground[i] = g;
-                        self.level[i] = 0;
-                        self.biome[i] = Biome::Hub;
-                        self.zone[i] = Some(Zone::Kueste);
-                    }
+    }
+
+    pub(super) fn layout_fortress(&mut self, rng: &mut Rng) {
+        let d = self.cur.def();
+        let (cx, cy) = (d.cx, d.cy);
+        // die ganze Insel: nackter Fels, um die Feste eben
+        for y in cy - d.ry - 4..=cy + d.ry + 4 {
+            for x in cx - d.rx - 4..=cx + d.rx + 4 {
+                if !inb(x, y) {
+                    continue;
+                }
+                let i = idx(x, y);
+                if self.zone[i] != Some(Zone::Kueste) || matches!(self.ground[i], Mat::Water | Mat::Abyss) {
+                    continue;
+                }
+                self.ground[i] = Mat::Rock;
+                let (dx, dy) = ((x - cx) as f32, (y - cy) as f32);
+                if (dx / 47.0).powi(2) + ((dy + 2.0) / 30.0).powi(2) < 1.0 {
+                    self.level[i] = 0;
+                }
+            }
+        }
+        // Ringmauer und Terrassen
+        for dy in -22..=22 {
+            for dx in -33..=33 {
+                let Some(l) = ring_level(dx, dy) else { continue };
+                let g = match l {
+                    4 => Mat::Rock,
+                    3 => Mat::Hex,
+                    _ => Mat::Cobble,
+                };
+                self.fort_set(cx + dx, cy + dy, l, g, false);
+            }
+        }
+        // eckige Bastionen (Mauermasse Ebene 2) mit zweistöckiger Halle, Ecktürme (Ebene 3)
+        for s in [-1i32, 1] {
+            self.fort_box(25 * s, -16, 42 * s, 13, 2, Mat::Rock, true);
+            self.fort_box(29 * s, 3, 39 * s, 10, 0, Mat::Plank, false);
+            self.fort_box(29 * s, -13, 39 * s, 2, 1, Mat::Marble, false);
+            self.fort_stair(32 * s, 34 * s, 0, 2);
+            self.fort_box(22 * s, 6, 28 * s, 7, 0, Mat::Cobble, false);
+            self.fort_box(22 * s, -9, 28 * s, -8, 1, Mat::Cobble, false);
+            self.fort_box(13 * s, -25, 27 * s, -13, 3, Mat::Rock, true);
+            self.fort_box(16 * s, -22, 24 * s, -16, 2, if s < 0 { Mat::Marble } else { Mat::Hex }, false);
+            self.fort_box(6 * s, -17, 15 * s, -16, 2, Mat::Cobble, false);
+            // Treppen Mittelhof → Oberhof
+            self.fort_stair(5 * s, 7 * s, -2, 0);
+        }
+        // Treppe zum Bossplateau (oben das Nebeltor)
+        self.fort_stair(-1, 1, -7, -5);
+        // Torhaus im Süden, davor der Kai, an dem die Särge antreiben
+        self.fort_box(-6, 15, 6, 22, 4, Mat::Rock, false);
+        self.fort_box(-1, 15, 1, 22, 0, Mat::Cobble, false);
+        self.fort_box(-12, 23, 14, 25, 0, Mat::Cobble, false);
+        for y in cy + 26..=cy + 34 {
+            for x in cx - 14..=cx + 16 {
+                if inb(x, y) && self.ground[idx(x, y)] != Mat::Water {
+                    let i = idx(x, y);
+                    self.ground[i] = Mat::Water;
+                    self.level[i] = 0;
+                    self.path[i] = false;
                 }
             }
         }
         let t = |dx: i32, dy: i32| (cx + dx, cy + dy);
-        // Fackeln an den Nordwänden der Räume
-        for &(x0, y0, x1, y1, _) in ROOMS.iter() {
-            if x1 - x0 >= 8 {
-                let mut x = x0 + 2;
-                while x <= x1 - 1 {
-                    self.prop_t("torch", cx + x, cy + y0);
-                    x += 6;
-                }
-                let _ = y1;
-            }
-        }
-        // Außen: Strand vor dem Südtor (hier landen die Särge), Türme, Hafen im Norden
-        self.road(&[t(0, 15), t(0, 22)], Mat::Sand, 1);
-        self.road(&[t(0, -21), t(0, -23)], Mat::Dirt, 1);
-        let (wx, wy) = self.dock_k(Zone::Kueste, "kueste".into(), cx, cy - 23, 0, -1);
-        let _ = (wx, wy);
-        for (x, y) in [(-30, -18), (30, -18), (-30, 14), (30, 14)] {
+        let _ = self.dock_k(Zone::Kueste, "kueste".into(), cx + 9, cy + 24, 0, 1);
+        self.ferry_pts = (tpos(cx, cy + 24), tpos(cx, cy + 18));
+        // runde Türme an den Ecken der Bastionen
+        for (x, y) in [(-43, 14), (43, 14), (-28, -24), (28, -24)] {
             let (tx, ty) = t(x, y);
             self.prop_x("fortTower", (tx * TS) as f32 + 16.0, (ty * TS) as f32 + 16.0, |_| {});
         }
-        for (x, k) in [(-3, 0), (3, 1)] {
-            let (tx, ty) = t(x, 16);
-            self.prop_tf("gateTower", tx, ty, k == 1);
-        }
-        for (k, &(x, y)) in [(-6, 18), (5, 19), (-9, 21), (8, 22), (-3, 23), (11, 18)].iter().enumerate() {
-            let (tx, ty) = t(x, y);
-            let kind = ["coffin0", "coffin1", "coffinLid0", "coffinBones0", "coffin1", "coffinLid1"][k];
-            self.prop_tf(kind, tx, ty, k % 2 == 0);
-        }
-        for (k, &(x, y)) in [(-14, 17), (14, 18), (-20, 20), (20, 21)].iter().enumerate() {
-            let (tx, ty) = t(x, y);
-            self.prop_tf(&format!("gibbet{}", k % 2), tx, ty, k % 2 == 1);
-        }
-        let (tx, ty) = t(-17, 22);
-        self.prop_tf("wreck", tx, ty, true);
-        for &(x, y) in &[(-2, 15), (2, 15), (-2, -21), (2, -21)] {
+        // Fackeln am Fuß der Terrassenmauern, an Toren und in den Räumen
+        for &(x, y) in &[
+            (-4, 8), (4, 8), (-11, 8), (11, 8), (-3, 2), (3, 2), (-10, 0), (10, 0), (-3, -4), (3, -4),
+            (-2, 23), (2, 23), (-36, 3), (-32, 3), (32, 3), (36, 3), (-36, -13), (-32, -13), (32, -13), (36, -13),
+            (-22, -22), (-18, -22), (18, -22), (22, -22),
+        ] {
             let (tx, ty) = t(x, y);
             self.prop_t("torch", tx, ty);
         }
-        for &(x, y, k) in &[(-4, 20, "skullpile"), (4, 17, "wardPost"), (-5, 16, "wardPost"), (3, -22, "anchorDeco"), (-3, -22, "ropeCoil")] {
+        // Kai: Särge, Galgen, Bannpfähle
+        for (k, &(x, y)) in [(-7, 24), (-10, 23), (5, 25), (13, 23)].iter().enumerate() {
+            let (tx, ty) = t(x, y);
+            let kind = ["coffin0", "coffinLid0", "coffinBones0", "coffin1"][k];
+            self.prop_tf(kind, tx, ty, k % 2 == 0);
+        }
+        for &(x, y, k) in &[(-12, 24, "gibbet0"), (14, 25, "gibbet1"), (-4, 23, "wardPost"), (4, 23, "wardPost"), (-9, 25, "skullpile")] {
             let (tx, ty) = t(x, y);
             self.prop_t(k, tx, ty);
         }
-        self.ferry_pts = (tpos(cx, cy + 20), tpos(cx, cy + 14));
-        // R1 Sarghaufen: oben auf dem Haufen der Sarg des Ertrunkenen
-        let (px, py) = tpos(cx, cy + 7);
+        // Sarghof: oben auf dem Haufen der Sarg des Ertrunkenen
+        let (px, py) = tpos(cx, cy + 10);
         for (k, &(dx, dy)) in [(-34.0, 10.0), (30.0, 12.0), (-18.0, 26.0), (22.0, 28.0), (-44.0, 30.0), (44.0, 26.0), (0.0, 34.0), (-26.0, -6.0), (28.0, -4.0), (8.0, 20.0), (-8.0, 18.0)]
             .iter()
             .enumerate()
@@ -114,92 +165,102 @@ impl World {
         }
         self.prop_x("coffinEmpty", px, py, |_| {});
         self.wake_coffin = (px, py);
-        for &(x, y, k) in &[(-5, 5, "candles0"), (5, 5, "candles1"), (-5, 10, "skullpile"), (5, 10, "bones")] {
+        for &(x, y, k) in &[
+            (-6, 9, "candles0"), (6, 9, "candles1"), (-6, 13, "skullpile"), (-4, 14, "bones"), (-14, 10, "gibbet0"),
+            (14, 9, "gibbet1"), (-9, 13, "brazier"), (12, 13, "brazier"), (-16, 12, "cannon"), (16, 12, "flag"),
+        ] {
             let (tx, ty) = t(x, y);
             self.prop_t(k, tx, ty);
         }
-        // R4 Hof: Säbelfeuer, der alte Galionsschnitzer, Feuerschalen
-        let (fx, fy) = t(0, -3);
+        // Säbelfeuer im Sarghof, daneben der alte Galionsschnitzer
+        let (fx, fy) = t(8, 11);
         self.fire("kueste", fx, fy);
-        self.npc("herald", cx - 4, cy - 2, "carver", "Alter Galionsschnitzer", "herald", true, None);
-        for &(x, y, k) in &[(-9, -5, "brazier"), (9, -5, "brazier"), (6, -1, "bench"), (-7, -1, "table"), (8, -5, "flag"), (-9, -1, "cannon")] {
+        self.npc("herald", cx + 11, cy + 11, "carver", "Alter Galionsschnitzer", "herald", true, None);
+        // Mittel- und Oberhof
+        for &(x, y, k) in &[(-14, -1, "cannon"), (14, -1, "cannon"), (-20, -6, "crates"), (20, -6, "ropeCoil"), (-8, -10, "flag"), (8, -10, "skullpile"), (-12, -13, "brazier"), (12, -13, "brazier")] {
             let (tx, ty) = t(x, y);
             self.prop_t(k, tx, ty);
         }
-        // R2 Wachstube
-        for &(x, y, k) in &[(-24, 4, "table"), (-22, 4, "bench"), (-16, 4, "crates"), (-25, 9, "crates"), (-15, 9, "candles2"), (-20, 9, "skull")] {
+        // Wachstube (West, unten), Westhalle (West, oben)
+        for &(x, y, k) in &[(-38, 4, "table"), (-36, 4, "bench"), (-30, 4, "crates"), (-38, 10, "crates"), (-30, 10, "candles2"), (-35, 9, "skull")] {
             let (tx, ty) = t(x, y);
             self.prop_t(k, tx, ty);
         }
-        let (a, b) = t(-24, 7);
+        let (a, b) = t(-38, 8);
         self.chest("f1", a, b, "rum", None);
-        // R3 Zellen: Käfige, Tote
-        for (k, &(x, y)) in [(16, 4), (20, 4), (24, 4), (18, 9), (23, 9)].iter().enumerate() {
+        for y in [-12, -8, -4] {
+            for x in [-38, -30] {
+                let (tx, ty) = t(x, y);
+                self.prop_t("stoneColumn", tx, ty);
+            }
+        }
+        for &(x, y, k) in &[(-34, -12, "wardPost"), (-38, -2, "candles1"), (-30, -2, "skullpile")] {
+            let (tx, ty) = t(x, y);
+            self.prop_t(k, tx, ty);
+        }
+        let (a, b) = t(-36, -12);
+        self.chest("f2", a, b, "bombs", None);
+        // Zellen (Ost, unten), Osthalle (Ost, oben)
+        for (k, &(x, y)) in [(30, 4), (34, 4), (38, 4), (31, 10), (37, 10)].iter().enumerate() {
             let (tx, ty) = t(x, y);
             self.prop_tf(&format!("gibbet{}", k % 2), tx, ty, k % 2 == 0);
         }
-        for &(x, y, k) in &[(15, 7, "sitDead0"), (25, 7, "sitDead1"), (21, 6, "bones"), (17, 6, "skullpile")] {
+        for &(x, y, k) in &[(29, 7, "sitDead0"), (39, 7, "sitDead1"), (35, 6, "bones"), (32, 8, "skullpile")] {
             let (tx, ty) = t(x, y);
             self.prop_t(k, tx, ty);
         }
-        let (a, b) = t(25, 9);
+        let (a, b) = t(38, 9);
         self.item("pearls", a, b);
-        // R5 Westhalle: Säulenreihen, Bannpfähle
-        for y in [-13, -9, -5] {
-            for x in [-25, -17] {
-                let (tx, ty) = t(x, y);
-                self.prop_t("stoneColumn", tx, ty);
-            }
-        }
-        for &(x, y, k) in &[(-21, -14, "wardPost"), (-26, -10, "candles1"), (-16, -6, "skullpile")] {
+        for &(x, y, k) in &[(30, -12, "crates"), (38, -12, "crates"), (30, -6, "cannon"), (38, -3, "anchorDeco"), (34, -3, "nets"), (37, -8, "ropeCoil")] {
             let (tx, ty) = t(x, y);
             self.prop_t(k, tx, ty);
         }
-        let (a, b) = t(-26, -14);
-        self.chest("f2", a, b, "bombs", None);
-        // R6 Osthalle: Beute der Festung (eine Truhe beißt)
-        for &(x, y, k) in &[(17, -14, "crates"), (25, -14, "crates"), (16, -9, "cannon"), (26, -6, "anchorDeco"), (21, -5, "nets"), (24, -10, "ropeCoil")] {
+        // Kapelle (Nordwestturm), Schatzkammer (Nordostturm, eine Truhe beißt)
+        for &(x, y, k) in &[(-23, -21, "candles0"), (-17, -21, "candles1"), (-20, -21, "skullpile"), (-24, -17, "bones")] {
             let (tx, ty) = t(x, y);
             self.prop_t(k, tx, ty);
         }
-        let (a, b) = t(21, -14);
+        let (a, b) = t(-20, -18);
+        self.item("pearls", a, b);
+        for &(x, y, k) in &[(17, -21, "crates"), (24, -21, "crates"), (24, -17, "anchorDeco")] {
+            let (tx, ty) = t(x, y);
+            self.prop_t(k, tx, ty);
+        }
+        let (a, b) = t(21, -21);
         self.chest("f3", a, b, "ring", None);
-        let (a, b) = t(18, -4);
+        let (a, b) = t(18, -17);
         self.chest("f4", a, b, "shard", Some("livingChest"));
-        // R7 Halle des Kapitäns: Säulen, Feuerschalen; nach dem Kampf steht hier sein Geist
-        for x in [-8, -4, 4, 8] {
-            for y in [-16, -12] {
-                let (tx, ty) = t(x, y);
-                self.prop_t("stoneColumn", tx, ty);
-            }
+        // Bossplateau: Säulen, Feuerschalen; nach dem Kampf steht hier der Geist des Kapitäns
+        for &(x, y) in &[(-6, -14), (6, -14), (-6, -10), (6, -10)] {
+            let (tx, ty) = t(x, y);
+            self.prop_t("stoneColumn", tx, ty);
         }
-        for &(x, y, k) in &[(-10, -17, "brazier"), (10, -17, "brazier"), (0, -17, "flag")] {
+        for &(x, y, k) in &[(-3, -16, "brazier"), (3, -16, "brazier"), (0, -17, "flag")] {
             let (tx, ty) = t(x, y);
             self.prop_t(k, tx, ty);
         }
-        self.npc("ghostCaptain", cx, cy - 14, "ghostCaptain", "Der Geisterkapitän", "ghostCaptain", false, None);
-        let (ax, ay) = tpos(cx, cy - 14);
+        self.npc("ghostCaptain", cx, cy - 12, "ghostCaptain", "Der Geisterkapitän", "ghostCaptain", false, None);
+        let (ax, ay) = tpos(cx, cy - 12);
         self.arenas.insert("kueste", Arena { x: ax, y: ay, r: 7.0 * TS as f32, ry: 3.5 * TS as f32 });
-        let (gx, gy) = tpos(cx - 11, cy - 14);
+        let (gx, gy) = tpos(cx, cy - 8);
         let gp = self.prop_x("foggate", gx, gy + 8.0, |p| {
             p.no_collide = true;
             p.gate = Some("kueste");
             p.interact = Some("gate");
             p.open = true;
         });
-        self.gates.push(Gate { key: "kueste", x: gx, y: gy, dir: (-1, 0), prop: gp });
-        // Hafentor: Nebel, der erst mit dem Kapitän vergeht
-        let (hx, hy) = tpos(cx, cy - 18);
-        let hp = self.prop_x("foggate", hx, hy + 8.0, |p| p.no_collide = true);
-        self.exit_gate = Some((hp, hx, hy));
+        self.gates.push(Gate { key: "kueste", x: gx, y: gy, dir: (0, 1), prop: gp });
+        self.exit_gate = None;
         // Besatzung der Feste
         for &(k, x, y, e) in &[
-            ("skeleton", -10, 7, false), ("skeleton", 10, 8, false),
-            ("skeleton", -20, 5, false), ("skelGunner", -16, 8, false), ("skeleton", -24, 9, false),
-            ("skeleton", 17, 6, false), ("skelGunner", 24, 5, false), ("skeleton", 21, 9, false),
-            ("skeleton", -5, -4, false), ("skelGunner", 6, -5, false),
-            ("skelBrute", -21, -9, true), ("skelGunner", -25, -6, false), ("skeleton", -17, -12, false), ("skeleton", -22, -4, false),
-            ("skelBrute", 21, -9, false), ("skeleton", 17, -6, false), ("skelGunner", 25, -12, false), ("skeleton", 23, -4, false),
+            ("skeleton", -10, 9, false), ("skeleton", 12, 8, false),
+            ("skeleton", -33, 5, false), ("skelGunner", -37, 6, false), ("skeleton", -31, 9, false),
+            ("skeleton", 33, 5, false), ("skelGunner", 37, 6, false), ("skeleton", 31, 9, false),
+            ("skelBrute", -34, -8, true), ("skeleton", -31, -11, false),
+            ("skelBrute", 34, -8, false), ("skelGunner", 37, -11, false),
+            ("skeleton", -18, -3, false), ("skeleton", 18, -3, false), ("skelGunner", 0, 3, false),
+            ("skelGunner", -10, -6, false), ("skeleton", 10, -6, false),
+            ("skeleton", -20, -18, false), ("skeleton", 20, -18, false),
         ] {
             self.spawn(k, cx + x, cy + y, e);
         }

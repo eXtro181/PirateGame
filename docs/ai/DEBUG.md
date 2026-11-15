@@ -54,6 +54,6 @@ Feuer-IDs: `kueste hain asche asche2 frost frost2 raben raben2 mangroven mangrov
   `tools/dev/shot -q -s "<parameter>"` (Aufbau der Zeile in `docs/ai/BAUEN.md`, Abschnitt Zustandszeile)
 - `&prof` Leistungsmessung je Sekunde (siehe `docs/ai/BAUEN.md`)
 - `&revenant` der eigene Wiedergänger steht 90 px östlich (hält 1234 Perlen; erschlagen gibt sie zurück)
-- `&ferry` Überfahrt der Särge zur Galgenfeste (wie nach dem Prolog, danach Erwachen auf dem Sarghaufen)
-- Galgenfeste: `&pos=27216,26224` Sarghaufen · `&pos=27216,25552` Halle des Kapitäns · `&pos=27216,26640` Strand · `&pos=27216,25230` Steg
+- `&ferry` Überfahrt der Särge zur Galgenfeste (wie nach dem Prolog, danach Erwachen auf dem Sarghaufen); `&ferry=<s>` ab Sekunde s
+- Galgenfeste: `&pos=27216,26320` Sarghaufen · `&pos=27216,25616` Bossplateau · `&pos=26128,25872` Westbastion · `&pos=27216,26768` Kai · `&pos=27520,26880` Steg
 
