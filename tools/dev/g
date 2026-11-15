@@ -12,10 +12,13 @@ case "$1" in
   -a) where="."; shift ;;
 esac
 [ $# -eq 0 ] && { sed -n '2,8p' "$0" | cut -c3-; exit 2; }
+# rg-Optionen dürfen auch vor dem Muster stehen (g -i muster, g -w muster pfad)
+opts=""
+while [ $# -gt 1 ] && [ "${1#-}" != "$1" ]; do opts="$opts $1"; shift; done
 pat=$1; shift
 for a in "$@"; do [ -e "$a" ] && where=""; done
 max=${G_MAX:-60}
-out=$(rg -n --heading --trim --color never --sort path -M 180 --max-columns-preview -e "$pat" "$@" $where 2>&1)
+out=$(rg -n --heading --trim --color never --sort path -M 180 --max-columns-preview $opts -e "$pat" "$@" $where 2>&1)
 [ -z "$out" ] && { echo "kein Treffer"; exit 1; }
 n=$(printf '%s\n' "$out" | wc -l)
 printf '%s\n' "$out" | head -n "$max"

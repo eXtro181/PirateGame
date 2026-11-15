@@ -841,8 +841,16 @@ impl World {
                                     }
                                 }
                             };
-                            let tufts = if patch > 0.06 { 1 + ((patch - 0.06) * 12.0) as i32 } else if rng.chance(0.18) { 1 } else { 0 };
+                            // dichter als früher (Grafik-Ausbau 15.11.): der Boden soll auch zwischen den Horsten leben
+                            let tufts = if patch > 0.0 { 1 + (patch * 14.0) as i32 } else if rng.chance(0.34) { 1 } else { 0 };
                             put(grass, tufts.min(3), &mut rng);
+                            // hier und da Steinchen und Zweige: kleine Brüche in der Fläche
+                            if rng.chance(0.045) {
+                                let s = stones(&mut rng);
+                                put(s, 1, &mut rng);
+                            } else if rng.chance(0.03) {
+                                put("twigs", 1, &mut rng);
+                            }
                             if patch > 0.2 && g == Mat::Meadow && rng.chance(0.4) {
                                 put("tallgrass", 1, &mut rng);
                             }

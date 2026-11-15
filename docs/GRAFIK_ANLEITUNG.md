@@ -32,7 +32,7 @@ Bezugsdateien im Repo: `crates/art/src/*` (Kunst aus Code), `src/gfx/mod.rs` + `
 19a. Ausbau 2026 (Runde 13): Licht, Wetter, Tageszeit, Bildwirkungen, Stilrichtlinie und Farbskript
 19b. Runde 14: Wellen, Brandung, plastische Dächer, Titelbild „Sturmnacht“
 19c. Endkampf neu (9.11.): PixelLab-Holländer, Gezeiten-Shader, Spiegelmond, Letzte Flut
-19d. Bildlook vom 14.11.: Nebel als Tiefe, Klarheit, farbtreues Licht
+19d. Bildlook vom 14./15.11.: Nebel als Tiefe, Klarheit, farbtreues Licht, Hauptlicht, Wind
 20. Schritt-für-Schritt-Plan für das neue Projekt
 21. Fallstricke
 22. Anhang: Shader im Wortlaut
@@ -408,7 +408,7 @@ Flackern) + Wind (`sway`) + `overhead` (ab dieser Zeile blendet die Krone aus, w
 Zweige, Laub, Tang, Treibholz, Wurzeln, Muscheln, Krebspanzer, Glut, Seerosen, Schilf, Pilze, Kristalle.
 Sie entsteht **je 256-px-Eimer erst beim Zeichnen** (`World::deco_bucket` in `world/nature.rs`, Zufall je Kachel aus den Kachelkoordinaten,
 also jedes Mal gleich) und folgt dem **Standort** (`World.nat`, siehe Kapitel 9 „Natürlicher Bewuchs“) statt einer Biom-Tabelle:
-Horste aus `patch = fbm(0,13·Kachel, 2)` (Gras 1 + (patch − 0,06)·12, höchstens 3, sonst 18 % ein Büschel),
+Horste aus `patch = fbm(0,13·Kachel, 2)` (Gras 1 + patch·14 ab patch > 0, höchstens 3, sonst 34 % ein Büschel; dazu 4,5 % Steine, 3 % Zweige),
 Blumen nur auf Wiesenflecken (`fbm(0,06·Kachel) + 0,12 auf Wiese > 0,14`, Anteil je Biom) und je 10 × 10 Kacheln **eine** Art (Kolonien),
 Klee über 0,22. Im **Schatten** (≥ 2) Waldboden: 1–2 Stück Laub, Zweige, Farnsprossen, Wurzeln, 5 % Pilze (Frost: Zweige/Schneehalme, Glut: Zweige/Glut/Kiesel).
 **Sand**: am Flutsaum (Landabstand 1) 40 % Tang, Muscheln, Treibholz, Kiesel, 3 % Krebspanzer/Gräten; Düne (2–3) Strandgras in Horsten.
@@ -1132,7 +1132,7 @@ Lichtstimmungen `mondnacht` (kühles Silber, Sterne 1, Strahlen 0,18) und `morge
 der Nebel am Ende der Welt richtet sich nach dem Abschnitt (silbern, grünlich-grau, salzig, mondhell, morgenrot – vorher lag dort immer blutroter Nebel,
 Ursache des Rotstichs am Meeresgrund).
 
-## 19d. Bildlook vom 14.11.: Nebel als Tiefe, Klarheit, farbtreues Licht
+## 19d. Bildlook vom 14./15.11.: Nebel als Tiefe, Klarheit, farbtreues Licht, Hauptlicht, Wind
 
 Anlass: Das Bild wirkte milchig (der Nebel lag als Schleier über allem), Lichter brannten zu weißen Flecken aus,
 und dunkle Gebiete liefen in einen einzigen Farbton (Aschebucht einfarbig rot, Fluchmangroven einfarbig grün).
@@ -1162,27 +1162,47 @@ Bäume, Mauern und Figuren stehen mit dem Fuß im Dunst und ragen oben heraus.
 
 - Klarheit: `c += clamp(c − weich, ±0,16) · 0,45 · (1 − Unschärfe)`; `weich` ist das Bild der Tiefenschärfe (Radius ~12 Texel).
   Das ist örtlicher Kontrast gegen ein weichgezeichnetes Bild, begrenzt, damit um Lichter keine Säume entstehen.
-- Tiefenschärfe schwächer: Übergänge 0,26–0,6 (fern) und 0,24–0,62 (nah), Mischung 0,62 statt 0,8, Abdunkeln 0,1, Entsättigen 0,12.
+- Tiefenschärfe schwächer: Übergänge 0,26–0,6 (fern) und 0,3–0,7 mit Faktor 0,6 (nah – dort stehen Figuren und Gegner),
+  Mischung 0,62 statt 0,8, Abdunkeln 0,1, Entsättigen 0,12.
 - Bloom erst ab 0,8 (bis 1,7) statt ab 0,64 – beleuchteter Boden blüht nicht mehr, nur Lichter, Glut und Glanz.
 - Tonkurve farbtreu: `mix(aces(x), x · aces(luma)/luma, 0,62)`.
   Je Kanal angewandt, quadriert der Fuß der Kurve im Dunkeln jeden Farbstich (aus leicht rötlichem Licht wird ein einfarbig rotes Bild).
 - Lebendigkeit: Sättigung × `(1 + 0,3·(1 − smoothstep(0, 0,5, Farbigkeit)))` – matte Farben gewinnen mehr als satte.
 - Spitzlichter entsättigen nur noch bis 0,3 (ab Helligkeit 0,9 bis 3,4).
 
-**Helligkeit aus echtem Licht** (`env::apply`):
+**Helligkeit aus echtem Licht** (`env::apply`), mit `up = 1 − clamp((luma(Umgebung) − 0,45)/0,6, 0, 1)`:
 
-- Umgebung × `0,68 + 0,14·up`, Sonne × `0,72 + 0,12·up`, `up = 1 − clamp((luma(Umgebung) − 0,45)/0,6, 0, 1)`.
-- Option „Düster“: `0,5 + 0,08·up` bzw. `0,55 + 0,07·up`.
+- Umgebung × `0,68 + 0,05·up`, Sonne/Mond × `0,72 + 0,5·up`, Belichtung × `1,15 + 0,24·up`.
+- Option „Düster“: Umgebung × `0,5 + 0,03·up`, Sonne/Mond × `0,55 + 0,28·up`.
+- Das Hauptlicht trägt die Anhebung: beleuchtete Flächen heben sich von Schlagschatten ab, die Grundhelligkeit bleibt gedämpft.
 - Dunkle Stimmungen werden angehoben, helle (Stillwasser am Morgen) bleiben; Kontrast + 0,09 statt + 0,06, Sättigung × 1,08 („Düster“ × 0,8).
+- Sonne/Mond stehen tiefer als notiert: Richtung mit `z · 0,78` und neu normiert – längere Schlagschatten, Streiflicht auf dem Boden.
+- Vignette `vignette + 0,05` (früher + 0,2), Randlicht 0,8 (früher 0,55).
+
+**Schatten** (`fs_light`): Schrittweite der Schlagschatten 5,8 px (15 Schritte, ~87 px) statt 4,4;
+Wolkenschatten dämpfen auch das Umgebungslicht zur Hälfte (früher 0,35).
+
+**Lichtinseln** (`draw.rs`): alle Punktlichter × `light_k · 1,7` (früher 1,5), Radius × 1,18 – warme Lichter gegen das kühle Mondlicht.
+
+**PixelFX-Bilder** (`pfx.rs`, beim Backen): schwach deckende Pixel (Alpha < 110) laufen zum Bildrand rund aus,
+`k = 1 − smoothstep((r − 0,42)/0,5)` mit `r` = Abstand von der Bildmitte (1 = Rand), Deckendes (Alpha 40 → 110) bleibt.
+Ohne das stand um Fackeln und Säbelfeuer ein eckiger heller Kasten (der Schein füllte das ganze Effektbild).
+
+**Wind im Gras** (`fs_gbuf`, nur Boden-Chunks): `grün = clamp((g − max(r, b)·0,92)·9, 0, 1)`;
+`bö = rauschen(welt·0,006 − wind·t·0,05)`, `phase = welt·wind·0,021 − t·(0,9 + 1,6·windstärke) + bö·9`;
+`band = smoothstep(0,55, 1, 0,5 + 0,5·sin(phase)) · smoothstep(0,35, 0,7, bö)`, Farbe × `1 + band·0,24·grün·(0,5 + windstärke)`.
+Helle Bänder ziehen in Windrichtung über grüne Flächen – Bewegung im Bild, ohne dass sich ein Sprite bewegt.
 
 **Wasser** (`water_x`): Wellen plastischer (`0,8 + 0,4·h`, Dünung `0,87 + 0,34·sw`), Himmelsspiegelung `clamp(fresnel·1,85 + 0,05, 0, 0,52)`.
 
 **Stimmungen**:
 
-- Aschebucht: Umgebung 7C7088×0,56, Sonne FFB890×0,36, Nebel 5C363C, Lift (0,022, 0,008, 0,014), Sättigung 0,9, Schatten (0,98, 0,97, 1,04).
+- Aschebucht: Umgebung 7C7088×0,56, Sonne F2C4AC×0,28, Nebel 5C363C, Lift (0,022, 0,008, 0,014), Sättigung 0,9, Schatten (0,98, 0,97, 1,04).
 - Aschebucht, Boden: verbrannte Erde graubraun (241A1E 342628 483634 5E4642 765A52 907266) statt rot; das Rot kommt aus Glut, Licht und Moos.
 - Fluchmangroven: Umgebung 6A8474×0,46, Sonne D8D898×0,4, Gain (0,99, 1,02, 0,96), Schatten (0,94, 1,02, 1,02), Lichter (1,05, 1,01, 0,9).
 - Galgenstrand: Sättigung 0,78.
+- Offene See: Umgebung 7898C0×0,6, Sonne C8D8F0×0,5, Wasser 2E8AA0 / 103A5A (dunkler, weniger grell).
+- Mondnacht (nach dem Sieg): Umgebung A4B6C4×0,72, Sonne DCE6F4×0,62.
 
 **Prüfen**: `tools/dev/shot` mit den Zonen `start=kueste|hain|raben|frost|asche|mangroven`, dazu `&sail`, `&prolog&pos=dorf`, `&pos=mid12`, `&day=0.5`.
 

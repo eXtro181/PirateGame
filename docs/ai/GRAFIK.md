@@ -87,7 +87,7 @@ Tinten-Übergang, Kinobalken, Dither; zwei Nebellagen mit Parallaxe; Silhouette 
 Alles in Kapitel 19a der Grafik-Anleitung (mit Stilrichtlinie und Farbskript).
 Werkzeug für automatische Bildvergleiche: `tools/shots/shots.js` (Referenzen mit `--ref`, Bilder außerhalb des Repos).
 
-## Bildlook 14.11. (Nebel als Tiefe, Klarheit, farbtreues Licht)
+## Bildlook 14./15.11. (Nebel als Tiefe, Klarheit, farbtreues Licht, Hauptlicht, Wind)
 
 Nur Shader und Stimmungswerte, keine neue Grafik; alle Formeln in Kapitel 19d der Grafik-Anleitung.
 - Nebellagen (`fs_overlay` Modus 5): um die Spielfigur licht, zur Ferne und zu den Rändern dicht; Farbe folgt dem Licht der Zone.
@@ -96,6 +96,10 @@ Nur Shader und Stimmungswerte, keine neue Grafik; alle Formeln in Kapitel 19d de
 - Form: Normalen ×1,3 (außer Wasser), kräftigere Verdeckung und Himmelslicht-Schattierung.
 - Endbild (`fs_final`): Klarheit (örtlicher Kontrast gegen das Unschärfe-Bild), schwächere Tiefenschärfe, Bloom erst ab 0,8, Lebendigkeit.
 - Tonkurve (`tonemap`): überwiegend über die Helligkeit (`keep`), sonst färbt der Kurvenfuß dunkle Szenen einfarbig.
-- Helligkeit: `env::apply` hebt dunkle Stimmungen an (`up`), helle bleiben; Kontrast und Sättigung leicht höher.
+- Helligkeit: `env::apply` hebt dunkle Stimmungen an (`up`): vor allem Sonne/Mond und Belichtung, kaum das Umgebungslicht.
+- Hauptlicht steht tiefer (`sun_dir` z × 0,78), Schlagschatten reichen ~87 px; Vignette schwächer, Randlicht stärker.
+- Lichtinseln: Punktlichter × `light_k`·1,7 und Radius × 1,18 (`draw.rs`, Ende von `Game::draw`).
+- PixelFX-Bilder: schwacher Schein läuft beim Backen rund aus (`pfx.rs`), sonst steht ein eckiger Kasten um Flammen.
+- Wind im Gras: helle Bänder über grünen Bodenflächen (`fs_gbuf`, `green`/`band`); Boden-Deko dichter (`deco_bucket`).
 - Fallstrick: Farben in `env.rs` stehen als Hex in sRGB und werden linear – ein „gedämpftes“ Rot ist im Licht-Pass sehr satt.
 - Fallstrick: wirkt eine Zone einfarbig, zuerst Nebellage (`draw.rs`), Sonnenfarbe und Tonkurve prüfen, nicht die Bodenpalette.

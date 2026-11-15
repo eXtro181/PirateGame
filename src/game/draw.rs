@@ -631,9 +631,11 @@ impl Game {
             let c2 = [(fc[0] as f32 + lift).min(255.0) as u8, (fc[1] as f32 + lift).min(255.0) as u8, (fc[2] as f32 + lift * 1.1).min(255.0) as u8];
             f.fog_layer(vx - 20.0, vy - 20.0, vw + 40.0, vh + 40.0, [c2[0], c2[1], c2[2], a2], sp * (1.6 + self.look.wind), 0.35);
         }
-        let lk = self.env_cur.light_k * 1.5;
+        // Lichtinseln: etwas kräftiger und mit weiterem Ausläufer (warme Lichter gegen das kühle Mondlicht)
+        let lk = self.env_cur.light_k * 1.7;
         for l in f.lights.iter_mut() {
             l.col = [l.col[0] * lk, l.col[1] * lk, l.col[2] * lk];
+            l.r *= 1.18;
         }
     }
 
