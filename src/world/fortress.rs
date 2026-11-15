@@ -10,7 +10,10 @@ use super::*;
 /// Ebene der runden Feste an (dx, dy) Kacheln von der Inselmitte; None = außerhalb der Ringmauer,
 /// 4 = Ringmauer. Die Terrassen liegen als Ringe um die Burg im Norden (wie bei `hub_cell`).
 fn ring_level(dx: i32, dy: i32) -> Option<u8> {
-    let (x, y) = (dx as f32, dy as f32);
+    ring_level_f(dx as f32, dy as f32)
+}
+/// wie `ring_level`, für Bruchteile von Kacheln: glatte Mauerbögen je Pixel
+fn ring_level_f(x: f32, y: f32) -> Option<u8> {
     let e = ((x / 32.0).powi(2) + (y / 21.0).powi(2)).sqrt();
     if e >= 1.0 {
         return None;
@@ -31,6 +34,30 @@ fn ring_level(dx: i32, dy: i32) -> Option<u8> {
 }
 
 impl World {
+    /// Runder Teil der Feste je Pixel wie in der Glutwacht (`lpx`, `mat_px`): Ebene und Boden.
+    /// None an eckigen Bauten (Bastionen, Türme, Torhaus, Gänge, Kai) und eine Kachel um sie herum.
+    pub(super) fn fort_px(&self, px: i32, py: i32) -> Option<(u8, Mat)> {
+        let d = Zone::Kueste.def();
+        let (tx, ty) = (px.div_euclid(TS), py.div_euclid(TS));
+        let ring = |x: i32, y: i32| {
+            inb(x, y)
+                && match ring_level(x - d.cx, y - d.cy) {
+                    Some(l) => l == self.level[idx(x, y)],
+                    None => self.biome[idx(x, y)] != Biome::Hub,
+                }
+        };
+        if ring_level(tx - d.cx, ty - d.cy).is_none() || ![(0, 0), (1, 0), (-1, 0), (0, 1), (0, -1)].iter().all(|&(a, b)| ring(tx + a, ty + b)) {
+            return None;
+        }
+        let (fx, fy) = ((px as f32 + 0.5) / TS as f32 - 0.5 - d.cx as f32, (py as f32 + 0.5) / TS as f32 - 0.5 - d.cy as f32);
+        Some(match ring_level_f(fx, fy) {
+            Some(4) => (4, Mat::Rock),
+            Some(3) => (3, Mat::Hex),
+            Some(l) => (l, Mat::Cobble),
+            // außen: der Mauerfuß steht rund auf dem Fels
+            None => (0, Mat::Rock),
+        })
+    }
     fn fort_set(&mut self, x: i32, y: i32, l: u8, g: Mat, keep_higher: bool) {
         if !inb(x, y) {
             return;

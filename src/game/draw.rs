@@ -152,6 +152,7 @@ impl Game {
         self.draw_wake(art, f);
         self.draw_ferry(art, f);
         self.draw_prolog_coffin(art, f);
+        self.draw_weaver(art, f);
         // Prolog: der Gehängte am Galgenweg und die stumme Menge
         self.draw_gallows(art, f);
         // Laternen und Feuerschalen der hohen Brücke über dem Hafenbecken

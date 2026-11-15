@@ -1825,6 +1825,8 @@ pub fn preset(name: &str) -> (Look, f32) {
             s = 1.8;
             Look { construct: true, wings: Some((0x3A3440, 1)), hover: 12.0, skin: 0x9A7A3A, coat: 0x24394A, pants: 0x1E2A36, crown: Some(0xD8E4F0), weapon: Some("cutlass"), eye_col: 0xD8E4F0, aura: Some(0x8FA3A8), cast_col: 0xD8E4F0, hair: 0, ..d() }
         }
+        // Geist der Weberin (Prolog): bleiche Frau, Silberhaar, Kleid wie Spinnenseide
+        "weaver" => Look { skin: 0xD8E2E8, hair_col: 0xE6ECF0, hair: 2, coat: 0x7E93A6, robe: true, sash: Some(0xF0F4F6), weapon: None, eye_col: 0x8FF2E8, ..d() },
         "lanternMaid" => Look { skin: 0xE0B896, hair_col: 0xA8A8A0, hair: 2, coat: 0x4A6170, hat: 3, robe: true, hold_lantern: Some(0x5FF2C8), weapon: None, ..d() },
         "smith" => Look { skin: 0x9A6A4C, hair_col: 0x26201E, hair: 0, beard: 2, body: 1, coat: 0x3A3430, apron: true, weapon: Some("hammer"), ..d() },
         "merchant" => Look { skin: 0xC49674, hair_col: 0x5A1A1E, hair: 2, coat: 0x3A2A3A, robe: true, hat: 3, hood_glow: false, hold_lantern: Some(0xF0A040), weapon: None, sash: Some(0xB08A3A), ..d() },
@@ -1887,7 +1889,7 @@ pub fn preset(name: &str) -> (Look, f32) {
     (l, s)
 }
 
-pub const PRESET_NAMES: [&str; 50] = [
-    "skelCaptain", "abyssPirate", "voodoo", "orcCaptain", "stormHarpy", "bellConstruct", "gorgonQueen", "clockStorm",
+pub const PRESET_NAMES: [&str; 51] = [
+    "weaver", "skelCaptain", "abyssPirate", "voodoo", "orcCaptain", "stormHarpy", "bellConstruct", "gorgonQueen", "clockStorm",
     "skeleton", "skelBrute", "skelGunner", "drowned", "drownedIce", "ashSkeleton", "stormSailor", "lanternMaid", "smith", "merchant", "shipmaster", "carver", "crewFire", "crewIce", "crewWind", "crewEarth", "villagerA", "villagerB", "villagerC", "villagerD", "villagerE", "villagerF", "villagerG", "villagerH", "smithIlka", "furWendla", "mapOrrin", "witchMabel", "kingFire", "kingIce", "kingWind", "kingEarth", "malakor", "ghostCaptain", "mobA", "mobB", "mobC", "drownA", "drownB", "drownC", "drownD", "drownKeeper",
 ];

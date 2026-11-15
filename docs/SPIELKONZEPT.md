@@ -71,7 +71,8 @@ Er hat das Spiegelbild des Mondes gestohlen – seitdem steht die See still, und
    Ist der Kampf entschieden, steigt neben dem großen Wasserfall an der Abbruchkante Nebel auf, und ein offener **Sarg** erscheint, der Deckel lehnt daneben;
    links und rechts entzündet sich je eine sehr helle Piratenfackel (Eisenkorb auf einem Pfahl mit Schädel).
    Vorher ist dort nichts als nackter Fels.
-   Wer die Spinne besiegt, steigt hinein, legt sich hin und zieht den Deckel zu.
+   Wer die Spinne besiegt, sieht aus ihrem Leib einen Geist steigen: die **Weberin**, einst Fährfrau der Letzten Flut. Sie erzählt kurz ihre
+   Geschichte und den Mondraub; erst dann erscheint der Sarg. Man legt sich hinein, sie schiebt den Deckel zu und ruft die Arme der Tiefe.
    Wer fällt, stirbt nicht einfach: die Spinne wickelt den Leichnam in einen weißen Kokon, zieht ihn an einem Faden hinter sich her bis zum Sarg,
    hebt ihn mit ihren Beinen hinein, schiebt den Deckel zu und krabbelt dann selbst kopfüber die Klippe hinab, bis die Tiefe sie verschluckt.
    In beiden Fällen schlängeln sich erst dann langsam zwei riesige Arme aus der schwarzen Tiefe die Klippe herauf,

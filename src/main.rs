@@ -398,6 +398,12 @@ fn setup(world: &mut bevy::ecs::world::World) {
                     g.debug_webs();
                 }
             }
+            if app.params.contains_key("weaver") {
+                // Testlauf: der Geist der Weberin erscheint wie nach dem Sieg über die Spinne
+                if let Scene::Play(g) = &mut app.scene {
+                    g.weaver = Some((g.player.a.x + 70.0, g.player.a.y - 20.0, 0.0));
+                }
+            }
             if app.params.contains_key("ferry") {
                 // Testlauf: Überfahrt der Särge zur Galgenfeste (wie nach dem Ende des Prologs)
                 if let Scene::Play(g) = &mut app.scene {

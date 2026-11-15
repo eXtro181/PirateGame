@@ -26,6 +26,7 @@ Feuer-IDs: `kueste hain asche asche2 frost frost2 raben raben2 mangroven mangrov
 - `&prolog` im Prolog (Stillwasser, vor dem Tresen) starten (`&prolog&intro`: mit dem Erwachen am Tresen; `&prolog&spider`: Spinne schon erschlagen;
   `&pos=dorf|tuer|tor|galgen|gebein|schlund`: Plätze im Prolog)
 - `&die` sofort sterben (im Prolog: Niederlagen-Sequenz)
+- `&weaver` Geist der Weberin erscheint wie nach dem Sieg über die Spinne (mit `&prolog&spider&pos=4336,3990` gleich am Sarg)
 - `&prolog&coffin=<sekunde>` Prolog-Ende am Sarg ab Sekunde n (mit `&defeat` die Niederlage; mit `&pos=4336,3990` steht man gleich am Sarg)
 - `&prolog&gallows=<sekunde>` Galgen-Sequenz ab Sekunde n (Stillwasser feindlich, von den Ertrunkenen erschlagen;
   2,4 s hängt man, 7,2 s Nacht, 10,6 s Spinne, 15,6 s Strick durch, ab 16,9 s die Sarg-Niederlage mit Sprung nah an den Sarg;
