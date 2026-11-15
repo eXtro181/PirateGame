@@ -326,6 +326,8 @@ impl Game {
             let w: &'static str = weapon(&s.weapon).key;
             let l = sw_art::chars::player_look(&s.look.arr(), w);
             crate::art::build_player(art, frame, &l);
+            // der Wiedergänger trägt dasselbe Gesicht
+            art.chars.insert("revenant".into(), art.player.clone());
             self.player.look_key = key;
         }
         let p = &mut self.player;
@@ -1496,6 +1498,13 @@ impl Game {
             self.fx.px.play(Px::Soul, x, y).scale(0.8).gain(0.9);
         } else {
             self.fx.px.play(Px::Soul, x, y).front(1.0);
+        }
+        if self.edefs[self.enemies[i].def].key == "revenant" {
+            if let Some(r) = self.save.revenant.take() {
+                self.gain_pearls(r.pearls, Some((x, y)));
+                self.ui.banner("WIEDERGÄNGER ERLÖST", &format!("{} Perlen kehren zurück", r.pearls), "big", 3.0);
+                self.timers.push((3.2, super::Timed::Whisper("… du hast dich selbst erschlagen. Die See lacht leise …".into())));
+            }
         }
         let k = if self.save.origin == "schmuggler" { 1.2 } else { 1.0 } * if self.save.gift == "coin" { 1.15 } else { 1.0 };
         let charm = if self.save.items.contains_key("driftCharm") { 1.15 } else { 1.0 };

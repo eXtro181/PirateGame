@@ -1321,7 +1321,15 @@ fn light_rays(suv: vec2<f32>, sy: f32) -> f32 {
     let c2 = textureSampleLevel(t_d, s_lin, fract(wq * 2.7 + vec2<f32>(0.37, 0.11)), 0.0).b;
     let cov = G.fx6.x;
     let gap = 1.0 - smoothstep(0.62 - cov * 0.3, 0.86 - cov * 0.3, c1 * 0.72 + c2 * 0.34);
-    return beam * top * G.hd.w * (0.4 + 0.95 * gap) * (1.15 - cov * 0.6);
+    // Verdeckung: ein Strahl steht nur, wo das Licht auf dem Weg von der Sonne durchkommt – dunkle
+    // Kronen und Dächer in Sonnenrichtung werfen Schattenbahnen in den Dunst (Lichtschächte)
+    var lit = 0.0;
+    let stepv = dir / G.view.zw * 14.0;
+    for (var k = 1; k <= 6; k = k + 1) {
+        lit += luma(textureSampleLevel(t_a, s_lin, suv + stepv * f32(k), 0.0).rgb);
+    }
+    let occ = smoothstep(0.04, 0.3, lit / 6.0);
+    return beam * top * G.hd.w * (0.4 + 0.95 * gap) * (1.15 - cov * 0.6) * (0.25 + 0.9 * occ);
 }
 
 // schwebender Staub im Vordergrund als unscharfe Bokeh-Scheiben (außerhalb der Fokuszone)

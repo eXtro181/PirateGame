@@ -427,6 +427,8 @@ Wenig Leben färbt die Welt grau und lässt den Bildrand im Herzschlag rot poche
 - **Perlen** sind die einzige Währung: für Stufen, Waffen, Waren und Schiffsausbauten.
 - **Versalzung** (15.11.): Jeder Tod lagert Salz in den Adern ein – je −5 % Leben, höchstens −25 %.
   Die Lebensleiste zeigt den verlorenen Teil als Salzkruste. Erst der Sieg über einen König oder ein Seeungeheuer spült das Salz fort.
+- **Wiedergänger** (15.11.): Stirbt man, bevor man seinen Perlenfleck zurückgeholt hat, geht der alte Fleck nicht verloren –
+  der alte Leichnam steht dort als eigenes, fahles Ebenbild wieder auf und hält dessen Perlen. Wer ihn erschlägt, bekommt sie zurück.
 - **Die Stimme im Wasser** (15.11.): Nach jeder Rast flüstert das eigene Spiegelbild einen Gedanken – es kennt Tode, Salz,
   die Könige, die Weberin (verschont oder erschlagen), Blut an der Klinge und Neue Fahrten.
 
@@ -460,6 +462,12 @@ Sie stehen in den Läden unter der Wirkung und erscheinen nach dem Fund als leis
 **Die vier Eide** (15.11.): Setzt man eine Galionsfigur zum ersten Mal auf ihren Thron, erinnert sie sich an den Handel ihres Königs:
 Brandvogt gab seine Flotte, Ysra Frostweh ihr Herz, Rabensturm seinen Namen, Morgrim seine Hand – jeweils um nicht zu ertrinken.
 Bei der vierten Figur die Frage nach der Stimme, die die Handel anbot: einer, der selbst nicht hinüber wollte (Malakor).
+
+**Die Laternenmagd** (15.11.): Im Thema „Über dich“ verrät sie mit jedem eingesetzten Thron mehr – sie ist Malakors ertrunkene Tochter.
+Als die Letzte Flut sie holen wollte, fischte er das Spiegelbild des Mondes aus dem Wasser: kein Mond, keine Flut, kein Abschied.
+
+**Logbuch des Geisterkapitäns** (15.11.): acht Seiten auf acht wilden Inseln (jede achte, ab Nr. 3). Der Kapitän war Malakors Maat:
+Tochter, Krankheit, Tod, der Sprung mit dem Netz nach dem Mond, die Handel mit den Königen – und das Flaschenschiff, das er mitnahm.
 
 ### 6.6 Seefahrt
 - **Das Flaschenschiff**: Am Galgenstrand wartet auf dem Steg ein Geisterkapitän (durchscheinend, schwebend, mit Geisterlaterne).

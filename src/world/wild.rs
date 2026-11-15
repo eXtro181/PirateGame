@@ -327,6 +327,17 @@ impl World {
                 self.item(it, tx, ty);
             }
         }
+        // jede achte Insel hütet eine Seite aus dem Logbuch des Geisterkapitäns (acht Seiten, am Landeplatz-Rand)
+        if k % 8 == 3 {
+            const LOGS: [&str; 8] = ["log1", "log2", "log3", "log4", "log5", "log6", "log7", "log8"];
+            for _ in 0..40 {
+                let (tx, ty) = (cx + rng.int(-r.rx / 3, r.rx / 3), cy + rng.int(-r.ry / 3, r.ry / 3));
+                if inb(tx, ty) && self.zone[idx(tx, ty)] == Some(Zone::Wild) && !matches!(self.ground[idx(tx, ty)], Mat::Water | Mat::Abyss) {
+                    self.item(LOGS[(k / 8) % 8], tx, ty);
+                    break;
+                }
+            }
+        }
         // Wegmarken: wenige, mit Absicht gesetzt – zwei alte Steine bzw. am Galgenstrand-Biom
         // Gräber am Weg vom Landeplatz zum Herzstück (statt verstreuter Schädel, Säulen und
         // Holzstapel überall; die PixelLab-Insel bekommt ihre eigenen)

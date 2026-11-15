@@ -234,6 +234,10 @@ impl Game {
             if e.folk == Some(super::gallows::TOWN) {
                 tint = [150, 208, 192, tint[3]];
             }
+            // der Wiedergänger: das eigene Ebenbild, fahl wie ein Ertrunkener
+            if d.key == "revenant" {
+                tint = [150, 196, 206, tint[3]];
+            }
             // verbrannt: verkohlt
             if e.state == ES::Dead && e.last_kind == 1 {
                 tint = [62, 44, 40, tint[3]];

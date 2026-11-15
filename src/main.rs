@@ -394,6 +394,14 @@ fn setup(world: &mut bevy::ecs::world::World) {
                     g.debug_webs();
                 }
             }
+            if app.params.contains_key("revenant") {
+                // Testlauf: der eigene Wiedergänger steht 90 px östlich (mit 1234 Perlen)
+                if let Scene::Play(g) = &mut app.scene {
+                    let (x, y) = (g.player.a.x + 90.0, g.player.a.y);
+                    g.save.revenant = Some(game::data::Stain { x, y, pearls: 1234 });
+                    g.spawn_all(&art);
+                }
+            }
             if app.params.contains_key("die") {
                 // Testlauf: gleich sterben (z. B. im Prolog: Erwachen im Sarg prüfen)
                 if let Scene::Play(g) = &mut app.scene {

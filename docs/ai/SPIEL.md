@@ -209,4 +209,9 @@ Seekarte `CHART_*`/`chart_*`)
 - `Timed::Whisper` zeigt einen Gedanken zeitversetzt; `Ui::whisper` bricht lange Gedanken in zwei Zeilen um.
 - Überlieferung: `Item.lore`, `Weapon.lore` (`data.rs`); Läden zeigen Wirkung + Überlieferung (Listen jetzt mit drei Beschreibungszeilen).
 - Die vier Eide: `oath_pages(el)` am Ende von `game/mod.rs`, Dialog beim ersten Einsetzen in `use_slot`; vierte Figur: Seite über die Stimme.
+- Wiedergänger: `Save.revenant` (alter Perlenfleck beim zweiten Tod, `player_died`), Gegner `revenant` (`data::enemies`, Bogen = Kopie von
+  `art.player`, eingetragen in `refresh_player`), erscheint in `spawn_all`; erschlagen → Perlen zurück (`enemy_die`). Test: `&revenant`.
+- Laternenmagd „Über dich“ (`dialog.rs`, `maid`): vier Stufen nach `missing` und `end_won`.
+- Logbuch: Gegenstände `log1..log8` (`ITEMS`), auf wilden Inseln mit `k % 8 == 3` (`layout_wild`); Text in `lore` (Gedanke nach dem Fund).
+- Regenspritzer: `update_feel` (feel.rs) setzt bei Regen PixelFX-Platscher um die Kamera, nicht auf Wasser, nicht drinnen.
 

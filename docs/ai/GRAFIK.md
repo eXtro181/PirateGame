@@ -107,4 +107,5 @@ Nur Shader und Stimmungswerte, keine neue Grafik; alle Formeln in Kapitel 19d de
   Dichte = Grünanteil (relativ zur Helligkeit) × Büschelrauschen; FullHD 0,62 px breit, sonst 1 px. Kostet 9 Zellen je Bodenpixel.
 - Fließende Glut (`fs_gbuf`): Leuchten der Boden-Chunks (Fugenglut, Lava) wandert mit zwei Rauschlagen (×0,45..1,55).
 - Farbige Schatten (`fs_light`, FullHD): wo die Sonne verdeckt ist, nimmt das Licht den Farbton des Himmels an (bis 40 %).
+- Lichtschächte (`light_rays`, Endbild): 6 Abtastungen der Szene Richtung Sonne – dunkle Kronen/Dächer werfen Schattenbahnen in den Dunst.
 

@@ -4,7 +4,8 @@ Telegrammstil, eine Idee je Zeile. Aufwand: S < 1 Std · M halber Tag · L mehre
 Prüfen je Paket: `tools/dev/check`, `wgsl`, `smoke`, `shot -q -s`, dann Kontaktblatt.
 
 ## 0 Stand
-- **Erledigt (Opus 5.5, 15.11.)**: B1, B6, B8, C1 (Rest: Schritt, Rolle, Landung), C4, D2, D5 (ohne Wiedergänger), E1, E2, E7.
+- **Erledigt (Opus 5.5, 15.11.)**: B1, B4 (Lichtschächte aus Szenenhelligkeit), B6, B8, B11 (Regen), C1 (Rest), C4, D2, D5
+  (Wiedergänger: beim zweiten Tod steht der alte Leichnam auf), E1, E2, E3, E7, E9 (Logbuch).
   Details: `docs/ai/SPIEL.md` (Abschnitt Versalzung …), `docs/ai/GRAFIK.md`, Grafik-Anleitung Kap. 19d.
 - 14./15.11.: neuer Bildlook (Grafik-Anleitung Kap. 19d): Nebel als Tiefe, Klarheit, farbtreue Tonkurve, Hauptlicht, Lichtinseln, Wind im Gras.
 - Engpass für alles Weitere: Atlas 5,95 von 6 Seiten. Ohne A1 passt keine größere Figur und kein zusätzliches Animationsbild hinein.
@@ -90,3 +91,11 @@ Grundsatz: Detail im Shader erzeugen (auflösungsunabhängig), Atlasfläche nur 
 1. A1 → B1, C1, B6 (sofort sichtbar) → D2, D8, E2 (klein, großer Nutzen).
 2. B2–B5, C2, C4 → D1, D4, D6 → E1, E3.
 3. B9, B10, C3, C6 → D3, D11, D12 → E4, E5.
+
+## G Befunde (Opus 5.5)
+- B12 Lichtspiele (Polarlicht, Sporen, Geisterlichter) gebaut und wieder entfernt: über hellem Schnee und dunklem Wald kaum sichtbar.
+- Ursache auch für andere Effekte: die Rauschtextur (`noise_texture` in `src/main.rs`) hat in den fbm-Kanälen r und b nur ±0,03 Streuung um 0,5.
+  Effekte mit festen Schwellen (Wolkenschatten, Lichtstrahlen, Nebelbänke) wirken dadurch schwächer als gedacht.
+  Vorschlag: Kanäle beim Erzeugen auf vollen Umfang normieren (Min/Max je Kanal), danach alle Zonen per Kontaktblatt neu abstimmen.
+- B4 als Lichtschächte aus der Szenenhelligkeit (Endbild) gelöst; echte Verdeckung bräuchte den Höhenpuffer im Endbild-Durchgang.
+

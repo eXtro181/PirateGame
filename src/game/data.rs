@@ -116,7 +116,7 @@ pub struct Item {
     /// Überlieferung (zwei Zeilen, Erzählweg wie in Soulslikes)
     pub lore: &'static str,
 }
-pub const ITEMS: [Item; 25] = [
+pub const ITEMS: [Item; 33] = [
     Item { key: "pearls", name: "Perlenbeutel", rarity: Rarity::Common, desc: "Ein nasser Beutel voller Perlen.", lore: "Perlen wachsen nur um Kummer. Die Ertrunkenen zahlen mit dem, was die See ihnen ließ." },
     Item { key: "rum", name: "Rumflasche", rarity: Rarity::Rare, desc: "Eine Rumflasche mehr an jedem Feuer.", lore: "Klaas sagt, Rum hält die Kälte draußen. Die Kälte sagt nichts – sie wartet." },
     Item { key: "phial", name: "Seelenphiole", rarity: Rarity::Uncommon, desc: "Füllt den Geist. Eine Phiole mehr an jedem Feuer.", lore: "Meeresleuchten in Glas. Wer daraus trinkt, hört kurz die Brandung seiner Kindheit." },
@@ -143,6 +143,15 @@ pub const ITEMS: [Item; 25] = [
     Item { key: "ravenFeather", name: "Rabenfeder", rarity: Rarity::Uncommon, desc: "Rabenwacht. Leicht wie der Wind: Ausdauer erholt sich 20 % schneller.", lore: "Raben folgen den Ertrunkenen. Eine Feder heißt: Einer hat dich schon für tot gehalten." },
     Item { key: "bogTonic", name: "Moortinktur", rarity: Rarity::Rare, desc: "Moorhain. Gerbt die Haut: 8 % weniger Schaden.", lore: "Mabel braut es aus Moorwasser und Geduld. Frag nicht, was im Bodensatz liegt." },
     Item { key: "voodooDoll", name: "Voodoopuppe", rarity: Rarity::Rare, desc: "Moorhain. Flüstert Zauber: +10 Geist, +10 % Zauberkraft.", lore: "Die Puppe trägt dein Gesicht, sobald du sie berührst. Moorhain verkauft sie trotzdem." },
+    // Logbuch des Geisterkapitäns: acht Seiten auf acht wilden Inseln (Erzählweg, `wild.rs`)
+    Item { key: "log1", name: "Logbuch, Seite 1", rarity: Rarity::Rare, desc: "Eine Seite aus dem Logbuch des Geisterkapitäns.", lore: "Tag eins auf dem Holländer. Der Kapitän heißt Malakor. Er lacht selten – nur wenn er von seiner Tochter spricht." },
+    Item { key: "log2", name: "Logbuch, Seite 2", rarity: Rarity::Rare, desc: "Eine Seite aus dem Logbuch des Geisterkapitäns.", lore: "Die Kleine ist krank. Malakor läuft jeden Hafen an, holt jeden Heiler. Keiner kann helfen." },
+    Item { key: "log3", name: "Logbuch, Seite 3", rarity: Rarity::Rare, desc: "Eine Seite aus dem Logbuch des Geisterkapitäns.", lore: "Sie ist tot. Seit drei Tagen sitzt der Kapitän am Heck und starrt auf das Spiegelbild des Mondes." },
+    Item { key: "log4", name: "Logbuch, Seite 4", rarity: Rarity::Rare, desc: "Eine Seite aus dem Logbuch des Geisterkapitäns.", lore: "Heute Nacht kam die Letzte Flut, um das Kind zu holen. Der Kapitän sprang mit einem Netz ins Wasser." },
+    Item { key: "log5", name: "Logbuch, Seite 5", rarity: Rarity::Rare, desc: "Eine Seite aus dem Logbuch des Geisterkapitäns.", lore: "Er hat den Mond gefangen. Das Spiegelbild zappelt in Ketten im Laderaum. Seitdem bewegt sich das Meer nicht mehr." },
+    Item { key: "log6", name: "Logbuch, Seite 6", rarity: Rarity::Rare, desc: "Eine Seite aus dem Logbuch des Geisterkapitäns.", lore: "Die Mannschaft ertrinkt, einer nach dem anderen – und kommt zurück. Der Kapitän nennt es Treue. Ich nenne es Fluch." },
+    Item { key: "log7", name: "Logbuch, Seite 7", rarity: Rarity::Rare, desc: "Eine Seite aus dem Logbuch des Geisterkapitäns.", lore: "Er bietet den Königen Handel an: das Nicht-Ertrinken gegen ihr Liebstes. Brandvogt hat eingeschlagen. Die anderen folgen." },
+    Item { key: "log8", name: "Logbuch, Seite 8", rarity: Rarity::Rare, desc: "Eine Seite aus dem Logbuch des Geisterkapitäns.", lore: "Ich verlasse das Schiff und nehme sein erstes Modell mit, das Flaschenschiff. Wer es ins Meer wirft, ruft ein Schiff aus der Tiefe." },
 ];
 pub fn item(k: &str) -> &'static Item {
     ITEMS.iter().find(|i| i.key == k).unwrap_or(&ITEMS[0])
@@ -185,6 +194,8 @@ pub fn enemies() -> Vec<EnemyDef> {
     use Body::*;
     vec![
         en("skeleton", "Ertrunkener Matrose", 60.0, 16.0, 38.0, 110.0, 22.0, 0.5, 0.6, 60.0, Sheet("skeleton"), 20.0),
+        // das eigene Spiegelbild aus dem Bilderbogen der Spielfigur (`refresh_player`), hält die Perlen des alten Flecks
+        en("revenant", "Dein Wiedergänger", 240.0, 24.0, 42.0, 170.0, 26.0, 0.42, 0.5, 0.0, Sheet("revenant"), 45.0),
         // aufgebrachter Mob einer feindlichen Siedlung
         en("mobA", "Aufgebrachter Dorfbewohner", 70.0, 11.0, 40.0, 150.0, 22.0, 0.55, 0.7, 25.0, Sheet("mobA"), 14.0),
         en("mobB", "Aufgebrachter Dorfbewohner", 64.0, 13.0, 38.0, 150.0, 26.0, 0.6, 0.7, 25.0, Sheet("mobB"), 12.0),
@@ -491,6 +502,10 @@ pub struct Save {
     /// Versalzung: jeder Tod lagert Salz ein (je −5 % Leben, höchstens 5); ein Königs- oder Seeboss-Sieg spült es fort
     #[serde(default)]
     pub salt: i32,
+    /// Wiedergänger: stirbt man, bevor man den Perlenfleck zurückgeholt hat, steht der alte Leichnam
+    /// dort als Gegner wieder auf und hält dessen Perlen fest
+    #[serde(default)]
+    pub revenant: Option<Stain>,
     #[serde(default)]
     pub play_time: f64,
     #[serde(default)]
@@ -650,6 +665,7 @@ pub fn new_save(name: &str, look: LookIdx, origin: &str, gift: &str, now: f64) -
         chart: vec![],
         deaths: 0,
         salt: 0,
+        revenant: None,
         play_time: 0.0,
         created_at: now,
     }

@@ -167,6 +167,11 @@ impl Look {
         self.zoom_t = self.zoom_t.max(hold);
     }
 
+    /// unter Dach (Innenräume): kein Wetter
+    pub fn is_indoor(&self) -> bool {
+        self.indoor
+    }
+
     /// in die Shader-Konstanten schreiben
     pub fn apply(&self, g: &mut Globals, e: &Env, low_hp: f32, ink: f32, player: (f32, f32), fx_high: bool) {
         g.fx0 = [if self.impact > 0.0 { 1.0 } else { 0.0 }, low_hp, ink, self.bars];

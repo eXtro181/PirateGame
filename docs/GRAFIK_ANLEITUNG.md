@@ -1216,6 +1216,9 @@ Hash über zurückgefaltete Zellen (`c mod 256`), sonst verliert der Sinus bei g
 
 **Farbige Schatten** (`fs_light`, FullHD): `li × mix(1, clamp(Umgebung/luma(Umgebung), 0,6, 1,6), (1 − sh)·smoothstep(0, 0,3, n·l)·0,4)`.
 
+**Lichtschächte** (`light_rays`): Strahlstärke × `0,25 + 0,9·smoothstep(0,04, 0,3, Ø luma)`, Ø aus 6 Abtastungen der Szene im Abstand
+von 14 Weltpixeln in Sonnenrichtung (auf dem Bildschirm). Wo Kronen und Dächer das Licht verdecken, bleiben Bahnen im Dunst dunkel.
+
 **Prüfen**: `tools/dev/shot` mit den Zonen `start=kueste|hain|raben|frost|asche|mangroven`, dazu `&sail`, `&prolog&pos=dorf`, `&pos=mid12`, `&day=0.5`.
 
 ---

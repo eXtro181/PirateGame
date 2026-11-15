@@ -277,6 +277,16 @@ pub fn dialog_for(g: &mut Game, ni: usize) -> Script {
             choices: [
                 vec![ch("Stufe aufsteigen", Cmd::LevelMenu)],
                 if s.end_won { vec![ch(&crate::game::ng_label(s.ng + 1), Cmd::NewGamePlus)] } else { vec![] },
+                // wer sie ist, verrät sie nach und nach (Malakors ertrunkene Tochter)
+                vec![ch("Über dich", Cmd::TalkPages(pages(if s.end_won {
+                    &["Er wollte mich halten. Du hast mich gehen lassen.", "Doch ich bleibe beim Feuer, bis der letzte Ertrunkene heimgekehrt ist. Das bin ich ihm schuldig – und dir."]
+                } else if missing == 0 {
+                    &["Du hast es erraten, nicht wahr? Malakor ist mein Vater.", "Als die Letzte Flut kam, um mich zu holen, fischte er das Spiegelbild des Mondes aus dem Wasser. Kein Mond, keine Flut – kein Abschied.", "Er hat die ganze See angehalten, damit ich bleibe. Fahr zu ihm. Sag ihm, dass ich keine Angst mehr habe."]
+                } else if missing <= 2 {
+                    &["Als ich ertrank, sang mir mein Vater ein Lied. Ich höre es manchmal, wenn der Strudel unruhig ist.", "Er war Kapitän. Sein Schiff war schwarz, und es flog über das Wasser, als hätte es Angst, es zu berühren."]
+                } else {
+                    &["Ich? Ich hüte das Feuer. Länger, als die Festung steht.", "Mein Vater sagte immer: Wer das Licht hält, muss nie hinüber. Er hat sich geirrt."]
+                })))],
                 vec![ch("Über das Säbelfeuer", Cmd::TalkPages(pages(&["Das Feuer brennt auf den Klingen aller Kapitäne, die hier fielen. Es verlöscht nie ganz.", "Solange es brennt, kehrst du zurück. Wie wir alle. Das ist der Fluch der Glutwacht – und ihr Trost."]))),
                     ch("Über die Letzte Flut", Cmd::TalkPages(pages(&["Früher kam sie in jeder hundertsten Nacht: die Letzte Flut. Sie stieg leise, trug die Ertrunkenen hinüber und sank wieder.", "Dann stahl Malakor das Spiegelbild des Mondes, und die See hielt den Atem an. Keine Ebbe, keine Flut. Seitdem kehren wir zurück, immer wieder – weil uns nichts mehr fortträgt."]))),
                 bye],

@@ -846,6 +846,11 @@ impl Game {
     pub fn spawn_all(&mut self, art: &Art) {
         let spawns = self.world.spawns.clone();
         self.enemies = spawns.iter().map(|s| self.make_enemy(s, art)).collect();
+        if let Some(r) = self.save.revenant.clone().filter(|_| !self.save.prolog) {
+            let sp = Spawn { kind: "revenant", x: r.x, y: r.y, elite: false, lvl: 0 };
+            let e = self.make_enemy(&sp, art);
+            self.enemies.push(e);
+        }
         // feindliche Siedlungen: der Mob kehrt mit allen Gegnern zurück
         self.sync_hostile(art);
         self.spawn_sea();
@@ -1833,6 +1838,10 @@ impl Game {
         let (x, y) = (self.player.a.x, self.player.a.y);
         let safe = if !self.world.blocked(x, y, 4.0, false, None) && self.world.g((x / TS as f32) as i32, (y / TS as f32) as i32) != Mat::Abyss { (x, y) } else { self.last_safe };
         if self.save.inf_pearls.is_none() && !self.save.prolog {
+            // der alte Fleck war noch nicht geholt: der alte Leichnam steht als Wiedergänger auf
+            if let Some(old) = self.save.stain.take().filter(|o| o.pearls > 0) {
+                self.save.revenant = Some(old);
+            }
             self.save.stain = if self.save.pearls > 0 { Some(Stain { x: safe.0, y: safe.1, pearls: self.save.pearls }) } else { None };
             self.save.pearls = 0;
             self.pearl_shown = 0.0;
