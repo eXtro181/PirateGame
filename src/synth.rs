@@ -163,6 +163,16 @@ pub enum Inst {
     Timpani,
     /// Becken
     Crash,
+    /// Männerchor „Oh“ (dunkle Formanten)
+    ChoirLo,
+    /// Orgel (Pfeifenreihen)
+    Organ,
+    /// tiefe Blechbläser
+    Brass,
+    /// große Trommel
+    Boom,
+    /// Tremolo-Streicher
+    Trem,
 }
 #[derive(Clone, Copy)]
 pub struct Ev {
@@ -264,6 +274,7 @@ fn tch(c: &str) -> (&'static str, &'static str, &'static str) {
         "A" => ("A1", "A2+C#3+E3", "A3+C#4+E4"),
         "C" => ("C2", "C3+E3+G3", "C4+E4+G4"),
         "F" => ("F2", "F2+A2+C3", "F3+A3+C4"),
+        "Eb" => ("D#2", "D#3+G3+A#3", "D#4+G4+A#4"),
         _ => ("D2", "D3+F3+A3", "D4+F4+A4"),
     }
 }
@@ -274,106 +285,151 @@ fn tch(c: &str) -> (&'static str, &'static str, &'static str) {
 pub fn song(name: &str) -> Option<Song> {
     use Inst::*;
     let s = match name {
-        // Titel „Thron der Ertrunkenen“ (20.11.): ein ganzes Lied von knapp drei Minuten in d-Moll, 72 Schläge.
-        // Vorspiel (Harfe, Streicher, Ruf der Blechflöte, Chor) – Strophe (Cello) – Strophe (Geige, Gegenstimme,
-        // treibende Streicher) – Refrain (Hörner, Geige, Chor, Pauken, Becken) – Zwischenspiel in F (Akkordeon,
-        // Paukenwirbel) – großer Refrain (alle, Blechflöte oben) – Ausklang (Cello allein, Glocke).
+        // Titel „Thron der Ertrunkenen“ (20.11.): episch und düster, d-Moll mit phrygischem Es-Dur, 60 Schläge.
+        // Totenglocken und Orgelbordun, eine einsame Stimme – Aufbau: Männerchor skandiert, Tremolo-Streicher,
+        // Pauken wie Herzschlag, tiefes Blech – Hauptthema: der ganze Chor mit Blech, Orgel und großen Trommeln –
+        // Einbruch: Cello allein, Glocken, Paukenwirbel – Höhepunkt: Blechfanfare über skandierendem Chor –
+        // gewaltige Schlussakkorde, ein letzter Schlag, Stille – Ausklang mit Glocke und Stimme.
         "titel" => {
-            let theme_a = "D4:3 E4:1 F4:2 A4:2 | G4:3 F4:1 E4:2 C4:2 | D4:3 C4:1 A#3:2 D4:2 | A3:6 C#4:2 | D4:3 E4:1 F4:2 A4:2 | C5:3 A#4:1 A4:2 F4:2 | G4:2 A#4:2 A4:2 G4:2 | A4:6 R:2";
-            let theme_b = "A4:2 D5:4 E5:2 | F5:3 E5:1 D5:2 A#4:2 | C5:2 F5:4 G5:2 | E5:6 R:2 | D5:2 G5:4 F5:2 | F5:3 E5:1 D5:2 F5:2 | E5:2 C#5:2 A4:2 C#5:2 | D5:4 C#5:4";
-            let theme_b2 = theme_b.replace("| D5:4 C#5:4", "| D5:8");
-            let bridge = "A4:4 C5:2 A4:2 | G4:4 E4:2 G4:2 | F4:3 G4:1 A4:2 D5:2 | D5:6 R:2 | C5:4 A4:2 F4:2 | E4:2 G4:2 C5:4 | A#4:3 A4:1 G4:2 D4:2 | E4:4 C#4:4";
-            let call = "D5:3 E5:1 F5:4 | D5:4 A#4:4 | G4:3 A4:1 A#4:2 D5:2 | C#5:8";
-            let counter = "F3:8 | E3:8 | D3:8 | C#3:8 | D3:4 F3:4 | A3:4 C4:4 | A#3:4 G3:4 | A3:4 E3:4";
-            let coda = "D4:3 E4:1 F4:2 A4:2 | G4:3 F4:1 E4:2 D4:2 | C#4:4 E4:4 | D4:8";
-            let (v1, v2, c1, br, c2, ou) = (64.0, 128.0, 192.0, 256.0, 320.0, 384.0);
-            let mut ev = sq("D2+A2:64", Pad, 0.12, 0.0);
-            ev.extend(sq(call, Whistle, 0.2, 32.0));
-            ev.extend(sq(&oct(theme_a, -1), Cello, 0.8, v1));
-            ev.extend(sq(theme_a, Fiddle, 0.4, v2));
-            ev.extend(sq(counter, Cello, 0.55, v2));
-            ev.extend(sq(&oct(theme_b, -1), Horn, 0.55, c1));
-            ev.extend(sq(theme_b, Fiddle, 0.42, c1));
-            ev.extend(sq(bridge, AccordionSolo, 0.3, br));
-            ev.extend(sq(&oct(&theme_b2, -1), Horn, 0.6, c2));
-            ev.extend(sq(&theme_b2, Fiddle, 0.45, c2));
-            ev.extend(sq(&theme_b2, Whistle, 0.17, c2));
-            ev.extend(sq(&oct(&theme_b2, -2), Cello, 0.45, c2));
-            ev.extend(sq(coda, Cello, 0.7, ou));
+            let theme = "D4:4 A4:4 | A#4:4 A4:2 G4:2 | G4:4 F4:2 D#4:2 | D4:8 | D4:4 A4:4 | A#4:4 C5:2 D5:2 | D#5:4 D5:2 A#4:2 | A4:8";
+            let lament = "R:8 | A4:4 D5:4 | C5:2 A#4:2 F4:4 | D5:4 A#4:4 | G4:4 F4:2 D#4:2 | E4:4 C#4:4";
+            let solo = "A#3:4 D4:4 | D4:4 A#3:2 G3:2 | G3:4 F3:2 D#3:2 | E3:8";
+            let fanfare = "D4:3 D4:1 F4:2 A4:2 | G4:3 G4:1 E4:2 C4:2 | F4:3 F4:1 D4:2 A#3:2 | A3:2 C#4:2 E4:2 A4:2 | A#4:3 A4:1 G4:2 D5:2 | D#5:4 D5:2 C5:2 | D5:3 C5:1 A#4:2 A4:2 | A4:4 C#5:4";
+            let coda = "A4:4 D5:4 | C5:4 A#4:4 | A#4:4 F4:4 | E4:8 | D4:8";
+            let bt = |bar: f32| bar * 8.0;
+            let mut ev = sq(lament, Choir, 0.3, 0.0);
+            ev.extend(sq(theme, Choir, 0.5, bt(14.0)));
+            ev.extend(sq(&oct(theme, -1), ChoirLo, 0.55, bt(14.0)));
+            ev.extend(sq(&oct(theme, -1), Brass, 0.45, bt(14.0)));
+            ev.extend(sq(solo, Cello, 0.75, bt(22.0)));
+            ev.extend(sq(fanfare, Brass, 0.6, bt(26.0)));
+            ev.extend(sq(&oct(fanfare, 1), Horn, 0.4, bt(26.0)));
+            ev.extend(sq(coda, Choir, 0.26, bt(38.0)));
+            ev.extend(sq("D1+A1:48", Organ, 0.35, 0.0));
+            ev.extend(sq("D1+A1:48", Organ, 0.3, bt(38.0)));
+            // Totenglocken
+            for bar in [0.0f32, 2.0, 4.0, 22.0, 23.0, 24.0, 25.0, 38.0, 40.0, 42.0] {
+                ev.push(Ev { t: bt(bar), dur: 8.0, inst: Bell, f: freq(if bar % 2.0 == 0.0 { "D4" } else { "A3" }), vel: 0.35 });
+            }
             let parts: [(u8, &[&str]); 7] = [
-                (0, &["Dm", "Bb", "Gm", "A", "Dm", "Bb", "Gm", "A"]),
-                (1, &["Dm", "C", "Bb", "A", "Dm", "F", "Gm", "A"]),
-                (2, &["Dm", "C", "Bb", "A", "Dm", "F", "Gm", "A"]),
-                (3, &["Dm", "Bb", "F", "C", "Gm", "Bb", "A", "A"]),
-                (4, &["F", "C", "Dm", "Bb", "F", "C", "Gm", "A"]),
-                (5, &["Dm", "Bb", "F", "C", "Gm", "Bb", "A", "Dm"]),
-                (6, &["Dm", "Bb", "A", "Dm"]),
+                (0, &["Dm", "Dm", "Bb", "Bb", "Eb", "A"]),
+                (1, &["Dm", "Bb", "Eb", "Dm", "Dm", "Gm", "Eb", "A"]),
+                (2, &["Dm", "Bb", "Eb", "Dm", "Dm", "Gm", "Eb", "A"]),
+                (3, &["Bb", "Gm", "Eb", "A"]),
+                (4, &["Dm", "C", "Bb", "A", "Gm", "Eb", "Dm", "A"]),
+                (5, &["Dm", "Bb", "Eb", "Dm"]),
+                (6, &["Dm", "Dm", "Bb", "A", "Dm", "Dm"]),
             ];
             let bars: Vec<(u8, &str)> = parts.iter().flat_map(|(s, l)| l.iter().map(move |c| (*s, *c))).collect();
             let timp = |t: f32, n: &str, v: f32| Ev { t, dur: 1.0, inst: Timpani, f: freq(n), vel: v };
+            let boom = |t: f32, v: f32| Ev { t, dur: 1.0, inst: Boom, f: 46.0, vel: v };
+            let crash = |t: f32, v: f32| Ev { t, dur: 1.0, inst: Crash, f: 0.0, vel: v };
+            let chant = |t: f32, m: &[&str], pat: [usize; 8], v: f32| -> Vec<Ev> {
+                pat.iter().enumerate().map(|(k, &p)| Ev { t: t + k as f32, dur: 0.9, inst: ChoirLo, f: freq(&oct(m[p], -1)), vel: v }).collect()
+            };
             for (i, &(sec, c)) in bars.iter().enumerate() {
-                let t = i as f32 * 8.0;
+                let t = bt(i as f32);
                 let (lo, mid, hi) = tch(c);
-                let notes: Vec<&str> = mid.split('+').collect();
-                let big = sec == 3 || sec == 5;
-                let tune = if matches!(c, "A" | "C" | "Gm") { "A1" } else { "D2" };
-                if !big {
-                    ev.extend(arp(hi, 8.0, if sec == 6 { 2.0 } else { 1.0 }, t, if sec == 0 { 0.26 } else { 0.32 }));
-                }
-                // Streicher: getragen, ab der zweiten Strophe als treibende Achtel
-                if sec == 2 || big {
-                    for (k, &p) in [0usize, 2, 1, 2, 0, 2, 1, 2].iter().enumerate() {
-                        ev.push(Ev { t: t + k as f32, dur: 0.85, inst: Strings, f: freq(notes[p]), vel: if big { 0.34 } else { 0.24 } });
-                    }
-                    ev.extend(sq(&format!("{hi}:8"), Strings, if big { 0.26 } else { 0.16 }, t));
-                } else {
-                    let fade = if sec == 6 { 1.0 - (i as f32 - 48.0) * 0.2 } else { 1.0 };
-                    ev.extend(sq(&format!("{mid}:8"), Strings, 0.24 * fade, t));
-                }
-                if (sec == 0 && i >= 4) || sec == 2 || big || (sec == 4 && i >= 36) || i == 51 {
-                    ev.extend(sq(&format!("{hi}:8"), Choir, if big { 0.45 } else { 0.28 }, t));
-                }
-                // Bass: tiefes Cello und gezupfter Bass
-                if (1..6).contains(&sec) {
-                    ev.extend(sq(&format!("{}:8", oct(lo, 1)), Cello, if big { 0.42 } else { 0.28 }, t));
-                    let b = oct(lo, 1);
-                    let pat = if big || sec == 2 { format!("{b}:2 R:1 {b}:1 {b}:2 R:1 {b}:1") } else { format!("{b}:4 R:4") };
-                    ev.extend(sq(&pat, Bass, 0.45, t));
-                }
-                // Pauken, kleine Trommel, Becken
+                let m: Vec<&str> = mid.split('+').collect();
+                let tune = match c {
+                    "A" | "C" => "A1",
+                    "Gm" => "G1",
+                    "Eb" => "D#2",
+                    "Bb" => "A#1",
+                    _ => "D2",
+                };
+                let bass = oct(lo, 1);
                 match sec {
-                    0 if i == 4 => ev.push(timp(t, "D2", 0.5)),
-                    1 if i % 2 == 0 => ev.push(timp(t, tune, 0.42)),
-                    2 => {
-                        ev.extend([timp(t, tune, 0.45), timp(t + 4.0, tune, 0.32), tick(t + 2.0, 0.1), tick(t + 6.0, 0.1)]);
-                    }
-                    3 | 5 => {
-                        let k = if sec == 5 { 1.15 } else { 1.0 };
-                        ev.extend([timp(t, tune, 0.6 * k), timp(t + 4.0, tune, 0.45 * k), tick(t + 2.0, 0.22 * k), tick(t + 6.0, 0.22 * k)]);
-                        if i % 4 == 3 {
-                            for (j, d) in [6.0f32, 6.5, 7.0, 7.5].iter().enumerate() {
-                                ev.push(timp(t + d, tune, (0.3 + j as f32 * 0.1) * k));
+                    0 => {
+                        if i >= 2 {
+                            ev.extend(sq(&format!("{}:8", oct(mid, -1)), Trem, 0.12 + 0.03 * (i as f32 - 2.0), t));
+                        }
+                        if i == 5 {
+                            for j in 0..16 {
+                                ev.push(timp(t + j as f32 * 0.5, "A1", 0.1 + j as f32 * 0.03));
                             }
                         }
-                        if i % 4 == 0 {
-                            ev.push(Ev { t, dur: 1.0, inst: Crash, f: 0.0, vel: if i % 8 == 0 { 0.6 * k } else { 0.35 * k } });
+                    }
+                    1 => {
+                        // Aufbau: der Männerchor skandiert, alles wächst
+                        let g = (i as f32 - 6.0) / 7.0;
+                        ev.extend(chant(t, &m, [0, 0, 2, 0, 1, 2, 0, 2], 0.25 + 0.2 * g));
+                        ev.extend(sq(&format!("{hi}:8"), Trem, 0.14 + 0.14 * g, t));
+                        ev.extend([timp(t, tune, 0.3 + 0.25 * g), timp(t + 4.0, tune, 0.25 + 0.2 * g)]);
+                        ev.extend(sq(&format!("{bass}:8"), Cello, 0.35, t));
+                        if i % 2 == 0 {
+                            ev.extend(sq(&format!("{}:8", oct(mid, -1)), Brass, 0.3 + 0.2 * g, t));
+                        }
+                        if i >= 10 {
+                            ev.extend(sq(&format!("{mid}:8"), Organ, 0.25, t));
+                        }
+                        if i == 13 {
+                            for j in 0..8 {
+                                ev.push(boom(t + 4.0 + j as f32 * 0.5, 0.25 + j as f32 * 0.07));
+                            }
                         }
                     }
-                    4 if i >= 38 => {
-                        // Paukenwirbel, der zum großen Refrain anschwillt
-                        for j in 0..16 {
-                            let r = ((i - 38) * 16 + j) as f32 / 32.0;
-                            ev.push(timp(t + j as f32 * 0.5, "A1", 0.12 + 0.5 * r));
+                    2 | 4 => {
+                        // volles Orchester: Hauptthema bzw. Höhepunkt
+                        let s0 = if sec == 2 { 14 } else { 26 };
+                        let k = if sec == 4 { 1.1 } else { 1.0 };
+                        for (j, &p) in [0usize, 2, 1, 2, 0, 2, 1, 2].iter().enumerate() {
+                            ev.push(Ev { t: t + j as f32, dur: 0.85, inst: Strings, f: freq(&oct(m[p], 1)), vel: 0.3 * k });
+                        }
+                        ev.extend(sq(&format!("{mid}:8"), Organ, 0.3 * k, t));
+                        ev.extend(sq(&format!("{bass}:8"), Cello, 0.45, t));
+                        ev.extend(sq(&format!("{bass}:2 R:2 {bass}:2 R:2"), Bass, 0.5, t));
+                        for j in 0..4 {
+                            ev.push(boom(t + j as f32 * 2.0, if j % 2 == 0 { 0.6 * k } else { 0.4 * k }));
+                        }
+                        ev.extend([timp(t, tune, 0.5 * k), timp(t + 4.0, tune, 0.4 * k)]);
+                        if (i - s0) % 2 == 0 {
+                            ev.push(crash(t, 0.45 * k));
+                        }
+                        if (i - s0) % 4 == 3 {
+                            for (j, d) in [6.0f32, 6.5, 7.0, 7.5].iter().enumerate() {
+                                ev.push(boom(t + d, (0.35 + j as f32 * 0.1) * k));
+                            }
+                        }
+                        if sec == 4 {
+                            ev.extend(sq(&format!("{hi}:8"), Choir, 0.45, t));
+                            ev.extend(chant(t, &m, [0, 0, 2, 0, 0, 0, 2, 1], 0.45));
                         }
                     }
-                    6 if i == 48 => ev.push(timp(t, "D2", 0.4)),
-                    _ => {}
+                    3 => {
+                        // Einbruch: plötzlich leise
+                        ev.extend(sq(&format!("{hi}:8"), Choir, 0.16, t));
+                        ev.extend(sq(&format!("{}:8", oct(mid, -1)), Trem, 0.1, t));
+                        if i == 25 {
+                            for j in 0..16 {
+                                ev.push(timp(t + j as f32 * 0.5, "A1", 0.1 + 0.045 * j as f32));
+                            }
+                            ev.extend([boom(t + 6.0, 0.4), boom(t + 7.0, 0.55), boom(t + 7.5, 0.7)]);
+                        }
+                    }
+                    5 => {
+                        // gewaltige Schlussakkorde, zuletzt ein Schlag und Stille
+                        let last = i == 37;
+                        let d = if last { 3 } else { 8 };
+                        ev.extend(sq(&format!("{hi}:{d}"), Choir, 0.55, t));
+                        ev.extend(sq(&format!("{}:{d}", oct(mid, -1)), ChoirLo, 0.55, t));
+                        ev.extend(sq(&format!("{}:{d}", oct(mid, -1)), Brass, 0.55, t));
+                        ev.extend(sq(&format!("{mid}:{d}"), Organ, 0.35, t));
+                        ev.extend(sq(&format!("{hi}:{d}"), Trem, 0.3, t));
+                        ev.extend(sq(&format!("{bass}:{d}"), Cello, 0.5, t));
+                        ev.extend([boom(t, 0.8), timp(t, tune, 0.7), crash(t, 0.6)]);
+                        if !last {
+                            for j in 0..8 {
+                                ev.push(timp(t + 4.0 + j as f32 * 0.5, tune, 0.2 + j as f32 * 0.05));
+                            }
+                        }
+                    }
+                    _ => {
+                        ev.extend(sq(&format!("{mid}:8"), Strings, 0.14 * (1.0 - (i as f32 - 38.0) / 6.0), t));
+                    }
                 }
             }
-            for (t, n, v) in [(0.0, "D5", 0.26), (32.0, "A4", 0.22), (v1, "D5", 0.24), (c1, "F5", 0.26), (br, "A4", 0.24), (c2, "D5", 0.3), (ou + 24.0, "D5", 0.26)] {
-                ev.push(Ev { t, dur: 6.0, inst: Bell, f: freq(n), vel: v });
-            }
-            Song { unit: 60.0 / 72.0 / 2.0, len: 416.0, events: ev, gain: 0.85 }
+            Song { unit: 60.0 / 60.0 / 2.0, len: 352.0, events: ev, gain: 0.85 }
         }
         // Strand der Ertränkten: Klagewalzer in a-Moll, Blechflöte und Akkordeon
         "salz" => {
@@ -549,8 +605,11 @@ pub fn render_event(buf: &mut [f32], e: &Ev, start: usize, dur: f32, rng: &mut R
         Harp => 1.6,
         Cello => 0.25,
         Pad => 0.1,
-        Strings => 0.3,
+        Strings | Trem => 0.3,
         Choir => 0.5,
+        ChoirLo => 0.6,
+        Organ => 0.4,
+        Brass => 0.2,
         Horn => 0.15,
         _ => 0.05,
     };
@@ -561,6 +620,7 @@ pub fn render_event(buf: &mut [f32], e: &Ev, start: usize, dur: f32, rng: &mut R
         Bell => (dur + 1.4).min(2.4),
         Harp => (dur + 1.6).min(2.6),
         Timpani => 1.5,
+        Boom => 2.2,
         Crash => 2.2,
         _ => dur + tail,
     };
@@ -687,7 +747,8 @@ pub fn render_event(buf: &mut [f32], e: &Ev, start: usize, dur: f32, rng: &mut R
                 add(buf, start + i, bp.run(rng.f()) * exp_decay(t, 0.18 * v, 0.03) * 2.0);
             }
         }
-        Strings => {
+        Strings | Trem => {
+            let trem = e.inst == Trem;
             let mut lp = Bq::new(Ft::Low, 1800.0, 0.7);
             let fs = [-11.0f32, -4.0, 4.0, 11.0].map(|c| f * 2f32.powf(c / 1200.0));
             let mut ph = [rng.u(), rng.u(), rng.u(), rng.u()];
@@ -701,6 +762,10 @@ pub fn render_event(buf: &mut [f32], e: &Ev, start: usize, dur: f32, rng: &mut R
                 if i % 8 == 0 {
                     vib = 1.0 + ((p0 + 5.5 * t) * std::f32::consts::TAU).sin() * 0.0035 * (t / 0.4).min(1.0);
                     g = env(t, a, 0.045 * v, dur + r * 0.5, r);
+                    if trem {
+                        // schnelles Hin- und Herstreichen
+                        g *= 0.55 + 0.45 * ((p0 * 3.0 + 12.5 * t) * std::f32::consts::TAU).sin().abs();
+                    }
                 }
                 let mut s = 0.0;
                 for k in 0..4 {
@@ -774,6 +839,84 @@ pub fn render_event(buf: &mut [f32], e: &Ev, start: usize, dur: f32, rng: &mut R
                 add(buf, start + i, (hp.run(x) * 0.6 + bp.run(x) * 0.5) * exp_decay(t, 0.12 * v, 2.0) * g);
             }
         }
+        ChoirLo => {
+            // Männerchor „Oh“: vier verstimmte Sägezähne durch dunkle Formanten
+            let (mut f1, mut f2, mut f3) = (Bq::new(Ft::Band, 460.0, 2.5), Bq::new(Ft::Band, 830.0, 3.5), Bq::new(Ft::Band, 2700.0, 6.0));
+            let fs = [0.992f32, 0.998, 1.003, 1.008].map(|k| f * k);
+            let mut ph = [rng.u(), rng.u(), rng.u(), rng.u()];
+            let a = (dur * 0.4).clamp(0.02, 0.5);
+            let p0 = rng.u();
+            let (mut vib, mut g) = (1.0f32, 0.0f32);
+            for i in 0..n {
+                let t = i as f32 * dt;
+                if i % 8 == 0 {
+                    vib = 1.0 + ((p0 + 4.2 * t) * std::f32::consts::TAU).sin() * 0.006 * (t / 0.7).min(1.0);
+                    g = env(t, a, 0.22 * v, dur + 0.5, 0.6);
+                }
+                let mut s = 0.0;
+                for k in 0..4 {
+                    ph[k] += fs[k] * vib * dt;
+                    s += osc(Wave::Saw, ph[k]);
+                }
+                add(buf, start + i, (f1.run(s) + f2.run(s) * 0.5 + f3.run(s) * 0.1) * g);
+            }
+        }
+        Organ => {
+            // Orgel: Unteroktave, Grundton, Oktave, Quinte, Doppeloktave als Dreiecke, sachtes Schweben
+            let parts = [(0.5f32, 0.45f32), (1.0, 1.0), (2.0, 0.55), (3.0, 0.3), (4.0, 0.22)];
+            let mut ph = [0.0f32; 5];
+            let mut lp = Bq::new(Ft::Low, 2600.0, 0.7);
+            let (mut g, mut tr) = (0.0f32, 1.0f32);
+            for i in 0..n {
+                let t = i as f32 * dt;
+                if i % 8 == 0 {
+                    g = env(t, 0.09, 0.05 * v, dur + 0.25, 0.45);
+                    tr = 1.0 + (t * 5.4 * std::f32::consts::TAU).sin() * 0.05;
+                }
+                let mut s = 0.0;
+                for k in 0..5 {
+                    ph[k] += f * parts[k].0 * dt;
+                    s += osc(Wave::Tri, ph[k]) * parts[k].1;
+                }
+                add(buf, start + i, lp.run(s) * g * tr);
+            }
+        }
+        Brass => {
+            // tiefe Blechbläser: drei Sägezähne, der Filter reißt beim Einsatz auf
+            let mut lp = Bq::new(Ft::Low, 300.0, 1.1);
+            let fs = [0.997f32, 1.0, 1.004].map(|k| f * k);
+            let mut ph = [rng.u(), rng.u(), rng.u()];
+            let a = (dur * 0.3).clamp(0.02, 0.14);
+            let mut g = 0.0f32;
+            for i in 0..n {
+                let t = i as f32 * dt;
+                if i % 16 == 0 {
+                    let cut = 300.0 + 1900.0 * (t / 0.25).min(1.0) - 700.0 * ((t - 0.25).max(0.0) / 0.8).min(1.0);
+                    lp.set(Ft::Low, cut.min(f * 9.0 + 200.0), 1.1);
+                    g = env(t, a, 0.1 * v, dur + 0.15, 0.25);
+                }
+                let mut s = 0.0;
+                for k in 0..3 {
+                    ph[k] += fs[k] * dt;
+                    s += osc(Wave::Saw, ph[k]);
+                }
+                add(buf, start + i, lp.run(s) * g);
+            }
+        }
+        Boom => {
+            // große Trommel: tiefer Schlag mit fallender Tonhöhe, Rauschstoß, langes Nachgrollen
+            let mut lp = Bq::new(Ft::Low, 220.0, 0.8);
+            let (mut p, mut q) = (0.0f32, 0.0f32);
+            for i in 0..n {
+                let t = i as f32 * dt;
+                let fr = f * (1.0 + 1.4 * (-t * 25.0).exp());
+                p += fr * dt;
+                q += fr * 0.5 * dt;
+                let g = if t < 0.002 { t / 0.002 } else { 1.0 };
+                let s = osc(Wave::Sine, p) * exp_decay(t, 0.6 * v, 1.4) + osc(Wave::Sine, q) * exp_decay(t, 0.3 * v, 1.8) + lp.run(rng.f()) * exp_decay(t, 0.5 * v, 0.12) * 2.0;
+                add(buf, start + i, s * g);
+            }
+        }
         Bell => {
             let parts = [(1.0, 1.0), (2.76, 0.35), (5.4, 0.12)];
             let mut ph = [0.0f32; 3];
@@ -818,7 +961,7 @@ impl Verb {
         for (line, j, lp) in self.combs.iter_mut() {
             let y = line[*j];
             *lp = y * 0.62 + *lp * 0.38;
-            line[*j] = x + *lp * 0.84;
+            line[*j] = x + *lp * 0.86;
             *j = (*j + 1) % line.len();
             wet += y;
         }
@@ -830,7 +973,7 @@ impl Verb {
             *j = (*j + 1) % line.len();
             o = out;
         }
-        x * 0.85 + o * 0.42
+        x * 0.8 + o * 0.55
     }
 }
 /// sanfter Begrenzer: bis 0,7 unverändert, darüber weich gesättigt
