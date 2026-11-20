@@ -1357,11 +1357,9 @@ fn bokeh_dust(uv: vec2<f32>) -> f32 {
     return dust;
 }
 
-// ---------------------------------------------------------------- Titelbild (Runde 14)
-// Sturmnacht auf hoher See, in voller Auflösung aus Formeln (keine Pixelgrafik): ziehende
-// Wolkendecke, Mond mit Hof, Blitze, perspektivische See mit Dünung, Mondpfad und Schaum, eine
-// schwarze Galeone mit zerfetzten Segeln und Laternen, dahinter der Kopf eines Riesenkraken mit
-// glühenden Augen, seine Arme steigen um das Schiff aus dem Wasser; Regen davor.
+// ---------------------------------------------------------------- Titelbild
+// in voller Auflösung aus Formeln (keine Pixelgrafik): Wolken, Mond, Blitze, perspektivische See mit
+// Dünung und Schaum; die Szene „Thron der Ertrunkenen“ steht in `title_scene`.
 // G.fx6.y = 1 schaltet das Titelbild ein, G.fx6.z = Zeit (s).
 
 fn tn(p: vec2<f32>) -> vec4<f32> {
@@ -1507,34 +1505,119 @@ fn shade_tentacle(col: vec3<f32>, tc: vec3<f32>, w: f32, lit: f32, fl: f32) -> v
     return mix(col, skin, c);
 }
 
+// ---- Titelbild „Thron der Ertrunkenen“ (20.11.): Regennacht. Der Mond steht rechts oben, doch auf dem Wasser
+// liegt kein Mondpfad – Malakor hält sein Spiegelbild im Holländer gefangen. Links die Galgenfeste auf ihrer Klippe,
+// in der Mitte der leere Knochenthron auf einem Felsen mit schwebender Krone, Arme aus der Tiefe, rechts der
+// Holländer mit dem gefesselten Mondlicht, Krakenaugen im Wasser, vorn treibende Särge.
+fn box_d(p: vec2<f32>, c: vec2<f32>, h: vec2<f32>) -> f32 {
+    let d = abs(p - c) - h;
+    return max(d.x, d.y);
+}
+// Zacke: Grundlinie y = b (halbe Breite bw), Spitze bei y = tip
+fn spike_d(p: vec2<f32>, x: f32, b: f32, tip: f32, bw: f32) -> f32 {
+    return max(abs(p.x - x) - bw * clamp((tip - p.y) / (tip - b), 0.0, 1.0), max(p.y - tip, b - p.y));
+}
+// leerer Knochenthron (Sitzfläche y = 0, Mitte x = 0) mit Stufen, Armlehnen, Zackenlehne und Schwert im Fels
+fn throne_d(p: vec2<f32>) -> f32 {
+    var d = box_d(p, vec2<f32>(0.0, -0.012), vec2<f32>(0.042, 0.012));
+    d = min(d, box_d(p, vec2<f32>(0.0, -0.04), vec2<f32>(0.034, 0.02)));
+    d = min(d, box_d(p, vec2<f32>(0.0, -0.066), vec2<f32>(0.06, 0.008)));
+    d = min(d, box_d(p, vec2<f32>(0.0, -0.081), vec2<f32>(0.084, 0.008)));
+    d = min(d, box_d(p, vec2<f32>(0.0, 0.088), vec2<f32>(0.038, 0.088)));
+    for (var i = 0; i < 5; i = i + 1) {
+        let k = f32(i - 2);
+        d = min(d, spike_d(p, k * 0.0165, 0.17, 0.2 + (2.0 - abs(k)) * 0.019, 0.0095));
+    }
+    for (var s = 0; s < 2; s = s + 1) {
+        let sx = select(-0.052, 0.052, s == 1);
+        d = min(d, box_d(p, vec2<f32>(sx, 0.014), vec2<f32>(0.009, 0.026)));
+        d = min(d, length(p - vec2<f32>(sx, 0.05)) - 0.012);
+    }
+    d = min(d, box_d(p, vec2<f32>(0.11, -0.05), vec2<f32>(0.0024, 0.042)));
+    d = min(d, box_d(p, vec2<f32>(0.11, -0.012), vec2<f32>(0.013, 0.0026)));
+    d = min(d, length(p - vec2<f32>(0.11, -0.003)) - 0.005);
+    return d;
+}
+fn crown_d(p: vec2<f32>) -> f32 {
+    var d = box_d(p, vec2<f32>(0.0, 0.0), vec2<f32>(0.021, 0.0055));
+    for (var i = 0; i < 3; i = i + 1) {
+        let k = f32(i - 1);
+        d = min(d, spike_d(p, k * 0.015, 0.004, 0.022 - abs(k) * 0.006, 0.0062));
+    }
+    return d;
+}
+// Sarg von oben, flach geneigt (Kopfende links, Länge −1 … 1)
+fn coffin_d(p: vec2<f32>) -> f32 {
+    let w = select(mix(0.5, 0.28, (p.x + 0.6) / 1.6), mix(0.32, 0.5, (p.x + 1.0) / 0.4), p.x < -0.6);
+    return max(abs(p.y) - w, abs(p.x) - 1.0);
+}
+fn cliff_top(x: f32, hz: f32) -> f32 {
+    return mix(hz + 0.11 + 0.02 * sin(x * 9.0 + 1.3) + 0.008 * sin(x * 31.0), hz - 0.012, smoothstep(-0.48, -0.29, x));
+}
+// Galgenfeste auf der Klippe (links): Deckung
+fn fort_cov(q: vec2<f32>, hz: f32, pw: f32, t: f32) -> f32 {
+    if (q.x > -0.27) {
+        return 0.0;
+    }
+    var m = cov(q.y - cliff_top(q.x, hz), pw) * step(hz - 0.012, q.y);
+    let base = hz + 0.1;
+    if (q.x > -0.9 && q.x < -0.47) {
+        let zin = 0.011 * step(0.5, fract(q.x * 75.0));
+        m = max(m, cov(max(q.y - (base + 0.058 + zin), base - 0.02 - q.y), pw));
+    }
+    var tw = array<vec3<f32>, 4>(vec3<f32>(-0.82, 0.16, 0.034), vec3<f32>(-0.69, 0.1, 0.026), vec3<f32>(-0.57, 0.135, 0.03), vec3<f32>(-0.5, 0.08, 0.022));
+    for (var i = 0; i < 4; i = i + 1) {
+        let w = tw[i];
+        let top = base + w.y;
+        m = max(m, cov(max(abs(q.x - w.x) - w.z, max(q.y - top, base - 0.02 - q.y)), pw));
+        if (i == 2) {
+            let zin = 0.012 * step(0.5, fract((q.x - w.x) * 90.0 + 0.25));
+            m = max(m, cov(max(abs(q.x - w.x) - w.z * 1.18, max(q.y - (top + 0.012 + zin), top - 0.004 - q.y)), pw));
+        } else {
+            m = max(m, cov(spike_d(q, w.x, top - 0.002, top + w.z * 2.4, w.z * 1.3), pw));
+        }
+    }
+    // Galgen an der Kante, der Käfig schwingt
+    let gx = -0.44;
+    let gb = cliff_top(gx, hz);
+    let sw = sin(t * 0.9) * 0.005;
+    m = max(m, cov(box_d(q, vec2<f32>(gx, gb + 0.045), vec2<f32>(0.0022, 0.045)), pw));
+    m = max(m, cov(box_d(q, vec2<f32>(gx + 0.022, gb + 0.089), vec2<f32>(0.024, 0.0022)), pw));
+    m = max(m, cov(box_d(q, vec2<f32>(gx + 0.042 + sw * 0.5, gb + 0.077), vec2<f32>(0.0007, 0.012)), pw));
+    m = max(m, cov(box_d(q, vec2<f32>(gx + 0.042 + sw, gb + 0.052), vec2<f32>(0.009, 0.014)), pw));
+    return clamp(m, 0.0, 1.0);
+}
+
 fn title_scene(uv: vec2<f32>) -> vec3<f32> {
     let res = G.screen.xy;
     let asp = res.x / res.y;
     let t = G.fx6.z;
-    // die Kamera schwebt sacht mit der Dünung
-    let cam = vec2<f32>(sin(t * 0.11) * 0.01, sin(t * 0.23) * 0.006);
+    let cam = vec2<f32>(sin(t * 0.09) * 0.008, sin(t * 0.21) * 0.005);
     let q = vec2<f32>((uv.x - 0.5) * asp, 0.5 - uv.y) + cam;
     let pw = 1.2 / res.y;
-    let hz = 0.06;
+    let hz = -0.08;
     let fl = t_flash(t);
     let fx = fl.y * asp * 0.45;
-    let moon = vec2<f32>(asp * 0.28, 0.34);
+    let moon = vec2<f32>(asp * 0.33, 0.31);
     let dm = length(q - moon);
+    let gx = asp * 0.3;
     var col = vec3<f32>(0.0);
     // ---- Himmel
     let hy = q.y - hz;
-    col = mix(vec3<f32>(0.055, 0.075, 0.095), vec3<f32>(0.005, 0.007, 0.018), smoothstep(-0.02, 0.45, hy));
-    col += vec3<f32>(0.5, 0.58, 0.66) * exp(-dm * 11.0) * 0.38 + vec3<f32>(0.14, 0.18, 0.24) * exp(-dm * 3.2) * 0.22;
-    col = mix(col, vec3<f32>(0.86, 0.9, 0.94) - vec3<f32>(0.1) * tn(q * 1.7).r, cov(dm - 0.036, pw));
+    col = mix(vec3<f32>(0.036, 0.05, 0.064), vec3<f32>(0.005, 0.007, 0.017), smoothstep(-0.02, 0.45, hy));
+    col += vec3<f32>(0.5, 0.58, 0.66) * exp(-dm * 9.0) * 0.4 + vec3<f32>(0.14, 0.18, 0.24) * exp(-dm * 2.6) * 0.25;
+    col = mix(col, vec3<f32>(0.84, 0.88, 0.9) - vec3<f32>(0.16) * tn((q - moon) * 9.0 + vec2<f32>(0.3, 0.1)).r, cov(dm - 0.052, pw));
     if (hy > -0.01) {
         let cz = 1.0 / (max(hy, 0.0) + 0.1);
         let cuv = vec2<f32>(q.x * cz * 0.1 + t * 0.011, cz * 0.055 - t * 0.0035);
         let n = tfbm(cuv);
         let dens = smoothstep(0.34, 0.74, n + 0.08 * sin(t * 0.07)) * smoothstep(-0.01, 0.05, hy);
-        let lit = exp(-dm * 3.5) * 0.9 + fl.x * 1.3 * exp(-abs(q.x - fx) * 1.8);
+        // Sterne in den Wolkenlücken
+        let st = step(0.9986, hash21(floor(q * 700.0))) * smoothstep(0.08, 0.35, hy) * (1.0 - smoothstep(0.0, 0.3, dens));
+        col += vec3<f32>(0.6, 0.66, 0.75) * st * (0.6 + 0.4 * sin(t * 3.0 + q.x * 500.0));
+        let lit = exp(-dm * 3.2) * 0.9 + fl.x * 1.3 * exp(-abs(q.x - fx) * 1.8);
         let ccol = mix(vec3<f32>(0.016, 0.02, 0.028), vec3<f32>(0.3, 0.34, 0.41), clamp(lit * (1.2 - n) * 0.9, 0.0, 1.0));
         col = mix(col, ccol, dens * 0.94);
-        // Blitzstrahl: zackig aus den Wolken bis zum Horizont
         if (fl.x > 0.04) {
             let k = floor(t / 7.0);
             let bx = fx + (tn(vec2<f32>(q.y * 2.3, k * 0.37)).r - 0.5) * 0.14 + (tn(vec2<f32>(q.y * 9.0, k * 0.11 + 0.5)).g - 0.5) * 0.035;
@@ -1543,13 +1626,13 @@ fn title_scene(uv: vec2<f32>) -> vec3<f32> {
         }
         col += vec3<f32>(0.22, 0.28, 0.38) * fl.x * 0.3;
     }
-    // ---- See
+    // ---- See: kein Mondpfad, nur das grüne Licht des Holländers und der Schein der Feste
     if (hy < 0.002) {
         let dy = max(-hy, 0.0012);
         let z = 0.12 / dy;
         let wp = vec2<f32>(q.x * z, z);
         var h = 0.0;
-        var gx = 0.0;
+        var gxx = 0.0;
         var gz = 0.0;
         var a = 1.0;
         var dirs = array<vec3<f32>, 4>(vec3<f32>(0.8, 0.6, 1.1), vec3<f32>(-0.5, 0.86, 1.7), vec3<f32>(0.25, 0.97, 2.9), vec3<f32>(0.95, -0.3, 4.3));
@@ -1557,114 +1640,163 @@ fn title_scene(uv: vec2<f32>) -> vec3<f32> {
             let d = dirs[i];
             let ph = dot(wp, d.xy) * d.z - t * sqrt(d.z) * 1.3;
             h += sin(ph) * a;
-            gx += cos(ph) * a * d.z * d.x;
+            gxx += cos(ph) * a * d.z * d.x;
             gz += cos(ph) * a * d.z * d.y;
             a *= 0.55;
         }
         h = h / 2.0;
-        let nrm = normalize(vec3<f32>(-gx * 0.2, 1.0, -gz * 0.2));
+        let nrm = normalize(vec3<f32>(-gxx * 0.2, 1.0, -gz * 0.2));
         let fres = 0.03 + 0.97 * pow(1.0 - clamp(nrm.y * 0.55 + dy * 2.0, 0.0, 1.0), 5.0);
         var sea = mix(vec3<f32>(0.004, 0.011, 0.016), vec3<f32>(0.065, 0.088, 0.11), clamp(fres, 0.0, 1.0));
         sea *= 0.45 + 1.1 * (h * 0.5 + 0.5);
-        // Mondpfad: gebrochen von den Wellen, am Horizont breit und hell
-        let path = exp(-abs(q.x - moon.x + nrm.x * 0.6 * (0.2 + dy)) * (5.0 + 26.0 * dy));
         let sparkle = smoothstep(0.62, 0.95, h * 0.5 + 0.5 + (tn(wp * 0.6 + vec2<f32>(t * 0.05, 0.0)).a - 0.5) * 0.5);
-        sea += vec3<f32>(0.62, 0.68, 0.74) * path * (0.12 + sparkle * 0.9);
-        // Schaumkronen
+        let gp = exp(-abs(q.x - gx + nrm.x * 0.5 * (0.2 + dy)) * (9.0 + 30.0 * dy));
+        sea += vec3<f32>(0.25, 0.75, 0.55) * gp * (0.05 + sparkle * 0.5) * exp(-dy * 3.0);
+        let fp = exp(-abs(q.x + 0.66 + nrm.x * 0.4 * (0.2 + dy)) * (6.0 + 20.0 * dy));
+        sea += vec3<f32>(0.9, 0.5, 0.2) * fp * (0.03 + sparkle * 0.15) * exp(-dy * 6.0);
         let fz = tn(wp * vec2<f32>(0.3, 0.6) + vec2<f32>(t * 0.02, -t * 0.03)).r;
         let foam = smoothstep(0.62, 0.86, h * 0.5 + 0.5 + (fz - 0.5) * 0.55) * smoothstep(0.0, 0.3, dy);
-        sea = mix(sea, vec3<f32>(0.4, 0.46, 0.5), foam * 0.55);
+        sea = mix(sea, vec3<f32>(0.4, 0.46, 0.5), foam * 0.5);
         sea += vec3<f32>(0.2, 0.26, 0.36) * fl.x * (0.25 + 0.5 * fres);
-        // Dunst am Horizont
-        sea = mix(sea, vec3<f32>(0.05, 0.068, 0.085), exp(-dy * 22.0) * 0.75);
+        sea = mix(sea, vec3<f32>(0.035, 0.05, 0.064), exp(-dy * 22.0) * 0.55);
         col = mix(col, sea, cov(hy, pw));
     }
-    // ---- der Kraken: Kopf hinter dem Schiff, Arme ringsum
-    let sx = asp * 0.14;
-    let roll = sin(t * 0.62) * 0.045 + sin(t * 0.27) * 0.02;
-    let ship = vec2<f32>(sx, hz - 0.045 + sin(t * 0.8) * 0.005);
-    let rise = 0.6 + 0.4 * sin(t * 0.19);
-    let lit_k = clamp(1.0 - dm * 0.9, 0.2, 1.0);
-    // Kopf: dunkle Kuppe im Dunst, zwei glühende Augen mit waagrechten Pupillen
-    let hc = vec2<f32>(sx + 0.34, hz - 0.06 + 0.07 * rise);
-    let hd = length((q - hc) * vec2<f32>(0.85, 0.62)) - 0.15;
-    let head_c = cov(hd, pw * 2.0) * step(hz - 0.03, q.y);
-    let mott = tn((q - hc) * vec2<f32>(0.9, 1.4) + vec2<f32>(0.2, 0.5)).r;
-    let headcol = mix(vec3<f32>(0.012, 0.012, 0.02), vec3<f32>(0.045, 0.05, 0.065), smoothstep(0.0, 0.2, q.y - hc.y + 0.12)) * (0.75 + 0.5 * mott) + vec3<f32>(0.22, 0.26, 0.34) * smoothstep(-0.006, 0.0, hd) * 0.12;
-    col = mix(col, headcol + vec3<f32>(0.3, 0.36, 0.5) * fl.x * 0.3, head_c * 0.92);
-    for (var e = 0; e < 2; e = e + 1) {
-        // zum Schiff gewandt: das nähere Auge größer, beide unten am Kopf über dem Wasser
-        let ex = hc + select(vec2<f32>(-0.1, 0.035), vec2<f32>(0.025, 0.045), e == 1);
-        let blink = smoothstep(0.0, 0.05, abs(fract(t * 0.07 + 0.3) - 0.5) - 0.012);
-        let ed = length((q - ex) * vec2<f32>(1.0, 1.9 / max(blink, 0.08))) - 0.03;
-        let pupil = abs(q.y - ex.y) < 0.0055 * blink && abs(q.x - ex.x) < 0.021;
-        let ecol = select(vec3<f32>(1.0, 0.62, 0.16), vec3<f32>(0.08, 0.03, 0.0), pupil);
-        col = mix(col, ecol, cov(ed, pw) * head_c);
-        col += vec3<f32>(1.0, 0.5, 0.12) * exp(-length(q - ex) * 34.0) * 0.32 * blink * head_c;
+    // ---- links die Galgenfeste: Randlicht vom Mond, erleuchtete Fenster, Fackeln
+    let fc = fort_cov(q, hz, pw, t);
+    if (fc > 0.001) {
+        let mdir = normalize(moon - vec2<f32>(-0.6, hz + 0.15));
+        let rim = clamp(fc - fort_cov(q + mdir * 0.005, hz, pw, t), 0.0, 1.0);
+        var fcol = vec3<f32>(0.016, 0.019, 0.026) * (0.8 + 0.4 * tn(q * vec2<f32>(5.0, 9.0)).g) + vec3<f32>(0.42, 0.5, 0.62) * rim * 0.7 + vec3<f32>(0.3, 0.36, 0.5) * fl.x * 0.25;
+        let gq = q * vec2<f32>(150.0, 75.0);
+        let cell = floor(gq);
+        let fr = fract(gq);
+        let inner = fort_cov(q + vec2<f32>(0.007, 0.0), hz, pw, t) * fort_cov(q - vec2<f32>(0.007, 0.0), hz, pw, t) * fort_cov(q + vec2<f32>(0.0, 0.012), hz, pw, t);
+        let win = step(0.86, hash21(cell)) * step(abs(fr.x - 0.5), 0.2) * step(abs(fr.y - 0.5), 0.28) * inner * step(hz + 0.115, q.y);
+        fcol = mix(fcol, vec3<f32>(1.0, 0.6, 0.24) * (0.8 + 0.2 * sin(t * 6.0 + hash21(cell) * 20.0)), win);
+        col = mix(col, fcol, fc);
     }
-    // Arme hinter dem Schiff
-    let lw = pw * 1.4;
-    var tb = array<vec4<f32>, 3>(vec4<f32>(-0.3, -0.2, 0.8, 0.0), vec4<f32>(0.28, 0.35, 1.9, 0.0), vec4<f32>(0.5, 0.15, 3.1, 0.0));
-    for (var i = 0; i < 3; i = i + 1) {
-        let b = tb[i];
-        let base = vec2<f32>(sx + b.x * 0.9, hz - 0.03);
-        if (abs(q.x - base.x) < 0.42 && q.y > base.y - 0.01 && q.y < base.y + 0.62) {
-            let rs = clamp(rise + 0.25 * sin(t * 0.3 + b.z), 0.2, 1.0);
-            let tc = tentacle(q, base, 0.5 * rs, b.y, b.z, 0.032, t);
-            col = shade_tentacle(col, tc, lw, lit_k, fl.x);
-        }
+    for (var l = 0; l < 3; l = l + 1) {
+        let lx = select(select(-0.76, -0.63, l == 1), -0.53, l == 2);
+        let ld = length(q - vec2<f32>(lx, hz + 0.172));
+        col += vec3<f32>(1.0, 0.55, 0.18) * (exp(-ld * 170.0) * 1.2 + exp(-ld * 28.0) * 0.1) * (0.85 + 0.15 * sin(t * 7.0 + f32(l) * 2.1));
     }
-    // ---- die Galeone
-    let sp = rot2(q - ship, -roll) / 0.36;
+    // ---- rechts der Holländer, Bug zum Thron, grün wie ein Geist
+    let ship = vec2<f32>(gx, hz - 0.008 + sin(t * 0.7) * 0.003);
+    let roll = sin(t * 0.5) * 0.03;
+    let ssc = 0.21;
+    let spr = rot2(q - ship, -roll) / ssc;
+    let sp = vec2<f32>(-spr.x, spr.y);
     if (abs(sp.x) < 0.75 && sp.y > -0.06 && sp.y < 0.62) {
-        let w = pw / 0.36 * 1.2;
+        let w = pw / ssc * 1.2;
         let m = ship_cov(sp, w, t);
-        // Randlicht vom Mond: die Kante, die zum Mond zeigt, glänzt
         let md = normalize(moon - ship);
-        let m2 = ship_cov(sp + vec2<f32>(md.x, md.y) * 0.006, w, t);
-        let rim = clamp(m - m2, 0.0, 1.0);
-        var sc = vec3<f32>(0.012, 0.012, 0.016) + vec3<f32>(0.5, 0.58, 0.7) * rim * 0.9 + vec3<f32>(0.4, 0.5, 0.7) * fl.x * 0.25;
-        // Heckfenster und Laternen
-        let win = step(abs(sp.y - 0.085), 0.008) * step(-0.455, sp.x) * step(sp.x, -0.34) * step(0.35, fract(sp.x * 60.0));
-        sc = mix(sc, vec3<f32>(1.0, 0.62, 0.25), win * 0.9);
-        col = mix(col, sc, m);
-        col = mix(col, vec3<f32>(1.0, 0.62, 0.25), win * m * 0.0);
+        let rim = clamp(m - ship_cov(sp + vec2<f32>(-md.x, md.y) * 0.008, w, t), 0.0, 1.0);
+        let gl = 0.5 + 0.5 * sin(t * 1.3 + sp.y * 8.0);
+        let sc = vec3<f32>(0.01, 0.03, 0.026) + vec3<f32>(0.3, 0.95, 0.7) * rim * 0.55 + vec3<f32>(0.08, 0.3, 0.22) * smoothstep(0.08, 0.5, sp.y) * (0.25 + 0.15 * gl);
+        col = mix(col, sc, m * 0.88);
     }
-    // Laternenschein (auch über das Wasser)
-    for (var l = 0; l < 2; l = l + 1) {
-        let lp = ship + rot2(select(vec2<f32>(-0.47, 0.155), vec2<f32>(0.43, 0.105), l == 1) * 0.36, roll);
-        let ld = length(q - lp);
-        col += vec3<f32>(1.0, 0.6, 0.22) * (exp(-ld * 160.0) * 1.3 + exp(-ld * 30.0) * 0.18) * (0.85 + 0.15 * sin(t * 7.0 + f32(l) * 2.0));
-        // Spiegelung im Wasser
-        if (q.y < hz) {
-            let rd = abs(q.x - lp.x) * 30.0 + max(lp.y - q.y - 0.01, 0.0) * 3.0;
-            col += vec3<f32>(0.9, 0.5, 0.18) * exp(-rd * 2.0) * 0.12 * step(q.y, lp.y - 0.008);
+    // das gefesselte Mondlicht im Bauch des Holländers, zwei Ketten
+    let orb = ship + vec2<f32>(0.0, 0.007);
+    let od = length(q - orb);
+    col += vec3<f32>(0.7, 1.0, 0.9) * (cov(od - 0.0065, pw) * 0.9 + exp(-od * 60.0) * 0.5 + exp(-od * 13.0) * 0.12) * (0.85 + 0.15 * sin(t * 2.0));
+    for (var c = 0; c < 2; c = c + 1) {
+        let sd = seg_d(q, orb, orb + vec2<f32>(select(-0.03, 0.028, c == 1), -0.006));
+        col = mix(col, vec3<f32>(0.22, 0.3, 0.28), cov(sd.x - 0.0014, pw) * (0.55 + 0.45 * step(0.5, fract(sd.y * 9.0))));
+    }
+    // Krakenaugen knapp über dem Wasser
+    for (var e = 0; e < 2; e = e + 1) {
+        let ex = vec2<f32>(asp * 0.15 + f32(e) * 0.045, hz - 0.004);
+        let blink = smoothstep(0.0, 0.05, abs(fract(t * 0.06 + 0.2) - 0.5) - 0.015);
+        let ed = length((q - ex) * vec2<f32>(1.0, 2.2 / max(blink, 0.08))) - 0.013;
+        let pupil = abs(q.y - ex.y) < 0.0022 * blink && abs(q.x - ex.x) < 0.009;
+        let ecol = select(vec3<f32>(1.0, 0.6, 0.16), vec3<f32>(0.06, 0.02, 0.0), pupil);
+        col = mix(col, ecol, cov(ed, pw) * step(hz - 0.007, q.y));
+        col += vec3<f32>(1.0, 0.5, 0.12) * exp(-length(q - ex) * 45.0) * 0.25 * blink;
+        if (q.y < hz - 0.007) {
+            col += vec3<f32>(0.9, 0.45, 0.12) * exp(-abs(q.x - ex.x) * 90.0) * exp(-(hz - q.y) * 25.0) * 0.16 * blink;
         }
     }
-    // Arme vor dem Schiff
-    var tf = array<vec4<f32>, 2>(vec4<f32>(-0.12, 0.45, 4.2, 0.0), vec4<f32>(0.36, -0.55, 5.3, 0.0));
+    // Dunst über dem Horizont
+    let fogn = tfbm(vec2<f32>(q.x * 1.6 + t * 0.012, q.y * 3.0 - t * 0.004));
+    let fogk = exp(-abs(q.y - hz - 0.015) * 22.0) * (0.12 + 0.3 * fogn);
+    col = mix(col, vec3<f32>(0.035, 0.05, 0.065) + vec3<f32>(0.2, 0.25, 0.3) * fl.x * 0.3, clamp(fogk, 0.0, 0.4));
+    // ---- Arme aus der Tiefe hinter dem Thron
+    let lw = pw * 1.4;
+    var tb = array<vec4<f32>, 2>(vec4<f32>(-0.19, 0.42, 0.9, 0.21), vec4<f32>(0.21, -0.46, 2.3, 0.24));
     for (var i = 0; i < 2; i = i + 1) {
-        let b = tf[i];
-        let base = vec2<f32>(sx + b.x, hz - 0.11 - f32(i) * 0.03);
-        if (abs(q.x - base.x) < 0.45 && q.y > base.y - 0.01 && q.y < base.y + 0.7) {
-            let rs = clamp(rise + 0.3 * sin(t * 0.25 + b.z), 0.15, 1.0);
-            let tc = tentacle(q, base, 0.62 * rs, b.y, b.z, 0.045, t);
-            col = shade_tentacle(col, tc, lw, lit_k, fl.x);
-            // Gischt am Austritt aus dem Wasser
+        let b = tb[i];
+        let base = vec2<f32>(b.x, hz - 0.01);
+        if (abs(q.x - base.x) < 0.4 && q.y > base.y - 0.01 && q.y < base.y + 0.5) {
+            let rs = 0.85 + 0.15 * sin(t * 0.3 + b.z);
+            let tc = tentacle(q, base, b.w * rs, b.y, b.z, 0.024, t);
+            col = shade_tentacle(col, tc, lw, 0.28, fl.x);
             let sd = length((q - base) * vec2<f32>(1.0, 3.0));
-            col += vec3<f32>(0.5, 0.56, 0.6) * exp(-sd * 40.0) * 0.35 * (0.6 + 0.4 * sin(t * 5.0 + b.z));
+            col += vec3<f32>(0.5, 0.56, 0.6) * exp(-sd * 45.0) * 0.3 * (0.6 + 0.4 * sin(t * 5.0 + b.z));
         }
     }
-    // ---- Vordergrund: dunkler Wellenkamm unten im Bild
-    let fg = -0.43 + 0.025 * sin(q.x * 6.0 - t * 1.1) + 0.012 * sin(q.x * 15.0 + t * 1.7);
-    let fgc = cov(q.y - fg, pw * 3.0);
+    // ---- der Thronfelsen
+    let isl = hz - 0.012 + 0.05 * max(1.0 - pow(q.x / 0.21, 2.0), 0.0) + 0.006 * (tn(vec2<f32>(q.x * 4.0, 0.7)).r - 0.5);
+    if (abs(q.x) < 0.23 && q.y > hz - 0.014) {
+        var rc = vec3<f32>(0.018, 0.021, 0.026) * (0.7 + 0.6 * tn(q * vec2<f32>(7.0, 13.0)).g);
+        rc += vec3<f32>(0.35, 0.42, 0.52) * smoothstep(isl - 0.006, isl, q.y) * 0.25 * smoothstep(-0.05, 0.1, q.x);
+        col = mix(col, rc, cov(q.y - isl, pw));
+        col += vec3<f32>(0.4, 0.46, 0.5) * exp(-abs(q.y - hz + 0.012) * 600.0) * 0.2 * step(q.y, isl) * (0.6 + 0.4 * sin(q.x * 90.0 - t * 2.0));
+    }
+    // ---- der leere Thron der Ertrunkenen
+    let ts = 0.72;
+    let seat = vec2<f32>(0.0, hz + 0.034 + 0.089 * ts);
+    let tp = (q - seat) / ts;
+    if (abs(tp.x) < 0.14 && tp.y > -0.1 && tp.y < 0.26) {
+        let w = pw / ts * 1.2;
+        let m = cov(throne_d(tp), w);
+        let mt = normalize(moon - seat);
+        let rim = clamp(m - cov(throne_d(tp + mt * 0.006), w), 0.0, 1.0);
+        let bone = tn(tp * vec2<f32>(14.0, 22.0)).r;
+        var tcol = vec3<f32>(0.035, 0.034, 0.032) * (0.6 + 0.8 * bone) + vec3<f32>(0.55, 0.62, 0.7) * rim * 0.8;
+        tcol += vec3<f32>(0.25, 0.6, 0.45) * exp(-length(tp - vec2<f32>(0.0, 0.1)) * 12.0) * 0.2;
+        tcol += vec3<f32>(0.3, 0.36, 0.5) * fl.x * 0.3;
+        col = mix(col, tcol, m);
+    }
+    // Ketten von der Lehne ins Wasser
+    for (var c = 0; c < 2; c = c + 1) {
+        let s = select(-1.0, 1.0, c == 1);
+        let a = seat + vec2<f32>(s * 0.026, 0.15) * ts;
+        let b = vec2<f32>(s * 0.2, hz - 0.004);
+        let mid = (a + b) * 0.5 - vec2<f32>(0.0, 0.03);
+        let dd = min(seg_d(q, a, mid).x, seg_d(q, mid, b).x);
+        let link = step(0.45, fract(length(q - a) * 220.0));
+        col = mix(col, vec3<f32>(0.05, 0.055, 0.06) + vec3<f32>(0.3, 0.35, 0.4) * link * 0.25, cov(dd - 0.0014, pw));
+    }
+    // die schwebende Krone über dem leeren Sitz
+    let cp = (q - (seat + vec2<f32>(0.0, (0.07 + 0.006 * sin(t * 1.1)) * ts))) / ts;
+    col = mix(col, vec3<f32>(0.95, 0.78, 0.38) * (0.7 + 0.5 * smoothstep(-0.006, 0.02, cp.y)), cov(crown_d(cp), pw / ts * 1.2));
+    col += vec3<f32>(0.45, 0.9, 0.65) * (exp(-length(cp) * 55.0) * 0.4 + exp(-length(cp) * 12.0) * 0.1) * (0.8 + 0.2 * sin(t * 2.3));
+    // ---- vorn treibende Särge
+    var cf = array<vec4<f32>, 3>(vec4<f32>(-0.5, -0.21, 0.065, 0.2), vec4<f32>(0.46, -0.25, 0.075, -0.15), vec4<f32>(-0.22, -0.13, 0.045, 0.08));
+    for (var i = 0; i < 3; i = i + 1) {
+        let c = cf[i];
+        let cc = c.xy + vec2<f32>(sin(t * 0.13 + c.x * 7.0) * 0.012, sin(t * 0.9 + f32(i) * 2.0) * 0.004);
+        let lp = rot2(q - cc, c.w + sin(t * 0.7 + f32(i)) * 0.03);
+        let p = vec2<f32>(lp.x / c.z, lp.y / (c.z * 0.32));
+        if (abs(p.x) < 1.4 && abs(p.y) < 1.2) {
+            let d = coffin_d(p) * c.z * 0.32;
+            let wood = tn(p * vec2<f32>(3.0, 8.0) + vec2<f32>(f32(i), 0.0)).r;
+            var kc = vec3<f32>(0.032, 0.024, 0.02) * (0.7 + 0.6 * wood) + vec3<f32>(0.3, 0.36, 0.44) * smoothstep(0.1, 0.9, p.y) * 0.12;
+            let crs = max(step(abs(p.x + 0.35), 0.05) * step(abs(p.y), 0.3), step(abs(p.y), 0.06) * step(abs(p.x + 0.35), 0.22));
+            kc = mix(kc, vec3<f32>(0.12, 0.1, 0.08), crs);
+            col = mix(col, kc, cov(d, pw));
+            col += vec3<f32>(0.35, 0.4, 0.45) * smoothstep(0.004, 0.0, abs(d - 0.003)) * 0.12;
+        }
+    }
+    // ---- Vordergrund: dunkler Wellenkamm
+    let fg = -0.47 + 0.02 * sin(q.x * 6.0 - t * 1.1) + 0.01 * sin(q.x * 15.0 + t * 1.7);
     let fgcol = vec3<f32>(0.002, 0.006, 0.009) + vec3<f32>(0.25, 0.3, 0.36) * smoothstep(fg - 0.02, fg, q.y) * 0.18;
-    col = mix(col, fgcol, fgc);
-    // ---- Regen: zwei Lagen schräger Schlieren
+    col = mix(col, fgcol, cov(q.y - fg, pw * 3.0));
+    // ---- Regen
     let ruv = vec2<f32>(q.x + q.y * 0.28, q.y);
     let r1 = tn(vec2<f32>(ruv.x * 0.62, ruv.y * 0.025 + t * 0.55)).a;
     let r2 = tn(vec2<f32>(ruv.x * 1.1 + 0.3, ruv.y * 0.05 + t * 0.9)).a;
-    col += vec3<f32>(0.45, 0.52, 0.6) * (smoothstep(0.86, 1.0, r1) * 0.12 + smoothstep(0.9, 1.0, r2) * 0.07) * (1.0 + fl.x * 2.0);
+    col += vec3<f32>(0.45, 0.52, 0.6) * (smoothstep(0.86, 1.0, r1) * 0.08 + smoothstep(0.9, 1.0, r2) * 0.05) * (1.0 + fl.x * 2.0);
     return col;
 }
 
@@ -1682,7 +1814,7 @@ fn title_final(uv: vec2<f32>) -> vec3<f32> {
 
 @fragment
 fn fs_final(f: FOut) -> @location(0) vec4<f32> {
-    // Titelbild: die Sturmnacht statt der Welt
+    // Titelbild statt der Welt
     if (G.fx6.y > 0.5) {
         return vec4<f32>(title_final(f.uv), 1.0);
     }

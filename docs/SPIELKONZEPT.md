@@ -633,20 +633,19 @@ das Gewitter beim Holländer, den Meeresgrund und jedes Seegebiet.
   Außerhalb von Kämpfen blendet sich die Anzeige nach einigen Sekunden aus; Ortsnamen erscheinen Buchstabe für Buchstabe.
 
 ### 7.5 Titelbild
-**„Sturmnacht“** (Runde 14, völlig neu und ohne Pixelgrafik):
-Der Titel ist ein animiertes Bild in voller Bildschirmauflösung, ganz aus Formeln im Shader gemalt.
-Nacht auf hoher See, eine Wolkendecke zieht im Sturm, der Mond steht mit kaltem Hof darüber,
-alle paar Sekunden zuckt ein Blitz aus den Wolken und taucht Himmel und See in fahles Licht.
-Die Dünung rollt in mehreren Wellenzügen heran, der Mond legt einen gebrochenen, glitzernden Pfad aufs Wasser, Schaumkronen blitzen auf,
-am Horizont liegt Dunst.
-In der Bildmitte rechts schaukelt eine schwarze Galeone mit zerfetzten, geblähten Segeln, Takelage und wehender Flagge,
-Heckfenster und zwei Laternen glühen warm und spiegeln sich im Wasser.
-Dahinter hebt sich der Kopf eines Riesenkraken aus dem Dunst, seine zwei bernsteinfarbenen Augen mit waagrechten Pupillen blinzeln;
-ringsum steigen seine Arme aus dem Meer, eingerollt, nass glänzend, mit Saugnäpfen, steigen und sinken wieder, vor dem Schiff mit Gischt am Austritt.
-Regen fällt in zwei Lagen, unten rollt ein dunkler Wellenkamm.
-**Hauptmenü**: links ein weicher dunkler Verlauf, darin oben der goldene Schriftzug „THRONE of the DROWNED“ mit wanderndem Lichtschimmer,
-goldener Linie und Unterzeile, darunter die Menüpunkte schlicht als Schrift ohne Kästen – der gewählte leuchtet golden mit Marke und Lichtstreif –,
-unten ein Bedienhinweis und die Fassung.
+**„Thron der Ertrunkenen“** (20.11., ohne Pixelgrafik): Der Titel ist ein animiertes Bild in voller Bildschirmauflösung (auch FullHD),
+ganz aus Formeln im Shader gemalt. Regennacht, ziehende Wolken, Sterne in den Lücken, Blitze; rechts oben der bleiche Mond –
+doch auf dem Wasser liegt kein Mondpfad, denn Malakor hält sein Spiegelbild gefangen.
+Links die Galgenfeste auf ihrer Klippe: runde Türme mit Kegeldächern und Zinnen, erleuchtete Fenster, Fackeln, ein Galgen mit schwingendem Käfig.
+In der Mitte auf einem Felsen der leere Knochenthron mit Zackenlehne, Ketten ins Wasser und einem Schwert im Fels; über dem Sitz schwebt
+eine grün glühende Krone, zwei Arme aus der Tiefe steigen daneben auf. Rechts treibt der Holländer, grün wie ein Geist, im Bauch das
+gefesselte Mondlicht mit zwei Ketten, darunter ein grüner Schein auf den Wellen; knapp über dem Wasser blinzeln zwei Krakenaugen.
+Vorn treiben Särge mit Kreuz auf dem Deckel, Regen fällt, unten rollt ein dunkler Wellenkamm.
+**Hauptmenü**: oben in der Mitte der goldene Schriftzug mit kaltem Schein und wanderndem Schimmer, darunter eine goldene Zierlinie mit Raute
+und die Unterzeile; die Bildmitte bleibt frei. Die Menüpunkte stehen unten nebeneinander (hochkant untereinander), mit kleinen Rauten
+dazwischen; der gewählte leuchtet golden mit Schein, Glanzlinie und Rauten. Wählen mit ←/→ oder ↑/↓, Bedienhinweis mittig, Fassung rechts.
+**Titelmusik** „Thron der Ertrunkenen“: d-Moll, langsam und episch – das Cello trägt das Thema, die Geige antwortet in der Höhe,
+im Höhepunkt mit der Blechflöte; Harfe, Glocken, tiefe Trommeln.
 ---
 
 ## 8. Klang
