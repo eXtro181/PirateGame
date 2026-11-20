@@ -225,21 +225,33 @@ fn arp(chord: &str, len: f32, step: f32, t0: f32, vel: f32) -> Vec<Ev> {
 pub fn song(name: &str) -> Option<Song> {
     use Inst::*;
     let s = match name {
-        // Titel: Cello-Klage über Harfe und Flächen, d-Moll, sehr langsam
+        // Titel „Thron der Ertrunkenen“ (20.11.): d-Moll, langsam und episch. Das Cello trägt das Thema,
+        // die Geige antwortet in der Höhe, im Höhepunkt mit der Blechflöte; Harfe, Glocken, tiefe Trommeln.
         "titel" => {
-            let cello = "D3:6 F3:3 E3:3 | D3:6 A2:6 | A#2:6 C3:3 D3:3 | A2:12 | D3:6 F3:3 G3:3 | A3:6 G3:3 F3:3 | E3:6 C#3:6 | D3:12";
-            let fid = "R:48 | A4:6 C5:3 A#4:3 | A4:6 F4:6 | G4:6 E4:3 C#4:3 | D4:12";
-            let mut ev = sq(cello, Cello, 0.9, 0.0);
-            ev.extend(sq(fid, Fiddle, 0.3, 0.0));
-            let chords = ["D3+A3+D4+F4", "D3+A3+D4+F4", "A#2+F3+A#3+D4", "A2+E3+A3+C#4", "D3+A3+D4+F4", "F2+C3+F3+A3", "A2+E3+A3+C#4", "D3+A3+D4+F4"];
+            let cello = "D3:4 A3:2 F3:2 | G3:3 F3:1 E3:2 C3:2 | D3:4 A3:2 C4:2 | A#3:6 A3:2 | D3:4 A3:2 F3:2 | G3:3 A3:1 A#3:2 C4:2 | D4:3 C4:1 A#3:2 G3:2 | A3:8";
+            let fid = "F4:2 A4:2 D5:4 | C5:2 A#4:2 A4:4 | A#4:2 D5:2 G5:4 | F5:3 E5:1 D5:4 | F5:2 E5:2 D5:2 C#5:2 | D5:3 A4:1 F4:4 | G4:2 A4:2 A#4:2 C#5:2 | D5:8";
+            let mut ev = sq(cello, Cello, 0.85, 0.0);
+            ev.extend(sq(fid, Fiddle, 0.38, 64.0));
+            ev.extend(sq(&fid[fid.find("| F5:2 E5:2").unwrap_or(0) + 2..], Whistle, 0.16, 96.0));
+            let chords = [
+                "D2+A2+D3+F3", "C2+G2+C3+E3", "D2+A2+D3+F3", "A#1+F2+A#2+D3", "D2+A2+D3+F3", "G1+D2+G2+A#2", "A#1+F2+A#2+D3", "A1+E2+A2+C#3",
+                "D2+A2+D3+F3", "F2+C3+F3+A3", "G2+D3+G3+A#3", "D2+A2+D3+F3", "A1+E2+A2+C#3", "D2+A2+D3+F3", "A1+E2+G2+C#3", "D2+A2+D3+F3",
+            ];
             for (i, c) in chords.iter().enumerate() {
-                let t = i as f32 * 12.0;
-                ev.extend(arp(c, 12.0, 1.5, t, 0.5));
-                ev.extend(sq(&format!("{}:12", c), Pad, 0.1, t));
+                let t = i as f32 * 8.0;
+                let up = c.split('+').map(|n| n.replace('1', "3").replace('2', "3")).collect::<Vec<_>>().join("+");
+                ev.extend(arp(&up, 8.0, 1.0, t, if i < 8 { 0.32 } else { 0.42 }));
+                ev.extend(sq(&format!("{c}:8"), Pad, if i < 8 { 0.07 } else { 0.12 }, t));
+                ev.push(drum(t, 44.0, if i < 8 { 0.3 } else { 0.5 }));
+                if i >= 8 {
+                    ev.extend(sq(&format!("{}:8", first(c)), Cello, 0.45, t));
+                    ev.extend([drum(t + 4.0, 46.0, 0.3), drum(t + 6.5, 50.0, 0.2), drum(t + 7.0, 52.0, 0.28)]);
+                }
             }
-            ev.push(Ev { t: 0.0, dur: 6.0, inst: Bell, f: freq("D5"), vel: 0.25 });
-            ev.push(Ev { t: 48.0, dur: 6.0, inst: Bell, f: freq("A4"), vel: 0.22 });
-            Song { unit: 60.0 / 54.0 / 3.0, len: 96.0, events: ev, gain: 0.55 }
+            for (t, n, v) in [(0.0, "D5", 0.26), (32.0, "A4", 0.22), (64.0, "D5", 0.28), (96.0, "F5", 0.24)] {
+                ev.push(Ev { t, dur: 6.0, inst: Bell, f: freq(n), vel: v });
+            }
+            Song { unit: 60.0 / 66.0 / 2.0, len: 128.0, events: ev, gain: 0.55 }
         }
         // Strand der Ertränkten: Klagewalzer in a-Moll, Blechflöte und Akkordeon
         "salz" => {

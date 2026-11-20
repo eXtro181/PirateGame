@@ -710,9 +710,8 @@ fn tick(
                 app.input.mouse = starts[0].1;
                 app.input.click = true;
             }
-            // Titelbild (Runde 14): eine Sturmnacht auf hoher See in voller Auflösung aus dem
-            // Endbild-Shader (`title_scene` in post.wgsl) – die Galeone in der Dünung, Kopf und Arme
-            // eines Riesenkraken, Blitze, Regen. Die Welt wird dahinter nicht gezeichnet (sie wird
+            // Titelbild „Thron der Ertrunkenen“ in voller Auflösung aus dem Endbild-Shader
+            // (`title_scene` in post.wgsl) – Galgenfeste, Knochenthron, Holländer, Särge, Blitze, Regen. Die Welt wird dahinter nicht gezeichnet (sie wird
             // nur schon erzeugt, damit das Spiel gleich beginnen kann); aus dem Titelbild-Bereich
             // kommt nur noch der Schriftzug.
             art::build_title(art, f);

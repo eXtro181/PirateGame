@@ -221,7 +221,7 @@ pub fn build_title(art: &mut Art, frame: &mut Frame) {
     }
     let slot = art.boss_slot;
     let mut a = slot.atlas();
-    // der Schriftzug bleibt weich gemalt; die Szene selbst malt der Shader (Sturmnacht)
+    // der Schriftzug bleibt weich gemalt; die Szene selbst malt der Shader (Thron der Ertrunkenen)
     a.style = false;
     let logo = sw_art::throne::title_logo();
     let mut v: Vec<(String, Spr)> = vec![("t:logo".into(), a.add("t:logo", &logo, 0, 0))];

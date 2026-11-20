@@ -340,13 +340,28 @@ impl Menu {
         out
     }
 
-    /// Menüpunkt des Hauptmenüs (Runde 14, „modern“): kein Kasten, nur Schrift; der gewählte
-    /// Punkt leuchtet golden, eine Marke gleitet herein, dahinter ein weicher Lichtstreif.
+    /// Raute aus waagrechten Streifen (Zierelement)
+    fn diamond(f: &mut Frame, cx: f32, cy: f32, r: i32, c: [u8; 4]) {
+        for k in -r..=r {
+            let hw = (r - k.abs()) as f32 + 0.5;
+            f.ui_rect(cx - hw, cy + k as f32 - 0.5, hw * 2.0, 1.0, c);
+        }
+    }
+    /// goldene Zierlinie, die von der Mitte nach beiden Seiten ausläuft, mit Raute
+    fn ornament(f: &mut Frame, cx: f32, y: f32, half: f32) {
+        let seg = half / 20.0;
+        for i in 0..20 {
+            let a = ((1.0 - i as f32 / 20.0) * 210.0) as u8;
+            f.ui_rect(cx + 6.0 + i as f32 * seg, y, seg + 0.5, 1.0, [232, 164, 67, a]);
+            f.ui_rect(cx - 6.0 - (i + 1) as f32 * seg, y, seg + 0.5, 1.0, [232, 164, 67, a]);
+        }
+        Self::diamond(f, cx, y + 0.5, 3, [240, 190, 100, 235]);
+    }
+    /// Menüpunkt des Titels (nebeneinander oder untereinander, mittig)
     #[allow(clippy::too_many_arguments)]
-    fn menu_item(&mut self, f: &mut Frame, art: &Art, inp: &Input, x: f32, y: f32, w: f32, label: &str, size: f32) -> bool {
+    fn menu_tab(&mut self, f: &mut Frame, art: &Art, inp: &Input, x: f32, y: f32, tw: f32, label: &str, size: f32) -> bool {
         let (id, mut sel) = self.nav();
-        let h = size + 10.0;
-        let r = [x - 14.0, y - 5.0, w + 14.0, h];
+        let r = [x - 12.0, y - 7.0, tw + 24.0, size + 16.0];
         let over = Self::hit(inp, r);
         if over && inp.mouse_moved {
             self.sel = id;
@@ -354,50 +369,52 @@ impl Menu {
         }
         let k = if sel { 0.5 + 0.5 * (self.t * 3.2).sin() } else { 0.0 };
         if sel {
-            // Lichtstreif hinter dem Punkt, zur Seite auslaufend
-            for i in 0..10 {
-                let a = (1.0 - i as f32 / 10.0) * (34.0 + 12.0 * k);
-                f.ui_rect(x - 6.0 + i as f32 * w * 0.09, y - 3.0, w * 0.09, size + 6.0, [232, 164, 67, a as u8]);
+            // warmer Schein, Glanzlinie darunter, Rauten links und rechts
+            f.ui_soft(x - 20.0, y - 9.0, tw + 40.0, size + 18.0, [255, 170, 70, (36.0 + 30.0 * k) as u8]);
+            for i in 0..12 {
+                let a = ((1.0 - (i as f32 - 5.5).abs() / 6.0) * 230.0) as u8;
+                f.ui_rect(x + i as f32 * tw / 12.0, y + size + 4.0, tw / 12.0 + 0.5, 1.0, [232, 164, 67, a]);
             }
-            // Marke: schmale leuchtende Linie links
-            Ui::rect(f, x - 12.0, y - 2.0, 2.0, size + 4.0, col::GOLD);
-            f.ui_soft(x - 18.0, y - 6.0, 14.0, size + 12.0, [255, 190, 90, (90.0 + 60.0 * k) as u8]);
+            Self::diamond(f, x - 9.0, y + size * 0.5, 2, col::GOLD);
+            Self::diamond(f, x + tw + 9.0, y + size * 0.5, 2, col::GOLD);
         }
-        let c = if sel { [255, 214, 140, 255] } else { [216, 207, 184, 200] };
-        text::display(f, art, label, x + if sel { 4.0 } else { 0.0 }, y, c, Al::L, size);
+        let c = if sel { [255, 214, 140, 255] } else { [216, 207, 184, 205] };
+        text::display(f, art, label, x, y - if sel { 1.0 } else { 0.0 }, c, Al::L, size);
         (inp.click && over) || (sel && self.activate)
     }
 
     fn main(&mut self, f: &mut Frame, art: &Art, inp: &Input, sfx: &mut Vec<&'static str>) -> MenuOut {
         let (w, h) = f.ui_size();
         let wide = w > 520.0;
-        // Lesbarkeit: die linke Bildhälfte dunkelt weich ab (die Sturmszene liegt rechts)
-        let gw = if wide { w * 0.56 } else { w };
-        // lückenlos auf ganzen UI-Pixeln (überlappende Streifen zeichneten sonst feine Linien)
-        let n = 48;
+        let cx = (w * 0.5).round();
+        // Lesbarkeit: weiche dunkle Bänder oben und unten, die Mitte mit dem Thron bleibt frei
+        let n = 32;
         for i in 0..n {
-            let (x0, x1) = ((i as f32 * gw / n as f32).floor(), ((i + 1) as f32 * gw / n as f32).floor());
-            let a = (1.0 - i as f32 / n as f32).powf(1.4) * if wide { 150.0 } else { 90.0 };
-            f.ui_rect(x0, 0.0, x1 - x0, h, [2, 4, 8, a as u8]);
+            let (k0, k1) = (i as f32 / n as f32, (i + 1) as f32 / n as f32);
+            let (y0, y1) = ((k0 * h * 0.36).floor(), (k1 * h * 0.36).floor());
+            f.ui_rect(0.0, y0, w, y1 - y0, [2, 4, 8, ((1.0 - k0).powf(1.6) * 160.0) as u8]);
+            let (b0, b1) = ((h - k0 * h * 0.3).ceil(), (h - k1 * h * 0.3).ceil());
+            f.ui_rect(0.0, b1, w, b0 - b1, [2, 4, 8, ((1.0 - k0).powf(1.3) * 205.0) as u8]);
         }
-        let lx = if wide { (w * 0.07).round() } else { 14.0 };
-        // Schriftzug links oben, darunter eine goldene Linie und die Unterzeile
-        let mut y = (h * 0.1).round();
+        // Schriftzug oben in der Mitte, darunter Zierlinie und Unterzeile
+        let mut y = (h * 0.06).round();
         if let Some(l) = art.map.get("t:logo").copied() {
-            let lw = if wide { (w * 0.44).min(l.w as f32 * 0.85) } else { w - 28.0 };
-            let sc = lw / l.w as f32;
-            let lh = l.h as f32 * sc;
+            let lw = if wide { (w * 0.4).min(l.w as f32 * 0.8) } else { w - 28.0 };
+            let lh = l.h as f32 * lw / l.w as f32;
+            let lx = (cx - lw * 0.5).round();
             let k = 0.5 + 0.5 * (self.t * 0.8).sin();
+            f.ui_soft(lx - 24.0, y - 12.0, lw + 48.0, lh + 24.0, [40, 70, 90, (36.0 + 18.0 * k) as u8]);
             text::smooth_spr(f, &l, lx, y, lw, lh, [255, 255, 255, 255]);
             // ein kalter Lichtschimmer wandert über den Schriftzug
             f.ui_soft(lx + lw * ((self.t * 0.11) % 1.0) - 26.0, y + lh * 0.15, 52.0, lh * 0.7, [170, 220, 255, (34.0 * k) as u8]);
-            y += lh + 6.0;
-            for i in 0..20 {
-                let a = (1.0 - i as f32 / 20.0) * 200.0;
-                f.ui_rect(lx + i as f32 * lw * 0.035, y, lw * 0.035 + 0.5, 1.0, [232, 164, 67, a as u8]);
+            y += lh + 7.0;
+            Self::ornament(f, cx, y, lw * 0.42);
+            y += 8.0;
+            // schmal: die Unterzeile umbrechen
+            for line in text::wrap(art, "Ein Soulslike über Ertrunkene, Geisterkönige und das Ende der Welt", w - 24.0) {
+                text::draw(f, art, &line, cx, y, [190, 200, 205, 205], Al::C, 1.0, true);
+                y += 10.0;
             }
-            y += 6.0;
-            text::draw(f, art, "Ein Soulslike über Ertrunkene, Geisterkönige und das Ende der Welt", lx, y, [190, 200, 205, 200], Al::L, 1.0, true);
         }
         let has = !self.profiles.is_empty();
         let mut items: Vec<(&str, Screen)> = vec![];
@@ -408,11 +425,20 @@ impl Menu {
         items.push(("Optionen", Screen::Options));
         items.push(("Credits", Screen::Credits));
         let size = if wide { 11.0 } else { 10.0 };
-        let step = size + 13.0;
-        let y0 = (h * 0.5).max(y + 30.0).round();
+        let tws: Vec<f32> = items.iter().map(|(l, _)| text::display_width(art, l, size)).collect();
+        // breit: nebeneinander unten, mit kleinen Rauten dazwischen; schmal: untereinander
+        let gap = 40.0;
+        let total: f32 = tws.iter().sum::<f32>() + gap * (items.len() as f32 - 1.0);
+        let mut x = (cx - total * 0.5).round();
+        let row_y = (h * 0.85).round();
+        let y0 = (h * 0.72).max(y + 30.0).min(h - 20.0 - 4.0 * (size + 15.0)).round();
         let mut out = MenuOut::None;
         for (i, (label, s)) in items.iter().enumerate() {
-            if self.menu_item(f, art, inp, lx + 12.0, y0 + i as f32 * step, 170.0, label, size) {
+            let (ix, iy) = if wide { (x, row_y) } else { ((cx - tws[i] * 0.5).round(), y0 + i as f32 * (size + 15.0)) };
+            if wide && i > 0 {
+                Self::diamond(f, (x - gap * 0.5).round(), row_y + size * 0.5, 1, [200, 160, 100, 130]);
+            }
+            if self.menu_tab(f, art, inp, ix, iy, tws[i], label, size) {
                 sfx.push("click");
                 self.go(*s);
                 // neuer Ertrunkener: beim ersten Öffnen zufällig gewürfelt (Aussehen und Name)
@@ -421,10 +447,20 @@ impl Menu {
                     out = MenuOut::LookChanged(self.look, ORIGINS[self.origin].weapon);
                 }
             }
+            x += tws[i] + gap;
         }
-        // Fußzeile: Bedienhinweis links, Fassung rechts
-        text::draw(f, art, "↑↓ wählen  ·  Enter bestätigen", lx + 12.0, h - 16.0, [143, 163, 168, 150], Al::L, 1.0, true);
-        text::tr(f, art, "v0.8 · Rust/Bevy", w - 8.0, h - 14.0, [143, 163, 168, 140]);
+        // nebeneinander auch mit ←/→ wählen
+        if wide && self.adjust != 0 && !items.is_empty() {
+            let m = items.len() as i32;
+            self.sel = ((self.sel as i32 + self.adjust).rem_euclid(m)) as usize;
+            sfx.push("click");
+        }
+        // Fußzeile: Bedienhinweis mittig, Fassung rechts
+        let hint = if wide { "←→ wählen  ·  Enter bestätigen" } else { "↑↓ wählen  ·  Enter bestätigen" };
+        text::draw(f, art, hint, cx, h - 14.0, [143, 163, 168, 150], Al::C, 1.0, true);
+        if wide {
+            text::tr(f, art, "v0.9 · Rust/Bevy", w - 8.0, h - 14.0, [143, 163, 168, 140]);
+        }
         out
     }
 

@@ -1,4 +1,4 @@
-//! Titelbild (Runde 14): Die Sturmnacht mit Galeone und Riesenkraken entsteht ganz im
+//! Titelbild „Thron der Ertrunkenen“ (20.11.): Feste, Knochenthron, Holländer und Särge entstehen ganz im
 //! Endbild-Shader (`title_scene` in `gfx/shaders/post.wgsl`, eingeschaltet über `Globals.fx6.y`).
 //! Hier bleibt nur der Weltpunkt, an den die Kamera im Titel gestellt wird (die Titelwelt wird
 //! schon erzeugt, aber nicht gezeichnet – das Spiel beginnt damit ohne Wartezeit).

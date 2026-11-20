@@ -30,7 +30,7 @@ Bezugsdateien im Repo: `crates/art/src/*` (Kunst aus Code), `src/gfx/mod.rs` + `
 18. Nebel, Partikel, Spiegelungen, Schatten am Boden
 19. Pixel-Modus gegen FullHD-Modus
 19a. Ausbau 2026 (Runde 13): Licht, Wetter, Tageszeit, Bildwirkungen, Stilrichtlinie und Farbskript
-19b. Runde 14: Wellen, Brandung, plastische Dächer, Titelbild „Sturmnacht“
+19b. Runde 14: Wellen, Brandung, plastische Dächer, Titelbild
 19c. Endkampf neu (9.11.): PixelLab-Holländer, Gezeiten-Shader, Spiegelmond, Letzte Flut
 19d. Bildlook vom 14./15.11.: Nebel als Tiefe, Klarheit, farbtreues Licht, Hauptlicht, Wind
 20. Schritt-für-Schritt-Plan für das neue Projekt
@@ -1042,7 +1042,7 @@ Hitze und Asche, Eis: Schnee, Sturm: Regen, Wind und Blitze, Erde: Regen).
 
 ---
 
-## 19b. Runde 14: Wellen, Brandung, plastische Dächer, Titelbild „Sturmnacht“
+## 19b. Runde 14: Wellen, Brandung, plastische Dächer, Titelbild
 
 **Dünung** (`scene.wgsl: swell`): Richtung `d` = Windrichtung (`fx5.zw`), `ph = dot(p, d)·0,045 − t·1,2 + wob·6` mit `wob` = langsames Rauschen (biegt die
 Kämme), Höhe `sh = (0,5 + 0,5·sin ph)^2,4` (schmale Kämme, breite Täler), abbrechend über ein grobes Rauschen `seg`;
@@ -1062,20 +1062,17 @@ dazu ständig ein atmender Schaumsaum.
 Walmflächen innerhalb `hip = 6 + hip_w·…` vom Rand (Relief `0,25·d + 2`, `up` 60, links ×1,42, rechts ×0,5), Grate ×1,5, Vorderseite ×(1,32 − 0,36k),
 am First ×1,45/1,22, Rückseite ×(0,5 + 0,25k), alles ×1,18; Traufschatten 12 Zeilen `0,52 + 0,48k²`, Gebäudeecken links ×1,2, rechts ×0,62…1.
 
-**Titelbild „Sturmnacht“** (`post.wgsl: title_scene`, `fx6.y` = 1, `fx6.z` = Zeit):
-Koordinaten `q = ((u − 0,5)·Seitenverhältnis, 0,5 − v)` plus sanftes Schweben, Horizont `0,06`.
-Himmel: Verlauf `(0,055, 0,075, 0,095)` → `(0,005, 0,007, 0,018)`, Mond bei `(0,28·asp, 0,34)` Radius 0,036 mit zwei Höfen,
-Wolken `tfbm(q.x·cz·0,1 + t·0,011, cz·0,055 − t·0,0035)` mit `cz = 1/(hy + 0,1)`, Dichte `smoothstep(0,34, 0,74, n)`, beleuchtet vom Mond und vom Blitz.
-Blitz (`t_flash`): Periode 7 s, Zeitpunkt zufällig, `exp(−10d) + 0,7·exp(−9(d − 0,16))`, Strahl aus zwei Rauschlagen.
-See: Abstand `z = 0,12/dy`, vier Wellenzüge (Richtung, Frequenz 1,1/1,7/2,9/4,3, Amplituden ×0,55), Fresnel, Helligkeit `0,45 + 1,1·h`,
-Mondpfad `exp(−|x − Mond + n.x·0,6(0,2 + dy)|·(5 + 26dy))` mit Glitzern, Schaumkronen, Dunst `exp(−22dy)·0,75`.
-Galeone `ship_cov` im Schiffsraum (Länge 1, Maßstab 0,36, Rollen `0,045·sin 0,62t + 0,02·sin 0,27t`):
-Rumpf, drei Masten mit je drei geblähten, an der Unterkante zerfransten Segeln mit Löchern, Bugspriet, Takelage, Flagge;
-Randlicht = Deckung minus Deckung um 0,006 Richtung Mond.
-Kraken: Kopf `(sx + 0,34, hz − 0,06 + 0,07·rise)`, Ellipse 0,15, gefleckt; Augen bernstein mit waagrechter Pupille, Blinzeln `fract(0,07t)`;
-Arme `tentacle` (16 Glieder, Winkelzuwachs `(0,05 + 0,32u³)·sin(…) + (0,02 + 0,16u²)·Richtung`, Radius `r0·(1 − 0,88u)`,
-Seite für die helle Unterseite mit Saugnäpfen `fract(26u)`), drei hinter (r0 0,032), zwei vor dem Schiff (0,045).
-Endbild: `tonemap(c·1,3)`, kühle Schatten/warme Lichter, Vignette `1 − 0,6·v^2,4`, Körnung 0,025. Kosten: Arme und Schiff nur in ihren Begrenzungsrechtecken.
+**Titelbild „Thron der Ertrunkenen“** (20.11., `post.wgsl: title_scene`, `fx6.y` = 1, `fx6.z` = Zeit):
+`q = ((u − 0,5)·Seitenverhältnis, 0,5 − v)` plus Schweben, Horizont `hz = −0,08`, Mond `(0,33·asp, 0,31)` Radius 0,052 mit Narben (`tn`).
+Himmel, Wolken und Blitz wie bisher (`tfbm`, `t_flash`), dazu Sterne `hash21(floor(q·700)) > 0,9986` in Wolkenlücken.
+See: vier Wellenzüge, Fresnel, **kein Mondpfad** (Lore), stattdessen grüner Schein unter dem Holländer und warmer unter der Feste.
+Galgenfeste `fort_cov` (Klippe `cliff_top`, Mauer mit Zinnen `fract(75x)`, vier Rundtürme mit Kegeldach bzw. Zinnenkranz, Galgen mit Käfig),
+Randlicht = Deckung minus Deckung 0,005 Richtung Mond, Fenster als Zellen `q·(150, 75)` mit `hash21 > 0,86` nur im Inneren.
+Holländer `ship_cov` gespiegelt (Bug links), Maßstab 0,21, grün, Mondlicht-Kugel mit zwei Ketten (`seg_d`); Krakenaugen bei `asp·0,15`.
+Horizontdunst `exp(−22·|q.y − hz − 0,015|)·(0,12 + 0,3·fbm)` ≤ 0,4. Zwei Arme `tentacle` (Licht 0,28) neben dem Thronfelsen.
+Thron `throne_d` (Kastenabstände `box_d`, Zacken `spike_d`, Maßstab 0,72) mit Randlicht und grünem Kronenschein, Ketten als zwei Strecken,
+Krone `crown_d` schwebt; Särge `coffin_d` (Sechseck von oben, y ×0,32) mit Kreuz und Schaumsaum; Regen ×0,08/0,05.
+Endbild: `tonemap(c·1,3)`, kühle Schatten/warme Lichter, Vignette `1 − 0,6·v^2,4`, Körnung 0,025.
 
 ## 19c. Endkampf neu (9.11.): PixelLab-Holländer, Gezeiten-Shader, Spiegelmond, Letzte Flut
 
