@@ -1,0 +1,296 @@
+THRONE OF THE DROWNED – TRAILER-DREHBUCH FÜR EINE VIDEO-KI (140 SEKUNDEN)
+==========================================================================
+
+Ein Soulslike über Ertrunkene, Geisterkönige und das Ende der Welt.
+Malakor, der Ertrunkene König, hat das Spiegelbild des Mondes gestohlen. Seitdem steht das Meer still,
+die Letzte Flut, die die Ertrunkenen heimträgt, kommt nie, und die See spuckt ihre Toten wieder aus.
+Du bist einer von ihnen.
+
+
+SO BENUTZT DU DIESE DATEI
+-------------------------
+1. Jeder Shot ist ein eigener Clip (meist 5–8 s). Erzeuge die Clips einzeln und schneide sie danach zusammen.
+2. Setze vor jeden Shot-Prompt den STIL-BLOCK, damit alle Clips gleich aussehen.
+   Den NEGATIV-BLOCK trägst du ins Feld für Ausschlüsse ein, falls die KI eines hat.
+3. Kommt eine Figur oder ein Ort vor, hänge deren englischen Steckbrief (EN) an den Prompt an.
+   So bleiben Gesichter, Kleidung und Farben über alle Clips gleich.
+4. Die Prompts sind auf Englisch, weil Video-KIs damit zuverlässiger arbeiten. Sprechertexte (VO) und
+   Schrifttafeln sind auf Deutsch und kommen erst im Schnitt dazu. Lass die KI keine Schrift ins Bild malen.
+5. Musik: das epische Titelstück des Spiels „Thron der Ertrunkenen“ (Chor, Orgel, tiefes Blech, große Trommeln).
+   Schneide auf die Trommelschläge.
+6. Sprecher: tiefe, ruhige, raue Männerstimme. Die Weberin spricht leise, weiblich, traurig.
+   Malakor spricht tief, langsam, mit Hall.
+
+
+STIL-BLOCK (vor jeden Shot setzen)
+----------------------------------
+HD-2D dark fantasy pirate game cinematic: highly detailed pixel-art characters and props inside a softly lit
+3D diorama world, three-quarter top-down camera like a living model, tilt-shift depth of field, volumetric fog,
+god rays, soft bloom. Muted desaturated palette of deep sea teal, slate and black, with small islands of warm
+orange torchlight and cold pale moonlight, occasional sickly ghost-green light. Constant rain, wet reflective
+stone, drifting mist, distant lightning. Melancholic, gothic, soulslike atmosphere. Smooth slow cinematic camera
+moves, 24 fps, film grain, vignette.
+
+
+NEGATIV-BLOCK (Ausschlüsse)
+---------------------------
+text, letters, subtitles, logos, watermark, UI, health bars, bright cheerful colors, cartoon style, anime faces,
+photorealistic humans, modern objects, sunshine, clear blue sky, gore, blood splatter, extra limbs,
+deformed hands, flickering, low resolution
+
+
+FIGUREN
+-------
+
+DER ERTRUNKENE (Held)
+Ein ertrunkener Pirat, der aus seinem Sarg erwacht. Stumm, entschlossen, schwer vom Wasser.
+EN: The Drowned One: a revenant pirate, pale grey-white skin, wet dark hair, black tricorn hat, worn dark-red
+long coat with tarnished brass buttons, cutlass in hand, seaweed and salt crust on his clothes, faint cold teal
+glint in the eyes, silent and determined.
+
+DIE RIESIGE MEERESSPINNE (Prolog-Boss)
+Die Wächterin am großen Wasserfall. In ihr steckt die verfluchte Weberin.
+EN: The Giant Sea Spider: a colossal spider of wet black-blue chitin crusted with barnacles and coral, long
+jointed legs, a cluster of glowing pale eyes, white silk threads and cocoons, lurking on a cliff wall beside a
+roaring waterfall over a black abyss.
+
+DIE WEBERIN (Geist)
+Einst Fährfrau der Letzten Flut: Sie hüllte die Ertrunkenen in Seide, damit die Flut sie heimträgt.
+Nach ihrem Tod als Spinne erscheint sie als Geist, deckt den Sarg zu und ruft die Arme der Tiefe.
+EN: The Weaver: a translucent ghost woman, pale bluish skin, long flowing silver-white hair, a long dress of
+pale blue-grey fabric like spider silk, glowing aqua eyes, she floats above the ground with a soft cold light
+around her, sorrowful and gentle.
+
+KAPITÄN KIELHOLER (erster Festungsboss) und sein Geist
+Skelettkapitän der Galgenfeste, der die Särge der Ertrunkenen auf den Haufen werfen lässt. Besiegt wird er zu
+einem Geist, der dem Helden sein Schiff in einer Flasche schenkt.
+EN: Captain Kielholer: a tall skeleton pirate captain, bleached bones, tattered blood-red long coat, black
+tricorn with a gold band, golden sash, a cutlass in each hand, glowing cyan-green eyes in the skull.
+His ghost: a translucent sea-green drowned captain with white hair and beard, tricorn, holding a ghost lantern
+and a ship in a bottle.
+
+DIE CREW
+Ertrunkene, die auf dem schwarzen Schiff des Helden anheuern.
+EN: The crew: four drowned sailors in weathered coats and bandanas, pale skin, each with a faint elemental
+glow (ember orange, ice white, storm grey, swamp green), hauling ropes on a black galleon in the rain.
+
+ADMIRAL BRANDVOGT, der Glutkönig (Aschebucht)
+Gab seine Flotte, um nicht zu ertrinken. Zweite Gestalt: Dämonen-Mantikor.
+EN: Admiral Brandvogt, the Ember King: a huge drowned admiral with charred dark skin, fiery red-orange hair and
+beard, dark crimson coat, tricorn, a crown of glowing orange embers, burning orange eyes, giant greatsword,
+ember aura. Second form: a demon-captain manticore of fire and ash with bat wings and a scorpion tail.
+
+KÖNIGIN YSRA FROSTWEH (Frostgrotte)
+Gab ihr Herz. Zweite Gestalt: Abgrund-Gorgonen-Königin.
+EN: Queen Ysra Frostweh: a tall drowned queen with pale ice-blue skin, long white hair, flowing blue-grey robe,
+a crown of mint-white ice, rapier, glowing ice-white eyes, frost mist around her. Second form: an abyssal gorgon
+queen with a long serpent body and hair of snakes.
+
+KAPITÄN RABENSTURM, der Sturmkönig (Hafen Rabenwacht)
+Gab seinen Namen. Zweite Gestalt: Uhrwerk-Sturm-Monster.
+EN: Captain Rabensturm, the Storm King: a drowned captain with storm-grey skin, dark blue hair and beard, navy
+coat, captain's hat, silver crown, cutlass, wind swirling around him, ravens. Second form: a clockwork storm
+monster with brass gears and great clockwork wings, lightning crackling.
+
+MORGRIM KORALLENHAND, König der Tiefe (Fluchmangroven)
+Gab seine Hand, an ihrer Stelle wächst Koralle. Zweite Gestalt: Kraken-Basilisk.
+EN: Morgrim Coralhand, King of the Deep: a bulky drowned king with green-grey skin, teal hair and beard, mossy
+green robe, a crown of lime-green coral, a coral hand, wielding a huge anchor, glowing green eyes.
+Second form: a kraken-basilisk chimera with tentacles, scales and a reptile head.
+
+MALAKOR, DER ERTRUNKENE KÖNIG (Endgegner)
+Wollte nicht hinüber, als er ertrank. Er stahl das Spiegelbild des Mondes und kettete es in den Bauch seines
+Holländers.
+EN: Malakor, the Drowned King: a giant drowned pirate king, sea-green skin, four arms each holding a sword,
+a beard of writhing tentacles, a crown of gold and coral, dark green coat with a blood-red sash, glowing eyes,
+dripping water. He stands on the stern of a green ghost galleon.
+
+
+ORTE UND DINGE
+--------------
+
+STILLWASSER (Prolog)
+Fischerdorf mit der Kneipe „Zur Letzten Flut“ und einem Galgenweg. Die Menge wendet sich ab, die Nacht sinkt herab.
+EN: Stillwasser: a small pixel-art fishing village of timber houses on a grey coast, a warm lantern-lit tavern
+with ship wheels and bottles on the shelves, a muddy gallows road with swinging iron cages, drowned villagers
+with pale faces standing in the rain, night falling.
+
+WRACKZWINGER UND WASSERFALL (Prolog)
+Felsschlucht voller Wracks. Ein großer Wasserfall stürzt in einen schwarzen Abgrund, an der Kante steht ein Sarg
+zwischen zwei Schädelfackeln.
+EN: The Wreck Gorge: a rocky gorge full of broken ship hulls, a huge waterfall plunging into a bottomless black
+abyss, at the cliff edge a wooden coffin between two bright torches on poles topped with skulls, mist rising.
+
+DIE GALGENFESTE (erster Dungeon)
+Dunkle alte Piratenfestung auf nacktem Fels. Runde Ringmauer, Terrassen bis zum Bossplateau, eckige Bastionen,
+ein Kai, an dem die Särge antreiben, ein Sarghaufen im Hof.
+EN: The Gallows Fortress: a dark ancient pirate fortress on a bare rock island, round curved brick curtain
+walls, terraces with stone stairs rising to a round plateau at the top, square bastions and round towers with
+conical roofs, a stone quay where coffins wash ashore, a heap of coffins in the courtyard, torches, gibbets with
+cages, skeleton guards, rain and lightning.
+
+DIE GLUTWACHT (Herz der Welt)
+Riesige runde Hafenfestung mit gestuften Mauern. Im Becken tauchen die Augen eines Kraken auf, oben stehen vier
+leere Throne. Das Säbelfeuer ist das Lagerfeuer der Ertrunkenen.
+EN: The Ember Watch: a vast round harbor fortress with concentric terraced stone walls around a dark water
+basin, giant amber kraken eyes slowly opening beneath the water, four empty stone thrones on a high terrace,
+a bonfire of swords stuck in the ground burning with a cold cyan flame.
+
+DIE VIER KÖNIGSINSELN
+Aschebucht (Glut, Lava, rotes Licht) · Frostgrotte (Schnee, Eis, Säulenbasalt) ·
+Hafen Rabenwacht (Fachwerk, Schiefer, Sturm, Raben) · Fluchmangroven (Moor, Kanäle, Pfahlbauten).
+EN: Four island kingdoms: an ash bay of black sand and glowing lava with red light; a frozen grotto of snow,
+ice and basalt columns; a storm-lashed harbor town of half-timbered houses and slate roofs with ravens; cursed
+mangroves of foggy canals and stilt huts.
+
+DAS ENDE DER WELT
+Am Rand der Karte stürzt das Meer über eine Kante ins Nichts.
+EN: The edge of the world: the ocean pours over a colossal endless waterfall into a black void, mist and
+thunder, shipwrecks caught at the rim.
+
+DER HOLLÄNDER UND DER SPIEGELMOND (Endkampf)
+Malakors grünes Geisterschiff. In seinem Bauch glüht das gefesselte Spiegelbild des Mondes, und auf dem Meer
+liegt nirgends ein Mondpfad.
+EN: The Dutchman: a huge ghost galleon glowing sickly green, tattered sails, ten gun ports, a fire-breathing
+figurehead, silver moonlight shining through the planks from a chained glowing moon orb in its hull.
+The real moon hangs in the sky, but the sea below shows no moon reflection at all.
+
+
+SHOTLISTE (140 SEKUNDEN)
+------------------------
+Format: Zeit · Dauer · Titel / PROMPT (EN) / VO (DE) / Ton und Schnitt
+Musik-Bögen: 0:00–0:42 Glocken, Orgel, einsame Stimme · 0:42–1:26 Männerchor, Pauken, Tremolo-Streicher ·
+1:26–2:08 voller Chor, Blech, große Trommeln · 2:08–2:20 Stille, letzter Schlag, Glocke.
+
+SHOT 1 · 0:00–0:07 · 7 s · Die Welt ohne Mondlicht
+PROMPT: Slow push-in from black to a vast dark night sea under heavy rain clouds, a pale moon breaks through
+the clouds, but the black water below shows no moon reflection at all, only mist and rain rings.
+VO (Weberin): „Einst trug die Letzte Flut die Ertrunkenen heim … sanft, hinüber.“
+TON: eine einzelne Totenglocke, tiefer Orgelton.
+
+SHOT 2 · 0:07–0:15 · 8 s · Der Mondraub
+PROMPT: Low angle: the Dutchman ghost galleon bursts up out of the sea, water pouring from its tattered sails,
+green fire in its gun ports, inside its hull a chained glowing silver moon orb shines through the planks,
+chains rattling. Malakor's dark silhouette on the stern.
+VO: „Dann fischte Malakor das Spiegelbild des Mondes aus der See … und kettete es in die Finsternis.“
+TON: Ketten klirren, Wasser stürzt.
+
+SHOT 3 · 0:15–0:22 · 7 s · Die stille See
+PROMPT: Top-down drifting camera over still black water: dozens of closed wooden coffins with carved crosses
+float slowly in the rain toward a distant coast, a faint green glow under the water.
+VO: „Seitdem steht das Meer still. Und die See … spuckt ihre Toten wieder aus.“
+
+SHOT 4 · 0:22–0:29 · 7 s · Zur Letzten Flut
+PROMPT: Inside the warm lantern-lit tavern of Stillwasser: pale drowned sailors sit silently at wooden tables,
+rain on the windows, a landlord polishes a glass, the camera glides past candles toward the door, which swings
+open to the dark rainy night.
+VO: „In Stillwasser trinken die Toten auf eine Flut, die nie kommt.“
+TON: leises Gemurmel, Regen, die Tür knarrt.
+
+SHOT 5 · 0:29–0:35 · 6 s · Die Galgennacht
+PROMPT: The muddy gallows road of Stillwasser at night: a crowd of pale drowned villagers slowly turns away and
+disappears into the fog, iron cages swing on gibbets, from the south a giant shadow with many legs rises out of
+the mist.
+TON: ein Käfig quietscht, tiefes Grollen.
+
+SHOT 6 · 0:35–0:42 · 7 s · Das Erwachen
+PROMPT: Close three-quarter view of a closed coffin on a heap of coffins: three heavy knocks from inside, the
+lid jolts, slides aside and falls, the Drowned One rises slowly, water dripping, and climbs out forward,
+cutlass in hand.
+VO: „Auch du bist ein Ertrunkener.“
+TON: drei dumpfe Schläge im Takt der Musik, beim dritten setzt der Männerchor ein.
+
+SHOT 7 · 0:42–0:49 · 7 s · Die Spinne
+PROMPT: The Giant Sea Spider crawls up the cliff wall beside the roaring waterfall and slams down onto the stone
+plateau in front of the Drowned One, silk threads fly, a fast dodge roll and a cutlass strike in slow motion.
+TON: großer Trommelschlag beim Aufprall.
+
+SHOT 8 · 0:49–0:58 · 9 s · Die Weberin
+PROMPT: The dead spider dissolves into mist and the Weaver ghost rises from it. She floats to the coffin at the
+cliff edge, pushes the lid closed with both hands and raises her arms; giant glowing tentacles rise from the
+abyss, coil around the coffin and pull it down; under the black water two enormous amber kraken eyes open.
+VO (Weberin): „Ich decke dich zu … und rufe die Arme der Tiefe.“
+
+SHOT 9 · 0:58–1:05 · 7 s · Die Galgenfeste
+PROMPT: Rain and lightning: the coffin drifts with others toward the Gallows Fortress and bumps against the
+stone quay; two skeletons haul it out, carry it through the gate and throw it high onto the heap of coffins in
+the courtyard.
+VO: „Der Weg hinaus führt nur nach oben.“
+
+SHOT 10 · 1:05–1:12 · 7 s · Der Aufstieg
+PROMPT: The Drowned One fights his way up curved brick terrace walls and stone stairs of the Gallows Fortress:
+he parries a skeleton, rolls past a musket shot, kicks open a door into a candle-lit guard room, torches
+flicker in the rain.
+TON: harte Schnitte auf die Pauken.
+
+SHOT 11 · 1:12–1:19 · 7 s · Kapitän Kielholer
+PROMPT: On the round hexagon-tiled plateau at the top of the fortress, Captain Kielholer attacks with two
+cutlasses in a whirl of sparks; struck down, he shatters into bones, his ghost rises and hands over a ship in a
+bottle.
+TON: Klingen, ein Knochenregen, dann ein heller Glockenton.
+
+SHOT 12 · 1:19–1:26 · 7 s · Das schwarze Schiff
+PROMPT: From the fortress pier the Drowned One throws the bottle into the sea; with a flash of light a black
+galleon rises from the waves; the crew hauls ropes, the sails fill, the ship sails out into the stormy night.
+VO: „Setz die Segel, Ertrunkener.“
+
+SHOT 13 · 1:26–1:32 · 6 s · Die Glutwacht
+PROMPT: Slow aerial orbit over the round Ember Watch harbor fortress at night, giant amber kraken eyes glowing
+in the basin, then the camera glides to four empty stone thrones on the top terrace, a cold cyan bonfire of
+swords in front of them.
+VO: „Vier Könige halten seine Ketten. Jeder hat zwei Gesichter.“
+TON: der volle Chor setzt ein.
+
+SHOT 14 · 1:32–1:42 · 10 s · Die vier Könige (vier Clips à 2,5 s)
+PROMPT A: Admiral Brandvogt raises his ember greatsword on a lava shore under red skies, then bursts into a
+fire manticore with bat wings.
+PROMPT B: Queen Ysra Frostweh in an ice grotto with basalt columns, her hair turns into snakes as she becomes a
+serpent gorgon queen.
+PROMPT C: Captain Rabensturm in a storm-lashed harbor town with ravens, clockwork wings unfold with lightning.
+PROMPT D: Morgrim Coralhand in foggy mangroves lifts his anchor, tentacles burst from the swamp as he becomes a
+kraken-basilisk.
+TON: je ein großer Trommelschlag pro König. Namen im Schnitt kurz einblenden (Schrift nicht von der KI).
+
+SHOT 15 · 1:42–1:48 · 6 s · Die See
+PROMPT: Naval battle in a storm: the black galleon fires a broadside, a sea monster rises from the waves and
+transforms into a burning ghost pirate ship, cannonballs splash, lightning flashes.
+TON: Kanonendonner auf den Schlägen.
+
+SHOT 16 · 1:48–1:54 · 6 s · Das Ende der Welt
+PROMPT: The black galleon sails toward the edge of the world, where the ocean pours over a colossal endless
+waterfall into a black void, mist and thunder, wrecks caught at the rim.
+VO: „Fahr bis ans Ende der Welt.“
+
+SHOT 17 · 1:54–2:00 · 6 s · Sterben und Aufstehen
+PROMPT: The Drowned One falls in battle and dissolves into seawater; cut to a cold cyan bonfire of swords where
+he rises again from the mist, takes a breath and draws his cutlass.
+VO: „Stirb. Steh wieder auf. Die See lässt dich nicht gehen.“
+TON: die Musik bricht kurz weg, dann ein Atemzug und ein Schlag.
+
+SHOT 18 · 2:00–2:08 · 8 s · Malakor
+PROMPT: A green whirlpool opens in the sea; masts pierce the surface first, then the whole Dutchman rises and
+crashes down; on its stern Malakor steps forward, four swords drawn, tentacle beard writhing, glowing eyes
+staring into the camera. Everything goes silent.
+VO (Malakor): „Ich gehe nicht hinüber.“
+TON: eine Sekunde völlige Stille vor dem Satz.
+
+SHOT 19 · 2:08–2:12 · 4 s · Der Schlag
+PROMPT: Extreme close-up: Malakor's four swords strike down at once toward the camera, green sparks, cut to
+black on impact.
+TON: der letzte gewaltige Akkord mit Becken und großer Trommel.
+
+SHOT 20 · 2:12–2:20 · 8 s · Schrifttafel (im Schnitt erstellen, nicht mit der KI)
+Schwarzbild, eine einzelne Glocke klingt aus. Goldener Schriftzug:
+   THRONE OF THE DROWNED
+Darunter: „Die See gibt ihre Toten nicht frei. Sie trägt sie nur woandershin.“
+Optional ganz unten klein: „Im Browser spielen“ und die Webadresse des Spiels.
+
+
+HINWEISE ZUM SCHNITT
+--------------------
+- Die ersten 42 Sekunden ruhig und langsam schneiden (lange Einstellungen), danach immer schneller.
+- Bis zum Erwachen tragen Glocken, Orgel und die einsame Stimme, ab dem Erwachen Männerchor und Pauken,
+  bei der Glutwacht der volle Chor mit Blech und großen Trommeln.
+- Vor Malakors Satz eine Sekunde Stille, dann der letzte Schlag und die Schrifttafel.
+- Das Ende der Geschichte (die Letzte Flut, die Rückkehr des Mondes) bleibt bewusst aus dem Trailer heraus.
+- Malakors Satz und einige Sprecherzeilen (Shots 4, 12, 17) sind neu für den Trailer, im Spiel kommen sie so nicht vor.
