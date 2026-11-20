@@ -306,7 +306,7 @@ impl Audio {
         // (im Titel und in Menüs darf es mehr sein)
         if let Some(r) = self.render.as_mut() {
             let t0 = bevy::platform::time::Instant::now();
-            let budget = if self.mood == "title" { 8.0 } else { 2.0 };
+            let budget = if self.mood == "title" { 12.0 } else { 2.0 };
             let mut done = false;
             while !done && t0.elapsed().as_secs_f64() * 1000.0 < budget {
                 done = r.step(1);

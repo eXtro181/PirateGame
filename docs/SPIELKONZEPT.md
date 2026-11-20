@@ -644,14 +644,16 @@ Vorn treiben Särge mit Kreuz auf dem Deckel, Regen fällt, unten rollt ein dunk
 **Hauptmenü**: oben in der Mitte der goldene Schriftzug mit kaltem Schein und wanderndem Schimmer, darunter eine goldene Zierlinie mit Raute
 und die Unterzeile; die Bildmitte bleibt frei. Die Menüpunkte stehen unten nebeneinander (hochkant untereinander), mit kleinen Rauten
 dazwischen; der gewählte leuchtet golden mit Schein, Glanzlinie und Rauten. Wählen mit ←/→ oder ↑/↓, Bedienhinweis mittig, Fassung rechts.
-**Titelmusik** „Thron der Ertrunkenen“: d-Moll, langsam und episch – das Cello trägt das Thema, die Geige antwortet in der Höhe,
-im Höhepunkt mit der Blechflöte; Harfe, Glocken, tiefe Trommeln.
+**Titelmusik** „Thron der Ertrunkenen“: ein ganzes Lied (2:53, d-Moll, 72 Schläge) mit Aufbau – Vorspiel (Harfe, Streicher, Ruf der
+Blechflöte, Chor), Strophe (Cello), zweite Strophe (Geige, Gegenstimme, treibende Streicher), Refrain (Hörner, Geige, Chor, Pauken, Becken),
+Zwischenspiel in F (Akkordeon, anschwellender Paukenwirbel), großer Refrain (alle, Blechflöte oben), Ausklang (Cello allein, Glocke); mit Hall.
 ---
 
 ## 8. Klang
 
 - **Synthesizer** im Code (`synth.rs`): Lieder werden als PCM gerendert (22 050 Hz, mono).
-  Instrumente: Glocke, Harfe (Karplus-Strong), Cello, Flächenklang, Trommel, Tick und weitere.
+  Instrumente: Glocke, Harfe (Karplus-Strong), Cello, Geige, Blechflöte, Akkordeon, Flächenklang, Streicher, Chor (Formanten), Horn,
+  Pauke, Becken, Bass, Trommel, Tick; die Titelmusik bekommt Hall (Schroeder) und einen sanften Begrenzer.
 - **Musik** (alle in Moll, instrumental, melancholische Seemannsmusik):
 
 | Stück | Wo |
