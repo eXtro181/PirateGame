@@ -12,13 +12,43 @@
 html, body { margin: 0; height: 100%; background: #0B1016; overflow: hidden; touch-action: none; -webkit-user-select: none; user-select: none; }
 #wrap { position: fixed; inset: 0; }
 canvas#bevy { display: block; width: 100%; height: 100%; outline: none; image-rendering: pixelated; }
-#load { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #8FA3A8; font: 16px/1.4 Georgia, serif; letter-spacing: .2em; pointer-events: none; }
+#menu-video { position: fixed; inset: 0; width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+#load { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #8FA3A8; font: 16px/1.4 Georgia, serif; letter-spacing: .2em; background: #0B1016; cursor: pointer; transition: background .8s; }
+#load.go { background: transparent; pointer-events: none; text-shadow: 0 0 12px #000; }
+#load i { font-style: normal; margin-top: 18px; color: #E8A443; animation: pulse 2.2s ease-in-out infinite; }
+#load.go i { display: none; }
+@keyframes pulse { 50% { opacity: .35; } }
 #load b { color: #5FF2C8; font-weight: normal; font-size: 28px; letter-spacing: .3em; margin-bottom: 12px; }
 </style>
 </head>
 <body>
+<video id="menu-video" muted loop playsinline preload="auto"></video>
+<audio id="menu-song" src="menu-lied.mp3" loop preload="auto"></audio>
 <div id="wrap"><canvas id="bevy" tabindex="0"></canvas></div>
-<div id="load"><b>THRONE OF THE DROWNED</b><span id="loadmsg">Die Gezeiten erwachen …</span></div>
+<div id="load"><b>THRONE OF THE DROWNED</b><span id="loadmsg">Die Gezeiten erwachen …</span><i>Klicken oder Taste drücken</i></div>
+<script>
+// Hauptmenü: Video und Lied starten gemeinsam mit der ersten Eingabe (Browser erlauben Ton erst danach).
+// Das Spiel lädt derweil weiter und zeigt sein Menü über demselben, schon laufenden Video.
+(function () {
+  var v = document.getElementById('menu-video'), a = document.getElementById('menu-song'), l = document.getElementById('load');
+  v.muted = true;
+  v.src = v.canPlayType('video/webm; codecs="vp9"') ? 'menu.webm' : 'menu.mp4';
+  a.volume = 0.36;
+  window.__gate = false;
+  // Testläufe (?debug&start=…) ohne Startbildschirm
+  if (/[?&]debug/.test(location.search)) { window.__gate = true; l.classList.add('go'); return; }
+  function go() {
+    if (window.__gate) return;
+    window.__gate = true;
+    try { v.currentTime = 0; a.currentTime = 0; } catch (e) {}
+    v.play().catch(function () {});
+    a.play().catch(function () {});
+    if (l.dataset.ready) l.remove(); else l.classList.add('go');
+    ['pointerdown', 'keydown', 'touchstart'].forEach(function (t) { document.removeEventListener(t, go, true); });
+  }
+  ['pointerdown', 'keydown', 'touchstart'].forEach(function (t) { document.addEventListener(t, go, true); });
+})();
+</script>
 <script type="module">
 import init from './schwarzwasser.js';
 init().catch(e => { if (!String(e).includes('Using exceptions for control flow')) { document.getElementById('loadmsg').textContent = 'Fehler: ' + e; console.error(e); } });

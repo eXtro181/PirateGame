@@ -8,12 +8,37 @@ thread_local! {
     static VIDEO: std::cell::RefCell<Option<(web_sys::HtmlVideoElement, u32)>> = const { std::cell::RefCell::new(None) };
 }
 
-/// Das Videoelement (beim ersten Aufruf angelegt); Some, sobald ein Bild bereitsteht.
+/// Hat der Spieler den Startbildschirm (index.html) schon angeklickt? Erst dann laufen Video und Lied.
+#[cfg(target_arch = "wasm32")]
+pub fn gate_passed() -> bool {
+    web_sys::window()
+        .and_then(|w| js_sys::Reflect::get(&w, &wasm_bindgen::JsValue::from_str("__gate")).ok())
+        .and_then(|v| v.as_bool())
+        .unwrap_or(true)
+}
+#[cfg(not(target_arch = "wasm32"))]
+pub fn gate_passed() -> bool {
+    true
+}
+
+/// Konnte das Video nicht geladen werden? Dann zeigt der Titel das Shader-Bild.
+#[cfg(target_arch = "wasm32")]
+pub fn failed() -> bool {
+    VIDEO.with(|v| v.borrow().as_ref().is_some_and(|(el, _)| el.network_state() == 3))
+}
+
+/// Das Videoelement (aus index.html, sonst beim ersten Aufruf angelegt); Some, sobald ein Bild bereitsteht.
 #[cfg(target_arch = "wasm32")]
 pub fn frame() -> Option<web_sys::HtmlVideoElement> {
     use wasm_bindgen::JsCast;
     VIDEO.with(|v| {
         let mut v = v.borrow_mut();
+        if v.is_none() {
+            let doc = web_sys::window()?.document()?;
+            if let Some(el) = doc.get_element_by_id("menu-video").and_then(|e| e.dyn_into::<web_sys::HtmlVideoElement>().ok()) {
+                *v = Some((el, 0));
+            }
+        }
         if v.is_none() {
             let doc = web_sys::window()?.document()?;
             let el: web_sys::HtmlVideoElement = doc.create_element("video").ok()?.dyn_into().ok()?;
@@ -32,8 +57,8 @@ pub fn frame() -> Option<web_sys::HtmlVideoElement> {
             *v = Some((el, 0));
         }
         let (el, n) = v.as_mut()?;
-        // angehalten (Start, nach dem Spiel): ab und zu wieder anstoßen
-        if el.paused() {
+        // angehalten (nach dem Spiel): ab und zu wieder anstoßen – vor dem Startklick nicht
+        if el.paused() && gate_passed() {
             if *n % 60 == 0 {
                 let _ = el.play();
             }

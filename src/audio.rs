@@ -165,6 +165,7 @@ pub struct Audio {
     #[cfg(target_arch = "wasm32")]
     menu: Option<web_sys::HtmlAudioElement>,
     menu_ok: bool,
+    menu_started: bool,
     menu_k: f32,
     menu_t: f32,
 }
@@ -198,7 +199,9 @@ impl Audio {
             g: None,
             #[cfg(target_arch = "wasm32")]
             menu: None,
-            menu_ok: false,
+            // bis zum Gegenbeweis vorhanden: so spielt nie zuerst das alte Titelstück
+            menu_ok: true,
+            menu_started: false,
             menu_k: 0.0,
             menu_t: 0.0,
         }
@@ -312,6 +315,14 @@ impl Audio {
     #[cfg(target_arch = "wasm32")]
     fn update_menu_song(&mut self, dt: f32) {
         if self.menu.is_none() {
+            // das Element aus index.html (dort startet es mit dem Startklick zusammen mit dem Video)
+            use wasm_bindgen::JsCast;
+            let doc = web_sys::window().and_then(|w| w.document());
+            if let Some(el) = doc.and_then(|d| d.get_element_by_id("menu-song")).and_then(|e| e.dyn_into::<web_sys::HtmlAudioElement>().ok()) {
+                self.menu = Some(el);
+            }
+        }
+        if self.menu.is_none() {
             if let Ok(el) = web_sys::HtmlAudioElement::new_with_src("menu-lied.mp3") {
                 el.set_loop(true);
                 el.set_preload("auto");
@@ -320,18 +331,26 @@ impl Audio {
             }
         }
         let Some(el) = self.menu.clone() else { return };
-        // Netzwerkzustand 3: keine Quelle (Datei fehlt)
-        let ok = el.network_state() != 3 && el.ready_state() >= 3;
+        // vorhanden, solange der Browser keinen Ladefehler meldet (Netzwerkzustand 3: keine Quelle);
+        // nicht auf Vorladen warten – viele Browser laden ohne Abspielen nichts
+        let ok = el.network_state() != 3;
         if ok != self.menu_ok {
             self.menu_ok = ok;
             self.apply_mood();
         }
         let want = ok && self.mood == "title";
-        self.menu_k = (self.menu_k + if want { dt * 0.6 } else { -dt * 0.8 }).clamp(0.0, 1.0);
+        if want && !el.paused() && !self.menu_started {
+            // erster Start (Startklick in index.html): sofort volle Lautstärke, zusammen mit dem Video
+            self.menu_started = true;
+            self.menu_k = 1.0;
+        }
+        // einblenden nur, während es spielt (Rückkehr ins Menü), ausblenden beim Spielstart
+        let up = if el.paused() { 0.0 } else { dt * 0.6 };
+        self.menu_k = (self.menu_k + if want { up } else { -dt * 0.8 }).clamp(0.0, 1.0);
         // das Lied ist lauter abgemischt als die Spielmusik (≈ 8 dB): angleichen
         el.set_volume((self.menu_k * self.volume * 0.45).clamp(0.0, 1.0) as f64);
         self.menu_t -= dt;
-        if want && el.paused() && web::unlocked() && self.menu_t <= 0.0 {
+        if want && el.paused() && web::unlocked() && crate::gfx::video::gate_passed() && self.menu_t <= 0.0 {
             self.menu_t = 1.0;
             let _ = el.play();
         }

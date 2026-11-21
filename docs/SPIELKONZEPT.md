@@ -634,7 +634,8 @@ das Gewitter beim Holländer, den Meeresgrund und jedes Seegebiet.
 
 ### 7.5 Titelbild
 **Hintergrundvideo** (21.11.): Im Hauptmenü läuft stumm in Schleife ein Video (brennendes Schiff vor der Galgenfeste, treibende Särge,
-ein Arm aus der Tiefe holt einen Sarg; `public/menu.webm`/`.mp4`). Dazu läuft das Lied „Where Anchors Sleep“ (`public/menu-lied.mp3`, 3:01, Schleife) statt der Titelmusik.
+ein Arm aus der Tiefe holt einen Sarg; `public/menu.webm`/`.mp4`). Dazu läuft das Lied „Where Anchors Sleep“ (`public/menu-lied.mp3`, 3:01, Schleife) statt der Titelmusik. Ein Startbildschirm
+(„Klicken oder Taste drücken“) startet Video und Lied gemeinsam; das Menü erscheint über dem schon laufenden Video.
 Ohne Video zeigt der Titel das Shader-Bild:
 **„Thron der Ertrunkenen“** (20.11., ohne Pixelgrafik): Der Titel ist ein animiertes Bild in voller Bildschirmauflösung (auch FullHD),
 ganz aus Formeln im Shader gemalt. Regennacht, ziehende Wolken, Sterne in den Lücken, Blitze; rechts oben der bleiche Mond –

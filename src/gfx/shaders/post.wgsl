@@ -1035,8 +1035,11 @@ fn title_final(uv: vec2<f32>) -> vec3<f32> {
 fn fs_final(f: FOut) -> @location(0) vec4<f32> {
     // Titelbild statt der Welt
     if (G.fx6.y > 0.5) {
-        if (G.fx6.w > 0.5) {
-            return vec4<f32>(title_video(f.uv), 1.0);
+        if (G.fx6.w > 0.0) {
+            return vec4<f32>(title_video(f.uv) * G.fx6.w, 1.0);
+        }
+        if (G.fx6.w < -0.5) {
+            return vec4<f32>(0.0, 0.0, 0.0, 1.0);
         }
         return vec4<f32>(title_final(f.uv), 1.0);
     }

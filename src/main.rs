@@ -173,7 +173,12 @@ fn setup(world: &mut bevy::ecs::world::World) {
             info!("FLORAMAP {}", base64::engine::general_purpose::STANDARD.encode(png));
         }
         if let Some(el) = web_sys::window().and_then(|w| w.document()).and_then(|d| d.get_element_by_id("load")) {
-            el.remove();
+            // Startbildschirm (index.html): erst nach der ersten Eingabe weg, die Video und Lied startet
+            if gfx::video::gate_passed() {
+                el.remove();
+            } else {
+                let _ = el.set_attribute("data-ready", "1");
+            }
         }
     }
     let opt = load_opts();
