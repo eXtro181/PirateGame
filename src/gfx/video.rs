@@ -8,7 +8,7 @@ thread_local! {
     static VIDEO: std::cell::RefCell<Option<(web_sys::HtmlVideoElement, u32)>> = const { std::cell::RefCell::new(None) };
 }
 
-/// Hat der Spieler den Startbildschirm (index.html) schon angeklickt? Erst dann laufen Video und Lied.
+/// Sind Menüvideo und -lied schon gestartet (index.html, `__startMenu` nach der Ladeanzeige)?
 #[cfg(target_arch = "wasm32")]
 pub fn gate_passed() -> bool {
     web_sys::window()
@@ -57,7 +57,7 @@ pub fn frame() -> Option<web_sys::HtmlVideoElement> {
             *v = Some((el, 0));
         }
         let (el, n) = v.as_mut()?;
-        // angehalten (nach dem Spiel): ab und zu wieder anstoßen – vor dem Startklick nicht
+        // angehalten (nach dem Spiel): ab und zu wieder anstoßen – vor dem Start nicht
         if el.paused() && gate_passed() {
             if *n % 60 == 0 {
                 let _ = el.play();

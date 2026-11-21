@@ -315,7 +315,7 @@ impl Audio {
     #[cfg(target_arch = "wasm32")]
     fn update_menu_song(&mut self, dt: f32) {
         if self.menu.is_none() {
-            // das Element aus index.html (dort startet es mit dem Startklick zusammen mit dem Video)
+            // das Element aus index.html (dort startet es zusammen mit dem Video)
             use wasm_bindgen::JsCast;
             let doc = web_sys::window().and_then(|w| w.document());
             if let Some(el) = doc.and_then(|d| d.get_element_by_id("menu-song")).and_then(|e| e.dyn_into::<web_sys::HtmlAudioElement>().ok()) {
@@ -340,7 +340,7 @@ impl Audio {
         }
         let want = ok && self.mood == "title";
         if want && !el.paused() && !self.menu_started {
-            // erster Start (Startklick in index.html): sofort volle Lautstärke, zusammen mit dem Video
+            // erster Start (index.html, mit dem Video): sofort volle Lautstärke
             self.menu_started = true;
             self.menu_k = 1.0;
         }

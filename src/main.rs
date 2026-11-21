@@ -173,11 +173,13 @@ fn setup(world: &mut bevy::ecs::world::World) {
             info!("FLORAMAP {}", base64::engine::general_purpose::STANDARD.encode(png));
         }
         if let Some(el) = web_sys::window().and_then(|w| w.document()).and_then(|d| d.get_element_by_id("load")) {
-            // Startbildschirm (index.html): erst nach der ersten Eingabe weg, die Video und Lied startet
-            if gfx::video::gate_passed() {
-                el.remove();
-            } else {
-                let _ = el.set_attribute("data-ready", "1");
+            el.remove();
+            // gleich danach starten Menüvideo und -lied zusammen (index.html)
+            if let Some(f) = web_sys::window()
+                .and_then(|w| js_sys::Reflect::get(&w, &wasm_bindgen::JsValue::from_str("__startMenu")).ok())
+                .and_then(|f| wasm_bindgen::JsCast::dyn_into::<js_sys::Function>(f).ok())
+            {
+                let _ = f.call0(&wasm_bindgen::JsValue::NULL);
             }
         }
     }
