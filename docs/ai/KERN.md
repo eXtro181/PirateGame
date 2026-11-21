@@ -61,8 +61,9 @@ alles links, Verlauf über die ganze Breite; Editor mit Geschlecht Frau/Mann, Kn
 
 `synth.rs` (Musik, Ambiente – Wellen, Wind, Dröhnen, **Regen** –, SFX als PCM; Prolog: „rustle“, „skitter“, „clink“; Runde 13:
 „stinger“, „discover“, „grunt“), `audio.rs` (WebAudio; Lagen Regen/Wind/Spannung geglättet je Bild, `sfx_pan` über `StereoPannerNode`;
-Menü-Hintergrundvideo `gfx/video.rs`: `<video>` (WebM/VP9, sonst MP4) → `copy_external_image_to_texture` → `title_video` (fx6.w = 1).
-Menülied `menu-lied.mp3` als `<audio>` in `audio.rs` (`update_menu_song`); fehlt es, spielt der Synthesizer „titel“.
+Nach der Ladeanzeige ruft `main.rs` `window.__startMenu()` (index.html): startet `#menu-video` und `#menu-song`; Ton-Sperre → Lied mit erster Eingabe.
+Menüvideo `gfx/video.rs` → `copy_external_image_to_texture` → `title_video`; fx6.w: >0 Video, −1 schwarz (lädt), 0 Shader-Titel (Fehler).
+Menülied in `audio.rs` (`update_menu_song`): beim ersten Start sofort voll, sonst einblenden; nur bei Ladefehler spielt der Synthesizer „titel“.
 Lieder werden nach Zeitbudget vorberechnet – 2 ms je Bild, im Titel 12 ms –, fertige Lieder ziehen in Browser-Puffer um und die Rust-Kopie wird freigegeben;
 SFX nur als Browser-Puffer; Klänge mit eigener Lautstärke über `Game.sfx_vol`), `save.rs` (Profile in localStorage **ohne Passwort**:
 Spielstand als JSON im Feld `plain`; alte verschlüsselte Profile (PBKDF2-SHA256 + AES-256-GCM) lassen sich einmal mit dem früheren Passwort öffnen und werden

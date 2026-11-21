@@ -105,6 +105,8 @@ pub struct Gpu {
     /// Hintergrundvideo des Titels: Textur, Bindegruppe, Größe; `video_on` in diesem Bild gezeigt
     video: Option<(wgpu::Texture, wgpu::BindGroup, u32, u32)>,
     video_on: bool,
+    /// Einblenden des Videos (−1: noch nie gezeigt)
+    video_fade: f32,
     vbuf: wgpu::Buffer,
     vcap: u64,
     ibuf: wgpu::Buffer,
@@ -349,6 +351,7 @@ impl Gpu {
             bg_final: None,
             video: None,
             video_on: false,
+            video_fade: -1.0,
             vbuf,
             vcap,
             ibuf,
@@ -513,8 +516,10 @@ fn prepare(mut gpu: ResMut<Gpu>, mut p: ResMut<Packed>, dev: Res<RenderDevice>, 
     if !bytes.is_empty() {
         queue.write_buffer(&gpu.vbuf, 0, bytes);
     }
-    // Titel: das aktuelle Bild des Hintergrundvideos in seine Textur (fx6.w = 1 schaltet es im Shader ein)
+    // Titel: das aktuelle Bild des Hintergrundvideos in seine Textur. fx6.w > 0: Video mit dieser Helligkeit,
+    // −1: schwarz (Video lädt noch, nie das alte Titelbild), 0: Shader-Titelbild (Video fehlt)
     gpu.video_on = false;
+    let mut fx6w = 0.0f32;
     #[cfg(target_arch = "wasm32")]
     {
         if p.g.fx6[1] > 0.5 {
@@ -533,13 +538,21 @@ fn prepare(mut gpu: ResMut<Gpu>, mut p: ResMut<Packed>, dev: Res<RenderDevice>, 
                         wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
                     );
                     gpu.video_on = true;
+                    // war der Titel schon schwarz, blendet das Video ein; sonst sofort voll
+                    gpu.video_fade = if gpu.video_fade < 0.0 { 1.0 } else { (gpu.video_fade + 0.03).min(1.0) };
+                    fx6w = gpu.video_fade.max(0.01);
                 }
+            } else if !super::video::failed() {
+                if gpu.video_fade < 0.0 {
+                    gpu.video_fade = 0.0;
+                }
+                fx6w = -1.0;
             }
         } else {
             super::video::pause();
         }
     }
-    p.g.fx6[3] = if gpu.video_on { 1.0 } else { 0.0 };
+    p.g.fx6[3] = fx6w;
     queue.write_buffer(&gpu.ubuf, 0, bytemuck::bytes_of(&p.g));
     if let Some(t) = t_up {
         crate::prof::add(crate::prof::UPLOAD, t.elapsed().as_secs_f64() * 1000.0);

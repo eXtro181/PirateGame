@@ -12,13 +12,37 @@
 html, body { margin: 0; height: 100%; background: #0B1016; overflow: hidden; touch-action: none; -webkit-user-select: none; user-select: none; }
 #wrap { position: fixed; inset: 0; }
 canvas#bevy { display: block; width: 100%; height: 100%; outline: none; image-rendering: pixelated; }
-#load { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #8FA3A8; font: 16px/1.4 Georgia, serif; letter-spacing: .2em; pointer-events: none; }
+#menu-video { position: fixed; inset: 0; width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+#load { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #8FA3A8; font: 16px/1.4 Georgia, serif; letter-spacing: .2em; background: #0B1016; pointer-events: none; }
 #load b { color: #5FF2C8; font-weight: normal; font-size: 28px; letter-spacing: .3em; margin-bottom: 12px; }
 </style>
 </head>
 <body>
+<video id="menu-video" muted loop playsinline preload="auto"></video>
+<audio id="menu-song" src="menu-lied.mp3" loop preload="auto"></audio>
 <div id="wrap"><canvas id="bevy" tabindex="0"></canvas></div>
 <div id="load"><b>THRONE OF THE DROWNED</b><span id="loadmsg">Die Gezeiten erwachen …</span></div>
+<script>
+// Hauptmenü: Video und Lied starten zusammen, sobald das Spiel die Ladeanzeige wegnimmt (`window.__startMenu`).
+// Sperrt der Browser Ton ohne vorherige Eingabe, kommt das Lied mit dem ersten Klick oder Tastendruck.
+(function () {
+  var v = document.getElementById('menu-video'), a = document.getElementById('menu-song');
+  var ev = ['pointerdown', 'keydown', 'touchstart'];
+  v.muted = true;
+  v.src = v.canPlayType('video/webm; codecs="vp9"') ? 'menu.webm' : 'menu.mp4';
+  a.volume = 0.36;
+  window.__gate = false;
+  function later() { a.play().then(function () { ev.forEach(function (t) { document.removeEventListener(t, later, true); }); }).catch(function () {}); }
+  window.__startMenu = function () {
+    if (window.__gate) return;
+    window.__gate = true;
+    if (/[?&]debug/.test(location.search)) return;
+    try { v.currentTime = 0; a.currentTime = 0; } catch (e) {}
+    v.play().catch(function () {});
+    a.play().catch(function () { ev.forEach(function (t) { document.addEventListener(t, later, true); }); });
+  };
+})();
+</script>
 <script type="module">
 import init from './schwarzwasser.js';
 init().catch(e => { if (!String(e).includes('Using exceptions for control flow')) { document.getElementById('loadmsg').textContent = 'Fehler: ' + e; console.error(e); } });
