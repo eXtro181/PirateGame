@@ -17,6 +17,10 @@ mod web {
     }
 
     /// AudioContext im Benutzer-Ereignis anlegen/fortsetzen (iOS verlangt das).
+    /// Hat der Spieler schon etwas gedrückt (Browser erlauben Ton erst danach)?
+    pub fn unlocked() -> bool {
+        UNLOCKED.with(|u| u.get())
+    }
     pub fn install_unlock() {
         let Some(w) = window() else { return };
         let cb = Closure::<dyn FnMut()>::new(|| {
@@ -157,6 +161,12 @@ pub struct Audio {
     lv: [f32; 3],
     #[cfg(target_arch = "wasm32")]
     g: Option<web::Graph>,
+    /// Lied des Hauptmenüs als Datei (`menu-lied.mp3`, Nutzerwunsch 21.11.): Element, spielbar, Pegel, Takt
+    #[cfg(target_arch = "wasm32")]
+    menu: Option<web_sys::HtmlAudioElement>,
+    menu_ok: bool,
+    menu_k: f32,
+    menu_t: f32,
 }
 
 impl Default for Audio {
@@ -186,6 +196,11 @@ impl Audio {
             lv: [0.0; 3],
             #[cfg(target_arch = "wasm32")]
             g: None,
+            #[cfg(target_arch = "wasm32")]
+            menu: None,
+            menu_ok: false,
+            menu_k: 0.0,
+            menu_t: 0.0,
         }
     }
 
@@ -197,7 +212,8 @@ impl Audio {
             "land" => Some("salz"),
             "sea" => Some("leine"),
             "fire" => Some("atem"),
-            "title" => Some("titel"),
+            // liegt das Lied des Hauptmenüs als Datei vor, schweigt der Synthesizer
+            "title" => (!self.menu_ok).then_some("titel"),
             "death" | "silence" | "" => None,
             m => synth::SONGS.iter().find(|s| **s == m).copied(),
         }
@@ -291,7 +307,41 @@ impl Audio {
     }
 
     /// Jedes Bild: rendern, Kontext anbinden, Lieder tauschen.
+    /// Lied des Hauptmenüs aus `menu-lied.mp3`: im Titel ein-, sonst ausgeblendet; fehlt die Datei,
+    /// spielt weiter das Titelstück des Synthesizers.
+    #[cfg(target_arch = "wasm32")]
+    fn update_menu_song(&mut self, dt: f32) {
+        if self.menu.is_none() {
+            if let Ok(el) = web_sys::HtmlAudioElement::new_with_src("menu-lied.mp3") {
+                el.set_loop(true);
+                el.set_preload("auto");
+                el.set_volume(0.0);
+                self.menu = Some(el);
+            }
+        }
+        let Some(el) = self.menu.clone() else { return };
+        // Netzwerkzustand 3: keine Quelle (Datei fehlt)
+        let ok = el.network_state() != 3 && el.ready_state() >= 3;
+        if ok != self.menu_ok {
+            self.menu_ok = ok;
+            self.apply_mood();
+        }
+        let want = ok && self.mood == "title";
+        self.menu_k = (self.menu_k + if want { dt * 0.6 } else { -dt * 0.8 }).clamp(0.0, 1.0);
+        el.set_volume((self.menu_k * self.volume).clamp(0.0, 1.0) as f64);
+        self.menu_t -= dt;
+        if want && el.paused() && web::unlocked() && self.menu_t <= 0.0 {
+            self.menu_t = 1.0;
+            let _ = el.play();
+        }
+        if self.menu_k <= 0.0 && !el.paused() {
+            let _ = el.pause();
+        }
+    }
+
     pub fn update(&mut self, dt: f32, fire_dist: Option<f32>) {
+        #[cfg(target_arch = "wasm32")]
+        self.update_menu_song(dt);
         // schrittweise Lieder rendern (unabhängig vom Audiokontext)
         if self.render.is_none() {
             while let Some(n) = self.queue.first().copied() {

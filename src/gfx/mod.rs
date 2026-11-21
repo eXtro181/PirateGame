@@ -4,6 +4,7 @@
 //! Das Spiel füllt jeden Frame die Ressource [`Frame`] (Immediate-Mode wie früher in JS).
 
 pub mod render;
+pub mod video;
 
 use bevy::prelude::*;
 use bytemuck::{Pod, Zeroable};

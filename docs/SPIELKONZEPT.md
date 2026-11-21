@@ -633,6 +633,9 @@ das Gewitter beim Holländer, den Meeresgrund und jedes Seegebiet.
   Außerhalb von Kämpfen blendet sich die Anzeige nach einigen Sekunden aus; Ortsnamen erscheinen Buchstabe für Buchstabe.
 
 ### 7.5 Titelbild
+**Hintergrundvideo** (21.11.): Im Hauptmenü läuft stumm in Schleife ein Video (brennendes Schiff vor der Galgenfeste, treibende Särge,
+ein Arm aus der Tiefe holt einen Sarg; `public/menu.webm`/`.mp4`). Liegt `public/menu-lied.mp3` vor, spielt es statt der Titelmusik.
+Ohne Video zeigt der Titel das Shader-Bild:
 **„Thron der Ertrunkenen“** (20.11., ohne Pixelgrafik): Der Titel ist ein animiertes Bild in voller Bildschirmauflösung (auch FullHD),
 ganz aus Formeln im Shader gemalt. Regennacht, ziehende Wolken, Sterne in den Lücken, Blitze; rechts oben der bleiche Mond –
 doch auf dem Wasser liegt kein Mondpfad, denn Malakor hält sein Spiegelbild gefangen.
