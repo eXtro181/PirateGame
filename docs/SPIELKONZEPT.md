@@ -633,6 +633,9 @@ das Gewitter beim Holländer, den Meeresgrund und jedes Seegebiet.
   Außerhalb von Kämpfen blendet sich die Anzeige nach einigen Sekunden aus; Ortsnamen erscheinen Buchstabe für Buchstabe.
 
 ### 7.5 Titelbild
+**Hintergrundvideo** (21.11.): Im Hauptmenü läuft stumm in Schleife ein Video (brennendes Schiff vor der Galgenfeste, treibende Särge,
+ein Arm aus der Tiefe holt einen Sarg; `public/menu.webm`/`.mp4`). Dazu läuft das Lied „Where Anchors Sleep“ (`public/menu-lied.mp3`, 3:01, Schleife) statt der Titelmusik.
+Ohne Video zeigt der Titel das Shader-Bild:
 **„Thron der Ertrunkenen“** (20.11., ohne Pixelgrafik): Der Titel ist ein animiertes Bild in voller Bildschirmauflösung (auch FullHD),
 ganz aus Formeln im Shader gemalt. Regennacht, ziehende Wolken, Sterne in den Lücken, Blitze; rechts oben der bleiche Mond –
 doch auf dem Wasser liegt kein Mondpfad, denn Malakor hält sein Spiegelbild gefangen.
@@ -644,14 +647,17 @@ Vorn treiben Särge mit Kreuz auf dem Deckel, Regen fällt, unten rollt ein dunk
 **Hauptmenü**: oben in der Mitte der goldene Schriftzug mit kaltem Schein und wanderndem Schimmer, darunter eine goldene Zierlinie mit Raute
 und die Unterzeile; die Bildmitte bleibt frei. Die Menüpunkte stehen unten nebeneinander (hochkant untereinander), mit kleinen Rauten
 dazwischen; der gewählte leuchtet golden mit Schein, Glanzlinie und Rauten. Wählen mit ←/→ oder ↑/↓, Bedienhinweis mittig, Fassung rechts.
-**Titelmusik** „Thron der Ertrunkenen“: d-Moll, langsam und episch – das Cello trägt das Thema, die Geige antwortet in der Höhe,
-im Höhepunkt mit der Blechflöte; Harfe, Glocken, tiefe Trommeln.
+**Titelmusik** „Thron der Ertrunkenen“ (2:56, d-Moll mit phrygischem Es-Dur, 60 Schläge), episch und düster:
+Totenglocken und Orgelbordun, eine einsame Stimme – Aufbau mit skandierendem Männerchor, Tremolo-Streichern, Pauken wie Herzschlag und tiefem Blech –
+Hauptthema im ganzen Chor mit Blech, Orgel und großen Trommeln – Einbruch (Cello allein, Glocken, Paukenwirbel) – Höhepunkt mit Blechfanfare
+über skandierendem Chor – gewaltige Schlussakkorde, ein letzter Schlag, Stille – Ausklang mit Glocke und Stimme; großer Hall.
 ---
 
 ## 8. Klang
 
 - **Synthesizer** im Code (`synth.rs`): Lieder werden als PCM gerendert (22 050 Hz, mono).
-  Instrumente: Glocke, Harfe (Karplus-Strong), Cello, Flächenklang, Trommel, Tick und weitere.
+  Instrumente: Glocke, Harfe (Karplus-Strong), Cello, Geige, Blechflöte, Akkordeon, Flächenklang, Streicher, Chor (Formanten), Horn,
+  Pauke, Becken, Männerchor, Orgel, tiefes Blech, große Trommel, Tremolo-Streicher, Bass, Trommel, Tick; die Titelmusik bekommt Hall (Schroeder) und einen sanften Begrenzer.
 - **Musik** (alle in Moll, instrumental, melancholische Seemannsmusik):
 
 | Stück | Wo |

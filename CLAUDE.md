@@ -6,7 +6,8 @@ nie auf Verdacht ganze Dateien lesen. Diese Datei wird in jeder Sitzung ganz gel
 ## Projekt
 - Soulslike-Piratenspiel im Browser, HD-Pixelart im HD-2D-Look. **Rust/Bevy 0.16**, eigener wgpu-Renderer (WebGL2/wasm).
 - Paket heißt weiter `schwarzwasser` (alter Name, Wasm-Dateien `schwarzwasser*`).
-- Alle Grafik, Musik und Klänge entstehen beim Start aus Code (`crates/art`, `src/synth.rs`). Einzige Ausnahme: PixelLab-PNGs in `crates/art/assets/pixellab/`.
+- Alle Grafik, Musik und Klänge entstehen beim Start aus Code (`crates/art`, `src/synth.rs`). Ausnahmen: PixelLab-PNGs in `crates/art/assets/pixellab/`,
+  Hauptmenü-Video `public/menu.webm`/`.mp4` und -Lied `public/menu-lied.mp3` (Nutzerwunsch 21.11.).
 - Repo `eXtro181/PirateGame`, live https://extro181.github.io/PirateGame/ (GitHub Pages baut nur bei Push auf `main`, 3–15 min).
 - Rund 53 000 Zeilen Rust/WGSL in 74 Dateien; die größten: `src/world/mod.rs` 4100, `src/game/mod.rs` 2900, `crates/art/src/terrain.rs` 2100.
 
@@ -17,7 +18,7 @@ nie auf Verdacht ganze Dateien lesen. Diese Datei wird in jeder Sitzung ganz gel
 - Auf Zweig `umbau` arbeiten und pushen; **nach `main` erst nach Zustimmung** (`tools/dev/merge-main`). Keine PRs ohne Auftrag.
 - **Nie `cargo fmt`** (formatiert das ganze Repo um).
 - Nie Passwörter auf der Live-Seite eingeben; Tests nur über `?debug&start=…`.
-- Keine Bild-/Audiodateien ins Repo außer PixelLab-PNGs. Der PixelLab-Schlüssel kommt nie ins Repo und wird nie im Chat erfragt.
+- Keine Bild-/Audiodateien ins Repo außer PixelLab-PNGs und Menüvideo/-lied in `public/`. Der PixelLab-Schlüssel kommt nie ins Repo und wird nie im Chat erfragt.
 - Commits enden mit den Attributionszeilen der Sitzung; sonst keine Modellkennung in Repo-Dateien.
 - Warnungsfrei bauen (eine bekannte Warnung: `AudioBufferSourceNode::stop` veraltet).
 - Doku mitpflegen: Inhalt → `docs/SPIELKONZEPT.md`, Grafik → `docs/GRAFIK_ANLEITUNG.md`, Technik → passender Abschnitt in `docs/ai/` (ersetzen, nicht anhängen).

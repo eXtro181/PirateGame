@@ -1008,6 +1008,17 @@ fn title_scene(uv: vec2<f32>) -> vec3<f32> {
     return col;
 }
 
+// Hintergrundvideo (`gfx/video.rs`, Textur in t_a): bildfüllend beschnitten, Ränder sanft abgedunkelt
+fn title_video(uv: vec2<f32>) -> vec3<f32> {
+    let vs = vec2<f32>(textureDimensions(t_a));
+    let ss = G.screen.xy;
+    let k = max(ss.x / vs.x, ss.y / vs.y);
+    var c = textureSampleLevel(t_a, s_lin, (uv - 0.5) * ss / (vs * k) + 0.5, 0.0).rgb;
+    c *= 1.0 - 0.45 * pow(length((uv - 0.5) * vec2<f32>(1.0, 1.2)), 2.2);
+    c += (hash21(uv * ss + vec2<f32>(G.fx6.z * 13.0, 0.0)) - 0.5) * 0.012;
+    return clamp(c, vec3<f32>(0.0), vec3<f32>(1.0));
+}
+
 fn title_final(uv: vec2<f32>) -> vec3<f32> {
     var c = title_scene(uv);
     // Belichtung, Tonkurve, kühle Schatten, warme Lichter
@@ -1024,6 +1035,9 @@ fn title_final(uv: vec2<f32>) -> vec3<f32> {
 fn fs_final(f: FOut) -> @location(0) vec4<f32> {
     // Titelbild statt der Welt
     if (G.fx6.y > 0.5) {
+        if (G.fx6.w > 0.5) {
+            return vec4<f32>(title_video(f.uv), 1.0);
+        }
         return vec4<f32>(title_final(f.uv), 1.0);
     }
     // Zoom (Kamera rückt nah heran): um die Bildmitte vergrößern

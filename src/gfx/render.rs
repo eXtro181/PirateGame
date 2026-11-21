@@ -102,6 +102,9 @@ pub struct Gpu {
     bg_dof_h: Option<wgpu::BindGroup>,
     bg_dof_v: Option<wgpu::BindGroup>,
     bg_final: Option<wgpu::BindGroup>,
+    /// Hintergrundvideo des Titels: Textur, Bindegruppe, Größe; `video_on` in diesem Bild gezeigt
+    video: Option<(wgpu::Texture, wgpu::BindGroup, u32, u32)>,
+    video_on: bool,
     vbuf: wgpu::Buffer,
     vcap: u64,
     ibuf: wgpu::Buffer,
@@ -344,6 +347,8 @@ impl Gpu {
             bg_dof_h: None,
             bg_dof_v: None,
             bg_final: None,
+            video: None,
+            video_on: false,
             vbuf,
             vcap,
             ibuf,
@@ -508,6 +513,33 @@ fn prepare(mut gpu: ResMut<Gpu>, mut p: ResMut<Packed>, dev: Res<RenderDevice>, 
     if !bytes.is_empty() {
         queue.write_buffer(&gpu.vbuf, 0, bytes);
     }
+    // Titel: das aktuelle Bild des Hintergrundvideos in seine Textur (fx6.w = 1 schaltet es im Shader ein)
+    gpu.video_on = false;
+    #[cfg(target_arch = "wasm32")]
+    {
+        if p.g.fx6[1] > 0.5 {
+            if let Some(el) = super::video::frame() {
+                let (w, h) = (el.video_width(), el.video_height());
+                if gpu.video.as_ref().map(|v| (v.2, v.3) != (w, h)).unwrap_or(true) {
+                    let tex = make_tex(d, "menu_video", w, h, 1, wgpu::TextureFormat::Rgba8UnormSrgb, true);
+                    let noise = view2(&gpu.noise);
+                    let bg = post_bg(d, &gpu.bgl_post, [&view2(&tex), &noise, &noise, &noise]);
+                    gpu.video = Some((tex, bg, w, h));
+                }
+                if let Some(v) = gpu.video.as_ref() {
+                    queue.copy_external_image_to_texture(
+                        &wgpu::CopyExternalImageSourceInfo { source: wgpu::ExternalImageSource::HTMLVideoElement(el), origin: wgpu::Origin2d::ZERO, flip_y: false },
+                        wgpu::CopyExternalImageDestInfo { texture: &v.0, mip_level: 0, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All, color_space: wgpu::PredefinedColorSpace::Srgb, premultiplied_alpha: false },
+                        wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+                    );
+                    gpu.video_on = true;
+                }
+            }
+        } else {
+            super::video::pause();
+        }
+    }
+    p.g.fx6[3] = if gpu.video_on { 1.0 } else { 0.0 };
     queue.write_buffer(&gpu.ubuf, 0, bytemuck::bytes_of(&p.g));
     if let Some(t) = t_up {
         crate::prof::add(crate::prof::UPLOAD, t.elapsed().as_secs_f64() * 1000.0);
@@ -629,7 +661,8 @@ impl Node for SwNode {
                 occlusion_query_set: None,
             });
             pass.set_bind_group(0, &gpu.bg0, &[]);
-            pass.set_bind_group(1, gpu.bg_final.as_ref().unwrap(), &[]);
+            let fin_bg = if gpu.video_on { gpu.video.as_ref().map(|v| &v.1) } else { None };
+            pass.set_bind_group(1, fin_bg.or(gpu.bg_final.as_ref()).unwrap(), &[]);
             pass.set_pipeline(fmt_pipe);
             pass.draw(0..3, 0..1);
             pass.set_bind_group(1, gpu.bg_scene.as_ref().unwrap(), &[]);

@@ -1,0 +1,57 @@
+//! Hintergrundvideo des Hauptmenüs (Nutzerwunsch 21.11.): `menu.mp4` läuft stumm als Schleife in einem
+//! unsichtbaren `<video>`-Element; im Titel kopiert `render::prepare` jedes Bild in eine Textur, die der
+//! Endbild-Shader statt der Shader-Szene zeigt (`title_video` in post.wgsl). Ohne Video bleibt das
+//! Shader-Titelbild „Thron der Ertrunkenen“.
+
+#[cfg(target_arch = "wasm32")]
+thread_local! {
+    static VIDEO: std::cell::RefCell<Option<(web_sys::HtmlVideoElement, u32)>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Das Videoelement (beim ersten Aufruf angelegt); Some, sobald ein Bild bereitsteht.
+#[cfg(target_arch = "wasm32")]
+pub fn frame() -> Option<web_sys::HtmlVideoElement> {
+    use wasm_bindgen::JsCast;
+    VIDEO.with(|v| {
+        let mut v = v.borrow_mut();
+        if v.is_none() {
+            let doc = web_sys::window()?.document()?;
+            let el: web_sys::HtmlVideoElement = doc.create_element("video").ok()?.dyn_into().ok()?;
+            el.set_muted(true);
+            el.set_default_muted(true);
+            el.set_loop(true);
+            el.set_autoplay(true);
+            let _ = el.set_attribute("playsinline", "");
+            let _ = el.set_attribute("muted", "");
+            let _ = el.set_attribute("style", "position:fixed;left:0;top:0;width:2px;height:2px;opacity:0;pointer-events:none");
+            // WebM (VP9), wo der Browser es kann, sonst MP4 (H.264)
+            el.set_src(if el.can_play_type("video/webm; codecs=\"vp9\"").is_empty() { "menu.mp4" } else { "menu.webm" });
+            if let Some(b) = doc.body() {
+                let _ = b.append_child(&el);
+            }
+            *v = Some((el, 0));
+        }
+        let (el, n) = v.as_mut()?;
+        // angehalten (Start, nach dem Spiel): ab und zu wieder anstoßen
+        if el.paused() {
+            if *n % 60 == 0 {
+                let _ = el.play();
+            }
+            *n += 1;
+        }
+        (el.ready_state() >= 2 && el.video_width() > 0).then(|| el.clone())
+    })
+}
+
+/// außerhalb des Titels: Video anhalten (spart Dekodieren)
+#[cfg(target_arch = "wasm32")]
+pub fn pause() {
+    VIDEO.with(|v| {
+        if let Some((el, n)) = v.borrow_mut().as_mut() {
+            if !el.paused() {
+                let _ = el.pause();
+            }
+            *n = 0;
+        }
+    });
+}
