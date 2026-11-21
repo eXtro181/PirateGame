@@ -328,7 +328,8 @@ impl Audio {
         }
         let want = ok && self.mood == "title";
         self.menu_k = (self.menu_k + if want { dt * 0.6 } else { -dt * 0.8 }).clamp(0.0, 1.0);
-        el.set_volume((self.menu_k * self.volume).clamp(0.0, 1.0) as f64);
+        // das Lied ist lauter abgemischt als die Spielmusik (≈ 8 dB): angleichen
+        el.set_volume((self.menu_k * self.volume * 0.45).clamp(0.0, 1.0) as f64);
         self.menu_t -= dt;
         if want && el.paused() && web::unlocked() && self.menu_t <= 0.0 {
             self.menu_t = 1.0;
